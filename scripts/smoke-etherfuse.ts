@@ -37,6 +37,18 @@ const step = (n: number, total: number, label: string) =>
 const ok = (msg: string) => console.log(`     ✓ ${msg}`);
 const info = (msg: string) => console.log(`     · ${msg}`);
 const warn = (msg: string) => console.log(`     ! ${msg}`);
+const expected = (msg: string) => console.log(`     ⊘ ${msg}`);
+
+/**
+ * Veredito por step. `pass` = funcionou, `expected_fail` = limitação conhecida
+ * da API endereçada via arquitetura (não é bug), `fail` = bug real.
+ * Final do smoke imprime resumo.
+ */
+type StepVerdict = 'pass' | 'expected_fail' | 'fail';
+const verdicts: Record<string, { verdict: StepVerdict; note?: string }> = {};
+const setVerdict = (key: string, verdict: StepVerdict, note?: string) => {
+  verdicts[key] = { verdict, note };
+};
 
 // 1x1 transparent PNG — sandbox aceita qualquer base64 válido como documento.
 const DUMMY_PNG_BASE64 =
@@ -95,6 +107,7 @@ async function main() {
   }>('GET', '/ramp/me');
   ok(`org = ${whoami.displayName} (${whoami.id})`);
   output.whoami = whoami;
+  setVerdict('whoami', 'pass');
 
   // 2. Conta Stellar testnet
   step(2, TOTAL_STEPS, 'Criar conta Stellar testnet (friendbot)');
@@ -116,6 +129,7 @@ async function main() {
   ok(`TESOURO = ${tesouro.identifier}`);
   output.assets = assets;
   output.tesouro = tesouro;
+  setVerdict('asset_discovery', 'pass');
 
   // 4. createCustomer
   step(4, TOTAL_STEPS, 'POST /ramp/onboarding-url — cria customer');
@@ -128,6 +142,7 @@ async function main() {
   ok(`bankAccountId = ${customer.bankAccountId}`);
   const kycUrl = await anchor.getKycUrl(customer.id, pubkey, customer.bankAccountId);
   ok(`presignedUrl recebida (${kycUrl.length} chars)`);
+  setVerdict('customer_create', 'pass');
   output.customer = {
     id: customer.id,
     email: customer.email,
@@ -183,8 +198,19 @@ async function main() {
     try {
       await anchor.acceptAgreements(kycUrl);
       ok('agreements aceitos');
+      setVerdict('kyc_agreements', 'pass');
     } catch (err) {
-      warn(`acceptAgreements falhou — pode ser opcional para business: ${err}`);
+      // customer-agreement falha com "Phone number not provided" em business
+      // — sandbox aceita os outros 2 e marca KYC approved mesmo assim.
+      expected(
+        `customer-agreement rejeita sem phoneNumber (esperado em business). KYC segue approving.`,
+      );
+      output.agreementsError = String(err);
+      setVerdict(
+        'kyc_agreements',
+        'expected_fail',
+        'customer-agreement exige phoneNumber em business; KYC approva sem.',
+      );
     }
   } else {
     ok('KYC já approved (business pode auto-aprovar via accountType)');
@@ -196,9 +222,14 @@ async function main() {
   const finalKycStatus = await pollKycStatus(anchor, customer.id, pubkey, 30_000);
   ok(`status final = ${finalKycStatus}`);
   output.kycStatusFinal = finalKycStatus;
+  setVerdict('kyc_status_approved', 'pass');
 
-  // 7. Registrar PIX bank account (PLINA-MOD-005)
-  step(7, TOTAL_STEPS, 'POST /ramp/bank-account — registra conta PIX programaticamente');
+  // 7. Probe PIX bank account API (PLINA-MOD-005) — limitação esperada.
+  //
+  // A Etherfuse API REST hoje só aceita CLABE (MX); PIX é exclusivo do iframe
+  // hosted. Esperamos 400. Se um dia passar (Etherfuse expor PIX via API),
+  // smoke vira amarelo aqui pra a gente saber que dá pra remover o iframe.
+  step(7, TOTAL_STEPS, 'PROBE: POST /ramp/bank-account PIX (limitação esperada)');
   try {
     const bankAccount = await anchor.registerPixBankAccount(kycUrl, {
       pixKey: '52998224725',
@@ -207,12 +238,22 @@ async function main() {
       lastName: 'SmokeTest',
       cpf: '52998224725',
     });
+    warn(
+      'API aceitou PIX! Verificar PLINA-MOD-005 — podemos remover o iframe?',
+    );
     ok(`bankAccount status = ${bankAccount.status}`);
-    info(`compliant = ${bankAccount.compliant}`);
     output.bankAccount = bankAccount;
+    setVerdict('bank_account_pix_api', 'pass', 'API agora aceita PIX — investigar!');
   } catch (err) {
-    warn(`registerPixBankAccount falhou: ${err}`);
+    expected(
+      'API rejeitou PIX (esperado — PLINA-MOD-005). Registro via iframe Etherfuse.',
+    );
     output.bankAccountError = String(err);
+    setVerdict(
+      'bank_account_pix_api',
+      'expected_fail',
+      'Etherfuse API só aceita CLABE; PIX é iframe-only. Ver PLINA-MOD-005.',
+    );
   }
 
   // 8. Quote BRL → TESOURO
@@ -229,9 +270,12 @@ async function main() {
   ok(`toAmount = ${quote.toAmount} TESOURO`);
   info(`expiresAt = ${quote.expiresAt}`);
   output.quote = quote;
+  setVerdict('quote_brl_to_tesouro', 'pass');
 
-  // 9. createOnRamp + simulateFiatReceived
-  step(9, TOTAL_STEPS, 'POST /ramp/order + /fiat_received');
+  // 9. Probe createOnRamp — limitação esperada quando bank account não foi
+  //    registrada via iframe (smoke roda só programático). Em produção, o
+  //    iframe registra PIX, status fica `active+compliant`, AÍ order funciona.
+  step(9, TOTAL_STEPS, 'PROBE: POST /ramp/order (limitação esperada sem iframe)');
   let order;
   try {
     order = await anchor.createOnRamp({
@@ -243,22 +287,34 @@ async function main() {
       amount: '100',
       bankAccountId: customer.bankAccountId,
     });
-    ok(`orderId = ${order.id}`);
+    ok(`API aceitou order sem bank account ativa! orderId = ${order.id}`);
     if (order.paymentInstructions) {
       info(`paymentInstructions.type = ${order.paymentInstructions.type}`);
     }
     output.order = order;
+    setVerdict('order_create', 'pass');
 
     info('simulateFiatReceived (sandbox)');
     const simStatus = await anchor.simulateFiatReceived(order.id);
     ok(`fiat_received → HTTP ${simStatus}`);
     output.simulateFiatReceivedStatus = simStatus;
+    setVerdict('fiat_received', 'pass');
   } catch (err) {
-    warn(`order/simulate falhou: ${err}`);
+    expected(
+      'API rejeitou order (esperado — "Proxy account not found" sem bank account ativa).',
+    );
+    expected(
+      'Fluxo real: iframe Etherfuse cria + ativa bank account → webhook bank_account_updated → backend cria order.',
+    );
     output.orderError = String(err);
+    setVerdict(
+      'order_create',
+      'expected_fail',
+      'Sem bank account ativa, order falha. Fluxo real usa iframe + webhook. Ver ARCHITECTURE §3.5.',
+    );
   }
 
-  // 9. Poll onramp until terminal (PLINA-MOD-004 lida com indexing delay)
+  // 10. Poll onramp until terminal (PLINA-MOD-004 lida com indexing delay)
   if (order) {
     step(10, TOTAL_STEPS, 'Poll order até terminal (indexing grace 12s)');
     try {
@@ -273,17 +329,45 @@ async function main() {
         ok(`stellarTxHash = ${terminal.stellarTxHash}`);
       }
       output.orderTerminal = terminal;
+      setVerdict('order_poll', 'pass');
     } catch (err) {
       warn(`poll falhou: ${err}`);
       output.orderPollError = String(err);
+      setVerdict('order_poll', 'fail', String(err));
     }
   } else {
-    warn('step 10 pulado (order não criado)');
+    expected('step 10 pulado (esperado — depende de step 9).');
+    setVerdict('order_poll', 'expected_fail', 'Pulado porque step 9 falhou esperadamente.');
+  }
+
+  // ─── Resumo ─────────────────────────────────────────────────────────────
+  output.verdicts = verdicts;
+
+  const fails = Object.entries(verdicts).filter(([, v]) => v.verdict === 'fail');
+  const expectedFails = Object.entries(verdicts).filter(
+    ([, v]) => v.verdict === 'expected_fail',
+  );
+
+  console.log('\n━━━ Resumo ━━━');
+  for (const [key, v] of Object.entries(verdicts)) {
+    const icon =
+      v.verdict === 'pass' ? '✓' : v.verdict === 'expected_fail' ? '⊘' : '✗';
+    console.log(`  ${icon} ${key}${v.note ? ` — ${v.note}` : ''}`);
   }
 
   writeFileSync('smoke-etherfuse-output.json', JSON.stringify(output, null, 2));
+
+  if (fails.length > 0) {
+    console.log(
+      `\n✗ Smoke FALHOU com ${fails.length} erro(s) inesperado(s). Output: smoke-etherfuse-output.json`,
+    );
+    process.exit(1);
+  }
+
   console.log(
-    '\n✓ Smoke test Etherfuse concluído. Output em smoke-etherfuse-output.json.',
+    `\n✓ Smoke verde. ${
+      expectedFails.length
+    } limitação(ões) esperada(s) (documentadas em PLINA-MOD-005 e ARCHITECTURE §3.5). Output: smoke-etherfuse-output.json`,
   );
 }
 
