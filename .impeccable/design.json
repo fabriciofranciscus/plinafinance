@@ -1,0 +1,277 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-04T00:00:00Z",
+  "title": "Design System: Plina Finance",
+  "extensions": {
+    "colorMeta": {
+      "deep-petrol": {
+        "role": "neutral",
+        "displayName": "Deep Petrol",
+        "canonical": "oklch(24% 0.025 200)",
+        "tonalRamp": [
+          "oklch(15% 0.020 200)",
+          "oklch(20% 0.022 200)",
+          "oklch(24% 0.025 200)",
+          "oklch(32% 0.028 200)",
+          "oklch(45% 0.030 200)",
+          "oklch(60% 0.025 200)",
+          "oklch(75% 0.018 200)",
+          "oklch(90% 0.010 200)"
+        ]
+      },
+      "auditable-cyan": {
+        "role": "primary",
+        "displayName": "Auditable Cyan",
+        "canonical": "oklch(70% 0.13 215)",
+        "tonalRamp": [
+          "oklch(25% 0.06 215)",
+          "oklch(38% 0.09 215)",
+          "oklch(50% 0.11 215)",
+          "oklch(60% 0.12 215)",
+          "oklch(70% 0.13 215)",
+          "oklch(80% 0.10 215)",
+          "oklch(88% 0.07 215)",
+          "oklch(95% 0.03 215)"
+        ]
+      },
+      "stellar-mid": {
+        "role": "secondary",
+        "displayName": "Stellar Mid",
+        "canonical": "oklch(67% 0.10 240)",
+        "tonalRamp": [
+          "oklch(30% 0.05 240)",
+          "oklch(45% 0.08 240)",
+          "oklch(55% 0.09 240)",
+          "oklch(67% 0.10 240)",
+          "oklch(76% 0.08 240)",
+          "oklch(85% 0.06 240)",
+          "oklch(92% 0.03 240)",
+          "oklch(97% 0.01 240)"
+        ]
+      },
+      "glacier-tint": {
+        "role": "tertiary",
+        "displayName": "Glacier Tint",
+        "canonical": "oklch(85% 0.05 230)",
+        "tonalRamp": [
+          "oklch(40% 0.04 230)",
+          "oklch(55% 0.05 230)",
+          "oklch(70% 0.05 230)",
+          "oklch(80% 0.05 230)",
+          "oklch(85% 0.05 230)",
+          "oklch(90% 0.04 230)",
+          "oklch(94% 0.025 230)",
+          "oklch(98% 0.01 230)"
+        ]
+      },
+      "document-grey": {
+        "role": "neutral",
+        "displayName": "Document Grey",
+        "canonical": "oklch(91% 0.001 200)",
+        "tonalRamp": [
+          "oklch(40% 0.005 200)",
+          "oklch(55% 0.004 200)",
+          "oklch(70% 0.003 200)",
+          "oklch(82% 0.002 200)",
+          "oklch(91% 0.001 200)",
+          "oklch(95% 0.001 200)",
+          "oklch(97% 0.001 200)",
+          "oklch(99% 0.001 200)"
+        ]
+      },
+      "sheet-white": {
+        "role": "neutral",
+        "displayName": "Sheet White",
+        "canonical": "oklch(100% 0 0)",
+        "tonalRamp": [
+          "oklch(85% 0.002 200)",
+          "oklch(90% 0.002 200)",
+          "oklch(94% 0.001 200)",
+          "oklch(97% 0.001 200)",
+          "oklch(99% 0 0)",
+          "oklch(100% 0 0)",
+          "oklch(100% 0 0)",
+          "oklch(100% 0 0)"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "rgba(19, 39, 40, 0.12)",
+        "tonalRamp": [
+          "rgba(19, 39, 40, 0.40)",
+          "rgba(19, 39, 40, 0.30)",
+          "rgba(19, 39, 40, 0.20)",
+          "rgba(19, 39, 40, 0.15)",
+          "rgba(19, 39, 40, 0.12)",
+          "rgba(19, 39, 40, 0.08)",
+          "rgba(19, 39, 40, 0.05)",
+          "rgba(19, 39, 40, 0.02)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Hero H1 e âncoras de seção principais." },
+      "headline": { "displayName": "Headline", "purpose": "Títulos dentro de seções." },
+      "title": { "displayName": "Title", "purpose": "Itens dentro de listas (caminhos, nomes)." },
+      "body": { "displayName": "Body", "purpose": "Copy institucional longo. Light weight (300) é deliberado." },
+      "label": { "displayName": "Label", "purpose": "Eyebrows, metadados, CTAs em uppercase tracking-widest." },
+      "mono": { "displayName": "Mono Data", "purpose": "Números, identificadores SEP/AUTH, endereços de contato." }
+    },
+    "shadows": [
+      {
+        "name": "cta-primary",
+        "value": "0 25px 50px -12px rgba(19, 39, 40, 0.25)",
+        "purpose": "Único uso de drop shadow — CTA primário em Lead Capture. Em hover, refletido em cyan via shadow-primary/20."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out-quart",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Easing padrão para todos os estados — reveal, hover, fade-up. Sem bounce."
+      },
+      {
+        "name": "duration-state",
+        "value": "300ms",
+        "purpose": "Hover de cor e opacity."
+      },
+      {
+        "name": "duration-reveal",
+        "value": "1000ms",
+        "purpose": "Reveal de seção em scroll (opacity + translateY 30px)."
+      },
+      {
+        "name": "duration-hover-bar",
+        "value": "700ms",
+        "purpose": "Barra cyan lateral em group-hover (scale-y 0→1, origin-top)."
+      },
+      {
+        "name": "duration-hero-fade",
+        "value": "1800ms",
+        "purpose": "Hero text reveal — fade-up 20px, delay 300ms (texto) ou 1200ms (scroll indicator)."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "max", "value": "1400px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "CTA institucional — Solicitar Prospecto / Submeter Aplicação. Pílula full-radius com label uppercase.",
+      "html": "<button class=\"ds-btn-primary\">SOLICITAR PROSPECTO</button>",
+      "css": ".ds-btn-primary { background: #132728; color: #ffffff; padding: 20px 40px; font-family: 'Geist', sans-serif; font-weight: 700; font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; border: none; border-radius: 9999px; box-shadow: 0 25px 50px -12px rgba(19, 39, 40, 0.25); cursor: pointer; transition: background-color 300ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 300ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-btn-primary:hover { background: #0EA7C7; box-shadow: 0 25px 50px -12px rgba(14, 167, 199, 0.20); } .ds-btn-primary:focus-visible { outline: 2px solid #0EA7C7; outline-offset: 4px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "CTA secundário no header navbar. Pílula clara em fundo dark.",
+      "html": "<button class=\"ds-btn-ghost\">Solicitar Prospecto</button>",
+      "css": ".ds-btn-ghost { background: #ffffff; color: #132728; padding: 10px 20px; font-family: 'Geist', sans-serif; font-weight: 700; font-size: 0.625rem; letter-spacing: 0.2em; text-transform: uppercase; border: none; border-radius: 9999px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15); cursor: pointer; transition: background-color 300ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-btn-ghost:hover { background: #e4e4e4; } .ds-btn-ghost:focus-visible { outline: 2px solid #0EA7C7; outline-offset: 4px; }"
+    },
+    {
+      "name": "Form Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Campo institucional do Lead Capture. Pílula full-radius com label Geist 700 uppercase acima.",
+      "html": "<div class=\"ds-input-group\"><label class=\"ds-input-label\">RESPONSÁVEL CORPORATIVO</label><input class=\"ds-input\" type=\"text\" placeholder=\"Nome Completo\" /></div>",
+      "css": ".ds-input-group { display: flex; flex-direction: column; gap: 6px; } .ds-input-label { font-family: 'Geist', sans-serif; font-weight: 700; font-size: 0.625rem; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(19, 39, 40, 0.40); margin-left: 16px; } .ds-input { width: 100%; padding: 16px 28px; border: 1px solid #e5e7eb; border-radius: 9999px; background: rgba(228, 228, 228, 0.20); font-family: 'Satoshi', sans-serif; font-size: 1rem; color: #132728; transition: border-color 200ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-input:focus { outline: none; border-color: #0EA7C7; } .ds-input::placeholder { color: rgba(19, 39, 40, 0.35); }"
+    },
+    {
+      "name": "Stack Tile",
+      "kind": "card",
+      "refersTo": "card-tile",
+      "description": "Tile sharp-corner em grid hairline. Eyebrow mono cyan, sub label Geist, lista de itens em Chillax title separados por hairline interno.",
+      "html": "<div class=\"ds-stack-tile\"><span class=\"ds-tile-eyebrow\">STABLECOINS</span><p class=\"ds-tile-sub\">LIQUIDAÇÃO MULTI-MOEDA</p><ul class=\"ds-tile-list\"><li>USDC</li><li>EURC</li><li>BRZ</li><li>BRLA</li></ul></div>",
+      "css": ".ds-stack-tile { background: #ffffff; padding: 32px; border-radius: 0; transition: background-color 500ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-stack-tile:hover { background: rgba(228, 228, 228, 0.40); } .ds-tile-eyebrow { display: block; font-family: 'Geist Mono', monospace; font-weight: 700; font-size: 0.625rem; letter-spacing: 0.2em; text-transform: uppercase; color: #4A9ED4; margin-bottom: 12px; } .ds-tile-sub { font-family: 'Geist', sans-serif; font-weight: 400; font-size: 0.625rem; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(19, 39, 40, 0.40); margin: 0 0 32px 0; } .ds-tile-list { list-style: none; padding: 0; margin: 0; } .ds-tile-list li { font-family: 'Chillax', sans-serif; font-weight: 600; font-size: 1.125rem; letter-spacing: -0.01em; color: #132728; padding-bottom: 12px; border-bottom: 1px solid rgba(19, 39, 40, 0.12); } .ds-tile-list li:last-child { border-bottom: none; padding-bottom: 0; }"
+    },
+    {
+      "name": "Numbered List Item",
+      "kind": "custom",
+      "description": "Padrão de assinatura do sistema — numeral mono à esquerda, título Chillax + body Satoshi 300, hairline divisor inferior, barra cyan lateral animada em group-hover.",
+      "html": "<div class=\"ds-numlist-item\"><div class=\"ds-numlist-bar\"></div><div class=\"ds-numlist-num\">A</div><div class=\"ds-numlist-content\"><h4 class=\"ds-numlist-title\">Revenda ao Comprador-Usuário</h4><p class=\"ds-numlist-body\">A diferença entre o preço pago ao vendedor original e o preço cobrado do comprador-usuário do bem é a fonte primária de yield.</p></div></div>",
+      "css": ".ds-numlist-item { position: relative; display: flex; gap: 64px; align-items: flex-start; padding: 64px 0; border-bottom: 1px solid rgba(19, 39, 40, 0.12); transition: background-color 700ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-numlist-item:hover { background: rgba(255, 255, 255, 0.50); } .ds-numlist-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #0EA7C7; transform: scaleY(0); transform-origin: top; transition: transform 700ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-numlist-item:hover .ds-numlist-bar { transform: scaleY(1); } .ds-numlist-num { font-family: 'Geist Mono', monospace; font-weight: 300; font-size: 3rem; color: rgba(19, 39, 40, 0.20); padding-left: 32px; min-width: 100px; transition: color 500ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-numlist-item:hover .ds-numlist-num { color: #4A9ED4; } .ds-numlist-content { flex: 1; } .ds-numlist-title { font-family: 'Chillax', sans-serif; font-weight: 600; font-size: 2rem; letter-spacing: -0.015em; color: #132728; margin: 0 0 16px 0; line-height: 1.1; } .ds-numlist-body { font-family: 'Satoshi', sans-serif; font-weight: 300; font-size: 1.125rem; line-height: 1.6; color: rgba(19, 39, 40, 0.70); margin: 0; max-width: 65ch; }"
+    },
+    {
+      "name": "TopBar",
+      "kind": "custom",
+      "refersTo": "topbar",
+      "description": "Faixa institucional acima da navbar — fase atual da operação + CTA inline. Esconde ao passar do hero.",
+      "html": "<div class=\"ds-topbar\">FASE INICIAL · CAPITAL PRIMÁRIO · ROADSHOW INSTITUCIONAL ABERTO. <a class=\"ds-topbar-cta\" href=\"#\">SOLICITAR PROSPECTO →</a></div>",
+      "css": ".ds-topbar { background: #0EA7C7; color: #ffffff; text-align: center; padding: 10px 24px; font-family: 'Geist', sans-serif; font-weight: 400; font-size: 0.6875rem; letter-spacing: 0.2em; text-transform: uppercase; } .ds-topbar-cta { color: #ffffff; font-weight: 700; margin-left: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.30); text-decoration: none; transition: opacity 200ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-topbar-cta:hover { opacity: 0.80; }"
+    },
+    {
+      "name": "Eyebrow Label",
+      "kind": "custom",
+      "description": "Eyebrow obrigatório acima de todo display de seção. Cyan, Geist 700, uppercase, tracking-widest.",
+      "html": "<span class=\"ds-eyebrow\">A Tese</span>",
+      "css": ".ds-eyebrow { display: block; font-family: 'Geist', sans-serif; font-weight: 700; font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; color: #0EA7C7; margin-bottom: 24px; }"
+    },
+    {
+      "name": "Display Heading",
+      "kind": "custom",
+      "description": "Display Chillax 600 com letter-spacing apertado. Sempre precedido de eyebrow.",
+      "html": "<h2 class=\"ds-display\">Modelo Híbrido de<br/>Realização de Valor.</h2>",
+      "css": ".ds-display { font-family: 'Chillax', sans-serif; font-weight: 600; font-size: clamp(2rem, 5vw, 3.75rem); letter-spacing: -0.02em; line-height: 1.05; color: #132728; margin: 0; }"
+    },
+    {
+      "name": "Mono Metric",
+      "kind": "custom",
+      "description": "Métrica numérica em Geist Mono — duration, mix-alvo, percentuais. Acompanhada de label Geist em hairline-bordered tile.",
+      "html": "<div class=\"ds-metric\"><span class=\"ds-metric-label\">DURATION</span><span class=\"ds-metric-value\">30-90 dias</span></div>",
+      "css": ".ds-metric { display: flex; flex-direction: column; gap: 8px; padding-left: 16px; border-left: 1px solid rgba(19, 39, 40, 0.12); } .ds-metric-label { font-family: 'Geist', sans-serif; font-weight: 700; font-size: 0.5625rem; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(19, 39, 40, 0.40); } .ds-metric-value { font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 0.875rem; color: #132728; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Regulated Terminal",
+    "overview": "A Plina opera no registro visual do terminal financeiro institucional — não o terminal de trader (Bloomberg, neon sobre preto), mas o terminal regulado: hairlines como malha estrutural, mono numérico carregando os dados que importam, tipografia editorial Chillax assinando as âncoras de cada seção, e um único cyan auditável que aparece raramente como sinal — não como decoração.\n\nA profundidade é tonal, não baseada em sombras: alterna Sheet White → Document Grey → Deep Petrol em fatias horizontais que dão ritmo sem decoração. Cards como afordância são raros e nunca aninhados; o padrão dominante é a grid hairline (gap-px sobre bg-hairline) que separa informação densa sem inventar elevação.\n\nO sistema rejeita explicitamente: gradientes de marca, sombras decorativas, cards iguais com ícone+título+texto, hero-metric template, gradient text, side-stripe borders, e qualquer linguagem de ganho rápido ou renda fixa digital.",
+    "keyCharacteristics": [
+      "Hairlines (1px @ 12% opacity) como única forma de separação estrutural",
+      "Tipografia editorial Chillax para âncoras + Geist Mono para dados",
+      "Auditable Cyan como sinal único, ≤10% de qualquer tela",
+      "Profundidade tonal por sandwich de superfícies (white / grey / petrol)",
+      "Bordas: 0px ou 9999px — nada intermediário",
+      "Easing cubic-bezier(0.16, 1, 0.3, 1) em todos os estados"
+    ],
+    "rules": [
+      { "name": "The One Voice Rule", "body": "Auditable Cyan aparece em ≤10% de qualquer viewport. Se um wireframe tem cyan em mais de três pontos visíveis, está errado. A força do sinal mora na raridade.", "section": "colors" },
+      { "name": "The Three-Surface Sandwich", "body": "Toda página alterna entre exatamente três superfícies — Sheet White, Document Grey, Deep Petrol. Nunca um quarto tom. Profundidade vem do contraste de superfície, nunca de sombra.", "section": "colors" },
+      { "name": "The No-Gradient Rule", "body": "Proibido gradient em texto, em background de seção, em borda. O sistema é flat por doutrina.", "section": "colors" },
+      { "name": "The Mono-For-Data Rule", "body": "Qualquer número que carregue significado regulatório, financeiro ou técnico aparece em Geist Mono. Percentuais de mix-alvo, durations, identificadores SEP, hash on-chain, AUM thresholds.", "section": "typography" },
+      { "name": "The Light-Body Rule", "body": "Body copy em Satoshi 300 (light). Pesos 400+ em copy longo viram leitura pesada de SaaS.", "section": "typography" },
+      { "name": "The Eyebrow-Headline Pair", "body": "Toda seção principal abre com label cyan uppercase tracking-widest seguido imediatamente do display em Chillax. Nunca display sozinho em topo de seção.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Surfaces não têm sombra em rest. Drop shadows são proibidos, exceto no caso único do CTA primário em Lead Capture.", "section": "elevation" },
+      { "name": "The No-Glassmorphism Rule", "body": "A única instância tolerada de backdrop-blur é a navbar quando passa do hero, para legibilidade do texto sobre conteúdo dinâmico abaixo.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do usar Auditable Cyan (#0EA7C7) como sinal raro — sublinhados ativos, ponto do logotipo, hover de barra lateral, eyebrow label uppercase. Máximo 10% de qualquer tela.",
+      "Do alternar superfícies em sandwich Sheet White → Document Grey → Deep Petrol entre seções verticais.",
+      "Do usar Geist Mono para todo número que carregue significado (mix-alvo, duration, percentual, identificador SEP/AUTH, endereço de contato).",
+      "Do parear toda âncora de seção: eyebrow Geist 700 uppercase tracking-widest cyan + Chillax display. Nunca display sozinho.",
+      "Do separar informação interna com hairlines 1px rgba(19,39,40,0.12) ou gap-px sobre bg-hairline. Nunca borda colorida.",
+      "Do usar barras laterais animadas (1×100%, scale-y origin-top, 700ms cyan) para sinalizar hover em list items numerados.",
+      "Do manter body em Satoshi 300 (light). Pesos pesados em copy longo são proibidos.",
+      "Do citar enquadramento regulatório explícito (CVM 175, Lei 11.795/2008, AUTH_CLAWBACK_ENABLED, SEP-24) em destaque editorial — não em fineprint de rodapé."
+    ],
+    "donts": [
+      "Don't usar gradient em texto, em background de seção, ou em borda. Gradient é proibido.",
+      "Don't usar drop shadows decorativas. Cards são flat. Profundidade é tonal.",
+      "Don't usar border-left ou border-right maior que 1px como side-stripe colorida em cards, alerts, callouts.",
+      "Don't clonar o template hero-metric (big number + label + supporting stats + gradient accent). É o cliché SaaS que o sistema rejeita.",
+      "Don't fazer cards iguais com ícone + heading + texto repetidos. Use o padrão de numbered list item.",
+      "Don't usar glassmorphism em cards de conteúdo. Backdrop-blur só na navbar pós-hero.",
+      "Don't usar copy de Renda Fixa Digital, ganho rápido, rentabilidade garantida, ou linguagem do framing Mercado Bitcoin / fintech retail.",
+      "Don't simplificar termos técnicos. CVM 175, FIDC, AUTH_CLAWBACK_ENABLED, SEP-38 aparecem como ferramentas de trabalho.",
+      "Don't usar emoji, exclamação, ou imperativo agressivo em CTA. Registro consultivo: Solicitar Prospecto, Submeter Aplicação, Agendar Roadshow.",
+      "Don't introduzir uma quarta superfície de cor (azul claro, off-white). Sandwich é três tons exatos."
+    ]
+  }
+}
