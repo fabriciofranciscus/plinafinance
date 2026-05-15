@@ -1,12 +1,18 @@
 /**
  * Privy server-side wrapper.
  *
- * Padrão pattern Yalla: Privy provisiona wallet Stellar embedded no login
- * (configurado no dashboard.privy.io); backend extrai o endereço da JWT
- * `linkedAccounts`. Wallet creation NÃO acontece server-side — é automática
- * via Privy login.
+ * Padrão Yalla. Stellar é **Tier 2** na Privy → NÃO tem toggle no dashboard
+ * pra auto-create-on-login. Cliente chama programaticamente após login:
  *
- * Pra assinatura: frontend chama `useSignRawHash({chainType:'stellar', hash})`,
+ *     import { useCreateWallet } from '@privy-io/react-auth/extended-chains';
+ *     await createWallet({ chainType: 'stellar' });
+ *
+ * Após isso o endereço aparece em `user.linkedAccounts` com prefixo 'G'.
+ * Backend extrai daí. Wallet creation **não acontece server-side** no fluxo
+ * normal (pode-se, via `privy.wallets().create()`, mas pra login UX o
+ * client-side é mais limpo).
+ *
+ * Assinatura: frontend chama `useSignRawHash({chainType:'stellar', hash})`,
  * recebe signature `0x...` hex (64 bytes Ed25519), backend converte pra base64
  * e usa `transaction.addSignature(stellarAddress, sigBase64)`.
  *

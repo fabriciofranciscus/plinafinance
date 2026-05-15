@@ -35,8 +35,10 @@ export function PrivyAppProvider({ children }: { children: ReactNode }) {
       config={{
         loginMethods: ['email', 'google'],
         embeddedWallets: {
-          // Stellar Tier 2 — habilitar no dashboard.privy.io.
-          // EVM/Solana off pra evitar wallets desnecessárias.
+          // Stellar é Tier 2 — não tem toggle no dashboard.privy.io.
+          // Criada programaticamente via useCreateWallet({chainType:'stellar'})
+          // de '@privy-io/react-auth/extended-chains' no client após login.
+          // EVM/Solana off (não precisamos delas).
           ethereum: { createOnLogin: 'off' },
           solana: { createOnLogin: 'off' },
         },
