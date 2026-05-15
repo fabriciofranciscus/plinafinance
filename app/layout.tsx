@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { PrivyAppProvider } from "@/components/PrivyAppProvider";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://plina.finance"),
@@ -50,7 +51,9 @@ export default function RootLayout({
       </head>
       <body className="font-text antialiased min-h-screen flex flex-col relative">
         <a href="#main" className="skip-link">Pular para conteúdo</a>
-        <main id="main">{children}</main>
+        <PrivyAppProvider>
+          <main id="main">{children}</main>
+        </PrivyAppProvider>
       </body>
     </html>
   );
