@@ -54,6 +54,9 @@ import type {
     EtherfuseOrderStatus,
     EtherfuseKycIdentityRequest,
     EtherfuseKycDocumentRequest,
+    EtherfusePixAccountBody,
+    EtherfuseSpeiAccountBody,
+    EtherfuseBankAccountResponse,
 } from './types';
 
 /**
@@ -891,6 +894,45 @@ export class EtherfuseClient implements Anchor {
         await this.acceptElectronicSignature(presignedUrl);
         await this.acceptTermsAndConditions(presignedUrl);
         return this.acceptCustomerAgreement(presignedUrl);
+    }
+
+    /**
+     * Register a PIX bank account programmatically.
+     *
+     * PLINA-MOD-005: upstream tem os tipos (`EtherfusePixAccountBody`) mas
+     * não expõe método público — só usaria via iframe (`fiatAccountRegistration: 'hosted'`).
+     * Pra POC institucional da Plina, o investidor preenche dados no form
+     * white-label da Plina e a gente registra via API. Endpoint via
+     * presigned URL auth: `POST /ramp/bank-account`.
+     *
+     * @param presignedUrl - presignedUrl da onboarding (`getKycUrl`).
+     * @param account - dados PIX (pixKey, pixKeyType, firstName, lastName, cpf).
+     * @returns BankAccount registrada (pending/active depending on sandbox).
+     */
+    async registerPixBankAccount(
+        presignedUrl: string,
+        account: EtherfusePixAccountBody,
+    ): Promise<EtherfuseBankAccountResponse> {
+        return this.request<EtherfuseBankAccountResponse>(
+            'POST',
+            '/ramp/bank-account',
+            { presignedUrl, account },
+        );
+    }
+
+    /**
+     * Register a SPEI (Mexican CLABE) bank account programmatically.
+     * Complemento ao registerPixBankAccount pra futura expansão multi-país.
+     */
+    async registerSpeiBankAccount(
+        presignedUrl: string,
+        account: EtherfuseSpeiAccountBody,
+    ): Promise<EtherfuseBankAccountResponse> {
+        return this.request<EtherfuseBankAccountResponse>(
+            'POST',
+            '/ramp/bank-account',
+            { presignedUrl, account },
+        );
     }
 
     /**

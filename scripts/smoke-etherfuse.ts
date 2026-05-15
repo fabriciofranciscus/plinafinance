@@ -42,7 +42,7 @@ const warn = (msg: string) => console.log(`     ! ${msg}`);
 const DUMMY_PNG_BASE64 =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
 
-const TOTAL_STEPS = 9;
+const TOTAL_STEPS = 10;
 
 async function pollKycStatus(
   anchor: EtherfuseClient,
@@ -197,8 +197,26 @@ async function main() {
   ok(`status final = ${finalKycStatus}`);
   output.kycStatusFinal = finalKycStatus;
 
-  // 7. Quote BRL → TESOURO
-  step(7, TOTAL_STEPS, 'POST /ramp/quote — BRL → TESOURO');
+  // 7. Registrar PIX bank account (PLINA-MOD-005)
+  step(7, TOTAL_STEPS, 'POST /ramp/bank-account — registra conta PIX programaticamente');
+  try {
+    const bankAccount = await anchor.registerPixBankAccount(kycUrl, {
+      pixKey: '52998224725',
+      pixKeyType: 'cpf',
+      firstName: 'Plina',
+      lastName: 'SmokeTest',
+      cpf: '52998224725',
+    });
+    ok(`bankAccount status = ${bankAccount.status}`);
+    info(`compliant = ${bankAccount.compliant}`);
+    output.bankAccount = bankAccount;
+  } catch (err) {
+    warn(`registerPixBankAccount falhou: ${err}`);
+    output.bankAccountError = String(err);
+  }
+
+  // 8. Quote BRL → TESOURO
+  step(8, TOTAL_STEPS, 'POST /ramp/quote — BRL → TESOURO');
   const quote = await anchor.getQuote({
     fromCurrency: 'BRL',
     toCurrency: 'TESOURO',
@@ -212,8 +230,8 @@ async function main() {
   info(`expiresAt = ${quote.expiresAt}`);
   output.quote = quote;
 
-  // 8. createOnRamp + simulateFiatReceived
-  step(8, TOTAL_STEPS, 'POST /ramp/order + /fiat_received');
+  // 9. createOnRamp + simulateFiatReceived
+  step(9, TOTAL_STEPS, 'POST /ramp/order + /fiat_received');
   let order;
   try {
     order = await anchor.createOnRamp({
@@ -242,7 +260,7 @@ async function main() {
 
   // 9. Poll onramp until terminal (PLINA-MOD-004 lida com indexing delay)
   if (order) {
-    step(9, TOTAL_STEPS, 'Poll order até terminal (indexing grace 12s)');
+    step(10, TOTAL_STEPS, 'Poll order até terminal (indexing grace 12s)');
     try {
       const terminal = await anchor.pollOnRampUntilTerminal(order.id, {
         intervalMs: 2_000,
@@ -260,7 +278,7 @@ async function main() {
       output.orderPollError = String(err);
     }
   } else {
-    warn('step 9 pulado (order não criado)');
+    warn('step 10 pulado (order não criado)');
   }
 
   writeFileSync('smoke-etherfuse-output.json', JSON.stringify(output, null, 2));

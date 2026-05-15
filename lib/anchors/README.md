@@ -61,15 +61,15 @@ if-else por provider (ex: `kycFlow: 'iframe' | 'form' | 'redirect'`).
 
 ## Etherfuse — anchor da POC
 
-Stellar testnet emite **CETES** (Mexican Federal Treasury) e
-**TESOURO** (Brazil, _coming soon_), não USDC. CETES é o bridge
-asset da demo:
+Stellar testnet emite **TESOURO** (Brazil Tesouro Direto tokenizado) +
+CETES (Mexican Federal Treasury). Bridge asset da demo é **TESOURO via PIX**
+(BRL):
 
 ```
-fiat MXN (sandbox sim) → Etherfuse → CETES Stellar testnet → swap → PLINARF
+BRL via PIX (sandbox sim) → Etherfuse → TESOURO Stellar testnet → swap → PLINARF
 ```
 
-Issuer CETES testnet: `GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4`
+Issuer TESOURO/CETES testnet (mesmo): `GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4`
 
 Sandbox specifics:
 - KYC fake auto-aprova.
@@ -112,6 +112,26 @@ no código com `PLINA-MOD-NNN`.
   grace = aguardar; depois = `ORDER_NOT_FOUND`. Evita falso negativo em
   polling imediatamente após `createOnRamp`.
   Fonte: SDF DevRel `Dev_Setup_Guide.md` (60 build runs).
+
+- **PLINA-MOD-005** — Novos métodos `registerPixBankAccount(presignedUrl, account)`
+  e `registerSpeiBankAccount(presignedUrl, account)` chamando
+  `POST /ramp/bank-account` com presigned URL auth. Métodos **ficam no
+  client** pra futura ativação, mas **API rejeita PIX hoje**.
+  - Testado em smoke 2026-05-15 com body `{pixKey, pixKeyType, firstName, lastName, cpf}`
+    derivado do tipo upstream `EtherfusePixAccountBody`: retornou 400 `"Json deserialize error:
+    data did not match any variant of untagged enum AccountRegistration"`.
+  - A OpenAPI spec da Etherfuse só documenta o shape CLABE (Mexicano).
+  - O tipo upstream pra PIX era especulativo, nunca validado contra API real.
+  - Conclusão arquitetural: **registro PIX + execução TED ficam no iframe
+    hosted da Etherfuse**, conforme `capabilities.fiatAccountRegistration: 'hosted'`
+    sinalizava desde o início. Plina white-label cobre **lead → KYC → quote**;
+    iframe cobre **bank account + TED**. Webhook `bank_account_updated` é o
+    hand-off pra Plina chamar `createOrder` quando a conta ficar `active +
+    compliant`. Decisão consistente com o pitch: Etherfuse é anchor regulada,
+    Plina não duplica camada de compliance bancário.
+  - Manter métodos no código por dois motivos: (a) se Etherfuse expor PIX
+    via API no futuro, é só remover o erro; (b) registerSpei funciona contra
+    o sandbox e pode ser útil pra testes MX.
 
 Quando divergirmos mais, registrar aqui com referência ao patch
 correspondente (`PLINA-MOD-NNN`) pra facilitar merge futuro de bugfixes
