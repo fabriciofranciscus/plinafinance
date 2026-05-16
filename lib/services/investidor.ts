@@ -198,3 +198,31 @@ export async function onboardInvestidor(
     fundedNow: fund.funded,
   };
 }
+
+/**
+ * Guardrail (whitepaper §6.5: AUTH_REQUIRED + KYC antes da trustline).
+ * Aborta com mensagem explícita se o investidor não estiver elegível.
+ * Lookup por investidorId ou por publicKey — qualquer ausência é fatal.
+ */
+export async function assertElegivelParaTrustline(opts: {
+  investidorId?: string;
+  publicKey?: string;
+}): Promise<void> {
+  if (!opts.investidorId && !opts.publicKey) {
+    throw new Error('investidorId ou publicKey obrigatório.');
+  }
+  const investidor = opts.investidorId
+    ? await db.investidor.findUnique({ where: { id: opts.investidorId } })
+    : await db.investidor.findUnique({ where: { publicKey: opts.publicKey! } });
+  if (!investidor) {
+    throw new Error('Investidor não onboardado — trustline negada.');
+  }
+  if (!investidor.kycAprovado) {
+    throw new Error('KYC pendente — trustline negada (whitepaper §6.5).');
+  }
+  if (investidor.status !== StatusInvestidor.AUTORIZADO) {
+    throw new Error(
+      `Investidor em estado ${investidor.status} — trustline negada.`,
+    );
+  }
+}

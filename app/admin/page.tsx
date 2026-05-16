@@ -16,10 +16,19 @@
 import { db } from '@/lib/db';
 import { isAdminAuthenticated } from '@/lib/auth/admin';
 import { accountExplorerUrl, assetExplorerUrl, txExplorerUrl } from '@/lib/stellar/config';
-import { navDaCota, navTotalDoPool, tokensEmitidosVivos } from '@/lib/services/pool';
+import {
+  caixaRealizado,
+  concentracaoPorAdministradora,
+  navDaCota,
+  navPorToken,
+  navTotalDoPool,
+  spreadRealizadoAcumulado,
+  tokensEmitidosVivos,
+} from '@/lib/services/pool';
 import { LoginForm } from './login-form';
 import { IncorporarCotaForm } from './incorporar-cota-form';
 import { ClawbackForm } from './clawback-form';
+import { ValidacaoForm } from './validacao-form';
 import { VendedorPipeline } from './vendedor-pipeline';
 import { CompradorPipeline } from './comprador-pipeline';
 import { logoutAction } from './actions';
@@ -51,7 +60,15 @@ export default async function AdminPage() {
     return <LoginForm />;
   }
 
-  const [parametros, cotas, investidores, leadsVendedor, leadsComprador, eventos] = await Promise.all([
+  const [
+    parametros,
+    cotas,
+    investidores,
+    leadsVendedor,
+    leadsComprador,
+    eventos,
+    realizacoes,
+  ] = await Promise.all([
     db.parametrosPool.findUnique({ where: { id: 'singleton' } }),
     db.cota.findMany({ orderBy: { criadaEm: 'asc' } }),
     db.investidor.findMany({ orderBy: { criadoEm: 'asc' } }),
@@ -79,10 +96,17 @@ export default async function AdminPage() {
       take: 20,
       include: { cota: true, investidor: true },
     }),
+    db.realizacaoCaminho.findMany({
+      select: { valorRealizado: true, spread: true },
+    }),
   ]);
 
-  const navTotal = navTotalDoPool(cotas);
+  const navTotal = navTotalDoPool(cotas, realizacoes);
   const tokensVivos = tokensEmitidosVivos(cotas);
+  const navUnit = navPorToken(cotas, realizacoes);
+  const caixa = caixaRealizado(realizacoes);
+  const spreadAcumulado = spreadRealizadoAcumulado(realizacoes);
+  const concentracao = concentracaoPorAdministradora(cotas);
 
   const sections = [
     { id: 'overview', label: 'Overview' },
@@ -131,12 +155,28 @@ export default async function AdminPage() {
       </nav>
 
       {parametros && (
-        <section className="mb-12 grid grid-cols-1 md:grid-cols-4 gap-px bg-base/15 border border-light-hairline">
-          <Metric label="NAV total ativo" value={brl(navTotal)} />
-          <Metric label={`${parametros.assetCode} vivos`} value={tokenFmt(tokensVivos)} />
-          <Metric label="Cotas" value={String(cotas.length)} />
-          <Metric label="Investidores" value={String(investidores.length)} />
-        </section>
+        <>
+          <section className="mb-2 grid grid-cols-1 md:grid-cols-4 gap-px bg-base/15 border border-light-hairline">
+            <Metric label="NAV total (ativo + caixa)" value={brl(navTotal)} />
+            <Metric
+              label={`${parametros.assetCode} vivos`}
+              value={tokenFmt(tokensVivos)}
+            />
+            <Metric label="Cotas ativas" value={String(cotas.length)} />
+            <Metric
+              label="Investidores"
+              value={String(investidores.length)}
+            />
+          </section>
+          <section className="mb-12 grid grid-cols-1 md:grid-cols-3 gap-px bg-base/15 border border-light-hairline">
+            <Metric label="NAV / token" value={brl(navUnit)} />
+            <Metric label="Caixa realizado" value={brl(caixa)} />
+            <Metric
+              label="Yield realizado acumulado"
+              value={brl(spreadAcumulado)}
+            />
+          </section>
+        </>
       )}
 
       {/* Issuer / Distributor */}
@@ -263,6 +303,7 @@ export default async function AdminPage() {
                 <Th>Tokens</Th>
                 <Th>Status</Th>
                 <Th>Emissão</Th>
+                <Th>Validação legal</Th>
               </tr>
             </thead>
             <tbody>
@@ -300,12 +341,30 @@ export default async function AdminPage() {
                         '—'
                       )}
                     </Td>
+                    <Td>
+                      {c.validacaoTxHash ? (
+                        <a
+                          href={txExplorerUrl(c.validacaoTxHash)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-[10px] underline text-primary-deep"
+                          title={c.hashValidacao ?? ''}
+                        >
+                          ✓ {c.validacaoTxHash.slice(0, 8)}…
+                        </a>
+                      ) : (
+                        <ValidacaoForm
+                          cotaId={c.id}
+                          hasValidacao={!!c.validacaoTxHash}
+                        />
+                      )}
+                    </Td>
                   </tr>
                 );
               })}
               {cotas.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="text-center py-8 text-base/60">
+                  <td colSpan={9} className="text-center py-8 text-base/60">
                     Nenhuma cota no pool.
                   </td>
                 </tr>
@@ -313,6 +372,37 @@ export default async function AdminPage() {
             </tbody>
           </table>
         </div>
+
+        {concentracao.length > 0 && (
+          <div className="mt-8 border border-light-hairline">
+            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 px-4 py-3 border-b border-light-hairline">
+              Concentração por administradora · alerta &gt; 40%
+            </p>
+            <ul className="divide-y divide-light-hairline">
+              {concentracao.map((c) => (
+                <li
+                  key={c.administradora}
+                  className="px-4 py-3 grid grid-cols-[1fr_120px_80px_100px] items-center gap-4"
+                >
+                  <span className="font-text text-sm">{c.administradora}</span>
+                  <span className="font-mono text-xs text-right">
+                    {brl(c.nav)}
+                  </span>
+                  <span className="font-mono text-xs text-right">
+                    {c.pct.toFixed(1)}%
+                  </span>
+                  <span
+                    className={`font-details text-[10px] tracking-[0.15em] uppercase text-right ${
+                      c.alerta ? 'text-amber-700' : 'text-primary-deep'
+                    }`}
+                  >
+                    {c.alerta ? 'concentrado' : 'ok'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       <section id="investidores" className="mb-16 scroll-mt-32">

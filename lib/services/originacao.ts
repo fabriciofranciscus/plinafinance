@@ -449,3 +449,68 @@ export async function incorporarCotaDoFunil(input: {
 
   return result;
 }
+
+// ─── 7. Validação legal da cota (whitepaper §6.1) ──────────────────────────
+
+export interface RegistrarValidacaoLegalInput {
+  cotaId: string;
+  /** URL pública do laudo legal (contemplação, adimplência, titularidade). */
+  laudoUrl: string;
+  operador: string;
+}
+
+export interface RegistrarValidacaoLegalResult {
+  cotaId: string;
+  payloadHash: string;
+  txHash: string;
+}
+
+/**
+ * Registra prova on-chain (Memo.hash) de que a cota teve laudo legal
+ * concluído. Whitepaper §6.1: "hash do documento de validação na Stellar
+ * como prova pública". Persiste `Cota.hashValidacao` + `validacaoTxHash`
+ * e cria EventoAudit `COTA_VALIDADA`.
+ */
+export async function registrarValidacaoLegal(
+  input: RegistrarValidacaoLegalInput,
+): Promise<RegistrarValidacaoLegalResult> {
+  if (!input.laudoUrl || !/^https?:\/\//.test(input.laudoUrl)) {
+    throw new Error('laudoUrl obrigatória (URL pública do documento).');
+  }
+  const cota = await db.cota.findUnique({ where: { id: input.cotaId } });
+  if (!cota) throw new Error(`Cota ${input.cotaId} não encontrada.`);
+
+  const payload = buildAuditPayload('cota_validacao', input.cotaId, {
+    laudoUrl: input.laudoUrl,
+    administradora: cota.administradora,
+    tipoBem: cota.tipoBem,
+    operador: input.operador,
+  });
+  const onChain = await registerOnChainHash(payload);
+
+  await db.$transaction(async (tx) => {
+    await tx.cota.update({
+      where: { id: input.cotaId },
+      data: {
+        hashValidacao: onChain.payloadHash,
+        validacaoTxHash: onChain.txHash,
+      },
+    });
+    await tx.eventoAudit.create({
+      data: {
+        acao: 'COTA_VALIDADA',
+        operador: input.operador,
+        cotaId: input.cotaId,
+        payloadJson: payload as unknown as Prisma.InputJsonValue,
+        payloadHash: onChain.payloadHash,
+        stellarTxHash: onChain.txHash,
+      },
+    });
+  });
+
+  return {
+    cotaId: input.cotaId,
+    payloadHash: onChain.payloadHash,
+    txHash: onChain.txHash,
+  };
+}

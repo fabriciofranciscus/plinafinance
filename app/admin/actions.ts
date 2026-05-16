@@ -23,6 +23,7 @@ import {
   executarClawback,
   incorporarCota,
 } from '@/lib/services/tokenizacao';
+import { registrarValidacaoLegal } from '@/lib/services/originacao';
 import { CaminhoRealizacao, MotivoClawback, StatusCota, TipoBem } from '@prisma/client';
 
 export interface ActionResult {
@@ -102,6 +103,25 @@ export async function executarClawbackAction(
       amount: String(formData.get('amount') ?? ''),
       motivo: formData.get('motivo') as MotivoClawback,
       fundamentoUrl: String(formData.get('fundamentoUrl') ?? '').trim(),
+      operador: 'admin-panel',
+    });
+    revalidatePath('/admin');
+    revalidatePath('/pool');
+    return { ok: true, txHash: result.txHash };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'unknown' };
+  }
+}
+
+export async function registrarValidacaoLegalAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  await ensureAuth();
+  try {
+    const result = await registrarValidacaoLegal({
+      cotaId: String(formData.get('cotaId') ?? ''),
+      laudoUrl: String(formData.get('laudoUrl') ?? '').trim(),
       operador: 'admin-panel',
     });
     revalidatePath('/admin');

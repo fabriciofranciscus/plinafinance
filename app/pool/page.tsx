@@ -12,9 +12,11 @@
 
 import { db } from '@/lib/db';
 import {
+  caixaRealizado,
   navDaCota,
   navPorToken,
   navTotalDoPool,
+  spreadRealizadoAcumulado,
   tokensEmitidosVivos,
 } from '@/lib/services/pool';
 import { accountExplorerUrl, assetExplorerUrl } from '@/lib/stellar/config';
@@ -53,11 +55,14 @@ function pct(value: number): string {
 }
 
 export default async function PoolPage() {
-  const [parametros, cotas] = await Promise.all([
+  const [parametros, cotas, realizacoes] = await Promise.all([
     db.parametrosPool.findUnique({ where: { id: 'singleton' } }),
     db.cota.findMany({
       where: { status: { in: ['DISPONIVEL', 'RESERVADA'] } },
       orderBy: { criadaEm: 'asc' },
+    }),
+    db.realizacaoCaminho.findMany({
+      select: { valorRealizado: true, spread: true },
     }),
   ]);
 
@@ -71,9 +76,11 @@ export default async function PoolPage() {
     );
   }
 
-  const navTotal = navTotalDoPool(cotas);
+  const navTotal = navTotalDoPool(cotas, realizacoes);
   const tokensVivos = tokensEmitidosVivos(cotas);
-  const navUnit = navPorToken(cotas);
+  const navUnit = navPorToken(cotas, realizacoes);
+  const caixa = caixaRealizado(realizacoes);
+  const spreadAcumulado = spreadRealizadoAcumulado(realizacoes);
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-16 md:py-24">
@@ -128,6 +135,28 @@ export default async function PoolPage() {
           }
         />
       </section>
+
+      {spreadAcumulado > 0 && (
+        <section className="mb-12 border-y border-light-hairline">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-base/15">
+            <Metric
+              label="Caixa realizado"
+              value={brl(caixa)}
+              sublabel="BRL retornado ao fundo via realização de cotas (Caminho A/B/C)"
+            />
+            <Metric
+              label="Yield realizado acumulado"
+              value={brl(spreadAcumulado)}
+              sublabel="Spread capturado em realizações já executadas"
+            />
+            <Metric
+              label="NAV por token"
+              value={brl(navUnit)}
+              sublabel="Inclui caixa realizado — > R$ 1,00 sinaliza yield acumulado"
+            />
+          </div>
+        </section>
+      )}
 
       <section>
         <h2 className="font-title text-2xl font-semibold mb-6 tracking-tight">

@@ -71,6 +71,7 @@ enum CaminhoRealizacao {
 
 enum AcaoAudit {
   // Pool + Investidor (POC base)
+  COTA_VALIDADA
   COTA_INCORPORADA
   TOKEN_EMITIDO
   INVESTIDOR_ONBOARDED
@@ -195,6 +196,11 @@ model Cota {
   tokensEmitidos      Decimal       @db.Decimal(20, 7) @default(0)
   emissaoTxHash       String?
   hashCessao          String?
+  /// SHA-256 do laudo de validação legal (contemplação, adimplência,
+  /// titularidade) — whitepaper §6.1. Registrado on-chain via Memo.hash
+  /// antes da emissão pra prova pública.
+  hashValidacao       String?
+  validacaoTxHash     String?
   notas               String?
   criadaEm            DateTime      @default(now())
   atualizadaEm        DateTime      @updatedAt

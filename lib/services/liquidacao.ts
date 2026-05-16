@@ -60,18 +60,23 @@ export async function calcularValorLiquidacao(
   if (!isFinite(amount) || amount <= 0) {
     throw new Error('amountPlinarf inválido');
   }
-  const cotas = await db.cota.findMany({
-    where: { status: { in: ['DISPONIVEL', 'RESERVADA'] } },
-    select: {
-      valorCarta: true,
-      desagioAquisicao: true,
-      tokensEmitidos: true,
-      status: true,
-    },
-  });
-  const navTotal = navTotalDoPool(cotas);
+  const [cotas, realizacoes] = await Promise.all([
+    db.cota.findMany({
+      where: { status: { in: ['DISPONIVEL', 'RESERVADA'] } },
+      select: {
+        valorCarta: true,
+        desagioAquisicao: true,
+        tokensEmitidos: true,
+        status: true,
+      },
+    }),
+    db.realizacaoCaminho.findMany({
+      select: { valorRealizado: true, spread: true },
+    }),
+  ]);
+  const navTotal = navTotalDoPool(cotas, realizacoes);
   const tokensVivos = tokensEmitidosVivos(cotas);
-  const unit = navPorToken(cotas);
+  const unit = navPorToken(cotas, realizacoes);
   return {
     amountPlinarf: amount,
     navPorTokenAtual: unit,

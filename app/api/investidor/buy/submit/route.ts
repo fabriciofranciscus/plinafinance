@@ -21,6 +21,7 @@ import { db } from '@/lib/db';
 import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { authorizeTrustline } from '@/lib/stellar/issuer';
 import { distribute } from '@/lib/stellar/issuer';
+import { assertElegivelParaTrustline } from '@/lib/services/investidor';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,6 +62,13 @@ export async function POST(req: Request) {
         { status: 500 },
       );
     }
+
+    // 0) Guardrail (whitepaper §6.5: AUTH_REQUIRED + KYC antes da trustline).
+    //    Falha explícita se investidor não estiver elegível.
+    await assertElegivelParaTrustline({
+      investidorId,
+      publicKey: investorPubkey,
+    });
 
     // 1) Submete trustline assinada pelo investor.
     const trustlineRes = await submitWithPrivySignature({

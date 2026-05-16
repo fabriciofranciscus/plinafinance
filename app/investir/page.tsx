@@ -59,6 +59,10 @@ function explorerTx(hash: string) {
 function explorerAccount(pubkey: string) {
   return `https://stellar.expert/explorer/testnet/account/${pubkey}`;
 }
+function maskId(id: string): string {
+  if (id.length < 12) return id;
+  return `${id.slice(0, 8)}…${id.slice(-4)}`;
+}
 
 export default function InvestirPage() {
   const { ready, authenticated, user, getAccessToken } = usePrivy();
@@ -250,7 +254,17 @@ export default function InvestirPage() {
                     </a>
                   }
                 />
-                <Row k="Etherfuse customer" v={onboard.etherfuseCustomerId} mono />
+                <Row
+                  k="Etherfuse customer"
+                  v={
+                    <span
+                      className="font-mono text-xs"
+                      title={onboard.etherfuseCustomerId}
+                    >
+                      {maskId(onboard.etherfuseCustomerId)}
+                    </span>
+                  }
+                />
                 <Row
                   k="KYC"
                   v={

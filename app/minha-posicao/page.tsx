@@ -43,6 +43,10 @@ interface PoolSummary {
   distributorPubkey: string;
   navTotal: number;
   tokensVivos: number;
+  navPorToken: number;
+  caixaRealizado: number;
+  spreadRealizadoAcumulado: number;
+  realizacoesCount: number;
   cotasCount: number;
   tipoBemCount: Record<string, number>;
   navPorTipo: Record<string, number>;
@@ -283,7 +287,8 @@ export default function MinhaPosicaoPage() {
 
   const ownershipPct =
     pool && pool.tokensVivos > 0 ? (plinarfQty / pool.tokensVivos) * 100 : 0;
-  const navEquivalent = plinarfQty;
+  const navUnit = pool?.navPorToken ?? 1;
+  const navEquivalent = plinarfQty * navUnit;
 
   const hasPosition = plinarfQty > 0;
   const initialLoading = loading && !balances;
@@ -349,12 +354,20 @@ export default function MinhaPosicaoPage() {
                 <p className="font-mono text-xs text-lightBg/60 mt-2">
                   {NUMBER_BR.format(plinarfQty)} unidades
                 </p>
-                <div className="mt-6 pt-6 border-t border-lightBg/15 grid grid-cols-2 gap-6">
+                <div className="mt-6 pt-6 border-t border-lightBg/15 grid grid-cols-3 gap-4">
                   <div>
                     <p className="font-details text-[10px] tracking-[0.2em] uppercase text-lightBg/50">
                       NAV equivalente
                     </p>
                     <p className="font-mono text-xl mt-1">{BRL.format(navEquivalent)}</p>
+                  </div>
+                  <div>
+                    <p className="font-details text-[10px] tracking-[0.2em] uppercase text-lightBg/50">
+                      NAV / token
+                    </p>
+                    <p className="font-mono text-xl mt-1">
+                      {NUMBER_BR.format(navUnit)}
+                    </p>
                   </div>
                   <div>
                     <p className="font-details text-[10px] tracking-[0.2em] uppercase text-lightBg/50">

@@ -33,6 +33,16 @@ ORG_NAME = "Plina Finance"
 ORG_DESCRIPTION = "Tokenizadora institucional de direito creditório brasileiro. Cotas de consórcio contempladas representadas como ativo Stellar PLINA-RF lastreado em FIDC sob CVM 175."
 ORG_URL = "https://plina.finance"
 ORG_OFFICIAL_EMAIL = "contato@plina.finance"
+ORG_LOGO = "https://plina.finance/icon.svg"
+
+# SEPs planejados (Fase 1 — mainnet com FIDC formal):
+#   TRANSFER_SERVER      = ""   # SEP-6  server-to-server com anchors parceiras
+#   KYC_SERVER           = ""   # SEP-12 KYC compartilhado
+#   WEB_AUTH_ENDPOINT    = ""   # SEP-10 auth do investidor
+#   ANCHOR_QUOTE_SERVER  = ""   # SEP-38 BRL ↔ USDC/EURC
+#   DIRECT_PAYMENT_SERVER = ""  # SEP-31 cross-border B2B
+# POC integra Etherfuse (REST proprietário, LATAM regulada) — SEPs entram
+# quando anchors parceiras de USDC/EURC entrarem na Fase 1.
 
 [[CURRENCIES]]
 code = "PLINARF"
@@ -48,8 +58,19 @@ attestation_of_reserve = "https://plina.finance/politica-clawback"
 regulated = true
 approval_criteria = "AUTH_REQUIRED — investidor passa pelo onboarding KYC institucional da Plina antes de receber trustline autorizada."
 
-[PRINCIPALS]
-# Founders detalhados em https://plina.finance#equipe
+[[PRINCIPALS]]
+name = "Thais Reis"
+email = "thais@plina.finance"
+twitter = ""
+github = ""
+keybase = ""
+
+[[PRINCIPALS]]
+name = "Fabricio Santos"
+email = "fabricio@plina.finance"
+twitter = ""
+github = ""
+keybase = ""
 `;
 
 export async function GET() {

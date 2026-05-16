@@ -24,6 +24,7 @@ import { db } from '../db';
 import { executeClawback, issueAsset } from '../stellar/issuer';
 import { tokensParaEmitir } from './pool';
 import { assetCode } from '../stellar/config';
+import { buildAuditPayload, registerOnChainHash } from '../stellar/audit';
 
 export interface IncorporarCotaInput {
   tipoBem: TipoBem;
@@ -134,7 +135,12 @@ export interface ExecutarClawbackInput {
 }
 
 export interface ExecutarClawbackResult {
+  /** Tx Stellar da operação clawback (Operation.clawback). */
   txHash: string;
+  /** Tx Stellar do Memo.hash do fundamento (whitepaper §3.2). */
+  fundamentoTxHash: string;
+  /** SHA-256 do payload `{motivo, fundamentoUrl, ...}` gravado on-chain. */
+  payloadHash: string;
 }
 
 /**
@@ -179,23 +185,42 @@ export async function executarClawback(
     },
   });
 
-  // 2) On-chain.
+  // 2) On-chain (clawback).
   const clawbackRes = await executeClawback(
     issuerSecret,
     investidor.publicKey,
     input.amount,
   );
 
-  // 3) Atualiza audit log + saldoEsperado.
+  // 3) Memo.hash do fundamento (whitepaper §3.2: "fundamento jurídico
+  //    vinculado, visível em Stellar Expert"). Self-payment do issuer
+  //    com SHA-256 do payload — Stellar Expert decodifica e qualquer
+  //    auditor cross-verifica `fundamentoUrl` off-chain contra o hash.
+  const fundamentoPayload = buildAuditPayload(
+    'clawback_fundamento',
+    input.investidorId,
+    {
+      motivo: input.motivo,
+      fundamentoUrl: input.fundamentoUrl,
+      targetPubkey: investidor.publicKey,
+      amount: input.amount,
+      clawbackTxHash: clawbackRes.hash,
+    },
+  );
+  const fundamentoOnChain = await registerOnChainHash(fundamentoPayload);
+
+  // 4) Atualiza audit log + saldoEsperado.
   await db.$transaction(async (tx) => {
     await tx.eventoAudit.update({
       where: { id: auditPre.id },
       data: {
         stellarTxHash: clawbackRes.hash,
+        payloadHash: fundamentoOnChain.payloadHash,
         payloadJson: {
           amount: input.amount,
           targetPubkey: investidor.publicKey,
           status: 'executed',
+          fundamentoTxHash: fundamentoOnChain.txHash,
         } as Prisma.InputJsonValue,
       },
     });
@@ -209,7 +234,11 @@ export async function executarClawback(
     });
   });
 
-  return { txHash: clawbackRes.hash };
+  return {
+    txHash: clawbackRes.hash,
+    fundamentoTxHash: fundamentoOnChain.txHash,
+    payloadHash: fundamentoOnChain.payloadHash,
+  };
 }
 
 export interface AtualizarStatusCotaInput {

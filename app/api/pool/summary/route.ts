@@ -9,15 +9,18 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import {
+  caixaRealizado,
   navDaCota,
+  navPorToken,
   navTotalDoPool,
+  spreadRealizadoAcumulado,
   tokensEmitidosVivos,
 } from '@/lib/services/pool';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const [parametros, cotas] = await Promise.all([
+  const [parametros, cotas, realizacoes] = await Promise.all([
     db.parametrosPool.findUnique({ where: { id: 'singleton' } }),
     db.cota.findMany({
       where: { status: { in: ['DISPONIVEL', 'RESERVADA'] } },
@@ -32,10 +35,16 @@ export async function GET() {
         prazoRestanteMeses: true,
       },
     }),
+    db.realizacaoCaminho.findMany({
+      select: { valorRealizado: true, spread: true },
+    }),
   ]);
 
-  const navTotal = navTotalDoPool(cotas);
+  const navTotal = navTotalDoPool(cotas, realizacoes);
   const tokensVivos = tokensEmitidosVivos(cotas);
+  const navUnit = navPorToken(cotas, realizacoes);
+  const caixa = caixaRealizado(realizacoes);
+  const spreadAcumulado = spreadRealizadoAcumulado(realizacoes);
 
   const tipoBemCount: Record<string, number> = {};
   for (const c of cotas) {
@@ -57,6 +66,10 @@ export async function GET() {
     distributorPubkey: parametros?.distributorPubkey ?? '',
     navTotal,
     tokensVivos,
+    navPorToken: navUnit,
+    caixaRealizado: caixa,
+    spreadRealizadoAcumulado: spreadAcumulado,
+    realizacoesCount: realizacoes.length,
     cotasCount: cotas.length,
     tipoBemCount,
     navPorTipo,

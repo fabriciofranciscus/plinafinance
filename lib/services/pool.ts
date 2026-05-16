@@ -1,18 +1,19 @@
 /**
  * Pool service — composição, NAV e emissão.
  *
- * Whitepaper §6.4: PLINA-RF representa cota de FIDC. Modelo simplificado
- * pro POC (sem FIDC formal): 1 PLINA-RF = R$ 1,00 em direito creditório
- * ajustado pelo NAV de aquisição.
+ * Whitepaper §5/§6.4: PLINA-RF representa cota de FIDC. 1 PLINA-RF = R$ 1,00
+ * em direito creditório ajustado diariamente pelo NAV.
  *
- * Convenção POC:
- *   - NAV de cota = valor_carta × (1 - desagio_aquisicao). Ex: carta R$ 250k
- *     com 18% deságio → NAV R$ 205k.
- *   - Tokens emitidos por cota = NAV (1 PLINA-RF por BRL de NAV).
- *   - NAV total do pool = soma de NAV das cotas com status ∈ {DISPONIVEL, RESERVADA}.
- *     Cotas REALIZADA têm seus tokens queimados na realização; REVERTIDA idem.
- *   - Para POC, mantenho REALIZADA também no cálculo do `nav_realizado_acumulado`
- *     pro relatório histórico — mas é metric separada.
+ * Convenção:
+ *   - NAV de cota ativa = valor_carta × (1 - desagio_aquisicao).
+ *   - Caixa realizado = soma de `valorRealizado` das cotas que saíram do pool
+ *     (Caminho A/B/C executados). Esse caixa **pertence ao fundo** — o spread
+ *     fica como yield acumulado, materializando o §6.2 (Caminho A como fonte
+ *     primária de yield).
+ *   - NAV total do pool = NAV das cotas ativas + caixa realizado.
+ *   - Tokens vivos = tokens emitidos das cotas ativas (denominador inalterado
+ *     pra refletir lastro corrente; quando uma cota é realizada, seus tokens
+ *     "saem" mas o caixa toma o lugar — NAV/token sobe pelo spread).
  *
  * Tipos `Decimal` do Prisma viram strings em runtime; aceito ambos via helper.
  */
@@ -44,11 +45,42 @@ export function navDaCota(cota: {
   return valor * (1 - desagio);
 }
 
-/** NAV total do pool, em BRL, considerando só cotas ativas. */
-export function navTotalDoPool(cotas: CotaForNav[]): number {
-  return cotas
+export interface RealizacaoForNav {
+  valorRealizado: Numericable;
+  spread?: Numericable;
+}
+
+/**
+ * Caixa do fundo proveniente de cotas já realizadas. Soma `valorRealizado`
+ * (preço pago pelo comprador-usuário, incluindo o custo de aquisição + spread).
+ * É o que sobra como cash do fundo depois que a cota saiu do pool de ativos.
+ */
+export function caixaRealizado(realizacoes: RealizacaoForNav[]): number {
+  return realizacoes.reduce((sum, r) => sum + toNumber(r.valorRealizado), 0);
+}
+
+/** Yield realizado acumulado (apenas a parte de spread). */
+export function spreadRealizadoAcumulado(realizacoes: RealizacaoForNav[]): number {
+  return realizacoes.reduce(
+    (sum, r) => sum + (r.spread !== undefined ? toNumber(r.spread) : 0),
+    0,
+  );
+}
+
+/**
+ * NAV total do fundo em BRL = NAV das cotas ativas + caixa realizado.
+ * O 2º argumento é opcional — se omitido, retorna apenas o NAV das cotas
+ * ativas (uso retrocompatível). Para visão correta do fundo, passe sempre
+ * `realizacoes`.
+ */
+export function navTotalDoPool(
+  cotas: CotaForNav[],
+  realizacoes: RealizacaoForNav[] = [],
+): number {
+  const navAtivo = cotas
     .filter((c) => c.status === 'DISPONIVEL' || c.status === 'RESERVADA')
     .reduce((sum, c) => sum + navDaCota(c), 0);
+  return navAtivo + caixaRealizado(realizacoes);
 }
 
 /** Soma de PLINA-RF emitidos vivos (cotas ativas). */
@@ -59,13 +91,43 @@ export function tokensEmitidosVivos(cotas: CotaForNav[]): number {
 }
 
 /**
- * NAV por token. POC: 1 PLINA-RF = 1 BRL (paridade de emissão).
- * Mantida como função porque na Fase 1 NAV/token vira marcação real do FIDC.
+ * NAV por token. Incluindo caixa realizado, NAV/token > 1 sinaliza yield
+ * acumulado pelo fundo. Sem cotas vivas mas com caixa, retorna 0 (pool
+ * em runoff — todas as cotas foram realizadas e os investidores devem
+ * liquidar).
  */
-export function navPorToken(cotas: CotaForNav[]): number {
+export function navPorToken(
+  cotas: CotaForNav[],
+  realizacoes: RealizacaoForNav[] = [],
+): number {
   const tokens = tokensEmitidosVivos(cotas);
   if (tokens === 0) return 0;
-  return navTotalDoPool(cotas) / tokens;
+  return navTotalDoPool(cotas, realizacoes) / tokens;
+}
+
+/**
+ * Concentração por administradora (apenas cotas ativas). Útil pro painel
+ * operacional flagrar exposição > 40% (limite POC; whitepaper §5 exige
+ * "mínima diversificação por administradora").
+ */
+export function concentracaoPorAdministradora(
+  cotas: (CotaForNav & { administradora: string })[],
+): { administradora: string; nav: number; pct: number; alerta: boolean }[] {
+  const ativas = cotas.filter(
+    (c) => c.status === 'DISPONIVEL' || c.status === 'RESERVADA',
+  );
+  const totalNav = ativas.reduce((sum, c) => sum + navDaCota(c), 0);
+  if (totalNav === 0) return [];
+  const byAdmin = new Map<string, number>();
+  for (const c of ativas) {
+    byAdmin.set(c.administradora, (byAdmin.get(c.administradora) ?? 0) + navDaCota(c));
+  }
+  return Array.from(byAdmin.entries())
+    .map(([administradora, nav]) => {
+      const pct = (nav / totalNav) * 100;
+      return { administradora, nav, pct, alerta: pct > 40 };
+    })
+    .sort((a, b) => b.nav - a.nav);
 }
 
 /**

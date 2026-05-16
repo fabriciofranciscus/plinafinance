@@ -25,12 +25,19 @@ for (const { path, expectText } of ROUTES) {
   });
 }
 
-test('stellar.toml é servido com CORS aberto e contém issuer PLINARF', async ({
+test('stellar.toml é servido com CORS, PLINARF, PRINCIPALS e SEPs planejados', async ({
   request,
 }) => {
   const res = await request.get('/.well-known/stellar.toml');
   expect(res.status()).toBe(200);
   const body = await res.text();
   expect(body).toMatch(/PLINARF/);
+  expect(body).toMatch(/ORG_OFFICIAL_EMAIL = "contato@plina\.finance"/);
+  expect(body).toMatch(/ORG_LOGO/);
+  expect(body).toMatch(/\[\[PRINCIPALS\]\]/);
+  expect(body).toMatch(/Thais Reis/);
+  expect(body).toMatch(/Fabricio Santos/);
+  // SEPs documentados como comentário (Fase 1)
+  expect(body).toMatch(/SEP-6|SEP-10|SEP-38/);
   expect(res.headers()['access-control-allow-origin']).toBeTruthy();
 });
