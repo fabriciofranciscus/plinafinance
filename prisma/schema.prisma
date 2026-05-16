@@ -132,6 +132,9 @@ model Investidor {
   kycAprovado     Boolean          @default(false)
   status          StatusInvestidor @default(PENDENTE_KYC)
   trustlineTxHash String?
+  /// UUID do customer Etherfuse. Persistido pra idempotência (quote/order
+  /// subsequentes reusam sem precisar re-criar customer).
+  etherfuseCustomerId String?
   saldoEsperado   Decimal          @db.Decimal(20, 7) @default(0)
   criadoEm        DateTime         @default(now())
   atualizadoEm    DateTime         @updatedAt

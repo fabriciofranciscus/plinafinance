@@ -57,15 +57,19 @@ export interface OnboardResult {
 export async function onboardInvestidor(
   input: OnboardInput,
 ): Promise<OnboardResult> {
-  // 1) Investidor já existente?
+  // 1) Investidor já existente com customer Etherfuse persistido?
   const existing = await db.investidor.findFirst({
     where: { email: input.email },
   });
-  if (existing && existing.status === 'AUTORIZADO') {
+  if (
+    existing &&
+    existing.status === 'AUTORIZADO' &&
+    existing.etherfuseCustomerId
+  ) {
     return {
       investidorId: existing.id,
       publicKey: existing.publicKey,
-      etherfuseCustomerId: '(reuse)',
+      etherfuseCustomerId: existing.etherfuseCustomerId,
       kycStatus: 'approved',
       fundedNow: false,
     };
@@ -153,6 +157,7 @@ export async function onboardInvestidor(
         nome: input.nome ?? input.email,
         email: input.email,
         publicKey,
+        etherfuseCustomerId: customer.id,
         kycAprovado: kycStatus === 'approved',
         status:
           kycStatus === 'approved'
@@ -161,6 +166,7 @@ export async function onboardInvestidor(
       },
       update: {
         publicKey,
+        etherfuseCustomerId: customer.id,
         kycAprovado: kycStatus === 'approved',
         status:
           kycStatus === 'approved'
