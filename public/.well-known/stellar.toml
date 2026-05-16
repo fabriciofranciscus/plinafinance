@@ -1,0 +1,38 @@
+# Plina Finance — Stellar TOML (SEP-0001)
+#
+# Asset: PLINARF (1 PLINA-RF = R$ 1,00 em direito creditório ajustado pelo NAV)
+# Network: TESTNET (POC — mainnet exigirá multisig do issuer e smart account
+# Soroban conforme ARCHITECTURE §3.2 + §3.3)
+#
+# Política de clawback pública e auditável em
+# https://plina.finance/politica-clawback — quatro hipóteses exclusivas
+# (whitepaper §6.5).
+
+VERSION = "0.1.0"
+NETWORK_PASSPHRASE = "Test SDF Network ; September 2015"
+
+[DOCUMENTATION]
+ORG_NAME = "Plina Finance"
+ORG_DESCRIPTION = "Tokenizadora institucional de direito creditório brasileiro. Cotas de consórcio contempladas representadas como ativo Stellar PLINA-RF lastreado em FIDC sob CVM 175."
+ORG_URL = "https://plina.finance"
+ORG_OFFICIAL_EMAIL = "contato@plina.finance"
+ORG_KEYBASE = ""
+ORG_TWITTER = ""
+
+[[CURRENCIES]]
+code = "PLINARF"
+issuer = "GBRG4JKO7R2R3OXPTQHL6TIZ5ZVF57YXHQ3547UYMV35TSW5Y6VUZOLB"
+display_decimals = 2
+name = "Plina Direito Creditório (POC)"
+desc = "Token Stellar representando cota de direito creditório brasileiro (cota de consórcio contemplada). 1 PLINA-RF = R$ 1,00 em NAV. POC em testnet — não negociável. Política de clawback pública em https://plina.finance/politica-clawback."
+conditions = "POC institucional na testnet. Mainnet exige enquadramento FIDC formal sob CVM 175 conforme Fase 1 do roadmap."
+status = "test"
+is_asset_anchored = true
+anchor_asset_type = "other"
+attestation_of_reserve = "https://plina.finance/politica-clawback"
+regulated = true
+approval_server = ""
+approval_criteria = "AUTH_REQUIRED — investidor passa pelo onboarding KYC institucional da Plina antes de receber trustline autorizada."
+
+[PRINCIPALS]
+# Founders detalhados em https://plina.finance#equipe

@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "smoke:stellar": "tsx scripts/smoke-stellar.ts",
     "smoke:etherfuse": "tsx scripts/smoke-etherfuse.ts",
+    "prisma:seed": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config -- ./node_modules/.bin/tsx prisma/seed.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config ./node_modules/.bin/prisma migrate dev",
     "prisma:deploy": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config ./node_modules/.bin/prisma migrate deploy",
