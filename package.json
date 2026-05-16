@@ -10,6 +10,7 @@
     "smoke:stellar": "tsx scripts/smoke-stellar.ts",
     "smoke:etherfuse": "tsx scripts/smoke-etherfuse.ts",
     "smoke:audit": "tsx scripts/smoke-audit.ts",
+    "test:e2e": "playwright test",
     "prisma:seed": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config -- ./node_modules/.bin/tsx prisma/seed.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config ./node_modules/.bin/prisma migrate dev",
@@ -29,6 +30,7 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.0",

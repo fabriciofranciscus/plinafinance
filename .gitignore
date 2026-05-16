@@ -44,3 +44,4 @@ smoke-etherfuse-output.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+test-results/
