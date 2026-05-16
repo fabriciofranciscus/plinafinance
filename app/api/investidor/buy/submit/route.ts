@@ -41,6 +41,17 @@ export async function POST(req: Request) {
       );
     }
 
+    // Stellar amounts: máx 7 decimais. Etherfuse retorna `toAmount` com até
+    // 20 decimais (precisão interna). Truncate pro formato aceito on-chain.
+    const amountNum = Number(amount);
+    if (!isFinite(amountNum) || amountNum <= 0) {
+      return NextResponse.json(
+        { error: 'amount inválido (deve ser > 0)' },
+        { status: 400 },
+      );
+    }
+    const stellarAmount = amountNum.toFixed(7);
+
     const issuerSecret = process.env.STELLAR_ISSUER_SECRET;
     const distributorSecret = process.env.STELLAR_DISTRIBUTOR_SECRET;
     const issuerPubkey = process.env.STELLAR_ISSUER_PUBLIC;
@@ -66,7 +77,7 @@ export async function POST(req: Request) {
       distributorSecret,
       issuerPubkey,
       investorPubkey,
-      amount,
+      stellarAmount,
     );
 
     // 4) Audit log + atualização do investidor (se conhecido).
@@ -90,7 +101,7 @@ export async function POST(req: Request) {
             investidorId,
             stellarTxHash: distRes.hash,
             payloadJson: {
-              amount,
+              amount: stellarAmount,
               targetPubkey: investorPubkey,
             } as Prisma.InputJsonValue,
           },
@@ -100,7 +111,7 @@ export async function POST(req: Request) {
           data: {
             trustlineTxHash: trustlineRes.hash,
             saldoEsperado: {
-              increment: new Prisma.Decimal(amount),
+              increment: new Prisma.Decimal(stellarAmount),
             },
           },
         });

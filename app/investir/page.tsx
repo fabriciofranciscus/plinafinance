@@ -70,7 +70,8 @@ export default function InvestirPage() {
     'idle',
   );
   const [onboard, setOnboard] = useState<OnboardData | null>(null);
-  const [amountBrl, setAmountBrl] = useState('1000');
+  // Sandbox Etherfuse limita onramps a 500 MXN (≈ R$ 430). Default conservador.
+  const [amountBrl, setAmountBrl] = useState('400');
   const [quote, setQuote] = useState<QuoteData | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [buyResult, setBuyResult] = useState<BuyResult | null>(null);
@@ -267,11 +268,12 @@ export default function InvestirPage() {
               <div className="flex flex-col md:flex-row md:items-end gap-3">
                 <label className="block flex-1">
                   <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-                    Valor BRL
+                    Valor BRL (sandbox: máx ≈ R$ 430)
                   </span>
                   <input
                     type="number"
                     min="10"
+                    max="430"
                     step="10"
                     value={amountBrl}
                     onChange={(e) => setAmountBrl(e.target.value)}
