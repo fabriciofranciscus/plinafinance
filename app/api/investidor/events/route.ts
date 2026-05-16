@@ -41,9 +41,10 @@ export async function GET(req: Request) {
         },
       },
     });
-    if (!investidor) return NextResponse.json({ events: [] });
+    if (!investidor) return NextResponse.json({ events: [], investidorId: null });
 
     return NextResponse.json({
+      investidorId: investidor.id,
       events: investidor.eventos.map((e) => ({
         id: e.id,
         acao: e.acao,
