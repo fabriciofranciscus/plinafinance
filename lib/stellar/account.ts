@@ -44,3 +44,23 @@ export async function accountExists(pubkey: string): Promise<boolean> {
 export function buildAsset(issuerPubkey: string, code: string = assetCode): Asset {
   return new Asset(code, issuerPubkey);
 }
+
+/**
+ * Funda uma conta Stellar testnet via friendbot. No-op silencioso se já
+ * existir. Útil pra wallets recém-criadas pelo Privy (que não fundam
+ * automaticamente — só registram o keypair no MPC custody).
+ *
+ * **Testnet only**. Mainnet exige `createAccount` operation a partir de
+ * uma conta com saldo.
+ */
+export async function fundAccountIfNeeded(pubkey: string): Promise<{
+  funded: boolean;
+}> {
+  if (await accountExists(pubkey)) return { funded: false };
+  const res = await fetch(`${friendbotUrl}?addr=${pubkey}`);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Friendbot falhou para ${pubkey}: ${res.status} ${body}`);
+  }
+  return { funded: true };
+}

@@ -88,6 +88,51 @@ export async function verifyPrivyTokenAndExtract(
 }
 
 /**
+ * Idempotente: retorna o endereço Stellar do user Privy, criando se ainda
+ * não existir. Evita o bug "uma wallet por login" que acumula até bater o
+ * limite de 100 por user (acontece quando client-side cria sem dedup).
+ *
+ * Padrão correto:
+ *   1. Server consulta `privy.getUserById(userId)` (verdade de Privy).
+ *   2. Procura linkedAccount com address `G...` (chainType=stellar).
+ *   3. Se existir → retorna.
+ *   4. Se não → `privy.wallets().create({chain_type:'stellar', owner:{user_id}})`.
+ *
+ * Race: 2 chamadas simultâneas pré-criação criam 2 wallets. Pra produção,
+ * adicionar dedup via Prisma `Investidor.privyId` unique + transaction.
+ * Pro POC, aceita-se o risco — usuário único na demo.
+ */
+export async function ensureStellarWallet(userId: string): Promise<string> {
+  const privy = getPrivyClient();
+
+  const existing = await getStellarAddressForUser(userId);
+  if (existing) return existing;
+
+  // Não tem wallet — cria server-side, vinculada ao user.
+  const wallet = await privy.walletApi.createWallet({
+    chainType: 'stellar',
+    owner: { userId },
+  });
+  return wallet.address;
+}
+
+/** Retorna endereço Stellar do user ou null se não tiver wallet. */
+export async function getStellarAddressForUser(
+  userId: string,
+): Promise<string | null> {
+  const privy = getPrivyClient();
+  const user = await privy.getUserById(userId);
+  const linkedAccounts = (user.linkedAccounts ?? []) as PrivyLinkedAccount[];
+  const stellar = linkedAccounts.find(
+    (a) =>
+      a.type === 'wallet' &&
+      typeof a.address === 'string' &&
+      (a.chainType === 'stellar' || a.address.startsWith('G')),
+  );
+  return stellar?.address ?? null;
+}
+
+/**
  * Converte signature hex 0x... (formato Privy useSignRawHash) pra base64
  * que `stellar-sdk` `transaction.addSignature` espera.
  *

@@ -10,6 +10,7 @@
 
 import { NextResponse } from 'next/server';
 import { buildTrustlineXdr } from '@/lib/stellar/transactions';
+import { fundAccountIfNeeded } from '@/lib/stellar/account';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,8 +27,14 @@ export async function POST(req: Request) {
         { status: 500 },
       );
     }
-    const result = await buildTrustlineXdr(pubkey, issuerPubkey);
-    return NextResponse.json(result);
+
+    // Privy wallets nascem sem XLM (só no MPC custody). Funda via friendbot
+    // se a conta não existe on-chain ainda. No-op silencioso pra contas
+    // existentes.
+    const fundResult = await fundAccountIfNeeded(pubkey);
+
+    const { xdr, hashHex } = await buildTrustlineXdr(pubkey, issuerPubkey);
+    return NextResponse.json({ xdr, hashHex, funded: fundResult.funded });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'unknown' },

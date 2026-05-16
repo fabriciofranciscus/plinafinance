@@ -33,6 +33,9 @@ export function PrivyAppProvider({ children }: { children: ReactNode }) {
     <PrivyProvider
       appId={appId}
       config={{
+        // Google requer OAuth client habilitado no dashboard.privy.io →
+        // Login methods → Google. Se não estiver habilitado, o botão aparece
+        // mas dá 403 no /oauth/init.
         loginMethods: ['email', 'google'],
         embeddedWallets: {
           // Stellar é Tier 2 — não tem toggle no dashboard.privy.io.

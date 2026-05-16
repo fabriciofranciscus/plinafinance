@@ -3,135 +3,71 @@
 /**
  * /lab — sandbox manual pra validar Privy + Stellar Tier 2.
  *
- * Stellar é "Tier 2" na Privy: não tem toggle no dashboard.privy.io —
- * wallet é criada programaticamente via useCreateWallet de
- * `@privy-io/react-auth/extended-chains` com chainType: 'stellar'.
- * Pattern Yalla `apps/web/src/hooks/use-auth.ts`.
+ * Wallet Stellar é resolvida pelo BACKEND via `/api/lab/ensure-wallet`:
+ * idempotente (não cria duplicata), persiste no Privy server-side. Evita
+ * o bug histórico "uma wallet por login" que acumula até bater limite de
+ * 100/user.
  *
- * Esperado:
- *   1. Login Privy → user autenticado.
- *   2. Auto-create wallet Stellar (com proteções contra duplicação).
- *   3. user.linkedAccounts ganha entry com address.startsWith('G').
- *   4. Botão "Estabelecer trustline PLINARF" assina via useSignRawHash,
- *      submete via Horizon. Trustline AUTHORIZED no Stellar Expert.
- *
- * Proteções contra spam de wallet creation (Privy limita 100/user — bug
- * histórico do Yalla):
- *   - Espera ready+authenticated+user populados.
- *   - 1.5s settle window antes de assumir "sem wallet".
- *   - localStorage flag por privy_id pra impedir re-attempt automático.
- *   - 15s watchdog com retry manual.
+ * Após ensure-wallet retornar address, frontend usa `useSignRawHash` de
+ * `@privy-io/react-auth/extended-chains` pra assinar o hash da tx.
  */
 
 import { usePrivy, useLogin, useLogout } from '@privy-io/react-auth';
-import {
-  useCreateWallet,
-  useSignRawHash,
-} from '@privy-io/react-auth/extended-chains';
-import { useCallback, useEffect, useRef, useState } from 'react';
-
-const WALLET_CREATION_TIMEOUT_MS = 15_000;
-const SETTLE_WINDOW_MS = 1500;
+import { useSignRawHash } from '@privy-io/react-auth/extended-chains';
+import { useEffect, useState } from 'react';
 
 export default function LabPage() {
   const { ready, authenticated, user, getAccessToken } = usePrivy();
   const { login } = useLogin();
   const { logout } = useLogout();
-  const { createWallet } = useCreateWallet();
   const { signRawHash } = useSignRawHash();
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<string[]>([]);
+  const [stellarAddress, setStellarAddress] = useState<string | null>(null);
   const [walletError, setWalletError] = useState<string | null>(null);
-  const creating = useRef(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Stellar address: ed25519 public key, Strkey encoding, prefixo 'G'.
-  const stellarAddress =
-    (user?.linkedAccounts ?? [])
-      .filter((a): a is typeof a & { address: string } => 'address' in a)
-      .find((a) => a.address.startsWith('G'))?.address ?? null;
 
   const append = (line: string) =>
     setLog((prev) => [...prev, `[${new Date().toISOString().slice(11, 19)}] ${line}`]);
 
-  const attemptCreate = useCallback(() => {
-    if (creating.current) return;
-    setWalletError(null);
-    creating.current = true;
-    append('criando wallet Stellar (useCreateWallet chainType=stellar)...');
-
-    timeoutRef.current = setTimeout(() => {
-      creating.current = false;
-      setWalletError(
-        'Criação demorou >15s. Clica retry — MPC pode ter travado.',
-      );
-    }, WALLET_CREATION_TIMEOUT_MS);
-
-    createWallet({ chainType: 'stellar' })
-      .then(() => {
-        append('     ✓ wallet criada');
-      })
-      .catch((err: unknown) => {
-        append(`     ✗ falha: ${err instanceof Error ? err.message : String(err)}`);
-        setWalletError(
-          err instanceof Error ? err.message : 'Erro desconhecido na criação.',
-        );
-      })
-      .finally(() => {
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-          timeoutRef.current = null;
-        }
-        creating.current = false;
-      });
-  }, [createWallet]);
-
-  // Auto-create no primeiro login só. localStorage por privy_id evita
-  // re-criação em re-render. Settle window dá tempo do Privy popular
-  // linkedAccounts antes de assumir vazio.
+  // Server resolve idempotente a wallet Stellar do user (cria se preciso).
   useEffect(() => {
-    if (!ready || !authenticated || !user) return;
-    if (stellarAddress) {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-      setWalletError(null);
-      return;
-    }
-    const attemptedKey = `plina:wallet-attempted:${user.id}`;
-    let alreadyAttempted = false;
-    try {
-      alreadyAttempted = window.localStorage.getItem(attemptedKey) === '1';
-    } catch {
-      // localStorage indisponível — segue com settle window.
-    }
-    if (alreadyAttempted) return;
+    if (!ready || !authenticated) return;
 
-    const settleId = setTimeout(() => {
+    let cancelled = false;
+    (async () => {
       try {
-        window.localStorage.setItem(attemptedKey, '1');
-      } catch {
-        // sem persistência: creating.current ainda evita re-fire na sessão.
+        const token = await getAccessToken();
+        if (!token) return;
+        const res = await fetch('/api/lab/ensure-wallet', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = (await res.json()) as { address?: string; error?: string };
+        if (cancelled) return;
+        if (!res.ok || !data.address) {
+          setWalletError(data.error ?? 'falha ao obter wallet');
+          append(`✗ ensure-wallet: ${data.error ?? 'sem address'}`);
+          return;
+        }
+        setStellarAddress(data.address);
+        append(`✓ wallet Stellar: ${data.address}`);
+      } catch (err) {
+        if (!cancelled) {
+          setWalletError(err instanceof Error ? err.message : String(err));
+        }
       }
-      attemptCreate();
-    }, SETTLE_WINDOW_MS);
+    })();
 
-    return () => clearTimeout(settleId);
-  }, [ready, authenticated, user, stellarAddress, attemptCreate]);
-
-  // Cleanup watchdog on unmount.
-  useEffect(() => {
     return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      cancelled = true;
     };
-  }, []);
+  }, [ready, authenticated, getAccessToken]);
 
   async function testTrustline() {
     if (!stellarAddress) return;
     setBusy(true);
     try {
-      append('1/3 — pedindo XDR de trustline ao backend');
+      append('1/3 — pedindo XDR de trustline ao backend (auto-fund se preciso)');
       const token = await getAccessToken();
       const buildRes = await fetch('/api/lab/build-trustline', {
         method: 'POST',
@@ -145,10 +81,12 @@ export default function LabPage() {
         const err = await buildRes.text();
         throw new Error(`build falhou: ${err}`);
       }
-      const { xdr, hashHex } = (await buildRes.json()) as {
+      const { xdr, hashHex, funded } = (await buildRes.json()) as {
         xdr: string;
         hashHex: string;
+        funded?: boolean;
       };
+      if (funded) append('     · conta fundada via friendbot');
       append(`     ✓ XDR recebido, hash=${hashHex.slice(0, 18)}...`);
 
       append('2/3 — Privy rawSign do hash (Ed25519)');
@@ -194,8 +132,8 @@ export default function LabPage() {
     <div style={{ padding: 24, fontFamily: 'monospace', maxWidth: 900 }}>
       <h1 style={{ marginBottom: 8 }}>/lab — Privy + Stellar Tier 2 smoke</h1>
       <p style={{ marginBottom: 16, color: '#666' }}>
-        Padrão Yalla: useCreateWallet({"{ chainType: 'stellar' }"}), useSignRawHash,
-        backend monta XDR + submete.
+        Sandbox manual: login Privy → wallet Stellar embedded → assina trustline
+        PLINARF via rawSign → submete via Horizon.
       </p>
 
       <hr style={{ margin: '16px 0' }} />
@@ -229,14 +167,9 @@ export default function LabPage() {
                 {stellarAddress}
               </a>
             ) : walletError ? (
-              <>
-                <span style={{ color: 'red' }}>{walletError}</span>{' '}
-                <button onClick={attemptCreate} style={{ marginLeft: 8 }}>
-                  Retry
-                </button>
-              </>
+              <span style={{ color: 'red' }}>{walletError}</span>
             ) : (
-              <span style={{ color: '#888' }}>aguardando criação…</span>
+              <span style={{ color: '#888' }}>resolvendo…</span>
             )}
           </p>
 
