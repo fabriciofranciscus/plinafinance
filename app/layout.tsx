@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { PrivyAppProvider } from "@/components/PrivyAppProvider";
+import { AppShell } from "@/components/AppShell";
+import { isAdminAuthenticated } from "@/lib/auth/admin";
+import { db } from "@/lib/db";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://plina.finance"),
@@ -34,9 +37,18 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const [isAdmin, params] = await Promise.all([
+    isAdminAuthenticated(),
+    db.parametrosPool
+      .findUnique({ where: { id: "singleton" } })
+      .catch(() => null),
+  ]);
+  const issuerPubkey =
+    params?.issuerPubkey ?? process.env.STELLAR_ISSUER_PUBLIC ?? "";
+
   return (
     <html lang="pt-BR" className="scroll-smooth">
       <head>
@@ -52,7 +64,9 @@ export default function RootLayout({
       <body className="font-text antialiased min-h-screen flex flex-col relative">
         <a href="#main" className="skip-link">Pular para conteúdo</a>
         <PrivyAppProvider>
-          <main id="main">{children}</main>
+          <AppShell isAdmin={isAdmin} issuerPubkey={issuerPubkey}>
+            <div id="main">{children}</div>
+          </AppShell>
         </PrivyAppProvider>
       </body>
     </html>

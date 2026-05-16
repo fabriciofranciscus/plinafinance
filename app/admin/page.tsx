@@ -63,9 +63,17 @@ export default async function AdminPage() {
   const navTotal = navTotalDoPool(cotas);
   const tokensVivos = tokensEmitidosVivos(cotas);
 
+  const sections = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'incorporar', label: 'Incorporar' },
+    { id: 'cotas', label: `Cotas (${cotas.length})` },
+    { id: 'investidores', label: `Investidores (${investidores.length})` },
+    { id: 'audit', label: 'Audit log' },
+  ];
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-12">
-      <header className="mb-12 flex items-start justify-between border-b border-light-hairline pb-6">
+      <header id="overview" className="mb-8 flex items-start justify-between scroll-mt-24">
         <div>
           <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
             Operação · acesso restrito · {parametros?.network ?? 'sem pool'}
@@ -83,6 +91,21 @@ export default async function AdminPage() {
           </button>
         </form>
       </header>
+
+      <nav className="sticky top-14 z-30 -mx-6 px-6 mb-10 bg-lightBg/95 backdrop-blur border-b border-light-hairline">
+        <ul className="flex gap-1 md:gap-2 overflow-x-auto py-2">
+          {sections.map((s) => (
+            <li key={s.id}>
+              <a
+                href={`#${s.id}`}
+                className="block whitespace-nowrap font-details text-[10px] tracking-[0.2em] uppercase font-bold px-3 py-2 text-base/70 hover:text-base hover:bg-document-grey transition-colors"
+              >
+                {s.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
 
       {parametros && (
         <section className="mb-12 grid grid-cols-1 md:grid-cols-4 gap-px bg-base/15 border border-light-hairline">
@@ -108,7 +131,7 @@ export default async function AdminPage() {
         </section>
       )}
 
-      <section className="mb-16">
+      <section id="incorporar" className="mb-16 scroll-mt-32">
         <h2 className="font-title text-2xl font-semibold mb-4 tracking-tight">
           Incorporar nova cota
         </h2>
@@ -119,7 +142,7 @@ export default async function AdminPage() {
         <IncorporarCotaForm />
       </section>
 
-      <section className="mb-16">
+      <section id="cotas" className="mb-16 scroll-mt-32">
         <h2 className="font-title text-2xl font-semibold mb-4 tracking-tight">
           Cotas ({cotas.length})
         </h2>
@@ -187,7 +210,7 @@ export default async function AdminPage() {
         </div>
       </section>
 
-      <section className="mb-16">
+      <section id="investidores" className="mb-16 scroll-mt-32">
         <h2 className="font-title text-2xl font-semibold mb-4 tracking-tight">
           Investidores ({investidores.length})
         </h2>
@@ -245,7 +268,7 @@ export default async function AdminPage() {
         )}
       </section>
 
-      <section>
+      <section id="audit" className="scroll-mt-32">
         <h2 className="font-title text-2xl font-semibold mb-4 tracking-tight">
           Audit log (últimos 20)
         </h2>

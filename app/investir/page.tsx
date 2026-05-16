@@ -216,6 +216,23 @@ export default function InvestirPage() {
         </button>
       ) : (
         <div className="space-y-10">
+          <Stepper
+            steps={[
+              { n: '01', label: 'Identidade', done: !!onboard, current: !onboard },
+              {
+                n: '02',
+                label: 'Quote BRL → TESOURO',
+                done: !!quote,
+                current: !!onboard && !quote,
+              },
+              {
+                n: '03',
+                label: 'Comprar PLINA-RF',
+                done: !!buyResult,
+                current: !!onboard && !!quote && !buyResult,
+              },
+            ]}
+          />
           <Section title="1. Identidade" status={onboard ? 'done' : 'pending'}>
             {onboard ? (
               <div className="space-y-2 text-sm">
@@ -249,7 +266,7 @@ export default function InvestirPage() {
                 )}
               </div>
             ) : step === 'onboarding' ? (
-              <Loading text="Criando customer Etherfuse + submetendo KYC…" />
+              <OnboardingSkeleton />
             ) : (
               <button
                 onClick={runOnboard}
@@ -335,23 +352,62 @@ export default function InvestirPage() {
                     : 'Comprar PLINA-RF'}
                 </button>
               ) : (
-                <div className="space-y-3">
-                  <p className="font-text text-sm text-base/80">
-                    Distribuição concluída. PLINA-RF na sua carteira institucional.
+                <div className="bg-base text-lightBg -mx-4 md:-mx-8 -mb-4 md:-mb-8 px-6 md:px-10 py-8 md:py-10">
+                  <p className="font-details text-[10px] tracking-[0.2em] uppercase text-primary">
+                    Distribuição concluída
                   </p>
-                  <div className="grid grid-cols-1 gap-2 text-xs font-mono">
-                    <TxRow label="trustline" hash={buyResult.trustlineTxHash} />
-                    <TxRow label="authorize" hash={buyResult.authorizeTxHash} />
-                    <TxRow label="distribute" hash={buyResult.distributeTxHash} />
+                  <p className="font-title text-3xl md:text-5xl font-semibold mt-3 tracking-tight">
+                    {NUMBER_BR.format(Number(quote.toAmount))}{' '}
+                    <span className="font-mono text-2xl md:text-3xl text-lightBg/70">
+                      PLINA-RF
+                    </span>
+                  </p>
+                  <p className="font-text text-sm text-lightBg/70 mt-2">
+                    Na sua carteira Stellar institucional. Lastreado em
+                    direito creditório brasileiro sob CVM 175.
+                  </p>
+
+                  <div className="mt-6 flex flex-wrap gap-3">
+                    <a
+                      href="/minha-posicao"
+                      className="bg-primary text-base font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-secondaryLight transition-colors"
+                    >
+                      Minha posição
+                    </a>
+                    <a
+                      href={explorerAccount(onboard.publicKey)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="border border-lightBg/30 text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-lightBg/10 transition-colors"
+                    >
+                      Stellar Expert →
+                    </a>
+                    <a
+                      href="/pool"
+                      className="border border-lightBg/30 text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-lightBg/10 transition-colors"
+                    >
+                      Pool atualizado
+                    </a>
+                    <button
+                      onClick={() => {
+                        setBuyResult(null);
+                        setQuote(null);
+                        setStep('ready');
+                      }}
+                      className="border border-lightBg/30 text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-lightBg/10 transition-colors"
+                    >
+                      Comprar mais
+                    </button>
                   </div>
-                  <a
-                    href={explorerAccount(onboard.publicKey)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-block font-details text-[10px] tracking-[0.2em] uppercase mt-3 underline"
-                  >
-                    Ver minha conta no Stellar Expert →
-                  </a>
+
+                  <div className="mt-6 pt-6 border-t border-lightBg/10 space-y-1.5">
+                    <p className="font-details text-[10px] tracking-[0.2em] uppercase text-lightBg/50">
+                      Transações on-chain
+                    </p>
+                    <TxRowDark label="trustline" hash={buyResult.trustlineTxHash} />
+                    <TxRowDark label="authorize" hash={buyResult.authorizeTxHash} />
+                    <TxRowDark label="distribute" hash={buyResult.distributeTxHash} />
+                  </div>
                 </div>
               )}
             </Section>
@@ -471,8 +527,98 @@ function TxRow({ label, hash }: { label: string; hash: string }) {
   );
 }
 
+function TxRowDark({ label, hash }: { label: string; hash: string }) {
+  return (
+    <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-3">
+      <span className="font-details text-[10px] tracking-[0.2em] uppercase text-lightBg/50 min-w-[80px]">
+        {label}
+      </span>
+      <a
+        href={explorerTx(hash)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-mono text-[10px] text-lightBg/85 hover:text-primary break-all"
+      >
+        {hash}
+      </a>
+    </div>
+  );
+}
+
 function Loading({ text }: { text: string }) {
   return (
     <p className="font-text text-sm text-base/70 animate-pulse">{text}</p>
+  );
+}
+
+function OnboardingSkeleton() {
+  const phases = [
+    'Criando wallet Stellar embedded',
+    'Criando customer institucional na anchor',
+    'Submetendo KYC programático',
+    'Confirmando aprovação',
+  ];
+  return (
+    <div className="space-y-3">
+      {phases.map((p, idx) => (
+        <div key={p} className="flex items-center gap-3">
+          <span
+            className="font-mono text-xs text-base/40 animate-pulse"
+            style={{ animationDelay: `${idx * 200}ms` }}
+          >
+            {String(idx + 1).padStart(2, '0')}
+          </span>
+          <span className="font-text text-sm text-base/70">{p}…</span>
+          <span
+            className="h-px flex-1 bg-base/15 animate-pulse"
+            style={{ animationDelay: `${idx * 200 + 100}ms` }}
+          />
+        </div>
+      ))}
+      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/50 pt-2">
+        Sandbox auto-aprova · ~3-8 segundos
+      </p>
+    </div>
+  );
+}
+
+interface Step {
+  n: string;
+  label: string;
+  done: boolean;
+  current: boolean;
+}
+
+function Stepper({ steps }: { steps: Step[] }) {
+  return (
+    <ol className="border-y border-light-hairline divide-y md:divide-y-0 md:divide-x divide-light-hairline grid grid-cols-1 md:grid-cols-3">
+      {steps.map((s) => (
+        <li key={s.n} className="relative px-5 py-5 group">
+          <span
+            className={`absolute left-0 top-0 h-full w-[2px] origin-top transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              s.current
+                ? 'scale-y-100 bg-primary'
+                : s.done
+                  ? 'scale-y-100 bg-base/30'
+                  : 'scale-y-0 bg-base/15'
+            }`}
+          />
+          <p
+            className={`font-mono text-xs ${
+              s.done ? 'text-primary-deep' : s.current ? 'text-base' : 'text-base/30'
+            }`}
+          >
+            {s.n} {s.done ? '✓' : ''}
+          </p>
+          <p
+            className={`font-title text-base font-semibold mt-1 tracking-tight ${
+              s.current ? 'text-base' : s.done ? 'text-base/80' : 'text-base/40'
+            }`}
+          >
+            {s.label}
+          </p>
+        </li>
+      ))}
+    </ol>
   );
 }

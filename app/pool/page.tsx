@@ -84,12 +84,20 @@ export default async function PoolPage() {
         <h1 className="font-title mt-3 text-4xl md:text-5xl font-semibold tracking-tight">
           Composição pública do pool
         </h1>
-        <p className="font-text mt-4 max-w-3xl text-lg text-base/80 leading-relaxed">
-          Direito creditório de cotas de consórcio contempladas adquiridas
-          com capital próprio. Cada token PLINA-RF representa R$ 1,00 de NAV
-          ajustado pela curva de realização. Auditável em tempo real via
-          Stellar Expert.
-        </p>
+        <div className="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <p className="font-text max-w-3xl text-lg text-base/80 leading-relaxed">
+            Direito creditório de cotas de consórcio contempladas adquiridas
+            com capital próprio. Cada token PLINA-RF representa R$ 1,00 de NAV
+            ajustado pela curva de realização. Auditável em tempo real via
+            Stellar Expert.
+          </p>
+          <a
+            href="/investir"
+            className="self-start whitespace-nowrap bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors"
+          >
+            Acesso institucional →
+          </a>
+        </div>
       </header>
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-px bg-base/15 mb-12 border border-light-hairline">
