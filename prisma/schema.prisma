@@ -1,11 +1,15 @@
-// Plina — schema inicial (POC + base que cresce para MVP).
+// Plina — schema MVP testnet-first.
 //
 // Referência canônica: /home/dalekthai/Documentos/Workspace/Plina/PlinaFinance-1.pdf
 // - Whitepaper §6.5: política de clawback limitada a 4 hipóteses (judicial, sanção, fraude, erro).
 // - Whitepaper §3.2: AUTH_REQUIRED + AUTH_REVOCABLE + AUTH_CLAWBACK_ENABLED como features.
-// - Whitepaper §6.2: três caminhos de realização (A/B/C). POC foca em A.
+// - Whitepaper §6.2: três caminhos de realização (A/B/C). MVP foca em A.
+// - Whitepaper §6.1: hash do documento de validação na Stellar como prova pública.
+// - Whitepaper §9: dados pessoais off-chain (Brasil), on-chain só hash/endereços/timestamps.
 //
-// PII off-chain. On-chain: apenas hash, public key, timestamp (regra do CLAUDE.md).
+// PII off-chain (CLAUDE.md). On-chain via `lib/stellar/audit` registra apenas
+// hashes em memo de tx auto-pagamento na conta operacional (Plina assina em
+// nome do ato — vendedor/comprador NÃO têm wallet Stellar).
 
 generator client {
   provider = "prisma-client-js"
@@ -66,6 +70,7 @@ enum CaminhoRealizacao {
 }
 
 enum AcaoAudit {
+  // Pool + Investidor (POC base)
   COTA_INCORPORADA
   TOKEN_EMITIDO
   INVESTIDOR_ONBOARDED
@@ -74,10 +79,87 @@ enum AcaoAudit {
   DISTRIBUICAO
   CLAWBACK_EXECUTADO
   COTA_REALIZADA
+  // Funil vendedor (MVP testnet-first)
+  LEAD_VENDEDOR_CAPTURADO
+  OFERTA_GERADA
+  OFERTA_ACEITA
+  CESSAO_ASSINADA
+  PIX_SIMULADO_EXECUTADO
+  // Funil comprador (MVP testnet-first)
+  LEAD_COMPRADOR_CAPTURADO
+  RESERVA_CRIADA
+  RESERVA_EXPIRADA
+  CAMINHO_A_EXECUTADO
+  // Liquidação investidor (whitepaper §6.4 janela de resgate)
+  PLINARF_LIQUIDADO
+}
+
+// Funil vendedor
+
+enum LeadVendedorStatus {
+  NOVO
+  CONTATADO
+  DOCS_SOLICITADOS
+  DOCS_RECEBIDOS
+  OFERTA_ENVIADA
+  OFERTA_ACEITA
+  CESSAO_ASSINADA
+  PIX_EXECUTADO
+  COTA_INCORPORADA
+  PERDIDO
+}
+
+enum OfertaStatus {
+  RASCUNHO
+  ENVIADA
+  ACEITA
+  REJEITADA
+  EXPIRADA
+}
+
+enum CessaoStatus {
+  PENDENTE
+  ENVIADA_DOCUSIGN
+  ASSINADA
+  EXPIRADA
+  CANCELADA
+}
+
+enum PagamentoStatus {
+  PENDENTE
+  EXECUTADO
+  FALHOU
+}
+
+enum PagamentoMetodo {
+  PIX_SIMULADO
+  PIX_REAL
+}
+
+// Funil comprador
+
+enum LeadCompradorTipo {
+  PESSOA_FISICA
+  PESSOA_JURIDICA
+}
+
+enum LeadCompradorStatus {
+  NOVO
+  QUALIFICADO
+  RESERVOU
+  FECHOU
+  PERDIDO
+}
+
+enum ReservaStatus {
+  ATIVA
+  EXPIRADA
+  CONFIRMADA
+  CANCELADA
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Models
+// Models — Pool & Investidor
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Singleton com parâmetros do issuer Stellar e do asset PLINARF.
@@ -94,7 +176,8 @@ model ParametrosPool {
   atualizadoEm      DateTime @updatedAt
 }
 
-/// Cota de consórcio contemplada adquirida com capital próprio.
+/// Cota de consórcio contemplada. Liga-se à Cessao que a originou (quando
+/// veio do funil vendedor) e à RealizacaoCaminho quando sai do pool.
 /// Administradora NÃO é exposta publicamente (PRD_MVP §6.7).
 model Cota {
   id                  String        @id @default(cuid())
@@ -116,7 +199,14 @@ model Cota {
   criadaEm            DateTime      @default(now())
   atualizadaEm        DateTime      @updatedAt
 
+  /// Cessao que originou esta cota (quando veio do funil vendedor).
+  /// Null em cotas seedadas / incorporadas diretamente via /admin.
+  cessaoId            String?       @unique
+  cessao              Cessao?       @relation(fields: [cessaoId], references: [id])
+
   eventos             EventoAudit[]
+  reservas            Reserva[]
+  realizacao          RealizacaoCaminho?
 
   @@index([status])
   @@index([statusEstoque])
@@ -144,25 +234,207 @@ model Investidor {
   @@index([status])
 }
 
-/// Audit log append-only (CLAUDE.md). Toda mudança de estado relevante registra.
-/// Cada acionamento de clawback DEVE ter `motivoClawback` + `fundamentoUrl`.
+// ─────────────────────────────────────────────────────────────────────────────
+// Models — Funil vendedor (Ricardo)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Lead capturado via /vender. PII off-chain. UTMs persistidas pra análise
+/// de canal (Google Ads, parcerias, orgânico).
+model LeadVendedor {
+  id            String   @id @default(cuid())
+  origem        String?
+  utmSource     String?
+  utmMedium     String?
+  utmCampaign   String?
+  nome          String
+  email         String   @unique
+  telefone      String?
+  cpf           String?
+  status        LeadVendedorStatus @default(NOVO)
+  motivoPerda   String?
+  criadoEm      DateTime @default(now())
+  atualizadoEm  DateTime @updatedAt
+
+  ofertas       Oferta[]
+  eventos       EventoAudit[]
+
+  @@index([status])
+  @@index([criadoEm])
+}
+
+/// Oferta firme calculada pra um lead. Pode ter múltiplas versões
+/// (cada renegociação gera nova Oferta com versao++).
+model Oferta {
+  id                    String   @id @default(cuid())
+  leadVendedorId        String
+  leadVendedor          LeadVendedor @relation(fields: [leadVendedorId], references: [id])
+  tipoBem               TipoBem
+  valorCarta            Decimal  @db.Decimal(15, 2)
+  administradora        String
+  desagioAquisicao      Decimal  @db.Decimal(5, 4)
+  valorLiquidoVendedor  Decimal  @db.Decimal(15, 2)
+  prazoRestanteMeses    Int?
+  validade              DateTime
+  status                OfertaStatus @default(RASCUNHO)
+  versao                Int      @default(1)
+  criadaEm              DateTime @default(now())
+  atualizadaEm          DateTime @updatedAt
+
+  cessao                Cessao?
+  eventos               EventoAudit[]
+
+  @@index([leadVendedorId])
+  @@index([status])
+}
+
+/// Cessão de direito creditório. Whitepaper §6.1: hash do documento na
+/// Stellar como prova pública. DocuSign sandbox no POC, real no MVP+.
+model Cessao {
+  id                  String   @id @default(cuid())
+  ofertaId            String   @unique
+  oferta              Oferta   @relation(fields: [ofertaId], references: [id])
+  docusignEnvelopeId  String?
+  hashDocumento       String?  // SHA-256 do PDF assinado
+  onChainTxHash       String?  // tx Stellar com memo hash
+  assinadaEm          DateTime?
+  status              CessaoStatus @default(PENDENTE)
+  criadaEm            DateTime @default(now())
+  atualizadaEm        DateTime @updatedAt
+
+  pagamento           Pagamento?
+  cota                Cota?
+  eventos             EventoAudit[]
+
+  @@index([status])
+}
+
+/// Pagamento ao vendedor (Pix simulado no MVP testnet, real em mainnet).
+model Pagamento {
+  id                String   @id @default(cuid())
+  cessaoId          String   @unique
+  cessao            Cessao   @relation(fields: [cessaoId], references: [id])
+  metodo            PagamentoMetodo @default(PIX_SIMULADO)
+  valor             Decimal  @db.Decimal(15, 2)
+  onChainTxHash     String?
+  executadoEm       DateTime?
+  comprovanteUrl    String?
+  status            PagamentoStatus @default(PENDENTE)
+  criadoEm          DateTime @default(now())
+  atualizadoEm      DateTime @updatedAt
+
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Models — Funil comprador-usuário (Maria + variantes PJ)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Lead capturado via /comprar. Pode ser PF (Maria) ou PJ (construtora,
+/// transportadora, empresário). Intenção de bem específica.
+model LeadComprador {
+  id            String   @id @default(cuid())
+  origem        String?
+  utmSource     String?
+  utmMedium     String?
+  utmCampaign   String?
+  nome          String
+  email         String   @unique
+  telefone      String?
+  documento     String?  // CPF ou CNPJ
+  tipo          LeadCompradorTipo @default(PESSOA_FISICA)
+  intencaoBem   String?
+  faixaCapital  String?
+  prazoDecisao  String?
+  status        LeadCompradorStatus @default(NOVO)
+  criadoEm      DateTime @default(now())
+  atualizadoEm  DateTime @updatedAt
+
+  reservas      Reserva[]
+  realizacoes   RealizacaoCaminho[]
+  eventos       EventoAudit[]
+
+  @@index([status])
+}
+
+/// Reserva de cota pelo comprador-usuário. 72h por default (PRD_MVP §6.8).
+/// Sinal simulado no testnet.
+model Reserva {
+  id                String   @id @default(cuid())
+  cotaId            String
+  cota              Cota     @relation(fields: [cotaId], references: [id])
+  leadCompradorId   String
+  leadComprador     LeadComprador @relation(fields: [leadCompradorId], references: [id])
+  expiraEm          DateTime
+  sinalSimulado     Decimal  @db.Decimal(15, 2) @default(0)
+  onChainTxHash     String?
+  status            ReservaStatus @default(ATIVA)
+  criadaEm          DateTime @default(now())
+  atualizadaEm      DateTime @updatedAt
+
+  @@index([cotaId])
+  @@index([status])
+  @@index([expiraEm])
+}
+
+/// Realização de uma cota por um dos 3 caminhos. POC MVP foca em A.
+/// Quando A: comprador-usuário concluiu a transferência de titularidade
+/// e Plina capturou spread. Cota → REALIZADA. NAV/token sobe pra holders.
+model RealizacaoCaminho {
+  id                  String   @id @default(cuid())
+  cotaId              String   @unique
+  cota                Cota     @relation(fields: [cotaId], references: [id])
+  caminho             CaminhoRealizacao
+  leadCompradorId     String?
+  leadComprador       LeadComprador? @relation(fields: [leadCompradorId], references: [id])
+  valorRealizado      Decimal  @db.Decimal(15, 2)
+  custoAquisicao      Decimal  @db.Decimal(15, 2)
+  spread              Decimal  @db.Decimal(15, 2)
+  onChainTxHash       String?
+  executadaEm         DateTime @default(now())
+  operador            String?
+
+  @@index([caminho])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Audit log
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Append-only (CLAUDE.md). Toda mudança de estado relevante registra.
+/// `payloadHash` é o SHA-256 que foi pra blockchain como memo. Vendedor/
+/// comprador podem cross-verificar: hash do documento off-chain == memo
+/// da tx Stellar referenciada.
 model EventoAudit {
   id              String          @id @default(cuid())
   acao            AcaoAudit
   operador        String?
-  cotaId          String?
-  investidorId    String?
   motivoClawback  MotivoClawback?
   fundamentoUrl   String?
   payloadJson     Json?
+  /// SHA-256 hex do payload canonicalizado. Igual ao Memo.Hash da tx.
+  payloadHash     String?
   stellarTxHash   String?
   criadoEm        DateTime        @default(now())
 
+  // Polymorphic-ish FKs (typed) — null exceto o relevante.
+  cotaId          String?
   cota            Cota?           @relation(fields: [cotaId], references: [id])
+  investidorId    String?
   investidor      Investidor?     @relation(fields: [investidorId], references: [id])
+  leadVendedorId  String?
+  leadVendedor    LeadVendedor?   @relation(fields: [leadVendedorId], references: [id])
+  ofertaId        String?
+  oferta          Oferta?         @relation(fields: [ofertaId], references: [id])
+  cessaoId        String?
+  cessao          Cessao?         @relation(fields: [cessaoId], references: [id])
+  leadCompradorId String?
+  leadComprador   LeadComprador?  @relation(fields: [leadCompradorId], references: [id])
 
   @@index([acao])
   @@index([cotaId])
   @@index([investidorId])
+  @@index([leadVendedorId])
+  @@index([leadCompradorId])
+  @@index([cessaoId])
   @@index([criadoEm])
 }
