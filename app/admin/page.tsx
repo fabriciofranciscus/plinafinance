@@ -21,6 +21,7 @@ import { LoginForm } from './login-form';
 import { IncorporarCotaForm } from './incorporar-cota-form';
 import { ClawbackForm } from './clawback-form';
 import { VendedorPipeline } from './vendedor-pipeline';
+import { CompradorPipeline } from './comprador-pipeline';
 import { logoutAction } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -50,7 +51,7 @@ export default async function AdminPage() {
     return <LoginForm />;
   }
 
-  const [parametros, cotas, investidores, leadsVendedor, eventos] = await Promise.all([
+  const [parametros, cotas, investidores, leadsVendedor, leadsComprador, eventos] = await Promise.all([
     db.parametrosPool.findUnique({ where: { id: 'singleton' } }),
     db.cota.findMany({ orderBy: { criadaEm: 'asc' } }),
     db.investidor.findMany({ orderBy: { criadoEm: 'asc' } }),
@@ -61,6 +62,15 @@ export default async function AdminPage() {
           orderBy: { versao: 'desc' },
           take: 1,
           include: { cessao: { include: { pagamento: true, cota: true } } },
+        },
+      },
+    }),
+    db.leadComprador.findMany({
+      orderBy: { criadoEm: 'desc' },
+      include: {
+        reservas: {
+          orderBy: { criadaEm: 'desc' },
+          include: { cota: true },
         },
       },
     }),
@@ -77,6 +87,7 @@ export default async function AdminPage() {
   const sections = [
     { id: 'overview', label: 'Overview' },
     { id: 'vendedores', label: `Vendedores (${leadsVendedor.length})` },
+    { id: 'compradores', label: `Compradores (${leadsComprador.length})` },
     { id: 'incorporar', label: 'Incorporar' },
     { id: 'cotas', label: `Cotas (${cotas.length})` },
     { id: 'investidores', label: `Investidores (${investidores.length})` },
@@ -184,6 +195,42 @@ export default async function AdminPage() {
                     cota: o.cessao.cota ? { id: o.cessao.cota.id } : null,
                   }
                 : null,
+            })),
+          }))}
+        />
+      </section>
+
+      <section id="compradores" className="mb-16 scroll-mt-32">
+        <h2 className="font-title text-2xl font-semibold mb-2 tracking-tight">
+          Funil comprador-usuário ({leadsComprador.length})
+        </h2>
+        <p className="font-text text-sm text-base/70 mb-6 max-w-2xl">
+          Leads de <code className="font-mono text-xs">/comprar/lead</code> e{' '}
+          <code className="font-mono text-xs">/comprar/reservar</code>. Reservas
+          ativas travam a cota por 72h. Caminho A executa close-out: Cota →
+          REALIZADA, NAV/token sobe pra holders.
+        </p>
+        <CompradorPipeline
+          leads={leadsComprador.map((l) => ({
+            id: l.id,
+            nome: l.nome,
+            email: l.email,
+            tipo: l.tipo,
+            intencaoBem: l.intencaoBem,
+            status: l.status,
+            criadoEm: l.criadoEm,
+            reservas: l.reservas.map((r) => ({
+              id: r.id,
+              status: r.status,
+              expiraEm: r.expiraEm,
+              onChainTxHash: r.onChainTxHash,
+              cota: {
+                id: r.cota.id,
+                tipoBem: r.cota.tipoBem,
+                valorCarta: r.cota.valorCarta.toString(),
+                desagioRevenda: r.cota.desagioRevenda?.toString() ?? null,
+                status: r.cota.status,
+              },
             })),
           }))}
         />

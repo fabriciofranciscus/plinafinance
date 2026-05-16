@@ -46,12 +46,14 @@ export function AppHeader({ isAdmin }: AppHeaderProps) {
     : authenticated
       ? [
           { href: '/pool', label: 'Pool' },
+          { href: '/cotas', label: 'Cotas' },
           { href: '/politica-clawback', label: 'Política' },
           { href: '/investir', label: 'Investir' },
           { href: '/minha-posicao', label: 'Minha posição' },
         ]
       : [
           { href: '/pool', label: 'Pool' },
+          { href: '/cotas', label: 'Cotas' },
           { href: '/politica-clawback', label: 'Política' },
           { href: '/investir', label: 'Investir' },
         ];
