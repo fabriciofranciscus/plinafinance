@@ -36,6 +36,8 @@ export interface IncorporarCotaInput {
   caminhoPrevisto?: CaminhoRealizacao;
   notas?: string;
   operador: string;
+  /// Quando a cota veio do funil vendedor, liga à Cessao que originou.
+  cessaoId?: string;
 }
 
 export interface IncorporarCotaResult {
@@ -88,6 +90,7 @@ export async function incorporarCota(
         tokensEmitidos: quantityStr,
         emissaoTxHash: emissionRes.hash,
         notas: input.notas ?? null,
+        cessaoId: input.cessaoId ?? null,
       },
     });
     await tx.eventoAudit.create({

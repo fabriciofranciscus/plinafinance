@@ -22,7 +22,10 @@ interface AppShellProps {
   issuerPubkey: string;
 }
 
-const ROUTES_WITHOUT_SHELL = ['/', '/lab'];
+// Rotas com chrome próprio (landing /) ou que precisam ser standalone:
+//   /vender, /comprar — superfícies de funil com voz própria (PRODUCT.md §5).
+//   /lab — sandbox dev.
+const ROUTES_WITHOUT_SHELL = ['/', '/lab', '/vender', '/comprar'];
 
 export function AppShell({ children, isAdmin, issuerPubkey }: AppShellProps) {
   const pathname = usePathname();

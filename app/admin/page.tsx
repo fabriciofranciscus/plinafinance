@@ -20,6 +20,7 @@ import { navDaCota, navTotalDoPool, tokensEmitidosVivos } from '@/lib/services/p
 import { LoginForm } from './login-form';
 import { IncorporarCotaForm } from './incorporar-cota-form';
 import { ClawbackForm } from './clawback-form';
+import { VendedorPipeline } from './vendedor-pipeline';
 import { logoutAction } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -49,10 +50,20 @@ export default async function AdminPage() {
     return <LoginForm />;
   }
 
-  const [parametros, cotas, investidores, eventos] = await Promise.all([
+  const [parametros, cotas, investidores, leadsVendedor, eventos] = await Promise.all([
     db.parametrosPool.findUnique({ where: { id: 'singleton' } }),
     db.cota.findMany({ orderBy: { criadaEm: 'asc' } }),
     db.investidor.findMany({ orderBy: { criadoEm: 'asc' } }),
+    db.leadVendedor.findMany({
+      orderBy: { criadoEm: 'desc' },
+      include: {
+        ofertas: {
+          orderBy: { versao: 'desc' },
+          take: 1,
+          include: { cessao: { include: { pagamento: true, cota: true } } },
+        },
+      },
+    }),
     db.eventoAudit.findMany({
       orderBy: { criadoEm: 'desc' },
       take: 20,
@@ -65,6 +76,7 @@ export default async function AdminPage() {
 
   const sections = [
     { id: 'overview', label: 'Overview' },
+    { id: 'vendedores', label: `Vendedores (${leadsVendedor.length})` },
     { id: 'incorporar', label: 'Incorporar' },
     { id: 'cotas', label: `Cotas (${cotas.length})` },
     { id: 'investidores', label: `Investidores (${investidores.length})` },
@@ -130,6 +142,52 @@ export default async function AdminPage() {
           <KvPubkey label="Distributor" pubkey={parametros.distributorPubkey} />
         </section>
       )}
+
+      <section id="vendedores" className="mb-16 scroll-mt-32">
+        <h2 className="font-title text-2xl font-semibold mb-2 tracking-tight">
+          Funil vendedor ({leadsVendedor.length})
+        </h2>
+        <p className="font-text text-sm text-base/70 mb-6 max-w-2xl">
+          Leads capturados via <code className="font-mono text-xs">/vender/lead</code>.
+          Cada estágio gera prova on-chain via Memo.hash. Status do lead
+          transita conforme operador avança o pipeline.
+        </p>
+        <VendedorPipeline
+          leads={leadsVendedor.map((l) => ({
+            id: l.id,
+            nome: l.nome,
+            email: l.email,
+            status: l.status,
+            criadoEm: l.criadoEm,
+            ofertas: l.ofertas.map((o) => ({
+              id: o.id,
+              versao: o.versao,
+              tipoBem: o.tipoBem,
+              valorCarta: o.valorCarta.toString(),
+              valorLiquidoVendedor: o.valorLiquidoVendedor.toString(),
+              desagioAquisicao: o.desagioAquisicao.toString(),
+              administradora: o.administradora,
+              status: o.status,
+              validade: o.validade,
+              cessao: o.cessao
+                ? {
+                    id: o.cessao.id,
+                    status: o.cessao.status,
+                    onChainTxHash: o.cessao.onChainTxHash,
+                    pagamento: o.cessao.pagamento
+                      ? {
+                          id: o.cessao.pagamento.id,
+                          status: o.cessao.pagamento.status,
+                          onChainTxHash: o.cessao.pagamento.onChainTxHash,
+                        }
+                      : null,
+                    cota: o.cessao.cota ? { id: o.cessao.cota.id } : null,
+                  }
+                : null,
+            })),
+          }))}
+        />
+      </section>
 
       <section id="incorporar" className="mb-16 scroll-mt-32">
         <h2 className="font-title text-2xl font-semibold mb-4 tracking-tight">
