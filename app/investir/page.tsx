@@ -74,8 +74,9 @@ export default function InvestirPage() {
     'idle',
   );
   const [onboard, setOnboard] = useState<OnboardData | null>(null);
-  // Sandbox Etherfuse limita onramps a 500 MXN (≈ R$ 430). Default conservador.
-  const [amountBrl, setAmountBrl] = useState('400');
+  // Sandbox Etherfuse limita onramps a 500 MXN (≈ R$ 430). Sem default —
+  // usuário escolhe o valor; auto-quote só dispara após digitar/escolher preset.
+  const [amountBrl, setAmountBrl] = useState('');
   const [quote, setQuote] = useState<QuoteData | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [buyResult, setBuyResult] = useState<BuyResult | null>(null);
@@ -117,6 +118,8 @@ export default function InvestirPage() {
 
   async function refreshQuote() {
     if (!onboard) return;
+    const v = Number(amountBrl);
+    if (!Number.isFinite(v) || v <= 0) return;
     setQuoteLoading(true);
     setError(null);
     try {

@@ -71,21 +71,22 @@ export async function POST(req: Request) {
     });
 
     // 1) Submete trustline assinada pelo investor.
-    const trustlineRes = await submitWithPrivySignature({
-      xdr,
-      investorPubkey,
-      investorSignatureHex: signatureHex,
-    });
+    const trustlineRes = await runStep('trustline', () =>
+      submitWithPrivySignature({
+        xdr,
+        investorPubkey,
+        investorSignatureHex: signatureHex,
+      }),
+    );
 
     // 2) Issuer autoriza trustline (server-side).
-    const authRes = await authorizeTrustline(issuerSecret, investorPubkey);
+    const authRes = await runStep('authorize', () =>
+      authorizeTrustline(issuerSecret, investorPubkey),
+    );
 
     // 3) Distributor paga PLINARF pro investor (server-side).
-    const distRes = await distribute(
-      distributorSecret,
-      issuerPubkey,
-      investorPubkey,
-      stellarAmount,
+    const distRes = await runStep('distribute', () =>
+      distribute(distributorSecret, issuerPubkey, investorPubkey, stellarAmount),
     );
 
     // 4) Audit log + atualização do investidor (se conhecido).
@@ -132,9 +133,43 @@ export async function POST(req: Request) {
       distributeTxHash: distRes.hash,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'unknown' },
-      { status: 500 },
-    );
+    const detail = describeStellarError(err);
+    console.error('[buy/submit] falha:', detail);
+    return NextResponse.json(detail, { status: detail.status });
   }
+}
+
+async function runStep<T>(step: 'trustline' | 'authorize' | 'distribute', fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    (err as { __plinaStep?: string }).__plinaStep = step;
+    throw err;
+  }
+}
+
+function describeStellarError(err: unknown): {
+  status: number;
+  error: string;
+  step?: string;
+  resultCodes?: unknown;
+  resultXdr?: unknown;
+} {
+  const step = (err as { __plinaStep?: string })?.__plinaStep;
+  // stellar-sdk usa axios — erros do Horizon vêm com response.data.extras.result_codes
+  const resp = (err as { response?: { status?: number; data?: { extras?: { result_codes?: unknown; result_xdr?: unknown }; detail?: string; title?: string } } })?.response;
+  const extras = resp?.data?.extras;
+  const message =
+    extras && (extras as { result_codes?: { transaction?: string } }).result_codes?.transaction
+      ? `[${step ?? 'stellar'}] ${(extras as { result_codes?: { transaction?: string } }).result_codes!.transaction} :: ${JSON.stringify((extras as { result_codes?: { operations?: unknown } }).result_codes!.operations ?? [])}`
+      : err instanceof Error
+        ? `[${step ?? 'route'}] ${err.message}`
+        : 'unknown';
+  return {
+    status: resp?.status ?? 500,
+    error: message,
+    step,
+    resultCodes: extras?.result_codes,
+    resultXdr: extras?.result_xdr,
+  };
 }
