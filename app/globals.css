@@ -8,6 +8,15 @@
   --color-secondaryLight: #A0CFE7;
   --color-lightBg: #e4e4e4;
 
+  /* DESIGN.md aliases — mantêm convivência sem caçar tokens espalhados */
+  --color-deep-petrol: #132728;
+  --color-sheet-white: #ffffff;
+  --color-document-grey: #e4e4e4;
+  --color-auditable-cyan: #0EA7C7;
+  --color-auditable-cyan-deep: #057A99;
+  --color-stellar-mid: #4A9ED4;
+  --color-glacier-tint: #A0CFE7;
+
   --font-title: 'Chillax', sans-serif;
   --font-text: 'Satoshi', sans-serif;
   --font-details: 'Geist', sans-serif;
@@ -21,7 +30,7 @@ body {
 }
 
 .border-light-hairline {
-  border-color: rgba(19, 39, 40, 0.15);
+  border-color: rgba(19, 39, 40, 0.12);
 }
 
 ::selection {
@@ -90,6 +99,19 @@ body {
 
 .animate-scroll-glide {
   animation: scroll-indicator-glide 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+@keyframes screen-in {
+  0% { opacity: 0; transform: translateY(12px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.animate-screen-in {
+  animation: screen-in 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-screen-in { animation: none; }
 }
 
 @keyframes marquee-track {
