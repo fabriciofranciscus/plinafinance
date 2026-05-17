@@ -98,11 +98,13 @@ function explorerTx(hash: string) {
 function explorerAccount(pubkey: string) {
   return `https://stellar.expert/explorer/testnet/account/${pubkey}`;
 }
-function maskId(id: string): string {
+function maskId(id: string | null | undefined): string {
+  if (!id) return '—';
   if (id.length < 12) return id;
   return `${id.slice(0, 8)}…${id.slice(-4)}`;
 }
-function maskPubkey(pk: string): string {
+function maskPubkey(pk: string | null | undefined): string {
+  if (!pk) return '—';
   if (pk.length < 16) return pk;
   return `${pk.slice(0, 8)}…${pk.slice(-8)}`;
 }
@@ -235,7 +237,16 @@ export default function InvestirPage() {
         body: JSON.stringify({ pubkey: onboard.publicKey }),
       });
       if (!res.ok) throw new Error(await res.text());
-      setBuild((await res.json()) as BuildData);
+      const data = (await res.json()) as Partial<BuildData>;
+      // Valida shape antes de avançar — sem isso, campos faltantes só
+      // explodem em runtime no maskPubkey/render de ConfirmScreen.
+      const missing = (['xdr', 'hashHex', 'issuerPubkey', 'assetCode'] as const).filter(
+        (k) => !data[k],
+      );
+      if (missing.length > 0) {
+        throw new Error(`/buy/build devolveu resposta incompleta — faltam: ${missing.join(', ')}`);
+      }
+      setBuild(data as BuildData);
       setScreen('confirm');
     } catch (err) {
       setError(asFlowError(err));
