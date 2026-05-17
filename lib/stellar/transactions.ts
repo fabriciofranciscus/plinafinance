@@ -40,7 +40,10 @@ export async function buildTrustlineXdr(
     networkPassphrase,
   })
     .addOperation(Operation.changeTrust({ asset: buildAsset(issuerPubkey, code) }))
-    .setTimeout(60)
+    // 10 min — usuário precisa revisar a confirm screen + assinar via Privy.
+    // 60s gerava tx_too_late no submit; folga maior é segura (sequence number
+    // já trava reuso, sem risco de replay).
+    .setTimeout(600)
     .build();
   return { xdr: tx.toXDR(), hashHex: '0x' + tx.hash().toString('hex') };
 }
@@ -85,7 +88,8 @@ export async function buildSwapBridgeForPlinarfXdr(input: {
         amount: input.plinarfAmount,
       }),
     )
-    .setTimeout(60);
+    // Mesma janela do trustline: usuário revisa + Privy assina. Ver buildTrustlineXdr.
+    .setTimeout(600);
 
   if (input.memo) builder.addMemo(Memo.text(input.memo.slice(0, 28)));
 
