@@ -180,7 +180,15 @@ Se `Quote.onRampOrder` já existe, devolvemos a order anterior (idempotente). Ma
 
 ---
 
-## 6. Arquivos materiais
+## 6. Sincronização cruzada — ThaisFReis/Plina
+
+Os dois repos do projeto divergiram estruturalmente: `ThaisFReis/Plina` (origin) é monorepo com Next.js em `plina-finance/`; `fabriciofranciscus/plinafinance` (onde o trabalho foi feito) tem o app no root. **Patches reescritos** com paths `plina-finance/<file>` estão em `exports/thaisfreis-patches/` (untracked) — ver README local pra apply.
+
+Verificação byte-a-byte (2026-05-18) dos pré-existentes do working tree contra `origin/feat/investir-redesign:plina-finance/<file>`: 5/6 idênticos (`globals.css`, `layout.tsx`, `AppHeader.tsx`, `package.json`, `package-lock.json`); 1 (`lib/stellar/transactions.ts`) diverge em 2 linhas de comentário, código funcional igual.
+
+**Estado de sincronização** (no momento do commit): `origin/main` está ~20 commits atrás de `fabricio/main`. Phase 1 aplica clean em `origin/feat/investir-redesign`; Phase 2 conflita em `ONBOARDING.md` (ainda não existe lá), `app/api/investidor/buy/submit/route.ts` e `app/investir/page.tsx` (versões anteriores no origin). Resolução documentada no README dos patches.
+
+## 7. Arquivos materiais
 
 - **Schema**: `prisma/schema.prisma`, migration `prisma/migrations/20260518200331_quote_onramp_envelope/`
 - **Rotas novas**: `app/api/investidor/buy/{trust-plinarf,trust-tesouro,onramp,swap}/*/route.ts`
