@@ -78,13 +78,27 @@ Plina tokeniza direitos creditórios de consórcio brasileiro como cota de FIDC 
 
 | Persona | Funil | Localização no app |
 |---|---|---|
-| **Investidor institucional** | Aquisição de PLINA-RF lastreada no pool | `/investir`, `/minha-posicao` |
+| **Investidor institucional** | Aquisição de PLINA-RF via onramp BRL → TESOURO + swap atômico | `/investir`, `/minha-posicao` |
 | **Vendedor (cedente da cota)** | Cessão da cota à Plina mediante pagamento via PIX | `/vender`, `/admin/vendedor-pipeline` |
 | **Comprador-usuário (Caminho A)** | Aquisição da cota para uso do bem (30–90 dias, yield alto) | `/comprar`, `/admin/comprador-pipeline` |
 
 O Caminho A constitui o diferencial competitivo do produto e não deve ser comoditizado em direção ao Caminho B convencional.
 
 A originação é operada na Fase 1 — não há autosserviço de vendedor. No POC, esse passo é simulado por mock; cotas entram no pool exclusivamente via painel da operação (`/admin`).
+
+### 2.1 Fluxo investidor — 7 telas, swap atômico
+
+`/investir` opera o caminho real BRL → TESOURO → PLINA-RF em sete telas guiadas (`Screen` em `app/investir/page.tsx`):
+
+1. **welcome** — login Privy (email OTP ou OAuth Google).
+2. **identity** — onboard server-side (wallet Stellar embedded, customer Etherfuse, KYC programático) e **setup one-time de trustlines** (2 assinaturas Privy: PLINA-RF + TESOURO).
+3. **quote** — consulta `/api/investidor/quote`, persiste `Quote` no Postgres (UUID Etherfuse como PK; `expiresAt` da anchor; `consumedAt` single-shot).
+4. **onramp** — `Etherfuse.createOnRamp`, persiste `OnRampOrder`, exibe PIX. Quando bank account PIX não está ativa em sandbox (limitação documentada em PLINA-MOD-005), entra em **caminho mock** (`__mock: true` no JSON, botão "Simular PIX pago").
+5. **settling** — polling de `/api/investidor/buy/onramp/status` a cada 3s até `status=completed`. Etherfuse paga TESOURO na wallet do investor (caminho real) ou flip mock instantâneo (sandbox).
+6. **confirm** — `/api/investidor/buy/swap/build` retorna envelope Stellar atômico com 2 legs (investor → distributor TESOURO + distributor → investor PLINA-RF). Distributor pré-assina server-side; investor co-assina o hash via Privy.
+7. **receipt** — hashes da onramp + swap. Label diferente em mock ("Distribuição (mock sandbox) concluída").
+
+**Propriedade de segurança crítica**: emissão de PLINA-RF é binding com `Quote.toAmount` server-side. Body não carrega `amount` em nenhuma rota do funil. Quote é consumido single-shot (`db.$transaction` com `updateMany { consumedAt: null }` + assert `count === 1`). Em produção, o envelope atômico garante que sem TESOURO real entregue, a leg PLINA-RF também falha. Doc completo em [`docs/2026-05-18-quote-binding-and-atomic-swap.md`](./docs/2026-05-18-quote-binding-and-atomic-swap.md).
 
 ---
 
@@ -183,6 +197,7 @@ Ordem obrigatória, sem omissões, antes de marcar qualquer step como concluído
 - `accountType: 'business'` é obrigatório no onboarding.
 - Header de autenticação: `Authorization: <key>` — sem prefixo `Bearer`.
 - Divergências em relação ao SDK upstream estão registradas em [`lib/anchors/README.md`](./lib/anchors/README.md) (`PLINA-MOD-001` a `PLINA-MOD-005`).
+- **Bank account PIX exige iframe Etherfuse** (PLINA-MOD-005). API REST aceita CLABE (MX), não PIX. Sem iframe, `createOnRamp` retorna "Proxy account not found". O backend detecta esse erro em sandbox (`ETHERFUSE_ENV=sandbox`) e cai em caminho **mock**: `OnRampOrder` é persistida com `paymentInstructionsJson.__mock = true`, `/onramp/sandbox-pay` flipa status pra `completed` direto no DB, e `/swap/build` em mock executa `distribute()` single-shot (sem TESOURO real). Em produção, o caminho mock está desligado (`/sandbox-pay` retorna 403). Marcador `mock: true` aparece em audit log e UI receipt.
 
 ### Privy Stellar Tier 2
 
@@ -245,6 +260,7 @@ Todo trabalho é mergeado via Pull Request para `main`. Commits diretos em `main
 | [`AGENTS.md`](./AGENTS.md) | Aviso de quebras de compatibilidade do Next.js 16. |
 | [`PRODUCT.md`](./PRODUCT.md) | Posicionamento, audiência, voz e princípios de produto. |
 | [`DESIGN.md`](./DESIGN.md) | Sistema visual, tokens, hierarquia. |
+| [`docs/`](./docs/README.md) | Implementation log — histórico de decisões e trade-offs por entrega de escopo material. |
 | [`lib/anchors/README.md`](./lib/anchors/README.md) | Atribuição do SDK vendorado e divergências locais (`PLINA-MOD-*`). |
 | Whitepaper (v1.0, abril 2026) | Fonte de verdade do produto. Mantido fora do repositório. |
 
@@ -252,7 +268,7 @@ Todo trabalho é mergeado via Pull Request para `main`. Commits diretos em `main
 
 ## 11. Ramp-up sugerido
 
-1. Setup completo do ambiente, smoke tests verdes e execução end-to-end do fluxo `/investir` em testnet (login Privy → quote Etherfuse → confirmação da emissão de PLINA-RF no Stellar Expert).
+1. Setup completo do ambiente, smoke tests verdes e execução end-to-end do fluxo `/investir` em testnet — 7 telas (welcome → identity → quote → onramp → settling → confirm → receipt), com 2 sigs Privy pra trustlines (PLINA-RF + TESOURO) + 1 sig pro envelope swap atômico. Em sandbox sem iframe Etherfuse, o caminho mock é acionado automaticamente; em produção, requer bank account PIX ativa via iframe.
 2. Leitura do whitepaper, `PRODUCT.md` e `CLAUDE.md`. Dúvidas estruturais devem ser endereçadas ao time antes do primeiro PR.
 3. Primeira contribuição em escopo reduzido, seguindo TDD e o Step Completion Checklist na íntegra.
 4. Revisão, ajustes e merge. Escopo expande progressivamente após o primeiro ciclo concluído.
