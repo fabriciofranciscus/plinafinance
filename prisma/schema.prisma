@@ -93,6 +93,11 @@ enum AcaoAudit {
   CAMINHO_A_EXECUTADO
   // Liquidação investidor (whitepaper §6.4 janela de resgate)
   PLINARF_LIQUIDADO
+  // Phase 2 — onramp Etherfuse + swap atômico
+  TESOURO_TRUSTLINE_AUTORIZADA
+  ONRAMP_CRIADA
+  ONRAMP_LIQUIDADA
+  SWAP_EXECUTADO
 }
 
 // Funil vendedor
@@ -228,6 +233,10 @@ model Investidor {
   kycAprovado     Boolean          @default(false)
   status          StatusInvestidor @default(PENDENTE_KYC)
   trustlineTxHash String?
+  /// Hash da tx que estabeleceu a trustline TESOURO (asset bridge da
+  /// Etherfuse). Necessário pra wallet receber TESOURO no caminho real
+  /// BRL → TESOURO → PLINARF (whitepaper §6.6).
+  tesouroTrustlineTxHash String?
   /// UUID do customer Etherfuse. Persistido pra idempotência (quote/order
   /// subsequentes reusam sem precisar re-criar customer).
   etherfuseCustomerId String?
@@ -236,7 +245,68 @@ model Investidor {
   atualizadoEm    DateTime         @updatedAt
 
   eventos         EventoAudit[]
+  quotes          Quote[]
+  onRampOrders    OnRampOrder[]
 
+  @@index([status])
+}
+
+/// Quote BRL → TESOURO retornado pela Etherfuse, persistido pra binding
+/// server-side de valor de emissão. Sem esse vínculo, /buy/submit aceitaria
+/// qualquer `amount` do body — investidor poderia pedir emissão arbitrária
+/// de PLINARF apenas com KYC válido e trustline assinada (gap fechado em
+/// 2026-05-18: amount agora é derivado server-side de quote.toAmount).
+///
+/// `id` é o UUID que a Etherfuse devolve em /ramp/quote, reusado como PK.
+/// `consumedAt` marca uso single-shot — quote queimado não pode reemitir.
+model Quote {
+  id              String   @id
+  investidorId    String
+  investidor      Investidor @relation(fields: [investidorId], references: [id])
+  fromCurrency    String
+  fromAmount      Decimal  @db.Decimal(20, 7)
+  toCurrency      String
+  toAmount        Decimal  @db.Decimal(20, 7)
+  exchangeRate    String
+  fee             String
+  expiresAt       DateTime
+  consumedAt      DateTime?
+  /// Hash da tx Stellar que consumiu o quote (swap envelope na Phase 2,
+  /// distribute single-shot na Phase 1).
+  consumedTxHash  String?
+  criadoEm        DateTime @default(now())
+
+  onRampOrder     OnRampOrder?
+
+  @@index([investidorId])
+  @@index([expiresAt])
+  @@index([consumedAt])
+}
+
+/// Ordem de onramp BRL → TESOURO via Etherfuse. Liga o quote ao settlement
+/// real (PIX recebido off-chain → TESOURO pago on-chain pra wallet do
+/// investor). Pré-condição pro swap atômico que emite PLINARF.
+///
+/// `id` é o orderId que a Etherfuse devolve. `stellarTxHash` é a tx de
+/// payment TESOURO → investor (preenche quando status=completed).
+model OnRampOrder {
+  id                      String   @id
+  quoteId                 String   @unique
+  quote                   Quote    @relation(fields: [quoteId], references: [id])
+  investidorId            String
+  investidor              Investidor @relation(fields: [investidorId], references: [id])
+  /// Status Etherfuse normalizado: pending | processing | completed | failed | cancelled | refunded.
+  status                  String   @default("pending")
+  /// Hash da tx Stellar de payment TESOURO → investor.
+  stellarTxHash           String?
+  /// PIX/SPEI instructions retornadas pela Etherfuse na criação da order.
+  /// Persistido pra UI poder re-renderizar sem hit no Etherfuse.
+  paymentInstructionsJson Json?
+  settledAt               DateTime?
+  criadoEm                DateTime @default(now())
+  atualizadoEm            DateTime @updatedAt
+
+  @@index([investidorId])
   @@index([status])
 }
 
