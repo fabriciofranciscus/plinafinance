@@ -19,10 +19,11 @@ import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { EtherfuseClient } from '@/lib/anchors/etherfuse';
+import { withAuth } from '@/lib/wallet/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
+export const POST = withAuth(async (req, { user }) => {
   try {
     const env = process.env.ETHERFUSE_ENV ?? 'sandbox';
     if (env === 'production') {
@@ -40,6 +41,12 @@ export async function POST(req: Request) {
     const order = await db.onRampOrder.findUnique({ where: { id: orderId } });
     if (!order) {
       return NextResponse.json({ error: 'order não encontrada' }, { status: 404 });
+    }
+    if (order.investidorId !== user.investidorId) {
+      return NextResponse.json(
+        { error: 'order não pertence ao investidor autenticado' },
+        { status: 403 },
+      );
     }
     if (order.status === 'completed') {
       return NextResponse.json({
@@ -119,4 +126,4 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-}
+});
