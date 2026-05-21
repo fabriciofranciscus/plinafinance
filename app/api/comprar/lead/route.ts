@@ -41,8 +41,19 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    const tipo =
-      body.tipo === 'PESSOA_JURIDICA'
+    const tipoRaw = String(body.tipo ?? '').trim().toUpperCase();
+    if (
+      tipoRaw &&
+      tipoRaw !== 'PESSOA_FISICA' &&
+      tipoRaw !== 'PESSOA_JURIDICA'
+    ) {
+      return NextResponse.json(
+        { error: 'tipo deve ser PESSOA_FISICA ou PESSOA_JURIDICA' },
+        { status: 400 },
+      );
+    }
+    const tipo: LeadCompradorTipo =
+      tipoRaw === 'PESSOA_JURIDICA'
         ? LeadCompradorTipo.PESSOA_JURIDICA
         : LeadCompradorTipo.PESSOA_FISICA;
 

@@ -33,6 +33,9 @@ import {
 
 const RESERVA_DURACAO_HORAS = 72;
 
+/** Janela de dedup pra evitar N txs Stellar por reenvio do form de lead. */
+export const LEAD_DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 // ─── 1. Captura de lead comprador ───────────────────────────────────────────
 
 export interface CapturarLeadCompradorInput {
@@ -67,22 +70,41 @@ export async function capturarLeadComprador(
     throw new Error('Nome e email obrigatórios.');
   }
 
+  const normalizedEmail = input.email.toLowerCase().trim();
+
+  // F-21 dedup: se o lead já tem audit on-chain recente, reusar o txHash em
+  // vez de submeter outra tx Stellar. Reenvio acidental do form é o caso
+  // comum — sem isso, cada reload virava poluição on-chain.
+  const recentAudit = await db.eventoAudit.findFirst({
+    where: {
+      acao: 'LEAD_COMPRADOR_CAPTURADO',
+      leadComprador: { email: normalizedEmail },
+      criadoEm: { gte: new Date(Date.now() - LEAD_DEDUP_WINDOW_MS) },
+      stellarTxHash: { not: null },
+      payloadHash: { not: null },
+    },
+    orderBy: { criadoEm: 'desc' },
+    select: { stellarTxHash: true, payloadHash: true, payloadJson: true },
+  });
+
   const payload = buildAuditPayload('lead_comprador', undefined, {
-    email: input.email.toLowerCase().trim(),
+    email: normalizedEmail,
     tipo: input.tipo,
     intencaoBem: input.intencaoBem ?? null,
     faixaCapital: input.faixaCapital ?? null,
     consentimentoLgpd: true,
     origem: input.origem ?? 'organico',
   });
-  const onChain = await registerOnChainHash(payload);
+  const onChain = recentAudit?.stellarTxHash && recentAudit.payloadHash
+    ? { txHash: recentAudit.stellarTxHash, payloadHash: recentAudit.payloadHash }
+    : await registerOnChainHash(payload);
 
   const lead = await db.$transaction(async (tx) => {
     const upserted = await tx.leadComprador.upsert({
-      where: { email: input.email.toLowerCase().trim() },
+      where: { email: normalizedEmail },
       create: {
         nome: input.nome.trim(),
-        email: input.email.toLowerCase().trim(),
+        email: normalizedEmail,
         telefone: input.telefone?.trim() || null,
         documento: input.documento?.replace(/\D/g, '') || null,
         tipo: input.tipo,
@@ -266,7 +288,7 @@ export interface ExecutarCaminhoAInput {
 
 export interface ExecutarCaminhoAResult {
   realizacaoId: string;
-  spread: number;
+  spread: string;
   payloadHash: string;
   txHash: string;
 }
@@ -299,25 +321,32 @@ export async function executarCaminhoA(
     throw new Error(`Cota em estado ${reserva.cota.status} — esperado RESERVADA`);
   }
 
-  const valorRealizado = Number(input.valorRealizado);
-  if (!isFinite(valorRealizado) || valorRealizado <= 0) {
+  let valorRealizado: Prisma.Decimal;
+  try {
+    valorRealizado = new Prisma.Decimal(input.valorRealizado);
+  } catch {
+    throw new Error('valorRealizado inválido');
+  }
+  if (!valorRealizado.isFinite() || valorRealizado.lte(0)) {
     throw new Error('valorRealizado inválido');
   }
 
   // Custo de aquisição = NAV original (valorCarta × (1 - desagioAquisicao))
-  const custoAquisicao = Math.floor(
-    Number(reserva.cota.valorCarta) *
-      (1 - Number(reserva.cota.desagioAquisicao)),
-  );
-  const spread = valorRealizado - custoAquisicao;
+  // Decimal pipeline: evita truncamento IEEE-754 + composição de erros.
+  const valorCartaDec = new Prisma.Decimal(reserva.cota.valorCarta);
+  const desagioDec = new Prisma.Decimal(reserva.cota.desagioAquisicao);
+  const custoAquisicao = valorCartaDec
+    .mul(new Prisma.Decimal(1).minus(desagioDec))
+    .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_EVEN);
+  const spread = valorRealizado.minus(custoAquisicao);
 
   const payload = buildAuditPayload('caminho_a', reserva.cotaId, {
     cotaId: reserva.cotaId,
     reservaId: reserva.id,
     leadCompradorId: reserva.leadCompradorId,
-    valorRealizado,
-    custoAquisicao,
-    spread,
+    valorRealizado: valorRealizado.toFixed(2),
+    custoAquisicao: custoAquisicao.toFixed(2),
+    spread: spread.toFixed(2),
     caminho: 'A_REVENDA',
   });
   const onChain = await registerOnChainHash(payload);
@@ -365,7 +394,10 @@ export async function executarCaminhoA(
         cotaId: reserva.cotaId,
         leadCompradorId: reserva.leadCompradorId,
         stellarTxHash: onChain.txHash,
-        payloadJson: { caminho: 'A_REVENDA', spread } as Prisma.InputJsonValue,
+        payloadJson: {
+          caminho: 'A_REVENDA',
+          spread: spread.toFixed(2),
+        } as Prisma.InputJsonValue,
       },
     });
     return created;
@@ -373,7 +405,7 @@ export async function executarCaminhoA(
 
   return {
     realizacaoId: realizacao.id,
-    spread,
+    spread: spread.toFixed(2),
     payloadHash: onChain.payloadHash,
     txHash: onChain.txHash,
   };
