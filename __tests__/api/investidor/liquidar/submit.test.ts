@@ -70,6 +70,7 @@ describe('POST /api/investidor/liquidar/submit', () => {
     expect(submitLiquidacao).toHaveBeenCalledOnce();
     expect(submitLiquidacao.mock.calls[0][0]).toMatchObject({
       investidorId: 'inv_1',
+      privyId: 'did:privy:abc',
       investorPubkey: 'GABC',
       amount: '10',
     });

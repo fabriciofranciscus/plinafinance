@@ -156,5 +156,6 @@ describe('POST /api/investidor/buy/swap/build', () => {
     expect(eventoAuditCreate).toHaveBeenCalledOnce();
     expect(eventoAuditCreate.mock.calls[0][0].data.acao).toBe('SWAP_EXECUTADO');
     expect(eventoAuditCreate.mock.calls[0][0].data.payloadJson.mock).toBe(true);
+    expect(eventoAuditCreate.mock.calls[0][0].data.privyId).toBe('did:privy:abc');
   });
 });

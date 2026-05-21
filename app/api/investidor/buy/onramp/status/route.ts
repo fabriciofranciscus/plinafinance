@@ -102,6 +102,7 @@ export const GET = withAuth(async (req, { user }) => {
               acao: 'ONRAMP_LIQUIDADA',
               operador: 'etherfuse-anchor',
               investidorId: order.investidorId,
+              privyId: user.privyId,
               stellarTxHash: newTxHash ?? undefined,
               payloadJson: {
                 orderId: order.id,

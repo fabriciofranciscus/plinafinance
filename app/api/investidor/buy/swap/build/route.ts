@@ -155,6 +155,7 @@ export const POST = withAuth(async (req, { user }) => {
             acao: 'SWAP_EXECUTADO',
             operador: 'sandbox-mock',
             investidorId: quote.investidorId,
+            privyId: user.privyId,
             stellarTxHash: distRes.hash,
             payloadJson: {
               quoteId: quote.id,

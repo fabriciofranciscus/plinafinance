@@ -135,5 +135,6 @@ describe('POST /api/investidor/buy/onramp/create', () => {
     expect(json.mock).toBe(true);
     expect(onRampCreate).toHaveBeenCalledOnce();
     expect(onRampCreate.mock.calls[0][0].data.investidorId).toBe('inv_1');
+    expect(eventoAuditCreate.mock.calls[0][0].data.privyId).toBe('did:privy:abc');
   });
 });
