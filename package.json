@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "smoke:stellar": "tsx scripts/smoke-stellar.ts",
     "smoke:etherfuse": "tsx scripts/smoke-etherfuse.ts",
     "smoke:audit": "tsx scripts/smoke-audit.ts",
@@ -36,9 +38,11 @@
     "@types/nodemailer": "^8.0.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/ui": "^4.1.7",
     "prisma": "^6.1.0",
     "tailwindcss": "^4",
     "tsx": "^4.19.2",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.7"
   }
 }
