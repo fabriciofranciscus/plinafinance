@@ -242,9 +242,13 @@ export default function InvestirPage() {
     setQuoteLoading(true);
     setError(null);
     try {
+      const token = await getAccessToken();
       const res = await fetch('/api/investidor/quote', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           amountBrl,
           customerId: onboard.etherfuseCustomerId,
@@ -258,7 +262,7 @@ export default function InvestirPage() {
     } finally {
       setQuoteLoading(false);
     }
-  }, [onboard, amountBrl]);
+  }, [onboard, amountBrl, getAccessToken]);
 
   useEffect(() => {
     if (screen !== 'quote' || !onboard) return;
@@ -408,8 +412,10 @@ export default function InvestirPage() {
     let cancelled = false;
     const tick = async () => {
       try {
+        const token = await getAccessToken();
         const res = await fetch(
           `/api/investidor/buy/onramp/status?orderId=${encodeURIComponent(onRamp.orderId)}`,
+          { headers: token ? { Authorization: `Bearer ${token}` } : {} },
         );
         if (!res.ok) return;
         const data = (await res.json()) as {
@@ -429,7 +435,7 @@ export default function InvestirPage() {
       cancelled = true;
       clearInterval(id);
     };
-  }, [screen, onRamp]);
+  }, [screen, onRamp, getAccessToken]);
 
   // Build swap envelope (real) ou executa swap direto (mock).
   const goToConfirm = useCallback(async () => {

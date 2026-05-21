@@ -16,10 +16,11 @@ import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { EtherfuseClient } from '@/lib/anchors/etherfuse';
+import { withAuth } from '@/lib/wallet/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
+export const POST = withAuth(async (req, { user }) => {
   try {
     const { amountBrl, customerId, stellarAddress } = (await req.json()) as {
       amountBrl?: string;
@@ -33,17 +34,19 @@ export async function POST(req: Request) {
       );
     }
 
-    // Investidor precisa existir antes do quote (FK do Quote). Lookup
-    // por etherfuseCustomerId — assim o cliente não consegue spoofar
-    // investidorId no body.
-    const investidor = await db.investidor.findFirst({
-      where: { etherfuseCustomerId: customerId },
-      select: { id: true },
-    });
-    if (!investidor) {
+    // Defense in depth: body precisa casar com o investidor autenticado.
+    // Sem isso, o token só prova identidade — qualquer um logado poderia
+    // cotar pra wallet alheia.
+    if (customerId !== user.etherfuseCustomerId) {
       return NextResponse.json(
-        { error: 'investidor não encontrado pra esse customerId' },
-        { status: 404 },
+        { error: 'customerId não corresponde ao investidor autenticado' },
+        { status: 403 },
+      );
+    }
+    if (stellarAddress !== user.publicKey) {
+      return NextResponse.json(
+        { error: 'stellarAddress não corresponde ao investidor autenticado' },
+        { status: 403 },
       );
     }
 
@@ -74,7 +77,7 @@ export async function POST(req: Request) {
     await db.quote.create({
       data: {
         id: quote.id,
-        investidorId: investidor.id,
+        investidorId: user.investidorId,
         fromCurrency: quote.fromCurrency,
         fromAmount: new Prisma.Decimal(quote.fromAmount),
         toCurrency: quote.toCurrency,
@@ -99,4 +102,4 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-}
+});
