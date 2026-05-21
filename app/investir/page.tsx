@@ -281,12 +281,16 @@ export default function InvestirPage() {
     setTrustlineLoading(true);
     setError(null);
     try {
+      const token = await getAccessToken();
+      const authHeaders: Record<string, string> = token
+        ? { Authorization: `Bearer ${token}` }
+        : {};
       // PLINARF trustline.
       const plinarfBuild = await fetch(
         '/api/investidor/buy/trust-plinarf/build',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
           body: JSON.stringify({ pubkey: onboard.publicKey }),
         },
       );
@@ -304,12 +308,11 @@ export default function InvestirPage() {
         '/api/investidor/buy/trust-plinarf/submit',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
           body: JSON.stringify({
             xdr: plinarfBuildData.xdr,
             investorPubkey: onboard.publicKey,
             signatureHex: plinarfSig.signature,
-            investidorId: onboard.investidorId,
           }),
         },
       );
@@ -320,7 +323,7 @@ export default function InvestirPage() {
         '/api/investidor/buy/trust-tesouro/build',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
           body: JSON.stringify({ pubkey: onboard.publicKey }),
         },
       );
@@ -338,12 +341,11 @@ export default function InvestirPage() {
         '/api/investidor/buy/trust-tesouro/submit',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
           body: JSON.stringify({
             xdr: tesouroBuildData.xdr,
             investorPubkey: onboard.publicKey,
             signatureHex: tesouroSig.signature,
-            investidorId: onboard.investidorId,
           }),
         },
       );
@@ -355,7 +357,7 @@ export default function InvestirPage() {
     } finally {
       setTrustlineLoading(false);
     }
-  }, [onboard, signRawHash, trustlinesReady, trustlineLoading]);
+  }, [onboard, signRawHash, trustlinesReady, trustlineLoading, getAccessToken]);
 
   // Cria onramp Etherfuse + transita pra screen de pagamento PIX.
   const goToOnramp = useCallback(async () => {

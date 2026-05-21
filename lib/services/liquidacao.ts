@@ -139,7 +139,7 @@ export async function submitLiquidacao(input: {
   investorPubkey: string;
   signatureHex: string;
   amount: string;
-  investidorId?: string;
+  investidorId: string;
 }): Promise<{
   liquidationTxHash: string;
   auditTxHash: string;
@@ -181,29 +181,28 @@ export async function submitLiquidacao(input: {
   );
   const onChain = await registerOnChainHash(payload);
 
-  // 4) Persist + audit log + saldoEsperado decrement.
-  if (input.investidorId) {
-    await db.$transaction(async (tx) => {
-      await tx.eventoAudit.create({
-        data: {
-          acao: 'PLINARF_LIQUIDADO',
-          operador: 'investidor-self-service',
-          investidorId: input.investidorId,
-          stellarTxHash: onChain.txHash,
-          payloadHash: onChain.payloadHash,
-          payloadJson: payload as unknown as Prisma.InputJsonValue,
-        },
-      });
-      await tx.investidor.update({
-        where: { id: input.investidorId },
-        data: {
-          saldoEsperado: {
-            decrement: new Prisma.Decimal(stellarAmount),
-          },
-        },
-      });
+  // 4) Persist + audit log + saldoEsperado decrement. investidorId é
+  // required agora (vem do auth-guard), então grava incondicionalmente.
+  await db.$transaction(async (tx) => {
+    await tx.eventoAudit.create({
+      data: {
+        acao: 'PLINARF_LIQUIDADO',
+        operador: 'investidor-self-service',
+        investidorId: input.investidorId,
+        stellarTxHash: onChain.txHash,
+        payloadHash: onChain.payloadHash,
+        payloadJson: payload as unknown as Prisma.InputJsonValue,
+      },
     });
-  }
+    await tx.investidor.update({
+      where: { id: input.investidorId },
+      data: {
+        saldoEsperado: {
+          decrement: new Prisma.Decimal(stellarAmount),
+        },
+      },
+    });
+  });
 
   return {
     liquidationTxHash,
