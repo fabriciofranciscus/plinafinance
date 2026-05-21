@@ -1,41 +1,44 @@
 /**
  * Auth do painel da operação Plina — POC.
  *
- * Cookie httpOnly `plina_admin` armazena hash do ADMIN_PASSWORD. Server
- * compara via re-hash. Não vaza a senha se o cookie for lido por error
- * (httpOnly impede JS, mas defesa em profundidade).
+ * Cookie httpOnly `plina_admin` carrega um sessionId opaco (32 bytes hex).
+ * Validade real fica em `AdminSession` no Postgres (criadoEm/expiraEm/
+ * revogadoEm) → logout invalida server-side, não dá pra replay até maxAge.
  *
  * Decisão pendente do SPECS_MVP_TECH.md §6: trocar por Clerk/Auth.js
  * no MVP. POC fica nessa senha única — Plina interna.
  */
 
 import { cookies } from 'next/headers';
-import { createHash } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
+import { db } from '../db';
 
 export const ADMIN_COOKIE = 'plina_admin';
 const COOKIE_MAX_AGE_SECONDS = 4 * 60 * 60; // 4h
-
-function expectedHash(): string {
-  const pwd = process.env.ADMIN_PASSWORD;
-  if (!pwd) {
-    throw new Error('ADMIN_PASSWORD não configurada no .env.local.');
-  }
-  return createHash('sha256').update(`plina:${pwd}`).digest('hex');
-}
 
 export async function isAdminAuthenticated(): Promise<boolean> {
   if (!process.env.ADMIN_PASSWORD) return false;
   const cookieStore = await cookies();
   const cookie = cookieStore.get(ADMIN_COOKIE);
   if (!cookie?.value) return false;
-  return cookie.value === expectedHash();
+  const session = await db.adminSession.findUnique({
+    where: { sessionId: cookie.value },
+    select: { revogadoEm: true, expiraEm: true },
+  });
+  if (!session) return false;
+  if (session.revogadoEm) return false;
+  if (session.expiraEm <= new Date()) return false;
+  return true;
 }
 
 export async function setAdminCookie() {
+  const sessionId = randomBytes(32).toString('hex');
+  const expiraEm = new Date(Date.now() + COOKIE_MAX_AGE_SECONDS * 1000);
+  await db.adminSession.create({ data: { sessionId, expiraEm } });
   const cookieStore = await cookies();
   cookieStore.set({
     name: ADMIN_COOKIE,
-    value: expectedHash(),
+    value: sessionId,
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
@@ -46,6 +49,13 @@ export async function setAdminCookie() {
 
 export async function clearAdminCookie() {
   const cookieStore = await cookies();
+  const existing = cookieStore.get(ADMIN_COOKIE);
+  if (existing?.value) {
+    await db.adminSession.updateMany({
+      where: { sessionId: existing.value, revogadoEm: null },
+      data: { revogadoEm: new Date() },
+    });
+  }
   cookieStore.set({
     name: ADMIN_COOKIE,
     value: '',

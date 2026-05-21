@@ -525,3 +525,16 @@ model EventoAudit {
   @@index([cessaoId])
   @@index([criadoEm])
 }
+
+/// POC admin session — opaque sessionId em cookie httpOnly. Permite
+/// revogacao server-side no logout (vs cookie auto-explicit so via maxAge).
+/// Plano de migracao pra Clerk/Auth.js: SPECS_MVP_TECH.md §6.
+model AdminSession {
+  id          String    @id @default(cuid())
+  sessionId   String    @unique
+  criadoEm    DateTime  @default(now())
+  expiraEm    DateTime
+  revogadoEm  DateTime?
+
+  @@index([expiraEm])
+}
