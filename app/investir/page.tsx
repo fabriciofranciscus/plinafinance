@@ -363,9 +363,13 @@ export default function InvestirPage() {
     setOnRampLoading(true);
     setError(null);
     try {
+      const token = await getAccessToken();
       const res = await fetch('/api/investidor/buy/onramp/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ quoteId: quote.quoteId }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -377,7 +381,7 @@ export default function InvestirPage() {
     } finally {
       setOnRampLoading(false);
     }
-  }, [quote]);
+  }, [quote, getAccessToken]);
 
   // Sandbox-only: dispara simulação de PIX pago. Após resolver, vai pro
   // settling screen que vai pollar até completed.
@@ -386,9 +390,13 @@ export default function InvestirPage() {
     setPaying(true);
     setError(null);
     try {
+      const token = await getAccessToken();
       const res = await fetch('/api/investidor/buy/onramp/sandbox-pay', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ orderId: onRamp.orderId }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -404,7 +412,7 @@ export default function InvestirPage() {
     } finally {
       setPaying(false);
     }
-  }, [onRamp]);
+  }, [onRamp, getAccessToken]);
 
   // Polling do status da onramp no settling screen — para quando completed.
   useEffect(() => {

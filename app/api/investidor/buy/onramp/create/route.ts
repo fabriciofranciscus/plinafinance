@@ -19,6 +19,7 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { EtherfuseClient } from '@/lib/anchors/etherfuse';
 import { AnchorError } from '@/lib/anchors/types';
+import { withAuth } from '@/lib/wallet/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,7 +31,7 @@ function isBankAccountMissingError(err: unknown): boolean {
   return msg.includes('proxy account') || msg.includes('bank account');
 }
 
-export async function POST(req: Request) {
+export const POST = withAuth(async (req, { user }) => {
   try {
     const { quoteId } = (await req.json()) as { quoteId?: string };
     if (!quoteId) {
@@ -46,6 +47,12 @@ export async function POST(req: Request) {
     });
     if (!quote) {
       return NextResponse.json({ error: 'quote não encontrado' }, { status: 404 });
+    }
+    if (quote.investidorId !== user.investidorId) {
+      return NextResponse.json(
+        { error: 'quote não pertence ao investidor autenticado' },
+        { status: 403 },
+      );
     }
     if (quote.consumedAt) {
       return NextResponse.json({ error: 'quote já consumido' }, { status: 409 });
@@ -161,4 +168,4 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-}
+});
