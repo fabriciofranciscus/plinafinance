@@ -230,6 +230,11 @@ model Investidor {
   nome            String
   email           String           @unique
   publicKey       String           @unique
+  /// Privy user ID (sub do JWT). Chave estável da sessão — auth-guard
+  /// resolve o investidor por aqui em vez de email pra evitar round-trip
+  /// `privy.getUserById` por request. Nullable enquanto rows antigas não
+  /// foram backfillada (ver scripts/backfill-privy-id.ts).
+  privyId         String?          @unique
   kycAprovado     Boolean          @default(false)
   status          StatusInvestidor @default(PENDENTE_KYC)
   trustlineTxHash String?
