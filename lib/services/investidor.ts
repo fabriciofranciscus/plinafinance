@@ -66,6 +66,14 @@ export async function onboardInvestidor(
     existing.status === 'AUTORIZADO' &&
     existing.etherfuseCustomerId
   ) {
+    // Backfill privyId se faltar (rows pré-migration). Único caminho onde
+    // garantimos o vínculo email↔privyId pra o auth-guard funcionar.
+    if (!existing.privyId) {
+      await db.investidor.update({
+        where: { id: existing.id },
+        data: { privyId: input.privyId },
+      });
+    }
     return {
       investidorId: existing.id,
       publicKey: existing.publicKey,
@@ -157,6 +165,7 @@ export async function onboardInvestidor(
         nome: input.nome ?? input.email,
         email: input.email,
         publicKey,
+        privyId: input.privyId,
         etherfuseCustomerId: customer.id,
         kycAprovado: kycStatus === 'approved',
         status:
@@ -166,6 +175,7 @@ export async function onboardInvestidor(
       },
       update: {
         publicKey,
+        privyId: input.privyId,
         etherfuseCustomerId: customer.id,
         kycAprovado: kycStatus === 'approved',
         status:
