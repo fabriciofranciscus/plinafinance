@@ -14,14 +14,21 @@ import { NextResponse } from 'next/server';
 import { buildTrustlineXdr } from '@/lib/stellar/transactions';
 import { fundAccountIfNeeded } from '@/lib/stellar/account';
 import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
+import { withAuth } from '@/lib/wallet/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
+export const POST = withAuth(async (req, { user }) => {
   try {
     const { pubkey } = (await req.json()) as { pubkey?: string };
     if (!pubkey || !pubkey.startsWith('G')) {
       return NextResponse.json({ error: 'pubkey inválida' }, { status: 400 });
+    }
+    if (pubkey !== user.publicKey) {
+      return NextResponse.json(
+        { error: 'pubkey não corresponde ao investidor autenticado' },
+        { status: 403 },
+      );
     }
     await fundAccountIfNeeded(pubkey);
     const tesouro = await resolveTesouroAsset(pubkey);
@@ -42,4 +49,4 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-}
+});

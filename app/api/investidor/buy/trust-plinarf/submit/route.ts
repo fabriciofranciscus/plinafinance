@@ -15,22 +15,28 @@ import { db } from '@/lib/db';
 import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { authorizeTrustline } from '@/lib/stellar/issuer';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
+import { withAuth } from '@/lib/wallet/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
+export const POST = withAuth(async (req, { user }) => {
   try {
     const body = (await req.json()) as {
       xdr?: string;
       investorPubkey?: string;
       signatureHex?: string;
-      investidorId?: string;
     };
-    const { xdr, investorPubkey, signatureHex, investidorId } = body;
+    const { xdr, investorPubkey, signatureHex } = body;
     if (!xdr || !investorPubkey || !signatureHex) {
       return NextResponse.json(
         { error: 'xdr, investorPubkey, signatureHex obrigatórios' },
         { status: 400 },
+      );
+    }
+    if (investorPubkey !== user.publicKey) {
+      return NextResponse.json(
+        { error: 'investorPubkey não corresponde ao investidor autenticado' },
+        { status: 403 },
       );
     }
 
@@ -43,7 +49,7 @@ export async function POST(req: Request) {
     }
 
     await assertElegivelParaTrustline({
-      investidorId,
+      investidorId: user.investidorId,
       publicKey: investorPubkey,
     });
 
@@ -55,25 +61,23 @@ export async function POST(req: Request) {
 
     const authRes = await authorizeTrustline(issuerSecret, investorPubkey);
 
-    if (investidorId) {
-      await db.$transaction(async (tx) => {
-        await tx.investidor.update({
-          where: { id: investidorId },
-          data: { trustlineTxHash: trustlineRes.hash },
-        });
-        await tx.eventoAudit.create({
-          data: {
-            acao: 'TRUSTLINE_AUTORIZADA',
-            operador: 'investidor-self-service',
-            investidorId,
-            stellarTxHash: authRes.hash,
-            payloadJson: {
-              trustlineTxHash: trustlineRes.hash,
-            } as Prisma.InputJsonValue,
-          },
-        });
+    await db.$transaction(async (tx) => {
+      await tx.investidor.update({
+        where: { id: user.investidorId },
+        data: { trustlineTxHash: trustlineRes.hash },
       });
-    }
+      await tx.eventoAudit.create({
+        data: {
+          acao: 'TRUSTLINE_AUTORIZADA',
+          operador: 'investidor-self-service',
+          investidorId: user.investidorId,
+          stellarTxHash: authRes.hash,
+          payloadJson: {
+            trustlineTxHash: trustlineRes.hash,
+          } as Prisma.InputJsonValue,
+        },
+      });
+    });
 
     return NextResponse.json({
       trustlineTxHash: trustlineRes.hash,
@@ -85,4 +89,4 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-}
+});

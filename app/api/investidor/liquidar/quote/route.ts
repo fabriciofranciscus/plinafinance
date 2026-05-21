@@ -9,10 +9,11 @@
 
 import { NextResponse } from 'next/server';
 import { calcularValorLiquidacao } from '@/lib/services/liquidacao';
+import { withAuth } from '@/lib/wallet/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
+export const POST = withAuth(async (req, _ctx) => {
   try {
     const body = (await req.json()) as { amountPlinarf?: string };
     if (!body.amountPlinarf) {
@@ -31,4 +32,4 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-}
+});

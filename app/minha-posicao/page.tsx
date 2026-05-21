@@ -183,9 +183,13 @@ export default function MinhaPosicaoPage() {
     setLiqError(null);
     setLiqStep('quoting');
     try {
+      const token = await getAccessToken();
       const res = await fetch('/api/investidor/liquidar/quote', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ amountPlinarf: liqAmount }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -195,16 +199,20 @@ export default function MinhaPosicaoPage() {
       setLiqError(err instanceof Error ? err.message : String(err));
       setLiqStep('idle');
     }
-  }, [liqAmount]);
+  }, [liqAmount, getAccessToken]);
 
   const runLiquidate = useCallback(async () => {
     if (!stellarAddress || !liqAmount) return;
     setLiqError(null);
     setLiqStep('signing');
     try {
+      const token = await getAccessToken();
+      const authHeaders: Record<string, string> = token
+        ? { Authorization: `Bearer ${token}` }
+        : {};
       const buildRes = await fetch('/api/investidor/liquidar/build', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ pubkey: stellarAddress, amount: liqAmount }),
       });
       if (!buildRes.ok) throw new Error(await buildRes.text());
@@ -222,13 +230,12 @@ export default function MinhaPosicaoPage() {
       setLiqStep('submitting');
       const submitRes = await fetch('/api/investidor/liquidar/submit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           xdr,
           pubkey: stellarAddress,
           signatureHex: signature,
           amount: liqAmount,
-          investidorId: investidorId ?? undefined,
         }),
       });
       if (!submitRes.ok) throw new Error(await submitRes.text());
@@ -240,7 +247,7 @@ export default function MinhaPosicaoPage() {
       setLiqError(err instanceof Error ? err.message : String(err));
       setLiqStep('ready');
     }
-  }, [stellarAddress, liqAmount, signRawHash, investidorId, refresh]);
+  }, [stellarAddress, liqAmount, signRawHash, refresh, getAccessToken]);
 
   function resetLiq() {
     setLiqAmount('');
