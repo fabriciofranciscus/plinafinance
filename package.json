@@ -9,6 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "lint:auth-guard": "node scripts/lint/require-auth-guard.mjs",
+    "prebuild": "pnpm lint:auth-guard",
     "smoke:stellar": "tsx scripts/smoke-stellar.ts",
     "smoke:etherfuse": "tsx scripts/smoke-etherfuse.ts",
     "smoke:audit": "tsx scripts/smoke-audit.ts",

@@ -140,6 +140,7 @@ export async function submitLiquidacao(input: {
   signatureHex: string;
   amount: string;
   investidorId: string;
+  privyId: string;
 }): Promise<{
   liquidationTxHash: string;
   auditTxHash: string;
@@ -189,6 +190,7 @@ export async function submitLiquidacao(input: {
         acao: 'PLINARF_LIQUIDADO',
         operador: 'investidor-self-service',
         investidorId: input.investidorId,
+        privyId: input.privyId,
         stellarTxHash: onChain.txHash,
         payloadHash: onChain.payloadHash,
         payloadJson: payload as unknown as Prisma.InputJsonValue,

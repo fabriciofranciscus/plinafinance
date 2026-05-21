@@ -189,8 +189,8 @@ export async function onboardInvestidor(
         acao: 'INVESTIDOR_ONBOARDED',
         operador: 'investidor-self-service',
         investidorId: upserted.id,
+        privyId: input.privyId,
         payloadJson: {
-          privyId: input.privyId,
           publicKey,
           etherfuseCustomerId: customer.id,
           kycStatus,

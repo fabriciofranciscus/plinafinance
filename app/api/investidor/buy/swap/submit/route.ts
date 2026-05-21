@@ -148,6 +148,7 @@ export const POST = withAuth(async (req, { user }) => {
           acao: 'SWAP_EXECUTADO',
           operador: 'investidor-self-service',
           investidorId: quote.investidorId,
+          privyId: user.privyId,
           stellarTxHash: submitRes.hash,
           payloadJson: {
             quoteId: quote.id,

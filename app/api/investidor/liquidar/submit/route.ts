@@ -40,6 +40,7 @@ export const POST = withAuth(async (req, { user }) => {
       signatureHex: body.signatureHex,
       amount: body.amount,
       investidorId: user.investidorId,
+      privyId: user.privyId,
     });
     return NextResponse.json(result);
   } catch (err) {

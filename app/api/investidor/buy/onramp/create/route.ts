@@ -147,6 +147,7 @@ export const POST = withAuth(async (req, { user }) => {
           acao: 'ONRAMP_CRIADA',
           operador: 'investidor-self-service',
           investidorId: quote.investidorId,
+          privyId: user.privyId,
           payloadJson: {
             orderId,
             quoteId: quote.id,

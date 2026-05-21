@@ -71,6 +71,7 @@ export const POST = withAuth(async (req, { user }) => {
           acao: 'TRUSTLINE_AUTORIZADA',
           operador: 'investidor-self-service',
           investidorId: user.investidorId,
+          privyId: user.privyId,
           stellarTxHash: authRes.hash,
           payloadJson: {
             trustlineTxHash: trustlineRes.hash,

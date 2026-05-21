@@ -105,6 +105,7 @@ export const POST = withAuth(async (req, { user }) => {
             acao: 'ONRAMP_LIQUIDADA',
             operador: mock ? 'sandbox-mock' : 'etherfuse-anchor',
             investidorId: order.investidorId,
+            privyId: user.privyId,
             stellarTxHash: finalTxHash ?? undefined,
             payloadJson: {
               orderId: order.id,

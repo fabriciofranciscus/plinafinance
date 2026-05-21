@@ -116,5 +116,6 @@ describe('POST /api/investidor/buy/onramp/sandbox-pay', () => {
     expect(eventoAuditCreate).toHaveBeenCalledOnce();
     expect(eventoAuditCreate.mock.calls[0][0].data.acao).toBe('ONRAMP_LIQUIDADA');
     expect(eventoAuditCreate.mock.calls[0][0].data.investidorId).toBe('inv_1');
+    expect(eventoAuditCreate.mock.calls[0][0].data.privyId).toBe('did:privy:abc');
   });
 });
