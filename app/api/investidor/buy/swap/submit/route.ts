@@ -18,10 +18,11 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
+import { withAuth } from '@/lib/wallet/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
+export const POST = withAuth(async (req, { user }) => {
   try {
     const body = (await req.json()) as {
       quoteId?: string;
@@ -57,6 +58,12 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+    if (user.publicKey !== investorPubkey) {
+      return NextResponse.json(
+        { error: 'investorPubkey não corresponde ao investidor autenticado' },
+        { status: 403 },
+      );
+    }
 
     const quote = await db.quote.findUnique({
       where: { id: quoteId },
@@ -65,7 +72,7 @@ export async function POST(req: Request) {
     if (!quote) {
       return NextResponse.json({ error: 'quote não encontrado' }, { status: 404 });
     }
-    if (quote.investidor.publicKey !== investorPubkey) {
+    if (quote.investidorId !== user.investidorId) {
       return NextResponse.json(
         { error: 'quote pertence a outro investidor' },
         { status: 403 },
@@ -159,4 +166,4 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-}
+});
