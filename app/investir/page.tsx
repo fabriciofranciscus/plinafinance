@@ -452,9 +452,13 @@ export default function InvestirPage() {
     setError(null);
     setSignConfirmed(false);
     try {
+      const token = await getAccessToken();
       const res = await fetch('/api/investidor/buy/swap/build', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           quoteId: quote.quoteId,
           investorPubkey: onboard.publicKey,
@@ -480,7 +484,7 @@ export default function InvestirPage() {
     } finally {
       setSwapLoading(false);
     }
-  }, [onboard, quote, onRamp]);
+  }, [onboard, quote, onRamp, getAccessToken]);
 
   async function buy() {
     if (!onboard || !quote || !swapBuild || swapBuild.mock) return;
@@ -496,7 +500,10 @@ export default function InvestirPage() {
       });
       const submitRes = await fetch('/api/investidor/buy/swap/submit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           quoteId: quote.quoteId,
           investorPubkey: onboard.publicKey,
