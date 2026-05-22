@@ -8,6 +8,8 @@ const {
   eventoAuditCreate,
   submitWithPrivySignature,
   assertElegivelParaTrustline,
+  assertSwapXdrMatchesQuote,
+  resolveTesouroAsset,
 } = vi.hoisted(() => ({
   quoteFindUnique: vi.fn(),
   quoteUpdateMany: vi.fn(),
@@ -15,6 +17,8 @@ const {
   eventoAuditCreate: vi.fn(),
   submitWithPrivySignature: vi.fn(),
   assertElegivelParaTrustline: vi.fn(),
+  assertSwapXdrMatchesQuote: vi.fn(),
+  resolveTesouroAsset: vi.fn(),
 }));
 
 vi.mock('@/lib/wallet/auth-guard', () => ({
@@ -56,6 +60,11 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('@/lib/stellar/transactions', () => ({ submitWithPrivySignature }));
 vi.mock('@/lib/services/investidor', () => ({ assertElegivelParaTrustline }));
+vi.mock('@/lib/stellar/parse-swap-xdr', () => ({ assertSwapXdrMatchesQuote }));
+vi.mock('@/lib/anchors/etherfuse/tesouro', () => ({ resolveTesouroAsset }));
+
+const SAVED_ISSUER = process.env.STELLAR_ISSUER_PUBLIC;
+process.env.STELLAR_ISSUER_PUBLIC = 'GISSUER';
 
 import { POST } from '@/app/api/investidor/buy/swap/submit/route';
 
@@ -102,6 +111,15 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue({ hash: 'tx_real_hash' });
   assertElegivelParaTrustline.mockReset().mockResolvedValue(undefined);
+  assertSwapXdrMatchesQuote.mockReset();
+  resolveTesouroAsset
+    .mockReset()
+    .mockResolvedValue({
+      code: 'TESOURO',
+      issuer: 'GTESOURO',
+      identifier: 'TESOURO:GTESOURO',
+    });
+  process.env.STELLAR_ISSUER_PUBLIC = SAVED_ISSUER ?? 'GISSUER';
 });
 
 describe('POST /api/investidor/buy/swap/submit', () => {
@@ -135,6 +153,18 @@ describe('POST /api/investidor/buy/swap/submit', () => {
     );
     const r = await POST(req(FULL_BODY));
     expect(r.status).toBe(409);
+  });
+
+  it('C-01: 400 quando XDR diverge do quote (amount inflado)', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    assertSwapXdrMatchesQuote.mockImplementationOnce(() => {
+      throw new Error('leg2 amount=999.0000000 ≠ esperado=99.5000000');
+    });
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(400);
+    const json = await r.json();
+    expect(json.error).toMatch(/xdr divergente/);
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
   });
 
   it('200 happy path consome quote + incrementa saldo + audit', async () => {

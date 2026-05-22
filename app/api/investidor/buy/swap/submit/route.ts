@@ -21,6 +21,8 @@ import { assertElegivelParaTrustline } from '@/lib/services/investidor';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { logStellarError } from '@/lib/stellar/log-error';
 import { parseStellarAmount } from '@/lib/format/parse-stellar-amount';
+import { assertSwapXdrMatchesQuote } from '@/lib/stellar/parse-swap-xdr';
+import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 
 export const dynamic = 'force-dynamic';
 
@@ -115,6 +117,34 @@ export const POST = withAuth(async (req, { user }) => {
       publicKey: investorPubkey,
     });
 
+    // C-01: valida que a XDR assinada bate com o quote server-side.
+    // Sem isso, signature em rawSign não amarra amount/asset/destinos.
+    const issuerPubkey = process.env.STELLAR_ISSUER_PUBLIC;
+    if (!issuerPubkey) {
+      return NextResponse.json(
+        { error: 'STELLAR_ISSUER_PUBLIC ausente' },
+        { status: 500 },
+      );
+    }
+    const expectedAmount = parseStellarAmount(quote.toAmount).toFixed(7);
+    const tesouro = await resolveTesouroAsset(investorPubkey);
+    try {
+      assertSwapXdrMatchesQuote(xdr, {
+        investorPubkey,
+        distributorPubkey,
+        issuerPubkey,
+        bridgeAsset: { code: tesouro.code, issuer: tesouro.issuer },
+        expectedAmount,
+      });
+    } catch (err) {
+      return NextResponse.json(
+        {
+          error: `xdr divergente do quote: ${err instanceof Error ? err.message : 'unknown'}`,
+        },
+        { status: 400 },
+      );
+    }
+
     const submitRes = await submitWithPrivySignature({
       xdr,
       investorPubkey,
@@ -124,7 +154,7 @@ export const POST = withAuth(async (req, { user }) => {
       ],
     });
 
-    const stellarAmount = parseStellarAmount(quote.toAmount).toFixed(7);
+    const stellarAmount = expectedAmount;
 
     await db.$transaction(async (tx) => {
       const consumed = await tx.quote.updateMany({
