@@ -21,7 +21,9 @@ import { Prisma, StatusInvestidor } from '@prisma/client';
 import { db } from '../db';
 import { ensureStellarWallet } from '../wallet/privy';
 import { fundAccountIfNeeded } from '../stellar/account';
+import { STELLAR_NETWORK } from '../stellar/config';
 import { EtherfuseClient } from '../anchors/etherfuse';
+import { parseCpf } from '../format/parse-cpf';
 
 const DUMMY_PNG_BASE64 =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
@@ -40,6 +42,7 @@ export interface OnboardInput {
   privyId: string;
   email: string;
   nome?: string;
+  cpf?: string;
 }
 
 export interface OnboardResult {
@@ -57,6 +60,20 @@ export interface OnboardResult {
 export async function onboardInvestidor(
   input: OnboardInput,
 ): Promise<OnboardResult> {
+  // F-12: em mainnet (proxy de "produção") exigir CPF real do investidor.
+  // Sandbox aceita dummy (Etherfuse auto-aprova; sem responsabilidade real).
+  const isProduction = STELLAR_NETWORK === 'PUBLIC';
+  let cpfNormalizado: string;
+  if (isProduction) {
+    const parsed = parseCpf(input.cpf);
+    if (!parsed) {
+      throw new Error('cpf obrigatório em mainnet (válido por módulo 11)');
+    }
+    cpfNormalizado = parsed;
+  } else {
+    cpfNormalizado = parseCpf(input.cpf) ?? '52998224725';
+  }
+
   // 1) Investidor já existente com customer Etherfuse persistido?
   const existing = await db.investidor.findFirst({
     where: { email: input.email },
@@ -116,7 +133,7 @@ export async function onboardInvestidor(
         postalCode: '01310-100',
         country: 'BR',
       },
-      idNumbers: [{ value: '52998224725', type: 'CPF' }],
+      idNumbers: [{ value: cpfNormalizado, type: 'CPF' }],
     },
   });
   await anchor.submitKycDocuments(customer.id, {
