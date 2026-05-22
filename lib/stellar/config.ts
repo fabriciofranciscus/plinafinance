@@ -33,6 +33,16 @@ export const assetCode = process.env.ASSET_CODE ?? 'PLINARF';
  */
 export const STELLAR_TX_TIMEOUT_SEC = 60;
 
+/**
+ * Funder mainnet (F-08). Em PUBLIC, `fundAccountIfNeeded` constrói um
+ * `createAccount` op a partir dessa conta — não há friendbot em produção.
+ * Em TESTNET esses envs são ignorados.
+ */
+export const STELLAR_FUNDER_SECRET = process.env.STELLAR_FUNDER_SECRET ?? '';
+export const STELLAR_FUNDER_PUBLIC = process.env.STELLAR_FUNDER_PUBLIC ?? '';
+export const STELLAR_FUNDER_STARTING_BALANCE =
+  process.env.STELLAR_FUNDER_STARTING_BALANCE ?? '2';
+
 const stellarExpertBase =
   STELLAR_NETWORK === 'PUBLIC'
     ? 'https://stellar.expert/explorer/public'

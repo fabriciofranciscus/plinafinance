@@ -39,7 +39,12 @@ import {
   buildAuditPayload,
   registerOnChainHash,
 } from '../stellar/audit';
-import { navPorToken, navTotalDoPool, tokensEmitidosVivos } from './pool';
+import {
+  navPorToken,
+  navPorTokenAsDecimal,
+  navTotalDoPool,
+  tokensEmitidosVivos,
+} from './pool';
 
 export interface CalcularLiquidacaoInput {
   amountPlinarf: string;
@@ -80,11 +85,14 @@ export async function calcularValorLiquidacao(
   ]);
   const navTotal = navTotalDoPool(cotas, realizacoes);
   const tokensVivos = tokensEmitidosVivos(cotas);
-  const unit = navPorToken(cotas, realizacoes);
+  const unitDec = navPorTokenAsDecimal(cotas, realizacoes);
+  const brlEquivalenteDec = unitDec
+    .mul(new Prisma.Decimal(input.amountPlinarf))
+    .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_EVEN);
   return {
     amountPlinarf: amount,
-    navPorTokenAtual: unit,
-    brlEquivalente: amount * unit,
+    navPorTokenAtual: unitDec.toNumber(),
+    brlEquivalente: brlEquivalenteDec.toNumber(),
     navTotalPool: navTotal,
     tokensVivosPool: tokensVivos,
   };

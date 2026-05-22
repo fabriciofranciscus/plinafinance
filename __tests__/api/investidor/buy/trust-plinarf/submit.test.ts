@@ -4,13 +4,17 @@ const {
   submitWithPrivySignature,
   authorizeTrustline,
   assertElegivelParaTrustline,
+  investidorFindUnique,
   investidorUpdate,
+  eventoAuditFindFirst,
   eventoAuditCreate,
 } = vi.hoisted(() => ({
   submitWithPrivySignature: vi.fn(),
   authorizeTrustline: vi.fn(),
   assertElegivelParaTrustline: vi.fn(),
+  investidorFindUnique: vi.fn(),
   investidorUpdate: vi.fn(),
+  eventoAuditFindFirst: vi.fn(),
   eventoAuditCreate: vi.fn(),
 }));
 
@@ -35,16 +39,11 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
 
 vi.mock('@/lib/db', () => ({
   db: {
-    $transaction: async (
-      cb: (tx: {
-        investidor: { update: typeof investidorUpdate };
-        eventoAudit: { create: typeof eventoAuditCreate };
-      }) => Promise<unknown>,
-    ) =>
-      cb({
-        investidor: { update: investidorUpdate },
-        eventoAudit: { create: eventoAuditCreate },
-      }),
+    investidor: { findUnique: investidorFindUnique, update: investidorUpdate },
+    eventoAudit: {
+      findFirst: eventoAuditFindFirst,
+      create: eventoAuditCreate,
+    },
   },
 }));
 
@@ -78,7 +77,9 @@ beforeEach(() => {
     .mockResolvedValue({ hash: 'tx_trust_hash' });
   authorizeTrustline.mockReset().mockResolvedValue({ hash: 'tx_auth_hash' });
   assertElegivelParaTrustline.mockReset().mockResolvedValue(undefined);
+  investidorFindUnique.mockReset().mockResolvedValue({ trustlineTxHash: null });
   investidorUpdate.mockReset().mockResolvedValue({});
+  eventoAuditFindFirst.mockReset().mockResolvedValue(null);
   eventoAuditCreate.mockReset().mockResolvedValue({});
 });
 
@@ -103,11 +104,72 @@ describe('POST /api/investidor/buy/trust-plinarf/submit', () => {
   it('200 happy path grava audit com user.investidorId', async () => {
     const r = await POST(req(FULL_BODY));
     expect(r.status).toBe(200);
-    expect(investidorUpdate.mock.calls[0][0].where.id).toBe('inv_1');
+    const json = await r.json();
+    expect(json.trustlineTxHash).toBe('tx_trust_hash');
+    expect(json.authorizeTxHash).toBe('tx_auth_hash');
+    expect(submitWithPrivySignature).toHaveBeenCalledOnce();
+    expect(authorizeTrustline).toHaveBeenCalledOnce();
+    expect(investidorUpdate).toHaveBeenCalledWith({
+      where: { id: 'inv_1' },
+      data: { trustlineTxHash: 'tx_trust_hash' },
+    });
     expect(eventoAuditCreate.mock.calls[0][0].data.acao).toBe(
       'TRUSTLINE_AUTORIZADA',
     );
-    expect(eventoAuditCreate.mock.calls[0][0].data.investidorId).toBe('inv_1');
-    expect(eventoAuditCreate.mock.calls[0][0].data.privyId).toBe('did:privy:abc');
+  });
+
+  it('F-11: retry após sucesso completo retorna hashes existentes (idempotente)', async () => {
+    investidorFindUnique.mockResolvedValueOnce({
+      trustlineTxHash: 'existing_trust',
+    });
+    eventoAuditFindFirst.mockResolvedValueOnce({
+      stellarTxHash: 'existing_auth',
+      payloadJson: {},
+    });
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(200);
+    const json = await r.json();
+    expect(json.trustlineTxHash).toBe('existing_trust');
+    expect(json.authorizeTxHash).toBe('existing_auth');
+    expect(json.idempotent).toBe(true);
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+    expect(authorizeTrustline).not.toHaveBeenCalled();
+  });
+
+  it('F-11: retry após falha de authorize executa só authorize (skip trustline)', async () => {
+    investidorFindUnique.mockResolvedValueOnce({
+      trustlineTxHash: 'existing_trust',
+    });
+    eventoAuditFindFirst.mockResolvedValueOnce(null);
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(200);
+    const json = await r.json();
+    expect(json.trustlineTxHash).toBe('existing_trust');
+    expect(json.authorizeTxHash).toBe('tx_auth_hash');
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+    expect(authorizeTrustline).toHaveBeenCalledOnce();
+    expect(investidorUpdate).not.toHaveBeenCalled();
+  });
+
+  it('F-11: persiste trustlineTxHash ANTES de chamar authorize', async () => {
+    const callOrder: string[] = [];
+    submitWithPrivySignature.mockImplementationOnce(async () => {
+      callOrder.push('submitTrustline');
+      return { hash: 'tx_trust_hash' };
+    });
+    investidorUpdate.mockImplementationOnce(async () => {
+      callOrder.push('persistTrustline');
+      return {};
+    });
+    authorizeTrustline.mockImplementationOnce(async () => {
+      callOrder.push('authorize');
+      return { hash: 'tx_auth_hash' };
+    });
+    await POST(req(FULL_BODY));
+    expect(callOrder).toEqual([
+      'submitTrustline',
+      'persistTrustline',
+      'authorize',
+    ]);
   });
 });

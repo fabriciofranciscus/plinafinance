@@ -29,6 +29,7 @@ export async function POST(req: Request) {
 
     const body = (await req.json().catch(() => ({}))) as {
       nome?: string;
+      cpf?: string;
     };
 
     // Email vem do Privy user (linkedAccounts).
@@ -46,13 +47,13 @@ export async function POST(req: Request) {
       privyId: claims.userId,
       email,
       nome: body.nome,
+      cpf: body.cpf,
     });
 
     return NextResponse.json(result);
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'unknown' },
-      { status: 500 },
-    );
+    const message = err instanceof Error ? err.message : 'unknown';
+    const isClientError = message.startsWith('cpf obrigatório');
+    return NextResponse.json({ error: message }, { status: isClientError ? 400 : 500 });
   }
 }

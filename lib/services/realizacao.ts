@@ -199,14 +199,14 @@ export async function criarReserva(
 
   const expiraEm = new Date(Date.now() + RESERVA_DURACAO_HORAS * 3600 * 1000);
   const sinal = input.sinalSimulado ?? '0';
-  const valorRevenda = Math.floor(
-    Number(cota.valorCarta) * (1 - Number(cota.desagioRevenda)),
-  );
+  const valorRevenda = new Prisma.Decimal(cota.valorCarta)
+    .mul(new Prisma.Decimal(1).minus(new Prisma.Decimal(cota.desagioRevenda)))
+    .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_EVEN);
 
   const payload = buildAuditPayload('reserva', input.cotaId, {
     cotaId: input.cotaId,
     leadCompradorId: input.leadCompradorId,
-    valorRevendaEstimado: valorRevenda,
+    valorRevendaEstimado: valorRevenda.toFixed(2),
     sinalSimulado: sinal,
     expiraEm: expiraEm.toISOString(),
   });
