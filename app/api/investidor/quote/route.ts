@@ -17,6 +17,7 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { EtherfuseClient } from '@/lib/anchors/etherfuse';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { parseBrlAmount } from '@/lib/format/parse-brl';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,14 @@ export const POST = withAuth(async (req, { user }) => {
         { status: 400 },
       );
     }
+    const amountValue = parseBrlAmount(amountBrl);
+    if (amountValue === null) {
+      return NextResponse.json(
+        { error: 'amountBrl inválido' },
+        { status: 400 },
+      );
+    }
+    const amountBrlNormalized = amountValue.toFixed(2);
 
     // Defense in depth: body precisa casar com o investidor autenticado.
     // Sem isso, o token só prova identidade — qualquer um logado poderia
@@ -66,7 +75,7 @@ export const POST = withAuth(async (req, { user }) => {
     const quote = await anchor.getQuote({
       fromCurrency: 'BRL',
       toCurrency: 'TESOURO',
-      fromAmount: amountBrl,
+      fromAmount: amountBrlNormalized,
       customerId,
       stellarAddress,
     });

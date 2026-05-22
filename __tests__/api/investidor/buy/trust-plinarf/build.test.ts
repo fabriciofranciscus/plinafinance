@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Keypair } from '@stellar/stellar-sdk';
+
+const USER_PK = Keypair.random().publicKey();
+const OTHER_PK = Keypair.random().publicKey();
 
 const { buildTrustlineXdr, fundAccountIfNeeded } = vi.hoisted(() => ({
   buildTrustlineXdr: vi.fn(),
@@ -17,7 +21,7 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
         user: {
           privyId: 'did:privy:abc',
           investidorId: 'inv_1',
-          publicKey: 'GABC',
+          publicKey: USER_PK,
           email: 'x@y.z',
           etherfuseCustomerId: 'cust_1',
         },
@@ -53,12 +57,12 @@ describe('POST /api/investidor/buy/trust-plinarf/build', () => {
   });
 
   it('403 pubkey ≠ user.publicKey', async () => {
-    const r = await POST(req({ pubkey: 'GOUTRO' }));
+    const r = await POST(req({ pubkey: OTHER_PK }));
     expect(r.status).toBe(403);
   });
 
   it('200 happy path', async () => {
-    const r = await POST(req({ pubkey: 'GABC' }));
+    const r = await POST(req({ pubkey: USER_PK }));
     expect(r.status).toBe(200);
     const json = await r.json();
     expect(json.xdr).toBe('AAAA');

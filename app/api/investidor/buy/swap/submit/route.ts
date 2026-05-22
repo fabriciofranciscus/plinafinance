@@ -19,6 +19,7 @@ import { db } from '@/lib/db';
 import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { logStellarError } from '@/lib/stellar/log-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -162,6 +163,7 @@ export const POST = withAuth(async (req, { user }) => {
 
     return NextResponse.json({ swapTxHash: submitRes.hash });
   } catch (err) {
+    logStellarError('[swap/submit]', err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'unknown' },
       { status: 500 },

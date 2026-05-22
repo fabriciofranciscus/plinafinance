@@ -18,6 +18,7 @@
 import { usePrivy, useLogin } from '@privy-io/react-auth';
 import { useSignRawHash } from '@privy-io/react-auth/extended-chains';
 import { useCallback, useEffect, useState } from 'react';
+import { StrKey } from '@stellar/stellar-sdk';
 
 interface BalanceRow {
   asset_code?: string;
@@ -133,7 +134,7 @@ export default function MinhaPosicaoPage() {
   const stellarAddress =
     (user?.linkedAccounts ?? [])
       .filter((a): a is typeof a & { address: string } => 'address' in a)
-      .find((a) => a.address.startsWith('G'))?.address ?? null;
+      .find((a) => StrKey.isValidEd25519PublicKey(a.address))?.address ?? null;
   const email =
     (user?.linkedAccounts ?? [])
       .filter((a): a is typeof a & { email: string } => 'email' in a)

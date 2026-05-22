@@ -20,6 +20,8 @@
  */
 
 import { PrivyClient } from '@privy-io/server-auth';
+import { StrKey } from '@stellar/stellar-sdk';
+import { db } from '@/lib/db';
 
 let _privy: PrivyClient | null = null;
 
@@ -70,7 +72,7 @@ export async function verifyPrivyTokenAndExtract(
     (a) =>
       a.type === 'wallet' &&
       typeof a.address === 'string' &&
-      (a.chainType === 'stellar' || a.address.startsWith('G')),
+      (a.chainType === 'stellar' || StrKey.isValidEd25519PublicKey(a.address)),
   );
   if (!stellarAccount?.address) {
     throw new Error(
@@ -90,30 +92,44 @@ export async function verifyPrivyTokenAndExtract(
 /**
  * Idempotente: retorna o endereço Stellar do user Privy, criando se ainda
  * não existir. Evita o bug "uma wallet por login" que acumula até bater o
- * limite de 100 por user (acontece quando client-side cria sem dedup).
+ * limite de 100 por user (audit F-16).
  *
- * Padrão correto:
- *   1. Server consulta `privy.getUserById(userId)` (verdade de Privy).
- *   2. Procura linkedAccount com address `G...` (chainType=stellar).
- *   3. Se existir → retorna.
- *   4. Se não → `privy.wallets().create({chain_type:'stellar', owner:{user_id}})`.
- *
- * Race: 2 chamadas simultâneas pré-criação criam 2 wallets. Pra produção,
- * adicionar dedup via Prisma `Investidor.privyId` unique + transaction.
- * Pro POC, aceita-se o risco — usuário único na demo.
+ * Race-safe: usa `WalletProvisioning` como lock por privyId em transação
+ * Serializable. 2 chamadas concorrentes serializam → primeira chama
+ * `privy.walletApi.createWallet`, segunda lê `publicKey` já persistido.
  */
 export async function ensureStellarWallet(userId: string): Promise<string> {
   const privy = getPrivyClient();
+  return await db.$transaction(
+    async (tx) => {
+      const lock = await tx.walletProvisioning.upsert({
+        where: { privyId: userId },
+        create: { privyId: userId },
+        update: {},
+      });
+      if (lock.publicKey) return lock.publicKey;
 
-  const existing = await getStellarAddressForUser(userId);
-  if (existing) return existing;
+      const existing = await getStellarAddressForUser(userId);
+      if (existing) {
+        await tx.walletProvisioning.update({
+          where: { privyId: userId },
+          data: { publicKey: existing },
+        });
+        return existing;
+      }
 
-  // Não tem wallet — cria server-side, vinculada ao user.
-  const wallet = await privy.walletApi.createWallet({
-    chainType: 'stellar',
-    owner: { userId },
-  });
-  return wallet.address;
+      const wallet = await privy.walletApi.createWallet({
+        chainType: 'stellar',
+        owner: { userId },
+      });
+      await tx.walletProvisioning.update({
+        where: { privyId: userId },
+        data: { publicKey: wallet.address },
+      });
+      return wallet.address;
+    },
+    { isolationLevel: 'Serializable' },
+  );
 }
 
 /** Retorna endereço Stellar do user ou null se não tiver wallet. */
@@ -127,7 +143,7 @@ export async function getStellarAddressForUser(
     (a) =>
       a.type === 'wallet' &&
       typeof a.address === 'string' &&
-      (a.chainType === 'stellar' || a.address.startsWith('G')),
+      (a.chainType === 'stellar' || StrKey.isValidEd25519PublicKey(a.address)),
   );
   return stellar?.address ?? null;
 }
