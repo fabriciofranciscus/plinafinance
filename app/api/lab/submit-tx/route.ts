@@ -15,6 +15,7 @@
 import { NextResponse } from 'next/server';
 import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { authorizeTrustline } from '@/lib/stellar/issuer';
+import { logStellarError } from '@/lib/stellar/log-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,12 +46,13 @@ export async function POST(req: Request) {
       try {
         await authorizeTrustline(issuerSecret, investorPubkey);
       } catch (authErr) {
-        console.warn('[lab] auto-autorização falhou (não-fatal):', authErr);
+        logStellarError('[lab] auto-autorização falhou (não-fatal):', authErr);
       }
     }
 
     return NextResponse.json({ hash: result.hash });
   } catch (err) {
+    logStellarError('[lab/submit-tx]', err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'unknown' },
       { status: 500 },

@@ -19,7 +19,6 @@
 import { Prisma } from '@prisma/client';
 import {
   Asset,
-  BASE_FEE,
   Horizon,
   Keypair,
   Memo,
@@ -28,8 +27,13 @@ import {
   TransactionBuilder,
 } from '@stellar/stellar-sdk';
 import { db } from '../db';
-import { assetCode, networkPassphrase } from '../stellar/config';
+import {
+  STELLAR_TX_TIMEOUT_SEC,
+  assetCode,
+  networkPassphrase,
+} from '../stellar/config';
 import { buildAsset, horizon } from '../stellar/account';
+import { getDynamicFee } from '../stellar/fee';
 import { privySignatureToBase64 } from '../wallet/privy';
 import {
   buildAuditPayload,
@@ -109,7 +113,7 @@ export async function buildLiquidarPlinarfXdr(input: {
   const plinarf: Asset = buildAsset(issuerPubkey, assetCode);
 
   const tx = new TransactionBuilder(account, {
-    fee: BASE_FEE,
+    fee: await getDynamicFee(),
     networkPassphrase,
   })
     .addOperation(
@@ -119,7 +123,7 @@ export async function buildLiquidarPlinarfXdr(input: {
         amount: stellarAmount,
       }),
     )
-    .setTimeout(60)
+    .setTimeout(STELLAR_TX_TIMEOUT_SEC)
     .build();
 
   return { xdr: tx.toXDR(), hashHex: '0x' + tx.hash().toString('hex') };

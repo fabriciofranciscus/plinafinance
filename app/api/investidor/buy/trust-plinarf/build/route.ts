@@ -12,6 +12,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { StrKey } from '@stellar/stellar-sdk';
 import { buildTrustlineXdr } from '@/lib/stellar/transactions';
 import { fundAccountIfNeeded } from '@/lib/stellar/account';
 import { withAuth } from '@/lib/wallet/auth-guard';
@@ -21,7 +22,7 @@ export const dynamic = 'force-dynamic';
 export const POST = withAuth(async (req, { user }) => {
   try {
     const { pubkey } = (await req.json()) as { pubkey?: string };
-    if (!pubkey || !pubkey.startsWith('G')) {
+    if (!pubkey || !StrKey.isValidEd25519PublicKey(pubkey)) {
       return NextResponse.json({ error: 'pubkey inválida' }, { status: 400 });
     }
     if (pubkey !== user.publicKey) {

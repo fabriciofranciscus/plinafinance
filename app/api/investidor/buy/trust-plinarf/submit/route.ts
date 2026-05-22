@@ -16,6 +16,7 @@ import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { authorizeTrustline } from '@/lib/stellar/issuer';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { logStellarError } from '@/lib/stellar/log-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,6 +86,7 @@ export const POST = withAuth(async (req, { user }) => {
       authorizeTxHash: authRes.hash,
     });
   } catch (err) {
+    logStellarError('[trust-plinarf/submit]', err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'unknown' },
       { status: 500 },

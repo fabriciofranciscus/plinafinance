@@ -14,6 +14,7 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { logStellarError } from '@/lib/stellar/log-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +66,7 @@ export const POST = withAuth(async (req, { user }) => {
 
     return NextResponse.json({ trustlineTxHash: res.hash });
   } catch (err) {
+    logStellarError('[trust-tesouro/submit]', err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'unknown' },
       { status: 500 },

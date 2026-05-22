@@ -26,6 +26,13 @@ export const friendbotUrl = 'https://friendbot.stellar.org';
 
 export const assetCode = process.env.ASSET_CODE ?? 'PLINARF';
 
+/**
+ * Timeout em segundos pra todas as txs Stellar (Memo.hash, trustline, swap,
+ * liquidação). Janela curta limita replay caso a sig vaze antes do submit
+ * (audit F-14). Tem que estar em [60, 120].
+ */
+export const STELLAR_TX_TIMEOUT_SEC = 60;
+
 const stellarExpertBase =
   STELLAR_NETWORK === 'PUBLIC'
     ? 'https://stellar.expert/explorer/public'

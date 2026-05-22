@@ -19,6 +19,7 @@ import {
 } from '@privy-io/react-auth';
 import { useSignRawHash } from '@privy-io/react-auth/extended-chains';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { parseBrlAmount } from '@/lib/format/parse-brl';
 
 type Screen =
   | 'welcome'
@@ -237,8 +238,8 @@ export default function InvestirPage() {
 
   const refreshQuote = useCallback(async () => {
     if (!onboard) return;
-    const v = Number(amountBrl);
-    if (!Number.isFinite(v) || v <= 0) return;
+    const v = parseBrlAmount(amountBrl);
+    if (v === null) return;
     setQuoteLoading(true);
     setError(null);
     try {
@@ -250,7 +251,7 @@ export default function InvestirPage() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          amountBrl,
+          amountBrl: v.toFixed(2),
           customerId: onboard.etherfuseCustomerId,
           stellarAddress: onboard.publicKey,
         }),

@@ -22,14 +22,14 @@
 import { createHash } from 'node:crypto';
 import {
   Asset,
-  BASE_FEE,
   Keypair,
   Memo,
   Operation,
   TransactionBuilder,
 } from '@stellar/stellar-sdk';
 import { horizon } from './account';
-import { networkPassphrase } from './config';
+import { STELLAR_TX_TIMEOUT_SEC, networkPassphrase } from './config';
+import { getDynamicFee } from './fee';
 
 /**
  * Serialização canônica JSON com chaves sorted recursivamente. Garante que
@@ -121,7 +121,7 @@ export async function registerOnChainHash(
   }
 
   const tx = new TransactionBuilder(account, {
-    fee: BASE_FEE,
+    fee: await getDynamicFee(),
     networkPassphrase,
   })
     .addOperation(
@@ -132,7 +132,7 @@ export async function registerOnChainHash(
       }),
     )
     .addMemo(Memo.hash(memoBuffer))
-    .setTimeout(60)
+    .setTimeout(STELLAR_TX_TIMEOUT_SEC)
     .build();
 
   tx.sign(source);

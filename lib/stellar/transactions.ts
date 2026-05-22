@@ -12,7 +12,6 @@
 
 import {
   Asset,
-  BASE_FEE,
   Horizon,
   Memo,
   Operation,
@@ -20,7 +19,8 @@ import {
   TransactionBuilder,
 } from '@stellar/stellar-sdk';
 import { buildAsset, horizon } from './account';
-import { assetCode, networkPassphrase } from './config';
+import { STELLAR_TX_TIMEOUT_SEC, assetCode, networkPassphrase } from './config';
+import { getDynamicFee } from './fee';
 import { privySignatureToBase64 } from '../wallet/privy';
 
 type SubmitResult = Horizon.HorizonApi.SubmitTransactionResponse;
@@ -36,11 +36,11 @@ export async function buildTrustlineXdr(
 ): Promise<{ xdr: string; hashHex: string }> {
   const account = await horizon.loadAccount(investorPubkey);
   const tx = new TransactionBuilder(account, {
-    fee: BASE_FEE,
+    fee: await getDynamicFee(),
     networkPassphrase,
   })
     .addOperation(Operation.changeTrust({ asset: buildAsset(issuerPubkey, code) }))
-    .setTimeout(60)
+    .setTimeout(STELLAR_TX_TIMEOUT_SEC)
     .build();
   return { xdr: tx.toXDR(), hashHex: '0x' + tx.hash().toString('hex') };
 }
@@ -66,7 +66,7 @@ export async function buildSwapBridgeForPlinarfXdr(input: {
   const plinarf = buildAsset(input.issuerPubkey);
 
   const builder = new TransactionBuilder(account, {
-    fee: BASE_FEE,
+    fee: await getDynamicFee(),
     networkPassphrase,
   })
     .addOperation(
@@ -85,7 +85,7 @@ export async function buildSwapBridgeForPlinarfXdr(input: {
         amount: input.plinarfAmount,
       }),
     )
-    .setTimeout(60);
+    .setTimeout(STELLAR_TX_TIMEOUT_SEC);
 
   if (input.memo) builder.addMemo(Memo.text(input.memo.slice(0, 28)));
 

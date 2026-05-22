@@ -524,6 +524,7 @@ model EventoAudit {
   @@index([leadCompradorId])
   @@index([cessaoId])
   @@index([criadoEm])
+  @@index([stellarTxHash])
 }
 
 /// POC admin session — opaque sessionId em cookie httpOnly. Permite
@@ -537,4 +538,15 @@ model AdminSession {
   revogadoEm  DateTime?
 
   @@index([expiraEm])
+}
+
+/// Lock idempotente pra ensureStellarWallet (audit F-16). Sem isso, 2
+/// chamadas simultâneas pré-criação criam 2 wallets Privy pro mesmo user
+/// (limite 100 por user). Investidor.privyId não serve de lock — exige
+/// publicKey/email NOT NULL antes da wallet existir.
+model WalletProvisioning {
+  privyId    String   @id
+  publicKey  String?
+  criadoEm   DateTime @default(now())
+  atualizado DateTime @updatedAt
 }

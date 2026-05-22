@@ -9,6 +9,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { StrKey } from '@stellar/stellar-sdk';
 import { buildTrustlineXdr } from '@/lib/stellar/transactions';
 import { fundAccountIfNeeded } from '@/lib/stellar/account';
 
@@ -17,7 +18,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   try {
     const { pubkey } = (await req.json()) as { pubkey?: string };
-    if (!pubkey || !pubkey.startsWith('G')) {
+    if (!pubkey || !StrKey.isValidEd25519PublicKey(pubkey)) {
       return NextResponse.json({ error: 'pubkey inválida' }, { status: 400 });
     }
     const issuerPubkey = process.env.STELLAR_ISSUER_PUBLIC;
