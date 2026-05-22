@@ -35,6 +35,7 @@ import {
 import { buildAsset, horizon } from '../stellar/account';
 import { getDynamicFee } from '../stellar/fee';
 import { privySignatureToBase64 } from '../wallet/privy';
+import { parseStellarAmount } from '../format/parse-stellar-amount';
 import {
   buildAuditPayload,
   registerOnChainHash,
@@ -111,11 +112,7 @@ export async function buildLiquidarPlinarfXdr(input: {
   if (!issuerPubkey || !distributorPubkey) {
     throw new Error('Stellar issuer/distributor não configurados.');
   }
-  const amount = Number(input.amount);
-  if (!isFinite(amount) || amount <= 0) {
-    throw new Error('amount inválido');
-  }
-  const stellarAmount = amount.toFixed(7);
+  const stellarAmount = parseStellarAmount(input.amount).toFixed(7);
 
   const account = await horizon.loadAccount(input.investorPubkey);
   const plinarf: Asset = buildAsset(issuerPubkey, assetCode);
@@ -159,11 +156,7 @@ export async function submitLiquidacao(input: {
   brlEquivalente: number;
   navPorTokenAtual: number;
 }> {
-  const amount = Number(input.amount);
-  if (!isFinite(amount) || amount <= 0) {
-    throw new Error('amount inválido');
-  }
-  const stellarAmount = amount.toFixed(7);
+  const stellarAmount = parseStellarAmount(input.amount).toFixed(7);
 
   // 1) Calcula NAV/token ANTES de submeter (preço justo da liquidação).
   const valor = await calcularValorLiquidacao({ amountPlinarf: stellarAmount });

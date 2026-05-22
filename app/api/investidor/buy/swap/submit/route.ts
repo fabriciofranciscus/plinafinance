@@ -20,6 +20,7 @@ import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { logStellarError } from '@/lib/stellar/log-error';
+import { parseStellarAmount } from '@/lib/format/parse-stellar-amount';
 
 export const dynamic = 'force-dynamic';
 
@@ -123,7 +124,7 @@ export const POST = withAuth(async (req, { user }) => {
       ],
     });
 
-    const stellarAmount = quote.toAmount.toFixed(7);
+    const stellarAmount = parseStellarAmount(quote.toAmount).toFixed(7);
 
     await db.$transaction(async (tx) => {
       const consumed = await tx.quote.updateMany({
