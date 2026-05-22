@@ -15,17 +15,19 @@
  *     pra refletir lastro corrente; quando uma cota é realizada, seus tokens
  *     "saem" mas o caixa toma o lugar — NAV/token sobe pelo spread).
  *
- * Tipos `Decimal` do Prisma viram strings em runtime; aceito ambos via helper.
+ * Aritmética interna em `Prisma.Decimal` (audit F-10): valores R$10M+ com
+ * desagio fracionário perdem centavos em IEEE-754. Funções públicas retornam
+ * `number` pra compatibilidade com UI/JSON; callers que persistem ou compõem
+ * precisão crítica devem usar as variantes `*AsDecimal`.
  */
 
 import { Prisma, StatusCota } from '@prisma/client';
 
 type Numericable = Prisma.Decimal | number | string;
 
-function toNumber(value: Numericable): number {
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string') return Number(value);
-  return value.toNumber();
+function toDecimal(value: Numericable): Prisma.Decimal {
+  if (value instanceof Prisma.Decimal) return value;
+  return new Prisma.Decimal(value);
 }
 
 export interface CotaForNav {
@@ -35,19 +37,37 @@ export interface CotaForNav {
   status: StatusCota;
 }
 
+const ONE = new Prisma.Decimal(1);
+
+export function navDaCotaAsDecimal(cota: {
+  valorCarta: Numericable;
+  desagioAquisicao: Numericable;
+}): Prisma.Decimal {
+  return toDecimal(cota.valorCarta)
+    .mul(ONE.minus(toDecimal(cota.desagioAquisicao)))
+    .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_EVEN);
+}
+
 /** NAV em BRL de uma cota individual. */
 export function navDaCota(cota: {
   valorCarta: Numericable;
   desagioAquisicao: Numericable;
 }): number {
-  const valor = toNumber(cota.valorCarta);
-  const desagio = toNumber(cota.desagioAquisicao);
-  return valor * (1 - desagio);
+  return navDaCotaAsDecimal(cota).toNumber();
 }
 
 export interface RealizacaoForNav {
   valorRealizado: Numericable;
   spread?: Numericable;
+}
+
+export function caixaRealizadoAsDecimal(
+  realizacoes: RealizacaoForNav[],
+): Prisma.Decimal {
+  return realizacoes.reduce(
+    (sum, r) => sum.plus(toDecimal(r.valorRealizado)),
+    new Prisma.Decimal(0),
+  );
 }
 
 /**
@@ -56,15 +76,32 @@ export interface RealizacaoForNav {
  * É o que sobra como cash do fundo depois que a cota saiu do pool de ativos.
  */
 export function caixaRealizado(realizacoes: RealizacaoForNav[]): number {
-  return realizacoes.reduce((sum, r) => sum + toNumber(r.valorRealizado), 0);
+  return caixaRealizadoAsDecimal(realizacoes).toNumber();
+}
+
+export function spreadRealizadoAcumuladoAsDecimal(
+  realizacoes: RealizacaoForNav[],
+): Prisma.Decimal {
+  return realizacoes.reduce(
+    (sum, r) =>
+      sum.plus(r.spread !== undefined ? toDecimal(r.spread) : new Prisma.Decimal(0)),
+    new Prisma.Decimal(0),
+  );
 }
 
 /** Yield realizado acumulado (apenas a parte de spread). */
 export function spreadRealizadoAcumulado(realizacoes: RealizacaoForNav[]): number {
-  return realizacoes.reduce(
-    (sum, r) => sum + (r.spread !== undefined ? toNumber(r.spread) : 0),
-    0,
-  );
+  return spreadRealizadoAcumuladoAsDecimal(realizacoes).toNumber();
+}
+
+export function navTotalDoPoolAsDecimal(
+  cotas: CotaForNav[],
+  realizacoes: RealizacaoForNav[] = [],
+): Prisma.Decimal {
+  const navAtivo = cotas
+    .filter((c) => c.status === 'DISPONIVEL' || c.status === 'RESERVADA')
+    .reduce((sum, c) => sum.plus(navDaCotaAsDecimal(c)), new Prisma.Decimal(0));
+  return navAtivo.plus(caixaRealizadoAsDecimal(realizacoes));
 }
 
 /**
@@ -77,17 +114,34 @@ export function navTotalDoPool(
   cotas: CotaForNav[],
   realizacoes: RealizacaoForNav[] = [],
 ): number {
-  const navAtivo = cotas
+  return navTotalDoPoolAsDecimal(cotas, realizacoes).toNumber();
+}
+
+export function tokensEmitidosVivosAsDecimal(
+  cotas: CotaForNav[],
+): Prisma.Decimal {
+  return cotas
     .filter((c) => c.status === 'DISPONIVEL' || c.status === 'RESERVADA')
-    .reduce((sum, c) => sum + navDaCota(c), 0);
-  return navAtivo + caixaRealizado(realizacoes);
+    .reduce(
+      (sum, c) => sum.plus(toDecimal(c.tokensEmitidos)),
+      new Prisma.Decimal(0),
+    );
 }
 
 /** Soma de PLINA-RF emitidos vivos (cotas ativas). */
 export function tokensEmitidosVivos(cotas: CotaForNav[]): number {
-  return cotas
-    .filter((c) => c.status === 'DISPONIVEL' || c.status === 'RESERVADA')
-    .reduce((sum, c) => sum + toNumber(c.tokensEmitidos), 0);
+  return tokensEmitidosVivosAsDecimal(cotas).toNumber();
+}
+
+export function navPorTokenAsDecimal(
+  cotas: CotaForNav[],
+  realizacoes: RealizacaoForNav[] = [],
+): Prisma.Decimal {
+  const tokens = tokensEmitidosVivosAsDecimal(cotas);
+  if (tokens.isZero()) return new Prisma.Decimal(0);
+  return navTotalDoPoolAsDecimal(cotas, realizacoes)
+    .div(tokens)
+    .toDecimalPlaces(8, Prisma.Decimal.ROUND_HALF_EVEN);
 }
 
 /**
@@ -100,9 +154,7 @@ export function navPorToken(
   cotas: CotaForNav[],
   realizacoes: RealizacaoForNav[] = [],
 ): number {
-  const tokens = tokensEmitidosVivos(cotas);
-  if (tokens === 0) return 0;
-  return navTotalDoPool(cotas, realizacoes) / tokens;
+  return navPorTokenAsDecimal(cotas, realizacoes).toNumber();
 }
 
 /**
@@ -116,39 +168,38 @@ export function concentracaoPorAdministradora(
   const ativas = cotas.filter(
     (c) => c.status === 'DISPONIVEL' || c.status === 'RESERVADA',
   );
-  const totalNav = ativas.reduce((sum, c) => sum + navDaCota(c), 0);
-  if (totalNav === 0) return [];
-  const byAdmin = new Map<string, number>();
+  const totalNav = ativas.reduce(
+    (sum, c) => sum.plus(navDaCotaAsDecimal(c)),
+    new Prisma.Decimal(0),
+  );
+  if (totalNav.isZero()) return [];
+  const byAdmin = new Map<string, Prisma.Decimal>();
   for (const c of ativas) {
-    byAdmin.set(c.administradora, (byAdmin.get(c.administradora) ?? 0) + navDaCota(c));
+    const prev = byAdmin.get(c.administradora) ?? new Prisma.Decimal(0);
+    byAdmin.set(c.administradora, prev.plus(navDaCotaAsDecimal(c)));
   }
   return Array.from(byAdmin.entries())
     .map(([administradora, nav]) => {
-      const pct = (nav / totalNav) * 100;
-      return { administradora, nav, pct, alerta: pct > 40 };
+      const pct = nav.div(totalNav).mul(100);
+      return {
+        administradora,
+        nav: nav.toNumber(),
+        pct: pct.toNumber(),
+        alerta: pct.gt(40),
+      };
     })
     .sort((a, b) => b.nav - a.nav);
 }
 
 /**
  * Quantidade de PLINA-RF a emitir ao incorporar uma cota nova.
- * POC: paridade NAV → 1 token por BRL de NAV.
+ * POC: paridade NAV → 1 token por BRL de NAV (truncado a inteiros).
  */
 export function tokensParaEmitir(cota: {
   valorCarta: Numericable;
   desagioAquisicao: Numericable;
 }): number {
-  return Math.floor(navDaCota(cota));
-}
-
-// ─── Self-test inline (rodar com `tsx lib/services/pool.ts` se duvidar) ────
-// Sem Vitest no POC ainda (decisão SPECS_MVP_TECH §6); inline checks por ora.
-if (require.main === module) {
-  const cota = { valorCarta: '250000', desagioAquisicao: '0.18' };
-  const nav = navDaCota(cota);
-  const expected = 205000;
-  if (nav !== expected) {
-    throw new Error(`navDaCota: esperado ${expected}, recebido ${nav}`);
-  }
-  console.log('✓ pool.ts inline self-test verde.');
+  return navDaCotaAsDecimal(cota)
+    .toDecimalPlaces(0, Prisma.Decimal.ROUND_DOWN)
+    .toNumber();
 }

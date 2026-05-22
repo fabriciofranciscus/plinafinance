@@ -165,7 +165,9 @@ export async function gerarOferta(input: GerarOfertaInput) {
   if (!isFinite(desagio) || desagio < 0 || desagio > 1)
     throw new Error('desagioAquisicao fora de [0, 1]');
 
-  const valorLiquido = Math.floor(valor * (1 - desagio));
+  const valorLiquido = new Prisma.Decimal(input.valorCarta)
+    .mul(new Prisma.Decimal(1).minus(new Prisma.Decimal(input.desagioAquisicao)))
+    .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_EVEN);
   const validade = new Date(Date.now() + (input.validadeHoras ?? 48) * 3600 * 1000);
 
   const existingVersions = await db.oferta.count({
