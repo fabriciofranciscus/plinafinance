@@ -1,11 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { submitWithPrivySignature, investidorUpdate, eventoAuditCreate } =
-  vi.hoisted(() => ({
-    submitWithPrivySignature: vi.fn(),
-    investidorUpdate: vi.fn(),
-    eventoAuditCreate: vi.fn(),
-  }));
+const {
+  submitWithPrivySignature,
+  investidorFindUnique,
+  investidorUpdate,
+  eventoAuditCreate,
+} = vi.hoisted(() => ({
+  submitWithPrivySignature: vi.fn(),
+  investidorFindUnique: vi.fn(),
+  investidorUpdate: vi.fn(),
+  eventoAuditCreate: vi.fn(),
+}));
 
 vi.mock('@/lib/wallet/auth-guard', () => ({
   withAuth: (
@@ -28,6 +33,8 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
 
 vi.mock('@/lib/db', () => ({
   db: {
+    investidor: { findUnique: investidorFindUnique, update: investidorUpdate },
+    eventoAudit: { create: eventoAuditCreate },
     $transaction: async (
       cb: (tx: {
         investidor: { update: typeof investidorUpdate };
@@ -63,6 +70,9 @@ beforeEach(() => {
   submitWithPrivySignature
     .mockReset()
     .mockResolvedValue({ hash: 'tx_tesouro_hash' });
+  investidorFindUnique
+    .mockReset()
+    .mockResolvedValue({ tesouroTrustlineTxHash: null });
   investidorUpdate.mockReset().mockResolvedValue({});
   eventoAuditCreate.mockReset().mockResolvedValue({});
 });
@@ -98,5 +108,18 @@ describe('POST /api/investidor/buy/trust-tesouro/submit', () => {
     const r = await POST(req(FULL_BODY));
     expect(r.status).toBe(200);
     expect(investidorUpdate.mock.calls[0][0].where.id).toBe('inv_1');
+  });
+
+  it('F-11: trustline tesouro já persistida → idempotente sem submit', async () => {
+    investidorFindUnique.mockResolvedValueOnce({
+      tesouroTrustlineTxHash: 'existing_tesouro',
+    });
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(200);
+    const json = await r.json();
+    expect(json.trustlineTxHash).toBe('existing_tesouro');
+    expect(json.idempotent).toBe(true);
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+    expect(investidorUpdate).not.toHaveBeenCalled();
   });
 });

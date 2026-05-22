@@ -39,6 +39,18 @@ export const POST = withAuth(async (req, { user }) => {
       );
     }
 
+    // F-11: idempotente. Trustline TESOURO já persistida → retorna existente.
+    const existing = await db.investidor.findUnique({
+      where: { id: user.investidorId },
+      select: { tesouroTrustlineTxHash: true },
+    });
+    if (existing?.tesouroTrustlineTxHash) {
+      return NextResponse.json({
+        trustlineTxHash: existing.tesouroTrustlineTxHash,
+        idempotent: true,
+      });
+    }
+
     const res = await submitWithPrivySignature({
       xdr,
       investorPubkey,
