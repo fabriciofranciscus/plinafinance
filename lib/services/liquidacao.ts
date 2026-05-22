@@ -36,6 +36,7 @@ import { buildAsset, horizon } from '../stellar/account';
 import { getDynamicFee } from '../stellar/fee';
 import { privySignatureToBase64 } from '../wallet/privy';
 import { parseStellarAmount } from '../format/parse-stellar-amount';
+import { extractLiquidacaoAmount } from '../stellar/parse-liquidacao-xdr';
 import {
   buildAuditPayload,
   registerOnChainHash,
@@ -147,7 +148,8 @@ export async function submitLiquidacao(input: {
   xdr: string;
   investorPubkey: string;
   signatureHex: string;
-  amount: string;
+  /** @deprecated mantido pra retrocompat; amount autoritativo vem do XDR (C-03). */
+  amount?: string;
   investidorId: string;
   privyId: string;
 }): Promise<{
@@ -156,7 +158,20 @@ export async function submitLiquidacao(input: {
   brlEquivalente: number;
   navPorTokenAtual: number;
 }> {
-  const stellarAmount = parseStellarAmount(input.amount).toFixed(7);
+  // C-03: amount autoritativo vem da própria XDR assinada — não do body.
+  // Body podia divergir do que o investor realmente assinou; chain processa
+  // o XDR, DB decrementava o body, gap "perdido" no saldo.
+  const issuerPubkey = process.env.STELLAR_ISSUER_PUBLIC;
+  const distributorPubkey = process.env.STELLAR_DISTRIBUTOR_PUBLIC;
+  if (!issuerPubkey || !distributorPubkey) {
+    throw new Error('Stellar issuer/distributor não configurados.');
+  }
+  const xdrAmount = extractLiquidacaoAmount(input.xdr, {
+    investorPubkey: input.investorPubkey,
+    distributorPubkey,
+    issuerPubkey,
+  });
+  const stellarAmount = parseStellarAmount(xdrAmount).toFixed(7);
 
   // 1) Calcula NAV/token ANTES de submeter (preço justo da liquidação).
   const valor = await calcularValorLiquidacao({ amountPlinarf: stellarAmount });

@@ -72,8 +72,16 @@ describe('POST /api/investidor/liquidar/submit', () => {
       investidorId: 'inv_1',
       privyId: 'did:privy:abc',
       investorPubkey: 'GABC',
-      amount: '10',
     });
+    // C-03: amount não é mais passado — autoritativo vem do XDR no service.
+    expect(submitLiquidacao.mock.calls[0][0].amount).toBeUndefined();
+  });
+
+  it('C-03: 200 sem body.amount — autoritativo vem do XDR', async () => {
+    const { amount: _ignored, ...noAmount } = FULL_BODY;
+    void _ignored;
+    const r = await POST(req(noAmount));
+    expect(r.status).toBe(200);
   });
 
   it('500 quando service lança', async () => {
