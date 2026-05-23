@@ -22,9 +22,9 @@ export const POST = withAuth(async (req, { user }) => {
       signatureHex?: string;
       amount?: string;
     };
-    if (!body.xdr || !body.pubkey || !body.signatureHex || !body.amount) {
+    if (!body.xdr || !body.pubkey || !body.signatureHex) {
       return NextResponse.json(
-        { error: 'xdr, pubkey, signatureHex e amount são obrigatórios' },
+        { error: 'xdr, pubkey, signatureHex são obrigatórios' },
         { status: 400 },
       );
     }
@@ -34,11 +34,12 @@ export const POST = withAuth(async (req, { user }) => {
         { status: 403 },
       );
     }
+    // C-03: body.amount agora é opcional/ignorado — amount autoritativo
+    // sai da própria XDR em submitLiquidacao.
     const result = await submitLiquidacao({
       xdr: body.xdr,
       investorPubkey: body.pubkey,
       signatureHex: body.signatureHex,
-      amount: body.amount,
       investidorId: user.investidorId,
       privyId: user.privyId,
     });

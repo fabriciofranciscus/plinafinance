@@ -14,12 +14,16 @@
  */
 
 import { NextResponse } from 'next/server';
+import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { logStellarError } from '@/lib/stellar/log-error';
+import { parseStellarAmount } from '@/lib/format/parse-stellar-amount';
+import { assertSwapXdrMatchesQuote } from '@/lib/stellar/parse-swap-xdr';
+import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,7 +89,21 @@ export const POST = withAuth(async (req, { user }) => {
         { status: 403 },
       );
     }
+    // C-04: idempotência. xdrHash reserva a request; retry com mesmo XDR
+    // após sucesso retorna hash existente, com XDR diferente em quote já
+    // lacrado retorna 409.
+    const xdrHash = createHash('sha256').update(xdr).digest('hex');
     if (quote.consumedAt) {
+      if (quote.submitXdrHash === xdrHash && quote.consumedTxHash) {
+        logStellarError(
+          '[swap/submit] idempotente (já consumido)',
+          new Error('retry pós sucesso'),
+        );
+        return NextResponse.json({
+          swapTxHash: quote.consumedTxHash,
+          idempotent: true,
+        });
+      }
       return NextResponse.json({ error: 'quote já consumido' }, { status: 409 });
     }
     if (quote.expiresAt.getTime() <= Date.now()) {
@@ -114,6 +132,57 @@ export const POST = withAuth(async (req, { user }) => {
       publicKey: investorPubkey,
     });
 
+    // C-01: valida que a XDR assinada bate com o quote server-side.
+    // Sem isso, signature em rawSign não amarra amount/asset/destinos.
+    const issuerPubkey = process.env.STELLAR_ISSUER_PUBLIC;
+    if (!issuerPubkey) {
+      return NextResponse.json(
+        { error: 'STELLAR_ISSUER_PUBLIC ausente' },
+        { status: 500 },
+      );
+    }
+    const expectedAmount = parseStellarAmount(quote.toAmount).toFixed(7);
+    const tesouro = await resolveTesouroAsset(investorPubkey);
+    try {
+      assertSwapXdrMatchesQuote(xdr, {
+        investorPubkey,
+        distributorPubkey,
+        issuerPubkey,
+        bridgeAsset: { code: tesouro.code, issuer: tesouro.issuer },
+        expectedAmount,
+      });
+    } catch (err) {
+      return NextResponse.json(
+        {
+          error: `xdr divergente do quote: ${err instanceof Error ? err.message : 'unknown'}`,
+        },
+        { status: 400 },
+      );
+    }
+
+    // C-04: reserva o xdrHash ANTES do submit. Race window de 2 chamadas
+    // simultâneas: a primeira ganha (count=1), a segunda 409.
+    const reserved = await db.quote.updateMany({
+      where: { id: quote.id, submitXdrHash: null },
+      data: { submitXdrHash: xdrHash },
+    });
+    if (reserved.count !== 1) {
+      const fresh = await db.quote.findUnique({
+        where: { id: quote.id },
+        select: { submitXdrHash: true, consumedTxHash: true },
+      });
+      if (fresh?.submitXdrHash === xdrHash && fresh.consumedTxHash) {
+        return NextResponse.json({
+          swapTxHash: fresh.consumedTxHash,
+          idempotent: true,
+        });
+      }
+      return NextResponse.json(
+        { error: 'quote já em flight com outra XDR' },
+        { status: 409 },
+      );
+    }
+
     const submitRes = await submitWithPrivySignature({
       xdr,
       investorPubkey,
@@ -123,7 +192,7 @@ export const POST = withAuth(async (req, { user }) => {
       ],
     });
 
-    const stellarAmount = quote.toAmount.toFixed(7);
+    const stellarAmount = expectedAmount;
 
     await db.$transaction(async (tx) => {
       const consumed = await tx.quote.updateMany({

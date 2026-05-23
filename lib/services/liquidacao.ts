@@ -16,6 +16,7 @@
  * próxima rodada de captação. Mais limpo arquiteturalmente.
  */
 
+import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import {
   Asset,
@@ -35,6 +36,8 @@ import {
 import { buildAsset, horizon } from '../stellar/account';
 import { getDynamicFee } from '../stellar/fee';
 import { privySignatureToBase64 } from '../wallet/privy';
+import { parseStellarAmount } from '../format/parse-stellar-amount';
+import { extractLiquidacaoAmount } from '../stellar/parse-liquidacao-xdr';
 import {
   buildAuditPayload,
   registerOnChainHash,
@@ -111,11 +114,7 @@ export async function buildLiquidarPlinarfXdr(input: {
   if (!issuerPubkey || !distributorPubkey) {
     throw new Error('Stellar issuer/distributor não configurados.');
   }
-  const amount = Number(input.amount);
-  if (!isFinite(amount) || amount <= 0) {
-    throw new Error('amount inválido');
-  }
-  const stellarAmount = amount.toFixed(7);
+  const stellarAmount = parseStellarAmount(input.amount).toFixed(7);
 
   const account = await horizon.loadAccount(input.investorPubkey);
   const plinarf: Asset = buildAsset(issuerPubkey, assetCode);
@@ -150,7 +149,8 @@ export async function submitLiquidacao(input: {
   xdr: string;
   investorPubkey: string;
   signatureHex: string;
-  amount: string;
+  /** @deprecated mantido pra retrocompat; amount autoritativo vem do XDR (C-03). */
+  amount?: string;
   investidorId: string;
   privyId: string;
 }): Promise<{
@@ -159,11 +159,67 @@ export async function submitLiquidacao(input: {
   brlEquivalente: number;
   navPorTokenAtual: number;
 }> {
-  const amount = Number(input.amount);
-  if (!isFinite(amount) || amount <= 0) {
-    throw new Error('amount inválido');
+  // C-03: amount autoritativo vem da própria XDR assinada — não do body.
+  // Body podia divergir do que o investor realmente assinou; chain processa
+  // o XDR, DB decrementava o body, gap "perdido" no saldo.
+  const issuerPubkey = process.env.STELLAR_ISSUER_PUBLIC;
+  const distributorPubkey = process.env.STELLAR_DISTRIBUTOR_PUBLIC;
+  if (!issuerPubkey || !distributorPubkey) {
+    throw new Error('Stellar issuer/distributor não configurados.');
   }
-  const stellarAmount = amount.toFixed(7);
+  const xdrAmount = extractLiquidacaoAmount(input.xdr, {
+    investorPubkey: input.investorPubkey,
+    distributorPubkey,
+    issuerPubkey,
+  });
+  const stellarAmount = parseStellarAmount(xdrAmount).toFixed(7);
+
+  // C-04: idempotência. xdrHash unique → P2002 em retry; tabela própria
+  // (liquidação não tem Quote persistido). Reserve antes do submit; se
+  // já existe e tem txHash, retorna sem re-submeter.
+  const xdrHash = createHash('sha256').update(input.xdr).digest('hex');
+  try {
+    await db.liquidacaoSubmit.create({
+      data: { xdrHash, investidorId: input.investidorId },
+    });
+  } catch (err) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
+      const existing = await db.liquidacaoSubmit.findUnique({
+        where: { xdrHash },
+        select: { txHash: true, investidorId: true },
+      });
+      if (existing?.investidorId !== input.investidorId) {
+        throw new Error('xdr já reservada por outro investidor');
+      }
+      if (existing.txHash) {
+        const auditExisting = await db.eventoAudit.findFirst({
+          where: {
+            acao: 'PLINARF_LIQUIDADO',
+            investidorId: input.investidorId,
+            payloadJson: {
+              path: ['liquidationTxHash'],
+              equals: existing.txHash,
+            },
+          },
+          select: { stellarTxHash: true, payloadJson: true },
+        });
+        const payload = auditExisting?.payloadJson as
+          | { brlEquivalente?: number; navPorTokenAtual?: number }
+          | null;
+        return {
+          liquidationTxHash: existing.txHash,
+          auditTxHash: auditExisting?.stellarTxHash ?? existing.txHash,
+          brlEquivalente: payload?.brlEquivalente ?? 0,
+          navPorTokenAtual: payload?.navPorTokenAtual ?? 0,
+        };
+      }
+      throw new Error('liquidação já em flight pra esse XDR');
+    }
+    throw err;
+  }
 
   // 1) Calcula NAV/token ANTES de submeter (preço justo da liquidação).
   const valor = await calcularValorLiquidacao({ amountPlinarf: stellarAmount });
@@ -215,6 +271,10 @@ export async function submitLiquidacao(input: {
           decrement: new Prisma.Decimal(stellarAmount),
         },
       },
+    });
+    await tx.liquidacaoSubmit.update({
+      where: { xdrHash },
+      data: { txHash: liquidationTxHash },
     });
   });
 

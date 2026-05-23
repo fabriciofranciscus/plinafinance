@@ -279,6 +279,10 @@ model Quote {
   /// Hash da tx Stellar que consumiu o quote (swap envelope na Phase 2,
   /// distribute single-shot na Phase 1).
   consumedTxHash  String?
+  /// C-04: sha256(xdr) reservado pelo request idempotente. Unique →
+  /// retry com o mesmo XDR não re-submete; com XDR diferente o quote
+  /// já está "lacrado" e retorna 409.
+  submitXdrHash   String?  @unique
   criadoEm        DateTime @default(now())
 
   onRampOrder     OnRampOrder?
@@ -549,4 +553,19 @@ model WalletProvisioning {
   publicKey  String?
   criadoEm   DateTime @default(now())
   atualizado DateTime @updatedAt
+}
+
+/// C-04: idempotência de /liquidar/submit. `xdrHash` é sha256(xdr); unique
+/// constraint impede dupla submissão da mesma XDR. `txHash` preenche
+/// após Horizon confirmar. Liquidação não tem Quote (XDR é construída
+/// em /liquidar/quote mas não fica persistida) — daí tabela própria.
+model LiquidacaoSubmit {
+  id            String   @id @default(cuid())
+  xdrHash       String   @unique
+  investidorId  String
+  txHash        String?
+  criadoEm      DateTime @default(now())
+  atualizado    DateTime @updatedAt
+
+  @@index([investidorId])
 }

@@ -8,6 +8,8 @@ const {
   eventoAuditCreate,
   submitWithPrivySignature,
   assertElegivelParaTrustline,
+  assertSwapXdrMatchesQuote,
+  resolveTesouroAsset,
 } = vi.hoisted(() => ({
   quoteFindUnique: vi.fn(),
   quoteUpdateMany: vi.fn(),
@@ -15,6 +17,8 @@ const {
   eventoAuditCreate: vi.fn(),
   submitWithPrivySignature: vi.fn(),
   assertElegivelParaTrustline: vi.fn(),
+  assertSwapXdrMatchesQuote: vi.fn(),
+  resolveTesouroAsset: vi.fn(),
 }));
 
 vi.mock('@/lib/wallet/auth-guard', () => ({
@@ -38,7 +42,7 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
 
 vi.mock('@/lib/db', () => ({
   db: {
-    quote: { findUnique: quoteFindUnique },
+    quote: { findUnique: quoteFindUnique, updateMany: quoteUpdateMany },
     $transaction: async (
       cb: (tx: {
         quote: { updateMany: typeof quoteUpdateMany };
@@ -56,6 +60,11 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('@/lib/stellar/transactions', () => ({ submitWithPrivySignature }));
 vi.mock('@/lib/services/investidor', () => ({ assertElegivelParaTrustline }));
+vi.mock('@/lib/stellar/parse-swap-xdr', () => ({ assertSwapXdrMatchesQuote }));
+vi.mock('@/lib/anchors/etherfuse/tesouro', () => ({ resolveTesouroAsset }));
+
+const SAVED_ISSUER = process.env.STELLAR_ISSUER_PUBLIC;
+process.env.STELLAR_ISSUER_PUBLIC = 'GISSUER';
 
 import { POST } from '@/app/api/investidor/buy/swap/submit/route';
 
@@ -102,6 +111,15 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue({ hash: 'tx_real_hash' });
   assertElegivelParaTrustline.mockReset().mockResolvedValue(undefined);
+  assertSwapXdrMatchesQuote.mockReset();
+  resolveTesouroAsset
+    .mockReset()
+    .mockResolvedValue({
+      code: 'TESOURO',
+      issuer: 'GTESOURO',
+      identifier: 'TESOURO:GTESOURO',
+    });
+  process.env.STELLAR_ISSUER_PUBLIC = SAVED_ISSUER ?? 'GISSUER';
 });
 
 describe('POST /api/investidor/buy/swap/submit', () => {
@@ -137,6 +155,47 @@ describe('POST /api/investidor/buy/swap/submit', () => {
     expect(r.status).toBe(409);
   });
 
+  it('C-04: retry após sucesso com mesmo XDR → 200 idempotente sem re-submit', async () => {
+    quoteFindUnique.mockResolvedValueOnce(
+      baseQuote({
+        consumedAt: new Date(),
+        consumedTxHash: 'tx_prev',
+        submitXdrHash: 'fe73463a59d79cb4609d5f18447ed88de5be0352298d9c24e55c56297122c5fd', // sha256("AAAA...")
+      }),
+    );
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(200);
+    const json = await r.json();
+    expect(json.swapTxHash).toBe('tx_prev');
+    expect(json.idempotent).toBe(true);
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+  });
+
+  it('C-04: quote consumido com XDR diferente → 409', async () => {
+    quoteFindUnique.mockResolvedValueOnce(
+      baseQuote({
+        consumedAt: new Date(),
+        consumedTxHash: 'tx_prev',
+        submitXdrHash: 'hash_de_outra_xdr',
+      }),
+    );
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(409);
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+  });
+
+  it('C-01: 400 quando XDR diverge do quote (amount inflado)', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    assertSwapXdrMatchesQuote.mockImplementationOnce(() => {
+      throw new Error('leg2 amount=999.0000000 ≠ esperado=99.5000000');
+    });
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(400);
+    const json = await r.json();
+    expect(json.error).toMatch(/xdr divergente/);
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+  });
+
   it('200 happy path consome quote + incrementa saldo + audit', async () => {
     quoteFindUnique.mockResolvedValueOnce(baseQuote());
     const r = await POST(req(FULL_BODY));
@@ -144,8 +203,10 @@ describe('POST /api/investidor/buy/swap/submit', () => {
     const json = await r.json();
     expect(json.swapTxHash).toBe('tx_real_hash');
     expect(submitWithPrivySignature).toHaveBeenCalledOnce();
-    expect(quoteUpdateMany).toHaveBeenCalledOnce();
-    expect(quoteUpdateMany.mock.calls[0][0].where.consumedAt).toBeNull();
+    // C-04: updateMany chamado 2x — reserve (submitXdrHash:null) + consume.
+    expect(quoteUpdateMany).toHaveBeenCalledTimes(2);
+    expect(quoteUpdateMany.mock.calls[0][0].where.submitXdrHash).toBeNull();
+    expect(quoteUpdateMany.mock.calls[1][0].where.consumedAt).toBeNull();
     expect(investidorUpdate).toHaveBeenCalledOnce();
     expect(investidorUpdate.mock.calls[0][0].where.id).toBe('inv_1');
     expect(eventoAuditCreate).toHaveBeenCalledOnce();
