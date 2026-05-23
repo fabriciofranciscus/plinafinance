@@ -22,6 +22,7 @@ import { db } from '../db';
 import { ensureStellarWallet } from '../wallet/privy';
 import { fundAccountIfNeeded } from '../stellar/account';
 import { STELLAR_NETWORK } from '../stellar/config';
+import { logStellarError } from '../stellar/log-error';
 import { EtherfuseClient } from '../anchors/etherfuse';
 import { parseCpf } from '../format/parse-cpf';
 
@@ -159,8 +160,11 @@ export async function onboardInvestidor(
   try {
     await anchor.acceptElectronicSignature(kycUrl);
     await anchor.acceptTermsAndConditions(kycUrl);
-  } catch {
-    // continua — KYC já aprovado via submit
+  } catch (err) {
+    // N-16: agreements falham em sandbox sem phone (PLINA-MOD-005). KYC
+    // já foi aprovado via submit — onboard segue, mas o erro vira visível
+    // (antes ficava swallowed silenciosamente).
+    logStellarError('[onboard:agreements]', err);
   }
 
   // 6) Confirma status approved (sandbox deve estar approved após submits).
@@ -170,8 +174,10 @@ export async function onboardInvestidor(
     if (status === 'approved') kycStatus = 'approved';
     else if (status === 'pending') kycStatus = 'pending';
     else kycStatus = 'not_started';
-  } catch {
-    // ignore — usa pending
+  } catch (err) {
+    // N-16: rede flap em getKycStatus — onboard segue com pending, mas
+    // operador vê o erro pra distinguir de "Etherfuse marcou pending".
+    logStellarError('[onboard:kyc-status]', err);
   }
 
   // 7) Upsert Investidor no DB.
