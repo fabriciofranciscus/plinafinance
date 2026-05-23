@@ -97,11 +97,20 @@ export function AppHeader({ isAdmin }: AppHeaderProps) {
               <span className="hidden sm:inline-flex font-details text-[10px] tracking-[0.2em] uppercase bg-base text-lightBg px-2 py-1">
                 Admin
               </span>
-              <form action="/api/admin/logout" method="POST">
-                <button className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 hover:text-base">
-                  Sair
-                </button>
-              </form>
+              <button
+                onClick={async () => {
+                  // N-11: fetch + custom header (CSRF defense). Form HTML
+                  // permitiria POST cross-site via SameSite=lax.
+                  await fetch('/api/admin/logout', {
+                    method: 'POST',
+                    headers: { 'x-plina-admin': '1' },
+                  });
+                  window.location.href = '/admin';
+                }}
+                className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 hover:text-base"
+              >
+                Sair
+              </button>
             </>
           ) : ready && authenticated && stellarAddress ? (
             <>

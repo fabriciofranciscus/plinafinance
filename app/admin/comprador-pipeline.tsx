@@ -90,7 +90,10 @@ function LeadCard({ lead }: { lead: PipelineComprador }) {
     try {
       const res = await fetch('/api/admin/realizacao', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-plina-admin': '1',
+        },
         body: JSON.stringify({ action, ...payload }),
       });
       if (!res.ok) {

@@ -253,8 +253,18 @@ export async function criarReserva(
   };
 }
 
-/** Cancela uma reserva ativa. Libera a cota de volta pra DISPONIVEL. */
-export async function cancelarReserva(reservaId: string, operador: string) {
+/**
+ * Cancela uma reserva ativa. Libera a cota de volta pra DISPONIVEL.
+ *
+ * N-13: agora grava EventoAudit + hash on-chain (Memo.hash). Whitepaper
+ * §6.1 exige prova on-chain pra toda mudança de estado relevante —
+ * reserva cancelada é dado de transparência pro lead comprador
+ * (rastrear motivo / reverter contestação).
+ */
+export async function cancelarReserva(
+  reservaId: string,
+  operador: string,
+): Promise<{ payloadHash: string; txHash: string }> {
   const reserva = await db.reserva.findUnique({
     where: { id: reservaId },
     include: { cota: true },
@@ -263,6 +273,15 @@ export async function cancelarReserva(reservaId: string, operador: string) {
   if (reserva.status !== ReservaStatus.ATIVA) {
     throw new Error(`Reserva em estado ${reserva.status} — não cancelável`);
   }
+
+  const payload = buildAuditPayload('reserva_cancelada', reservaId, {
+    reservaId,
+    cotaId: reserva.cotaId,
+    leadCompradorId: reserva.leadCompradorId,
+    statusAnterior: reserva.status,
+    cotaStatusAnterior: reserva.cota.status,
+  });
+  const onChain = await registerOnChainHash(payload);
 
   await db.$transaction(async (tx) => {
     await tx.reserva.update({
@@ -275,7 +294,20 @@ export async function cancelarReserva(reservaId: string, operador: string) {
         data: { status: StatusCota.DISPONIVEL },
       });
     }
+    await tx.eventoAudit.create({
+      data: {
+        acao: 'RESERVA_CANCELADA',
+        operador,
+        cotaId: reserva.cotaId,
+        leadCompradorId: reserva.leadCompradorId,
+        payloadJson: payload as unknown as Prisma.InputJsonValue,
+        payloadHash: onChain.payloadHash,
+        stellarTxHash: onChain.txHash,
+      },
+    });
   });
+
+  return { payloadHash: onChain.payloadHash, txHash: onChain.txHash };
 }
 
 // ─── 4. Caminho A executado ─────────────────────────────────────────────────

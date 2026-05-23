@@ -4,16 +4,27 @@
  * Calcula BRL equivalente a uma quantidade de PLINA-RF, a NAV atual do
  * pool. Não submete nada.
  *
+ * N-08: handler faz 2 findMany (Cota + RealizacaoCaminho) por request.
+ * Vetor barato de DoS DB com 1 sessão Privy válida → sensitiveAuthLimiter
+ * (10 req/min por IP, mesmo bucket de onboard).
+ *
  * Body: { amountPlinarf }
  */
 
 import { NextResponse } from 'next/server';
 import { calcularValorLiquidacao } from '@/lib/services/liquidacao';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { sensitiveAuthLimiter, clientIp } from '@/lib/rate-limit/config';
 
 export const dynamic = 'force-dynamic';
 
 export const POST = withAuth(async (req, _ctx) => {
+  if (!sensitiveAuthLimiter.consume(clientIp(req))) {
+    return NextResponse.json(
+      { error: 'too many requests' },
+      { status: 429 },
+    );
+  }
   try {
     const body = (await req.json()) as { amountPlinarf?: string };
     if (!body.amountPlinarf) {
