@@ -26,11 +26,15 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
 vi.mock('@/lib/services/liquidacao', () => ({ calcularValorLiquidacao }));
 
 import { POST } from '@/app/api/investidor/liquidar/quote/route';
+import { sensitiveAuthLimiter } from '@/lib/rate-limit/config';
 
-function req(body: object): Request {
+function req(body: object, ip = '10.0.0.1'): Request {
   return new Request('http://x/quote', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      'x-forwarded-for': ip,
+    },
     body: JSON.stringify(body),
   });
 }
@@ -40,6 +44,7 @@ beforeEach(() => {
     brlEquivalente: 100,
     navPorTokenAtual: 1.0,
   });
+  sensitiveAuthLimiter.reset();
 });
 
 describe('POST /api/investidor/liquidar/quote', () => {
@@ -54,5 +59,15 @@ describe('POST /api/investidor/liquidar/quote', () => {
     expect(calcularValorLiquidacao).toHaveBeenCalledWith({
       amountPlinarf: '10',
     });
+  });
+
+  it('N-08: 429 após 10 chamadas do mesmo IP em 1 minuto', async () => {
+    const ip = '10.0.0.99';
+    for (let i = 0; i < 10; i++) {
+      const ok = await POST(req({ amountPlinarf: '1' }, ip));
+      expect(ok.status).toBe(200);
+    }
+    const r = await POST(req({ amountPlinarf: '1' }, ip));
+    expect(r.status).toBe(429);
   });
 });
