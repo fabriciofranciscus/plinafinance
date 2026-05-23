@@ -1,50 +1,51 @@
 /**
  * POST /api/lab/submit-tx
  *
- * Smoke endpoint pro /lab. Recebe `{xdr, investorPubkey, signatureHex}` —
- * o signature foi gerado pelo Privy useSignRawHash no frontend.
- *
- * Anexa signature em base64 no envelope e submete via Horizon. Devolve
+ * Smoke endpoint pro /lab. Recebe `{xdr, signatureHex}` — pubkey vem do
+ * JWT, não do body. Anexa signature e submete via Horizon. Devolve
  * `{hash}` da tx confirmada.
  *
- * Em produção, autorizar trustline (issuer side) é chamada separada após
- * Plina aprovar o investidor — aqui no /lab, faço a autorização automática
- * pra trustline aparecer como AUTHORIZED no Stellar Expert.
+ * C-07: gateado por LAB_ENABLED (testnet-only opt-in) + withAuth.
+ * Auto-autoriza trustline server-side (só no /lab; em produção a Plina
+ * decide quando autorizar após KYC).
  */
 
 import { NextResponse } from 'next/server';
 import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { authorizeTrustline } from '@/lib/stellar/issuer';
 import { logStellarError } from '@/lib/stellar/log-error';
+import { withAuth } from '@/lib/wallet/auth-guard';
+import { isLabEnabled } from '@/lib/env/lab';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
+export const POST = withAuth(async (req, { user }) => {
+  if (!isLabEnabled()) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 });
+  }
   try {
-    const { xdr, investorPubkey, signatureHex } = (await req.json()) as {
+    const { xdr, signatureHex } = (await req.json()) as {
       xdr?: string;
-      investorPubkey?: string;
       signatureHex?: string;
     };
-    if (!xdr || !investorPubkey || !signatureHex) {
+    if (!xdr || !signatureHex) {
       return NextResponse.json(
-        { error: 'campos obrigatórios: xdr, investorPubkey, signatureHex' },
+        { error: 'campos obrigatórios: xdr, signatureHex' },
         { status: 400 },
       );
     }
 
     const result = await submitWithPrivySignature({
       xdr,
-      investorPubkey,
+      investorPubkey: user.publicKey,
       investorSignatureHex: signatureHex,
     });
 
     // Auto-autorizar a trustline pra ela aparecer como AUTHORIZED.
-    // (Em produção a Plina decide quando autorizar, após KYC + compliance.)
     const issuerSecret = process.env.STELLAR_ISSUER_SECRET;
     if (issuerSecret) {
       try {
-        await authorizeTrustline(issuerSecret, investorPubkey);
+        await authorizeTrustline(issuerSecret, user.publicKey);
       } catch (authErr) {
         logStellarError('[lab] auto-autorização falhou (não-fatal):', authErr);
       }
@@ -58,4 +59,4 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-}
+});
