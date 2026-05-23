@@ -7,6 +7,8 @@ import {
   TransactionBuilder,
   Account,
 } from '@stellar/stellar-sdk';
+
+type AnyOp = ReturnType<typeof Operation.payment>;
 import { extractLiquidacaoAmount } from '@/lib/stellar/parse-liquidacao-xdr';
 
 const INVESTOR = Keypair.fromRawEd25519Seed(Buffer.alloc(32, 1)).publicKey();
@@ -20,7 +22,7 @@ function buildXdr(opts: {
   destination?: string;
   asset?: Asset;
   amount?: string;
-  ops?: Operation.Operation[];
+  ops?: AnyOp[];
 }): string {
   const source = opts.source ?? INVESTOR;
   const account = new Account(source, '0');

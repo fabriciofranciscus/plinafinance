@@ -13,8 +13,10 @@
  * essa validação, o cliente pode forjar XDR com PLINARF inflado e
  * passar pelo submit.
  */
-import { Asset, Transaction, Operation } from '@stellar/stellar-sdk';
+import { Asset, Transaction, type Operation } from '@stellar/stellar-sdk';
 import { networkPassphrase, assetCode } from './config';
+
+type AnyOp = Transaction['operations'][number];
 
 export interface SwapXdrExpectation {
   investorPubkey: string;
@@ -24,9 +26,7 @@ export interface SwapXdrExpectation {
   expectedAmount: string;
 }
 
-function isPayment(
-  op: Operation.Operation,
-): op is Operation.Payment {
+function isPayment(op: AnyOp): op is Operation.Payment {
   return op.type === 'payment';
 }
 

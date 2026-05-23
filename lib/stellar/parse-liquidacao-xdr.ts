@@ -14,8 +14,10 @@
  *  - destination = distributorPubkey.
  *  - amount > 0.
  */
-import { Asset, Transaction, Operation } from '@stellar/stellar-sdk';
+import { Asset, Transaction, type Operation } from '@stellar/stellar-sdk';
 import { networkPassphrase, assetCode } from './config';
+
+type AnyOp = Transaction['operations'][number];
 
 export interface LiquidacaoXdrExpectation {
   investorPubkey: string;
@@ -23,7 +25,7 @@ export interface LiquidacaoXdrExpectation {
   issuerPubkey: string;
 }
 
-function isPayment(op: Operation.Operation): op is Operation.Payment {
+function isPayment(op: AnyOp): op is Operation.Payment {
   return op.type === 'payment';
 }
 

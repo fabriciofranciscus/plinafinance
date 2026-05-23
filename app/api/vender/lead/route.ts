@@ -3,42 +3,42 @@
  *
  * Captura lead vendedor + prova on-chain do consentimento LGPD.
  *
- * Body: { nome, email, telefone?, cpf?, consentimentoLgpd, utm_* }
- * Returns: { leadId, payloadHash, txHash }
+ * C-06: Zod strict + rate-limit anti-spam.
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { capturarLead } from '@/lib/services/originacao';
+import { parseBody } from '@/lib/http/parse-body';
+import { leadLimiter, clientIp } from '@/lib/rate-limit/config';
 
 export const dynamic = 'force-dynamic';
 
+const Schema = z
+  .object({
+    nome: z.string().min(1).max(200),
+    email: z.string().email().max(254),
+    telefone: z.string().max(40).optional(),
+    cpf: z.string().max(40).optional(),
+    consentimentoLgpd: z.literal(true),
+    origem: z.string().max(100).optional(),
+    utmSource: z.string().max(100).optional(),
+    utmMedium: z.string().max(100).optional(),
+    utmCampaign: z.string().max(100).optional(),
+  })
+  .strict();
+
 export async function POST(req: Request) {
+  if (!leadLimiter.consume(clientIp(req))) {
+    return NextResponse.json(
+      { error: 'too many requests' },
+      { status: 429 },
+    );
+  }
+  const parsed = await parseBody(req, Schema);
+  if ('response' in parsed) return parsed.response;
+  const body = parsed.data;
   try {
-    const body = (await req.json()) as {
-      nome?: string;
-      email?: string;
-      telefone?: string;
-      cpf?: string;
-      consentimentoLgpd?: boolean;
-      origem?: string;
-      utmSource?: string;
-      utmMedium?: string;
-      utmCampaign?: string;
-    };
-
-    if (!body.nome || !body.email) {
-      return NextResponse.json(
-        { error: 'nome e email obrigatórios' },
-        { status: 400 },
-      );
-    }
-    if (!body.consentimentoLgpd) {
-      return NextResponse.json(
-        { error: 'Consentimento LGPD obrigatório' },
-        { status: 400 },
-      );
-    }
-
     const result = await capturarLead({
       nome: body.nome,
       email: body.email,

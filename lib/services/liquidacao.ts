@@ -202,7 +202,7 @@ export async function submitLiquidacao(input: {
             payloadJson: {
               path: ['liquidationTxHash'],
               equals: existing.txHash,
-            } as Prisma.JsonFilter,
+            },
           },
           select: { stellarTxHash: true, payloadJson: true },
         });

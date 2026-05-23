@@ -53,7 +53,9 @@ describe('POST /api/comprar/lead', () => {
     const r = await POST(req({ ...BASE, tipo: 'PJ' }));
     expect(r.status).toBe(400);
     const json = await r.json();
-    expect(json.error).toMatch(/PESSOA_FISICA|PESSOA_JURIDICA/);
+    expect(json.error).toMatch(/inválido/);
+    // C-06: Zod issues detalham o campo divergente.
+    expect(json.issues?.[0]?.path).toBe('tipo');
     expect(capturarLeadComprador).not.toHaveBeenCalled();
   });
 
