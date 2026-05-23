@@ -91,4 +91,34 @@ describe('POST /api/investidor/quote', () => {
     expect(quoteCreate).toHaveBeenCalledOnce();
     expect(quoteCreate.mock.calls[0][0].data.investidorId).toBe('inv_1');
   });
+
+  it('N-12: toAmount com >7 decimais é arredondado ao persistir', async () => {
+    getQuote.mockResolvedValueOnce({
+      id: 'q_2',
+      fromCurrency: 'BRL',
+      fromAmount: '100',
+      toCurrency: 'TESOURO',
+      toAmount: '1.123456789', // 9 decimais
+      exchangeRate: '0.0112',
+      fee: '0.5',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      createdAt: new Date().toISOString(),
+    });
+    const r = await POST(
+      req({ amountBrl: '100', customerId: 'cust_1', stellarAddress: 'GABC' }),
+    );
+    expect(r.status).toBe(200);
+    const persisted = quoteCreate.mock.calls[0][0].data.toAmount;
+    // Persistido como Decimal arredondado em 7 casas: 1.1234568.
+    expect(persisted.toFixed(7)).toBe('1.1234568');
+  });
+
+  it('N-12: toAmount com ≤7 decimais não é alterado', async () => {
+    const r = await POST(
+      req({ amountBrl: '100', customerId: 'cust_1', stellarAddress: 'GABC' }),
+    );
+    expect(r.status).toBe(200);
+    const persisted = quoteCreate.mock.calls[0][0].data.toAmount;
+    expect(persisted.toFixed(7)).toBe('99.5000000');
+  });
 });

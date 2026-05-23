@@ -18,6 +18,7 @@ import { db } from '@/lib/db';
 import { EtherfuseClient } from '@/lib/anchors/etherfuse';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { parseBrlAmount } from '@/lib/format/parse-brl';
+import { logStellarError } from '@/lib/stellar/log-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,17 +81,45 @@ export const POST = withAuth(async (req, { user }) => {
       stellarAddress,
     });
 
-    // Persiste com Decimal(20,7) — Stellar amount aceita até 7 decimais.
-    // Etherfuse devolve `toAmount` em string com precisão maior; Decimal
-    // do Prisma trunca/arredonda conservadoramente.
+    // N-12: arredondamento explícito em 7 casas. Etherfuse devolve
+    // toAmount com até 18 dígitos; Decimal(20,7) do Prisma truncava
+    // silencioso no save, gerando dust no swap. Round HALF_EVEN
+    // (banqueiro) + log quando houve perda de precisão pra rastrear.
+    const toAmountRaw = new Prisma.Decimal(quote.toAmount);
+    const toAmount = toAmountRaw.toDecimalPlaces(
+      7,
+      Prisma.Decimal.ROUND_HALF_EVEN,
+    );
+    if (!toAmountRaw.eq(toAmount)) {
+      logStellarError(
+        '[quote] toAmount truncado pra 7 casas',
+        new Error(
+          `raw=${toAmountRaw.toFixed()} rounded=${toAmount.toFixed(7)}`,
+        ),
+      );
+    }
+    const fromAmountRaw = new Prisma.Decimal(quote.fromAmount);
+    const fromAmount = fromAmountRaw.toDecimalPlaces(
+      7,
+      Prisma.Decimal.ROUND_HALF_EVEN,
+    );
+    if (!fromAmountRaw.eq(fromAmount)) {
+      logStellarError(
+        '[quote] fromAmount truncado pra 7 casas',
+        new Error(
+          `raw=${fromAmountRaw.toFixed()} rounded=${fromAmount.toFixed(7)}`,
+        ),
+      );
+    }
+
     await db.quote.create({
       data: {
         id: quote.id,
         investidorId: user.investidorId,
         fromCurrency: quote.fromCurrency,
-        fromAmount: new Prisma.Decimal(quote.fromAmount),
+        fromAmount,
         toCurrency: quote.toCurrency,
-        toAmount: new Prisma.Decimal(quote.toAmount),
+        toAmount,
         exchangeRate: quote.exchangeRate,
         fee: quote.fee,
         expiresAt: new Date(quote.expiresAt),
