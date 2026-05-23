@@ -10,6 +10,7 @@
 
 import { NextResponse } from 'next/server';
 import { isAdminAuthenticated } from '@/lib/auth/admin';
+import { requireAdminCsrf } from '@/lib/auth/admin-csrf';
 import {
   cancelarReserva,
   executarCaminhoA,
@@ -18,6 +19,8 @@ import {
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+  const csrf = requireAdminCsrf(req);
+  if (csrf) return csrf;
   if (!(await isAdminAuthenticated())) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
