@@ -38,6 +38,7 @@ import { getDynamicFee } from '../stellar/fee';
 import { privySignatureToBase64 } from '../wallet/privy';
 import { parseStellarAmount } from '../format/parse-stellar-amount';
 import { extractLiquidacaoAmount } from '../stellar/parse-liquidacao-xdr';
+import { logStellarError } from '../stellar/log-error';
 import {
   buildAuditPayload,
   registerOnChainHash,
@@ -222,6 +223,14 @@ export async function submitLiquidacao(input: {
   }
 
   // 1) Calcula NAV/token ANTES de submeter (preço justo da liquidação).
+  //
+  // N-15 sinalização: NAV usado no payload é snapshot pré-submit. Em
+  // concorrência (duas liquidações no mesmo segundo) o segundo payload
+  // reflete supply pré-primeira tx — divergência pequena no MVP testnet
+  // (estimativa de BRL fictício) mas precisa virar epoch-snapshot
+  // on-chain antes de venda real em mainnet. Telemetria abaixo flagga
+  // janelas longas que aumentam o risco.
+  const calcStartedAt = performance.now();
   const valor = await calcularValorLiquidacao({ amountPlinarf: stellarAmount });
 
   // 2) Submete payment Investidor → Distributor (Privy signature).
@@ -234,6 +243,13 @@ export async function submitLiquidacao(input: {
     horizon as Horizon.Server
   ).submitTransaction(tx);
   const liquidationTxHash = submitRes.hash;
+  const navWindowMs = performance.now() - calcStartedAt;
+  if (navWindowMs > 2_000) {
+    logStellarError(
+      '[liquidacao] janela NAV→submit longa',
+      new Error(`${navWindowMs.toFixed(0)}ms — payload pode refletir NAV stale`),
+    );
+  }
 
   // 3) Audit on-chain do hash da liquidação (Memo.hash da Plina assinando
   //    o ato — não confunde com a tx do payment do investidor).
