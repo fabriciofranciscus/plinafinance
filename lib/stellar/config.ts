@@ -43,6 +43,19 @@ export const STELLAR_FUNDER_PUBLIC = process.env.STELLAR_FUNDER_PUBLIC ?? '';
 export const STELLAR_FUNDER_STARTING_BALANCE =
   process.env.STELLAR_FUNDER_STARTING_BALANCE ?? '2';
 
+/**
+ * N-09: cap diário global de funding em mainnet. Contado via EventoAudit
+ * com acao=WALLET_FUNDED. Excedido → throw (operador precisa bumpar
+ * manualmente após investigar). Default conservador.
+ */
+export const FUNDER_DAILY_CAP = Number(process.env.FUNDER_DAILY_CAP ?? '100');
+
+/**
+ * N-09: piso de XLM do funder pra warn (não bloqueia). Operador vê no
+ * log e bumpa antes de drenar. Default cobre ~25 contas a 2 XLM.
+ */
+export const FUNDER_BALANCE_FLOOR = process.env.FUNDER_BALANCE_FLOOR ?? '50';
+
 const stellarExpertBase =
   STELLAR_NETWORK === 'PUBLIC'
     ? 'https://stellar.expert/explorer/public'
