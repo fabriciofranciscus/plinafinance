@@ -12,6 +12,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { stripInternalKeys } from '@/lib/audit/strip-internal';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,7 +40,9 @@ export const GET = withAuth(async (_req, { user }) => {
       stellarTxHash: e.stellarTxHash,
       motivoClawback: e.motivoClawback,
       fundamentoUrl: e.fundamentoUrl,
-      payload: e.payloadJson,
+      // N-17: strip de chaves canônicas internas (_type/_at/_ref) injetadas
+      // por buildAuditPayload. Consumidor não precisa ver o envelope de hash.
+      payload: stripInternalKeys(e.payloadJson),
     })),
   });
 });
