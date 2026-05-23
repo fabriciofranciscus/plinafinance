@@ -245,6 +245,12 @@ model Investidor {
   /// UUID do customer Etherfuse. Persistido pra idempotência (quote/order
   /// subsequentes reusam sem precisar re-criar customer).
   etherfuseCustomerId String?
+  /// N-14: CPF normalizado (11 dígitos, sem máscara). Nullable pra rows
+  /// pré-fix. Útil pra auditoria + matching com Etherfuse customer.
+  cpfNormalizado     String?
+  /// N-14: true quando o CPF veio do fallback dummy de sandbox. Bloqueia
+  /// operações em mainnet — exige re-KYC com CPF real.
+  isSyntheticCpf     Boolean          @default(false)
   saldoEsperado   Decimal          @db.Decimal(20, 7) @default(0)
   criadoEm        DateTime         @default(now())
   atualizadoEm    DateTime         @updatedAt
