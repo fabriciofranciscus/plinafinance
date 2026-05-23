@@ -42,7 +42,7 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
 
 vi.mock('@/lib/db', () => ({
   db: {
-    quote: { findUnique: quoteFindUnique },
+    quote: { findUnique: quoteFindUnique, updateMany: quoteUpdateMany },
     $transaction: async (
       cb: (tx: {
         quote: { updateMany: typeof quoteUpdateMany };
@@ -155,6 +155,35 @@ describe('POST /api/investidor/buy/swap/submit', () => {
     expect(r.status).toBe(409);
   });
 
+  it('C-04: retry após sucesso com mesmo XDR → 200 idempotente sem re-submit', async () => {
+    quoteFindUnique.mockResolvedValueOnce(
+      baseQuote({
+        consumedAt: new Date(),
+        consumedTxHash: 'tx_prev',
+        submitXdrHash: 'fe73463a59d79cb4609d5f18447ed88de5be0352298d9c24e55c56297122c5fd', // sha256("AAAA...")
+      }),
+    );
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(200);
+    const json = await r.json();
+    expect(json.swapTxHash).toBe('tx_prev');
+    expect(json.idempotent).toBe(true);
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+  });
+
+  it('C-04: quote consumido com XDR diferente → 409', async () => {
+    quoteFindUnique.mockResolvedValueOnce(
+      baseQuote({
+        consumedAt: new Date(),
+        consumedTxHash: 'tx_prev',
+        submitXdrHash: 'hash_de_outra_xdr',
+      }),
+    );
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(409);
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+  });
+
   it('C-01: 400 quando XDR diverge do quote (amount inflado)', async () => {
     quoteFindUnique.mockResolvedValueOnce(baseQuote());
     assertSwapXdrMatchesQuote.mockImplementationOnce(() => {
@@ -174,8 +203,10 @@ describe('POST /api/investidor/buy/swap/submit', () => {
     const json = await r.json();
     expect(json.swapTxHash).toBe('tx_real_hash');
     expect(submitWithPrivySignature).toHaveBeenCalledOnce();
-    expect(quoteUpdateMany).toHaveBeenCalledOnce();
-    expect(quoteUpdateMany.mock.calls[0][0].where.consumedAt).toBeNull();
+    // C-04: updateMany chamado 2x — reserve (submitXdrHash:null) + consume.
+    expect(quoteUpdateMany).toHaveBeenCalledTimes(2);
+    expect(quoteUpdateMany.mock.calls[0][0].where.submitXdrHash).toBeNull();
+    expect(quoteUpdateMany.mock.calls[1][0].where.consumedAt).toBeNull();
     expect(investidorUpdate).toHaveBeenCalledOnce();
     expect(investidorUpdate.mock.calls[0][0].where.id).toBe('inv_1');
     expect(eventoAuditCreate).toHaveBeenCalledOnce();

@@ -14,6 +14,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { submitWithPrivySignature } from '@/lib/stellar/transactions';
@@ -88,7 +89,21 @@ export const POST = withAuth(async (req, { user }) => {
         { status: 403 },
       );
     }
+    // C-04: idempotência. xdrHash reserva a request; retry com mesmo XDR
+    // após sucesso retorna hash existente, com XDR diferente em quote já
+    // lacrado retorna 409.
+    const xdrHash = createHash('sha256').update(xdr).digest('hex');
     if (quote.consumedAt) {
+      if (quote.submitXdrHash === xdrHash && quote.consumedTxHash) {
+        logStellarError(
+          '[swap/submit] idempotente (já consumido)',
+          new Error('retry pós sucesso'),
+        );
+        return NextResponse.json({
+          swapTxHash: quote.consumedTxHash,
+          idempotent: true,
+        });
+      }
       return NextResponse.json({ error: 'quote já consumido' }, { status: 409 });
     }
     if (quote.expiresAt.getTime() <= Date.now()) {
@@ -142,6 +157,29 @@ export const POST = withAuth(async (req, { user }) => {
           error: `xdr divergente do quote: ${err instanceof Error ? err.message : 'unknown'}`,
         },
         { status: 400 },
+      );
+    }
+
+    // C-04: reserva o xdrHash ANTES do submit. Race window de 2 chamadas
+    // simultâneas: a primeira ganha (count=1), a segunda 409.
+    const reserved = await db.quote.updateMany({
+      where: { id: quote.id, submitXdrHash: null },
+      data: { submitXdrHash: xdrHash },
+    });
+    if (reserved.count !== 1) {
+      const fresh = await db.quote.findUnique({
+        where: { id: quote.id },
+        select: { submitXdrHash: true, consumedTxHash: true },
+      });
+      if (fresh?.submitXdrHash === xdrHash && fresh.consumedTxHash) {
+        return NextResponse.json({
+          swapTxHash: fresh.consumedTxHash,
+          idempotent: true,
+        });
+      }
+      return NextResponse.json(
+        { error: 'quote já em flight com outra XDR' },
+        { status: 409 },
       );
     }
 
