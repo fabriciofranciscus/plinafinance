@@ -28,8 +28,11 @@ export async function POST(req: Request) {
     const body = (await req.json()) as { action?: string } & Record<string, unknown>;
     switch (body.action) {
       case 'cancelar-reserva': {
-        await cancelarReserva(String(body.reservaId), 'admin-panel');
-        return NextResponse.json({ ok: true });
+        const result = await cancelarReserva(
+          String(body.reservaId),
+          'admin-panel',
+        );
+        return NextResponse.json({ ok: true, ...result });
       }
       case 'executar-caminho-a': {
         const result = await executarCaminhoA({

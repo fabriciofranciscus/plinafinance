@@ -89,6 +89,7 @@ enum AcaoAudit {
   // Funil comprador (MVP testnet-first)
   LEAD_COMPRADOR_CAPTURADO
   RESERVA_CRIADA
+  RESERVA_CANCELADA
   RESERVA_EXPIRADA
   CAMINHO_A_EXECUTADO
   // Liquidação investidor (whitepaper §6.4 janela de resgate)
@@ -98,6 +99,8 @@ enum AcaoAudit {
   ONRAMP_CRIADA
   ONRAMP_LIQUIDADA
   SWAP_EXECUTADO
+  // N-09 — funder XLM em mainnet
+  WALLET_FUNDED
 }
 
 // Funil vendedor
