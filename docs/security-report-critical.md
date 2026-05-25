@@ -1,0 +1,1 @@
+Vulnerabilidade: 12 rotas /api/investidor/** sem auth (IDOR via UUID vazado). Riscos: vazamento PIX, emissão indevida PLINARF mock, audit sem identidade (CVM 175). Correção: withAuth + ownership check + lint guard. PR #16: github.com/fabriciofranciscus/plinafinance/pull/16
