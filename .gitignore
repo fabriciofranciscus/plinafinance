@@ -37,6 +37,7 @@ yarn-error.log*
 # smoke test output — contém secret keys, NUNCA commitar
 smoke-stellar-output.json
 smoke-etherfuse-output.json
+scripts/video/state.json
 
 # vercel
 .vercel
