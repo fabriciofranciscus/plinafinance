@@ -59,7 +59,7 @@ export function AppHeader({ isAdmin }: AppHeaderProps) {
         ];
 
   return (
-    <header className="bg-sheet-white border-b border-light-hairline sticky top-0 z-40">
+    <header className="bg-white border-b border-light-hairline sticky top-0 z-40">
       <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link
@@ -128,7 +128,7 @@ export function AppHeader({ isAdmin }: AppHeaderProps) {
               </button>
             </>
           ) : (
-            <span className="hidden sm:inline-flex font-details text-[10px] tracking-[0.2em] uppercase bg-document-grey text-base/70 px-2 py-1">
+            <span className="hidden sm:inline-flex font-details text-[10px] tracking-[0.2em] uppercase bg-lightBg text-base/70 px-2 py-1">
               POC · Testnet
             </span>
           )}

@@ -30,8 +30,13 @@ export const assetCode = process.env.ASSET_CODE ?? 'PLINARF';
  * Timeout em segundos pra todas as txs Stellar (Memo.hash, trustline, swap,
  * liquidação). Janela curta limita replay caso a sig vaze antes do submit
  * (audit F-14). Tem que estar em [60, 120].
+ *
+ * Subimos pra 120s (do 60s original do F-14) depois que PR #3 mostrou que
+ * 60s causava tx_too_late no submit quando o usuário leva mais tempo na
+ * confirm screen + assinatura via Privy. 120s é o teto do range permitido
+ * pelo audit, então ainda preserva a mitigação de replay.
  */
-export const STELLAR_TX_TIMEOUT_SEC = 60;
+export const STELLAR_TX_TIMEOUT_SEC = 120;
 
 /**
  * Funder mainnet (F-08). Em PUBLIC, `fundAccountIfNeeded` constrói um
