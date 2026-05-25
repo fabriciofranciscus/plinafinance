@@ -139,11 +139,13 @@ function explorerTx(hash: string) {
 function explorerAccount(pubkey: string) {
   return `https://stellar.expert/explorer/testnet/account/${pubkey}`;
 }
-function maskId(id: string): string {
+function maskId(id: string | null | undefined): string {
+  if (!id) return '—';
   if (id.length < 12) return id;
   return `${id.slice(0, 8)}…${id.slice(-4)}`;
 }
-function maskPubkey(pk: string): string {
+function maskPubkey(pk: string | null | undefined): string {
+  if (!pk) return '—';
   if (pk.length < 16) return pk;
   return `${pk.slice(0, 8)}…${pk.slice(-8)}`;
 }
@@ -296,10 +298,18 @@ export default function InvestirPage() {
         },
       );
       if (!plinarfBuild.ok) throw new Error(await plinarfBuild.text());
-      const plinarfBuildData = (await plinarfBuild.json()) as {
+      const plinarfBuildData = (await plinarfBuild.json()) as Partial<{
         xdr: string;
         hashHex: string;
-      };
+      }>;
+      // Valida shape antes de avançar — sem isso, campos faltantes só
+      // explodem em runtime no signRawHash/submit (PR #5 hardening).
+      {
+        const missing = (['xdr', 'hashHex'] as const).filter((k) => !plinarfBuildData[k]);
+        if (missing.length > 0) {
+          throw new Error(`/buy/trust-plinarf/build devolveu resposta incompleta — faltam: ${missing.join(', ')}`);
+        }
+      }
       const plinarfSig = await signRawHash({
         address: onboard.publicKey,
         chainType: 'stellar',
