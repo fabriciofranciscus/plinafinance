@@ -3,14 +3,14 @@ import {
   type AuthFlag,
   AuthRequiredFlag,
   AuthRevocableFlag,
-  BASE_FEE,
   Horizon,
   Keypair,
   Operation,
   TransactionBuilder,
 } from '@stellar/stellar-sdk';
 import { buildAsset, horizon } from './account';
-import { assetCode, networkPassphrase } from './config';
+import { STELLAR_TX_TIMEOUT_SEC, assetCode, networkPassphrase } from './config';
+import { getDynamicFee } from './fee';
 
 /**
  * Wrappers Stellar usados pelo POC e pelo MVP.
@@ -24,15 +24,13 @@ import { assetCode, networkPassphrase } from './config';
  * NÃO toca o DB — orquestração fica em `lib/services/*`.
  */
 
-const TIMEOUT_SECS = 60;
-
 type SubmitResult = Horizon.HorizonApi.SubmitTransactionResponse;
 
 async function buildSourceTx(sourceSecret: string) {
   const source = Keypair.fromSecret(sourceSecret);
   const account = await horizon.loadAccount(source.publicKey());
   const builder = new TransactionBuilder(account, {
-    fee: BASE_FEE,
+    fee: await getDynamicFee(),
     networkPassphrase,
   });
   return { source, builder };
@@ -42,7 +40,7 @@ async function sign(
   builder: TransactionBuilder,
   signers: Keypair[],
 ): Promise<SubmitResult> {
-  const tx = builder.setTimeout(TIMEOUT_SECS).build();
+  const tx = builder.setTimeout(STELLAR_TX_TIMEOUT_SEC).build();
   signers.forEach((s) => tx.sign(s));
   return horizon.submitTransaction(tx);
 }

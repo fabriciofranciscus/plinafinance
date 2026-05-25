@@ -19,8 +19,16 @@ import {
 } from '@privy-io/react-auth';
 import { useSignRawHash } from '@privy-io/react-auth/extended-chains';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { parseBrlAmount } from '@/lib/format/parse-brl';
 
-type Screen = 'welcome' | 'identity' | 'quote' | 'confirm' | 'receipt';
+type Screen =
+  | 'welcome'
+  | 'identity'
+  | 'quote'
+  | 'onramp'
+  | 'settling'
+  | 'confirm'
+  | 'receipt';
 
 interface OnboardData {
   investidorId: string;
@@ -39,18 +47,45 @@ interface QuoteData {
   expiresAt: string;
 }
 
-interface BuildData {
-  xdr: string;
-  hashHex: string;
-  funded: boolean;
-  issuerPubkey: string;
-  assetCode: string;
+interface PixInstructions {
+  type?: string;
+  pixCode?: string;
+  pixKey?: string;
+  pixKeyType?: string;
+  beneficiary?: string;
+  amount?: string;
+  currency?: string;
+  __mock?: boolean;
 }
 
+interface OnRampData {
+  orderId: string;
+  status: string;
+  paymentInstructions: PixInstructions | null;
+  mock: boolean;
+  stellarTxHash?: string | null;
+}
+
+interface SwapEnvelope {
+  xdr: string;
+  hashHex: string;
+  distributorSigBase64: string;
+  distributorPubkey: string;
+  mock: false;
+}
+
+interface SwapMockResult {
+  txHash: string;
+  mock: true;
+  alreadyExecuted: true;
+}
+
+type SwapBuild = SwapEnvelope | SwapMockResult;
+
 interface BuyResult {
-  trustlineTxHash: string;
-  authorizeTxHash: string;
-  distributeTxHash: string;
+  swapTxHash: string;
+  onRampTxHash: string | null;
+  mock: boolean;
 }
 
 interface FlowError {
@@ -70,6 +105,8 @@ const SCREENS: { id: Screen; label: string }[] = [
   { id: 'welcome', label: 'Acesso' },
   { id: 'identity', label: 'Identidade' },
   { id: 'quote', label: 'Cotação' },
+  { id: 'onramp', label: 'Pagamento' },
+  { id: 'settling', label: 'Liquidação' },
   { id: 'confirm', label: 'Revisão' },
   { id: 'receipt', label: 'Confirmação' },
 ];
@@ -90,6 +127,10 @@ const GLOSSARY: Record<string, string> = {
     'Razão 1:1 entre PLINA-RF e o valor patrimonial líquido (NAV) do FIDC. No POC, mantida sem revalorização; em produção, NAV é apurado diariamente.',
   clawback:
     'AUTH_CLAWBACK_ENABLED. Permite o issuer revogar tokens em hipóteses limitadas (judicial, sanção, fraude, erro). Diferencial institucional documentado no whitepaper §6.5.',
+  'swap atômico':
+    'Envelope Stellar com 2 operações no mesmo tx: investor paga TESOURO ao distributor + distributor paga PLINA-RF ao investor. Ambas legs commitam juntas — sem TESOURO, sem PLINA-RF. Substitui o single-shot do MVP por settlement on-chain real.',
+  onramp:
+    'BRL → TESOURO via Etherfuse. Investidor paga PIX off-chain, Etherfuse paga TESOURO na wallet Stellar. Pré-condição pro swap PLINA-RF.',
 };
 
 function explorerTx(hash: string) {
@@ -98,13 +139,11 @@ function explorerTx(hash: string) {
 function explorerAccount(pubkey: string) {
   return `https://stellar.expert/explorer/testnet/account/${pubkey}`;
 }
-function maskId(id: string | null | undefined): string {
-  if (!id) return '—';
+function maskId(id: string): string {
   if (id.length < 12) return id;
   return `${id.slice(0, 8)}…${id.slice(-4)}`;
 }
-function maskPubkey(pk: string | null | undefined): string {
-  if (!pk) return '—';
+function maskPubkey(pk: string): string {
   if (pk.length < 16) return pk;
   return `${pk.slice(0, 8)}…${pk.slice(-8)}`;
 }
@@ -153,11 +192,16 @@ export default function InvestirPage() {
   const [onboard, setOnboard] = useState<OnboardData | null>(null);
   const [onboarding, setOnboarding] = useState(false);
   const [kycConsented, setKycConsented] = useState(false);
+  const [trustlinesReady, setTrustlinesReady] = useState(false);
+  const [trustlineLoading, setTrustlineLoading] = useState(false);
   const [amountBrl, setAmountBrl] = useState('');
   const [quote, setQuote] = useState<QuoteData | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
-  const [build, setBuild] = useState<BuildData | null>(null);
-  const [buildLoading, setBuildLoading] = useState(false);
+  const [onRamp, setOnRamp] = useState<OnRampData | null>(null);
+  const [onRampLoading, setOnRampLoading] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [swapBuild, setSwapBuild] = useState<SwapBuild | null>(null);
+  const [swapLoading, setSwapLoading] = useState(false);
   const [signConfirmed, setSignConfirmed] = useState(false);
   const [buying, setBuying] = useState(false);
   const [buyResult, setBuyResult] = useState<BuyResult | null>(null);
@@ -194,16 +238,20 @@ export default function InvestirPage() {
 
   const refreshQuote = useCallback(async () => {
     if (!onboard) return;
-    const v = Number(amountBrl);
-    if (!Number.isFinite(v) || v <= 0) return;
+    const v = parseBrlAmount(amountBrl);
+    if (v === null) return;
     setQuoteLoading(true);
     setError(null);
     try {
+      const token = await getAccessToken();
       const res = await fetch('/api/investidor/quote', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
-          amountBrl,
+          amountBrl: v.toFixed(2),
           customerId: onboard.etherfuseCustomerId,
           stellarAddress: onboard.publicKey,
         }),
@@ -215,7 +263,7 @@ export default function InvestirPage() {
     } finally {
       setQuoteLoading(false);
     }
-  }, [onboard, amountBrl]);
+  }, [onboard, amountBrl, getAccessToken]);
 
   useEffect(() => {
     if (screen !== 'quote' || !onboard) return;
@@ -225,38 +273,224 @@ export default function InvestirPage() {
     return () => clearTimeout(t);
   }, [amountBrl, screen, onboard, refreshQuote]);
 
-  const goToConfirm = useCallback(async () => {
-    if (!onboard) return;
-    setBuildLoading(true);
+  // Trustline setup (PLINARF + TESOURO). Roda automaticamente quando o
+  // investor entra no screen identity já onboardado. Idempotente: se
+  // trustlinesReady=true, pula. PLINARF é pré-condição pra receber emissão;
+  // TESOURO é pré-condição pra leg investor→distributor do swap atômico.
+  const setupTrustlines = useCallback(async () => {
+    if (!onboard || trustlinesReady || trustlineLoading) return;
+    setTrustlineLoading(true);
     setError(null);
-    setSignConfirmed(false);
     try {
-      const res = await fetch('/api/investidor/buy/build', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pubkey: onboard.publicKey }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data = (await res.json()) as Partial<BuildData>;
-      // Valida shape antes de avançar — sem isso, campos faltantes só
-      // explodem em runtime no maskPubkey/render de ConfirmScreen.
-      const missing = (['xdr', 'hashHex', 'issuerPubkey', 'assetCode'] as const).filter(
-        (k) => !data[k],
+      const token = await getAccessToken();
+      const authHeaders: Record<string, string> = token
+        ? { Authorization: `Bearer ${token}` }
+        : {};
+      // PLINARF trustline.
+      const plinarfBuild = await fetch(
+        '/api/investidor/buy/trust-plinarf/build',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({ pubkey: onboard.publicKey }),
+        },
       );
-      if (missing.length > 0) {
-        throw new Error(`/buy/build devolveu resposta incompleta — faltam: ${missing.join(', ')}`);
-      }
-      setBuild(data as BuildData);
-      setScreen('confirm');
+      if (!plinarfBuild.ok) throw new Error(await plinarfBuild.text());
+      const plinarfBuildData = (await plinarfBuild.json()) as {
+        xdr: string;
+        hashHex: string;
+      };
+      const plinarfSig = await signRawHash({
+        address: onboard.publicKey,
+        chainType: 'stellar',
+        hash: plinarfBuildData.hashHex as `0x${string}`,
+      });
+      const plinarfSubmit = await fetch(
+        '/api/investidor/buy/trust-plinarf/submit',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({
+            xdr: plinarfBuildData.xdr,
+            investorPubkey: onboard.publicKey,
+            signatureHex: plinarfSig.signature,
+          }),
+        },
+      );
+      if (!plinarfSubmit.ok) throw new Error(await plinarfSubmit.text());
+
+      // TESOURO trustline (bridge da Etherfuse).
+      const tesouroBuild = await fetch(
+        '/api/investidor/buy/trust-tesouro/build',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({ pubkey: onboard.publicKey }),
+        },
+      );
+      if (!tesouroBuild.ok) throw new Error(await tesouroBuild.text());
+      const tesouroBuildData = (await tesouroBuild.json()) as {
+        xdr: string;
+        hashHex: string;
+      };
+      const tesouroSig = await signRawHash({
+        address: onboard.publicKey,
+        chainType: 'stellar',
+        hash: tesouroBuildData.hashHex as `0x${string}`,
+      });
+      const tesouroSubmit = await fetch(
+        '/api/investidor/buy/trust-tesouro/submit',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({
+            xdr: tesouroBuildData.xdr,
+            investorPubkey: onboard.publicKey,
+            signatureHex: tesouroSig.signature,
+          }),
+        },
+      );
+      if (!tesouroSubmit.ok) throw new Error(await tesouroSubmit.text());
+
+      setTrustlinesReady(true);
     } catch (err) {
       setError(asFlowError(err));
     } finally {
-      setBuildLoading(false);
+      setTrustlineLoading(false);
     }
-  }, [onboard]);
+  }, [onboard, signRawHash, trustlinesReady, trustlineLoading, getAccessToken]);
+
+  // Cria onramp Etherfuse + transita pra screen de pagamento PIX.
+  const goToOnramp = useCallback(async () => {
+    if (!quote) return;
+    setOnRampLoading(true);
+    setError(null);
+    try {
+      const token = await getAccessToken();
+      const res = await fetch('/api/investidor/buy/onramp/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ quoteId: quote.quoteId }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = (await res.json()) as OnRampData;
+      setOnRamp(data);
+      setScreen('onramp');
+    } catch (err) {
+      setError(asFlowError(err));
+    } finally {
+      setOnRampLoading(false);
+    }
+  }, [quote, getAccessToken]);
+
+  // Sandbox-only: dispara simulação de PIX pago. Após resolver, vai pro
+  // settling screen que vai pollar até completed.
+  const sandboxPay = useCallback(async () => {
+    if (!onRamp) return;
+    setPaying(true);
+    setError(null);
+    try {
+      const token = await getAccessToken();
+      const res = await fetch('/api/investidor/buy/onramp/sandbox-pay', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ orderId: onRamp.orderId }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = (await res.json()) as {
+        status: string;
+        stellarTxHash: string | null;
+        mock: boolean;
+      };
+      setOnRamp({ ...onRamp, ...data });
+      setScreen('settling');
+    } catch (err) {
+      setError(asFlowError(err));
+    } finally {
+      setPaying(false);
+    }
+  }, [onRamp, getAccessToken]);
+
+  // Polling do status da onramp no settling screen — para quando completed.
+  useEffect(() => {
+    if (screen !== 'settling' || !onRamp || onRamp.status === 'completed') return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const token = await getAccessToken();
+        const res = await fetch(
+          `/api/investidor/buy/onramp/status?orderId=${encodeURIComponent(onRamp.orderId)}`,
+          { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          status: string;
+          stellarTxHash: string | null;
+          mock: boolean;
+        };
+        if (cancelled) return;
+        setOnRamp((prev) => (prev ? { ...prev, ...data } : prev));
+      } catch {
+        // ignora — próximo tick retenta
+      }
+    };
+    void tick();
+    const id = setInterval(tick, 3_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [screen, onRamp, getAccessToken]);
+
+  // Build swap envelope (real) ou executa swap direto (mock).
+  const goToConfirm = useCallback(async () => {
+    if (!onboard || !quote || !onRamp || onRamp.status !== 'completed') return;
+    setSwapLoading(true);
+    setError(null);
+    setSignConfirmed(false);
+    try {
+      const token = await getAccessToken();
+      const res = await fetch('/api/investidor/buy/swap/build', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          quoteId: quote.quoteId,
+          investorPubkey: onboard.publicKey,
+          investidorId: onboard.investidorId,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = (await res.json()) as SwapBuild;
+      setSwapBuild(data);
+      if (data.mock) {
+        // Mock: server já executou. Vai direto pro receipt.
+        setBuyResult({
+          swapTxHash: data.txHash,
+          onRampTxHash: onRamp.stellarTxHash ?? null,
+          mock: true,
+        });
+        setScreen('receipt');
+      } else {
+        setScreen('confirm');
+      }
+    } catch (err) {
+      setError(asFlowError(err));
+    } finally {
+      setSwapLoading(false);
+    }
+  }, [onboard, quote, onRamp, getAccessToken]);
 
   async function buy() {
-    if (!onboard || !quote || !build) return;
+    if (!onboard || !quote || !swapBuild || swapBuild.mock) return;
     setError(null);
     setBuying(true);
     try {
@@ -265,21 +499,31 @@ export default function InvestirPage() {
       const { signature } = await signRawHash({
         address: onboard.publicKey,
         chainType: 'stellar',
-        hash: build.hashHex as `0x${string}`,
+        hash: swapBuild.hashHex as `0x${string}`,
       });
-      const submitRes = await fetch('/api/investidor/buy/submit', {
+      const submitRes = await fetch('/api/investidor/buy/swap/submit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
-          xdr: build.xdr,
+          quoteId: quote.quoteId,
           investorPubkey: onboard.publicKey,
           signatureHex: signature,
-          amount: quote.toAmount,
+          xdr: swapBuild.xdr,
+          distributorSigBase64: swapBuild.distributorSigBase64,
+          distributorPubkey: swapBuild.distributorPubkey,
           investidorId: onboard.investidorId,
         }),
       });
       if (!submitRes.ok) throw new Error(await submitRes.text());
-      setBuyResult((await submitRes.json()) as BuyResult);
+      const data = (await submitRes.json()) as { swapTxHash: string };
+      setBuyResult({
+        swapTxHash: data.swapTxHash,
+        onRampTxHash: onRamp?.stellarTxHash ?? null,
+        mock: false,
+      });
       setScreen('receipt');
     } catch (err) {
       setError(asFlowError(err));
@@ -357,6 +601,9 @@ export default function InvestirPage() {
                     void runOnboard();
                   }}
                   user={user}
+                  trustlinesReady={trustlinesReady}
+                  trustlineLoading={trustlineLoading}
+                  onSetupTrustlines={setupTrustlines}
                   onContinue={() => setScreen('quote')}
                   onRetry={runOnboard}
                 />
@@ -367,15 +614,32 @@ export default function InvestirPage() {
                   setAmountBrl={setAmountBrl}
                   quote={quote}
                   loading={quoteLoading}
-                  buildLoading={buildLoading}
+                  buildLoading={onRampLoading}
+                  onContinue={goToOnramp}
+                />
+              )}
+              {screen === 'onramp' && onboard && quote && onRamp && (
+                <OnRampScreen
+                  onRamp={onRamp}
+                  quote={quote}
+                  paying={paying}
+                  onSandboxPay={sandboxPay}
+                  onSkipToSettling={() => setScreen('settling')}
+                />
+              )}
+              {screen === 'settling' && onboard && quote && onRamp && (
+                <SettlingScreen
+                  onRamp={onRamp}
+                  quote={quote}
+                  swapLoading={swapLoading}
                   onContinue={goToConfirm}
                 />
               )}
-              {screen === 'confirm' && onboard && quote && build && (
+              {screen === 'confirm' && onboard && quote && swapBuild && !swapBuild.mock && (
                 <ConfirmScreen
                   onboard={onboard}
                   quote={quote}
-                  build={build}
+                  swap={swapBuild}
                   signConfirmed={signConfirmed}
                   setSignConfirmed={setSignConfirmed}
                   buying={buying}
@@ -389,7 +653,8 @@ export default function InvestirPage() {
                   buyResult={buyResult}
                   onBuyMore={() => {
                     setBuyResult(null);
-                    setBuild(null);
+                    setSwapBuild(null);
+                    setOnRamp(null);
                     setQuote(null);
                     setSignConfirmed(false);
                     setScreen('quote');
@@ -434,6 +699,8 @@ function Rail({
     welcome: current !== 'welcome',
     identity: onboard && current !== 'identity',
     quote: quote && current !== 'quote' && current !== 'identity',
+    onramp: current === 'settling' || current === 'confirm' || current === 'receipt',
+    settling: current === 'confirm' || current === 'receipt',
     confirm: buyResult,
     receipt: false,
   };
@@ -824,6 +1091,9 @@ function IdentityScreen({
   consented,
   onConsent,
   user,
+  trustlinesReady,
+  trustlineLoading,
+  onSetupTrustlines,
   onContinue,
   onRetry,
 }: {
@@ -832,6 +1102,9 @@ function IdentityScreen({
   consented: boolean;
   onConsent: () => void;
   user: ReturnType<typeof usePrivy>['user'];
+  trustlinesReady: boolean;
+  trustlineLoading: boolean;
+  onSetupTrustlines: () => void;
   onContinue: () => void;
   onRetry: () => void;
 }) {
@@ -931,10 +1204,41 @@ function IdentityScreen({
               )}
             </dl>
 
+            <div className="mt-10 border-y border-light-hairline py-6">
+              <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65 mb-3">
+                Trustlines · setup one-time
+              </p>
+              <p className="font-text text-sm text-base/80 leading-relaxed">
+                Pra operar o swap atômico (whitepaper §6.6), sua wallet precisa
+                de duas trustlines: <Term>TESOURO</Term> (bridge da anchor) e
+                PLINA-RF. Você assina os dois <Term>trustline</Term> hashes via
+                Privy uma única vez.
+              </p>
+              {trustlinesReady ? (
+                <p className="mt-4 font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">
+                  ● trustlines configuradas
+                </p>
+              ) : (
+                <button
+                  onClick={onSetupTrustlines}
+                  disabled={trustlineLoading}
+                  className="mt-4 bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-6 py-3 rounded-full hover:bg-primary-deep transition-colors duration-200 disabled:opacity-50 disabled:cursor-wait inline-flex items-center gap-3"
+                >
+                  {trustlineLoading && (
+                    <span className="w-2 h-2 bg-primary rounded-full animate-pulse" aria-hidden />
+                  )}
+                  {trustlineLoading
+                    ? 'Aguardando assinatura Privy…'
+                    : 'Configurar trustlines (2 assinaturas)'}
+                </button>
+              )}
+            </div>
+
             <div className="mt-12">
               <button
                 onClick={onContinue}
-                className="bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-8 py-4 rounded-full hover:bg-primary-deep transition-colors duration-200"
+                disabled={!trustlinesReady}
+                className="bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-8 py-4 rounded-full hover:bg-primary-deep transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Continuar para cotação
               </button>
@@ -1073,10 +1377,238 @@ function QuoteScreen({
   );
 }
 
+function OnRampScreen({
+  onRamp,
+  quote,
+  paying,
+  onSandboxPay,
+  onSkipToSettling,
+}: {
+  onRamp: OnRampData;
+  quote: QuoteData;
+  paying: boolean;
+  onSandboxPay: () => void;
+  onSkipToSettling: () => void;
+}) {
+  const instructions = onRamp.paymentInstructions;
+  return (
+    <div>
+      <TestnetBanner />
+
+      <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
+        04 // Pagamento · <Term>onramp</Term> BRL → TESOURO
+      </p>
+      <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">
+        {onRamp.mock
+          ? 'Sandbox mock — pague simulado'
+          : 'Pague via PIX para a anchor'}
+      </h1>
+      <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
+        {onRamp.mock ? (
+          <>
+            Bank account PIX não está ativa (PLINA-MOD-005 — exige iframe
+            Etherfuse em produção). Em sandbox usamos um <em>mock</em>:
+            simulamos o PIX como pago e flipamos a order pra <code>completed</code>.
+          </>
+        ) : (
+          <>
+            Pague o PIX abaixo do seu banco. A Etherfuse confirma o
+            recebimento e paga TESOURO na sua wallet Stellar
+            automaticamente (~10-30s após confirmação).
+          </>
+        )}
+      </p>
+
+      <div className="mt-10 border-y border-light-hairline">
+        <dl className="grid grid-cols-1 gap-px bg-base/10">
+          <DataRow
+            k="Valor (BRL)"
+            v={
+              <span className="font-mono text-sm">
+                {BRL.format(Number(quote.fromAmount))}
+              </span>
+            }
+          />
+          <DataRow
+            k="Chave PIX"
+            v={
+              <span className="font-mono text-xs break-all">
+                {instructions?.pixKey ?? instructions?.pixCode ?? '—'}
+              </span>
+            }
+          />
+          <DataRow
+            k="Beneficiário"
+            v={
+              <span className="font-mono text-xs">
+                {instructions?.beneficiary ?? 'Etherfuse Brasil'}
+              </span>
+            }
+          />
+          <DataRow
+            k="Order ID"
+            v={
+              <span className="font-mono text-[11px] text-base/75">
+                {onRamp.orderId}
+              </span>
+            }
+          />
+          <DataRow
+            k="Status"
+            v={
+              <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/75">
+                ○ {onRamp.status}
+                {onRamp.mock && ' · mock'}
+              </span>
+            }
+          />
+        </dl>
+      </div>
+
+      <div className="mt-12 flex flex-wrap gap-4">
+        {onRamp.mock ? (
+          <button
+            onClick={onSandboxPay}
+            disabled={paying}
+            className="bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-8 py-4 rounded-full hover:bg-primary-deep transition-colors duration-200 disabled:opacity-50 disabled:cursor-wait inline-flex items-center gap-3"
+          >
+            {paying && (
+              <span
+                className="w-2 h-2 bg-primary rounded-full animate-pulse"
+                aria-hidden
+              />
+            )}
+            {paying ? 'Simulando PIX…' : 'Simular PIX pago (sandbox)'}
+          </button>
+        ) : (
+          <button
+            onClick={onSkipToSettling}
+            className="bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-8 py-4 rounded-full hover:bg-primary-deep transition-colors duration-200"
+          >
+            Já paguei · acompanhar liquidação
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SettlingScreen({
+  onRamp,
+  quote,
+  swapLoading,
+  onContinue,
+}: {
+  onRamp: OnRampData;
+  quote: QuoteData;
+  swapLoading: boolean;
+  onContinue: () => void;
+}) {
+  const done = onRamp.status === 'completed';
+  return (
+    <div>
+      <TestnetBanner />
+
+      <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
+        05 // Liquidação · TESOURO na sua wallet
+      </p>
+      <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">
+        {done ? 'TESOURO liquidado — prossiga' : 'Aguardando settlement…'}
+      </h1>
+      <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
+        {done ? (
+          <>
+            A anchor pagou TESOURO na sua wallet. Próximo passo: assinar o
+            envelope <Term>swap atômico</Term> que troca TESOURO por PLINA-RF
+            on-chain numa única transação.
+          </>
+        ) : (
+          <>
+            A Etherfuse está indexando o pagamento. Polling a cada 3s.
+            Indexing grace de ~12s antes de marcar falha.
+          </>
+        )}
+      </p>
+
+      <div className="mt-10 border-y border-light-hairline">
+        <dl className="grid grid-cols-1 gap-px bg-base/10">
+          <DataRow
+            k="Order"
+            v={
+              <span className="font-mono text-[11px] text-base/75">
+                {onRamp.orderId}
+              </span>
+            }
+          />
+          <DataRow
+            k="Status"
+            v={
+              <span
+                className={`font-details text-[10px] tracking-[0.2em] uppercase ${
+                  done ? 'text-primary-deep' : 'text-base/70'
+                }`}
+              >
+                {done ? '●' : '○'} {onRamp.status}
+                {onRamp.mock && ' · mock'}
+              </span>
+            }
+          />
+          {onRamp.stellarTxHash && (
+            <DataRow
+              k="TESOURO tx"
+              v={
+                onRamp.stellarTxHash.startsWith('mock-') ? (
+                  <span className="font-mono text-[11px] text-base/75">
+                    {onRamp.stellarTxHash}
+                  </span>
+                ) : (
+                  <a
+                    href={explorerTx(onRamp.stellarTxHash)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-[11px] text-base hover:text-primary-deep underline decoration-base/25 underline-offset-4 break-all"
+                  >
+                    {onRamp.stellarTxHash}
+                  </a>
+                )
+              }
+            />
+          )}
+          <DataRow
+            k="A receber"
+            v={
+              <span className="font-mono text-sm">
+                {NUMBER_BR.format(Number(quote.toAmount))} PLINA-RF
+              </span>
+            }
+          />
+        </dl>
+      </div>
+
+      <div className="mt-12">
+        <button
+          onClick={onContinue}
+          disabled={!done || swapLoading}
+          className="bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-8 py-4 rounded-full hover:bg-primary-deep transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-3"
+        >
+          {swapLoading && (
+            <span className="w-2 h-2 bg-primary rounded-full animate-pulse" aria-hidden />
+          )}
+          {swapLoading
+            ? 'Preparando envelope…'
+            : done
+              ? 'Continuar para revisão do swap'
+              : 'Aguardando settlement…'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ConfirmScreen({
   onboard,
   quote,
-  build,
+  swap,
   signConfirmed,
   setSignConfirmed,
   buying,
@@ -1084,7 +1616,7 @@ function ConfirmScreen({
 }: {
   onboard: OnboardData;
   quote: QuoteData;
-  build: BuildData;
+  swap: SwapEnvelope;
   signConfirmed: boolean;
   setSignConfirmed: (v: boolean) => void;
   buying: boolean;
@@ -1097,16 +1629,16 @@ function ConfirmScreen({
       <TestnetBanner />
 
       <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
-        04 // Revisão · assinatura on-chain
+        06 // Revisão · swap atômico
       </p>
       <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">
         Inspecione antes de assinar.
       </h1>
       <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
-        Você assina uma <Term>trustline</Term> pra PLINA-RF (1 hash via Privy). A
-        Plina executa em sequência <Term>authorize</Term> (issuer) e{' '}
-        <Term>distribute</Term> (distributor), totalizando 3 transações
-        auditáveis na rede Stellar.
+        Você assina um envelope <Term>swap atômico</Term> com 2 legs: você
+        paga TESOURO ao distributor, distributor te paga PLINA-RF. As duas
+        operações commitam juntas — sem TESOURO, sem PLINA-RF. Distributor já
+        co-assinou server-side.
       </p>
 
       <div className="mt-12 border-t border-light-hairline">
@@ -1137,22 +1669,18 @@ function ConfirmScreen({
             }
           />
           <DataRow
-            k="Issuer (PLINA-RF)"
+            k="Distributor"
             v={
-              <span className="font-mono text-xs" title={build.issuerPubkey}>
-                {maskPubkey(build.issuerPubkey)}
+              <span className="font-mono text-xs" title={swap.distributorPubkey}>
+                {maskPubkey(swap.distributorPubkey)} · co-assinado
               </span>
             }
-          />
-          <DataRow
-            k="Asset"
-            v={<span className="font-mono text-xs">{build.assetCode}</span>}
           />
           <DataRow
             k="Hash a assinar"
             v={
               <span className="font-mono text-[11px] break-all text-base/75">
-                {build.hashHex}
+                {swap.hashHex}
               </span>
             }
           />
@@ -1160,7 +1688,7 @@ function ConfirmScreen({
             k="Operações on-chain"
             v={
               <span className="font-mono text-xs text-base/75">
-                trustline · authorize · distribute
+                payment TESOURO · payment PLINA-RF (atômico)
               </span>
             }
           />
@@ -1190,7 +1718,7 @@ function ConfirmScreen({
           </button>
           {showXdr && (
             <pre className="bg-lightBg/60 border-t border-light-hairline px-4 py-4 font-mono text-[10px] text-base/75 whitespace-pre-wrap break-all max-h-64 overflow-auto">
-              {build.xdr}
+              {swap.xdr}
             </pre>
           )}
         </div>
@@ -1231,10 +1759,10 @@ function ConfirmScreen({
           {buying ? (
             <span className="inline-flex items-center gap-3">
               <span className="w-2 h-2 bg-primary rounded-full animate-pulse" aria-hidden />
-              Trustline · autorização · distribuição…
+              Submetendo swap atômico…
             </span>
           ) : (
-            'Assinar e comprar'
+            'Assinar e executar swap'
           )}
         </button>
         {!buying && (
@@ -1262,7 +1790,7 @@ function ReceiptScreen({
     <div>
       <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
         <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary-deep mr-2 align-middle" aria-hidden />
-        05 // Distribuição concluída
+        07 // {buyResult.mock ? 'Distribuição (mock sandbox) concluída' : 'Swap atômico concluído'}
       </p>
       <h1 className="font-title text-4xl md:text-5xl font-semibold mt-4 tracking-tight leading-[1.05] text-base">
         {NUMBER_BR.format(Number(quote.toAmount))}
@@ -1270,8 +1798,10 @@ function ReceiptScreen({
       </h1>
       <p className="font-text text-base mt-6 text-base/80 leading-relaxed max-w-prose">
         Na sua wallet Stellar institucional. Lastreado em direito creditório
-        brasileiro sob CVM 175. Três operações encadeadas, todas auditáveis
-        on-chain.
+        brasileiro sob CVM 175.{' '}
+        {buyResult.mock
+          ? 'Sandbox sem PIX real: distribuição direta server-side (PLINA-MOD-005 bypass).'
+          : 'Swap atômico — 2 legs commitam juntas, settlement on-chain real.'}
       </p>
 
       <div className="mt-14">
@@ -1279,12 +1809,23 @@ function ReceiptScreen({
           Transações on-chain
         </p>
         <ol className="space-y-px bg-base/10 border-y border-light-hairline">
-          <TxRow label="trustline" hash={buyResult.trustlineTxHash} idx={1} />
-          <TxRow label="authorize" hash={buyResult.authorizeTxHash} idx={2} />
-          <TxRow label="distribute" hash={buyResult.distributeTxHash} idx={3} />
+          {buyResult.onRampTxHash && (
+            <TxRow
+              label={buyResult.mock ? 'onramp (mock)' : 'onramp · TESOURO'}
+              hash={buyResult.onRampTxHash}
+              idx={1}
+            />
+          )}
+          <TxRow
+            label={buyResult.mock ? 'distribute' : 'swap atômico'}
+            hash={buyResult.swapTxHash}
+            idx={buyResult.onRampTxHash ? 2 : 1}
+          />
         </ol>
         <p className="font-mono text-[10px] text-base/55 mt-3">
-          investidor assinou 1 · Plina assinou 2 · 3 hashes auditáveis
+          {buyResult.mock
+            ? 'mock sandbox · sem TESOURO on-chain'
+            : 'investidor assinou envelope · distributor co-assinou · 2 legs em 1 tx'}
         </p>
       </div>
 

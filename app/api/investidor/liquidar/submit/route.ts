@@ -10,30 +10,38 @@
 
 import { NextResponse } from 'next/server';
 import { submitLiquidacao } from '@/lib/services/liquidacao';
+import { withAuth } from '@/lib/wallet/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
+export const POST = withAuth(async (req, { user }) => {
   try {
     const body = (await req.json()) as {
       xdr?: string;
       pubkey?: string;
       signatureHex?: string;
       amount?: string;
-      investidorId?: string;
     };
-    if (!body.xdr || !body.pubkey || !body.signatureHex || !body.amount) {
+    if (!body.xdr || !body.pubkey || !body.signatureHex) {
       return NextResponse.json(
-        { error: 'xdr, pubkey, signatureHex e amount são obrigatórios' },
+        { error: 'xdr, pubkey, signatureHex são obrigatórios' },
         { status: 400 },
       );
     }
+    if (body.pubkey !== user.publicKey) {
+      return NextResponse.json(
+        { error: 'pubkey não corresponde ao investidor autenticado' },
+        { status: 403 },
+      );
+    }
+    // C-03: body.amount agora é opcional/ignorado — amount autoritativo
+    // sai da própria XDR em submitLiquidacao.
     const result = await submitLiquidacao({
       xdr: body.xdr,
       investorPubkey: body.pubkey,
       signatureHex: body.signatureHex,
-      amount: body.amount,
-      investidorId: body.investidorId,
+      investidorId: user.investidorId,
+      privyId: user.privyId,
     });
     return NextResponse.json(result);
   } catch (err) {
@@ -42,4 +50,4 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-}
+});

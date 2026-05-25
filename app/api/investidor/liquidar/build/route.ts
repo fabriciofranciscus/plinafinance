@@ -8,15 +8,23 @@
  */
 
 import { NextResponse } from 'next/server';
+import { StrKey } from '@stellar/stellar-sdk';
 import { buildLiquidarPlinarfXdr } from '@/lib/services/liquidacao';
+import { withAuth } from '@/lib/wallet/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
+export const POST = withAuth(async (req, { user }) => {
   try {
     const body = (await req.json()) as { pubkey?: string; amount?: string };
-    if (!body.pubkey || !body.pubkey.startsWith('G')) {
+    if (!body.pubkey || !StrKey.isValidEd25519PublicKey(body.pubkey)) {
       return NextResponse.json({ error: 'pubkey inválida' }, { status: 400 });
+    }
+    if (body.pubkey !== user.publicKey) {
+      return NextResponse.json(
+        { error: 'pubkey não corresponde ao investidor autenticado' },
+        { status: 403 },
+      );
     }
     if (!body.amount) {
       return NextResponse.json({ error: 'amount obrigatório' }, { status: 400 });
@@ -32,4 +40,4 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-}
+});

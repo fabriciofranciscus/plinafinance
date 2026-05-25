@@ -21,7 +21,10 @@ import { Prisma, StatusInvestidor } from '@prisma/client';
 import { db } from '../db';
 import { ensureStellarWallet } from '../wallet/privy';
 import { fundAccountIfNeeded } from '../stellar/account';
+import { STELLAR_NETWORK } from '../stellar/config';
+import { logStellarError } from '../stellar/log-error';
 import { EtherfuseClient } from '../anchors/etherfuse';
+import { parseCpf } from '../format/parse-cpf';
 
 const DUMMY_PNG_BASE64 =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
@@ -40,6 +43,7 @@ export interface OnboardInput {
   privyId: string;
   email: string;
   nome?: string;
+  cpf?: string;
 }
 
 export interface OnboardResult {
@@ -57,6 +61,26 @@ export interface OnboardResult {
 export async function onboardInvestidor(
   input: OnboardInput,
 ): Promise<OnboardResult> {
+  // F-12: em mainnet (proxy de "produção") exigir CPF real do investidor.
+  // Sandbox aceita dummy (Etherfuse auto-aprova; sem responsabilidade real).
+  const isProduction = STELLAR_NETWORK === 'PUBLIC';
+  const parsedCpf = parseCpf(input.cpf);
+  let cpfNormalizado: string;
+  let isSyntheticCpf: boolean;
+  if (isProduction) {
+    if (!parsedCpf) {
+      throw new Error('cpf obrigatório em mainnet (válido por módulo 11)');
+    }
+    cpfNormalizado = parsedCpf;
+    isSyntheticCpf = false;
+  } else {
+    // N-14: persistir a flag explicitamente — se o env flipar pra mainnet
+    // depois, assertElegivelParaTrustline bloqueia esse investidor sem
+    // re-KYC.
+    cpfNormalizado = parsedCpf ?? '52998224725';
+    isSyntheticCpf = !parsedCpf;
+  }
+
   // 1) Investidor já existente com customer Etherfuse persistido?
   const existing = await db.investidor.findFirst({
     where: { email: input.email },
@@ -66,6 +90,14 @@ export async function onboardInvestidor(
     existing.status === 'AUTORIZADO' &&
     existing.etherfuseCustomerId
   ) {
+    // Backfill privyId se faltar (rows pré-migration). Único caminho onde
+    // garantimos o vínculo email↔privyId pra o auth-guard funcionar.
+    if (!existing.privyId) {
+      await db.investidor.update({
+        where: { id: existing.id },
+        data: { privyId: input.privyId },
+      });
+    }
     return {
       investidorId: existing.id,
       publicKey: existing.publicKey,
@@ -108,7 +140,7 @@ export async function onboardInvestidor(
         postalCode: '01310-100',
         country: 'BR',
       },
-      idNumbers: [{ value: '52998224725', type: 'CPF' }],
+      idNumbers: [{ value: cpfNormalizado, type: 'CPF' }],
     },
   });
   await anchor.submitKycDocuments(customer.id, {
@@ -134,8 +166,11 @@ export async function onboardInvestidor(
   try {
     await anchor.acceptElectronicSignature(kycUrl);
     await anchor.acceptTermsAndConditions(kycUrl);
-  } catch {
-    // continua — KYC já aprovado via submit
+  } catch (err) {
+    // N-16: agreements falham em sandbox sem phone (PLINA-MOD-005). KYC
+    // já foi aprovado via submit — onboard segue, mas o erro vira visível
+    // (antes ficava swallowed silenciosamente).
+    logStellarError('[onboard:agreements]', err);
   }
 
   // 6) Confirma status approved (sandbox deve estar approved após submits).
@@ -145,8 +180,10 @@ export async function onboardInvestidor(
     if (status === 'approved') kycStatus = 'approved';
     else if (status === 'pending') kycStatus = 'pending';
     else kycStatus = 'not_started';
-  } catch {
-    // ignore — usa pending
+  } catch (err) {
+    // N-16: rede flap em getKycStatus — onboard segue com pending, mas
+    // operador vê o erro pra distinguir de "Etherfuse marcou pending".
+    logStellarError('[onboard:kyc-status]', err);
   }
 
   // 7) Upsert Investidor no DB.
@@ -157,7 +194,10 @@ export async function onboardInvestidor(
         nome: input.nome ?? input.email,
         email: input.email,
         publicKey,
+        privyId: input.privyId,
         etherfuseCustomerId: customer.id,
+        cpfNormalizado,
+        isSyntheticCpf,
         kycAprovado: kycStatus === 'approved',
         status:
           kycStatus === 'approved'
@@ -166,7 +206,10 @@ export async function onboardInvestidor(
       },
       update: {
         publicKey,
+        privyId: input.privyId,
         etherfuseCustomerId: customer.id,
+        cpfNormalizado,
+        isSyntheticCpf,
         kycAprovado: kycStatus === 'approved',
         status:
           kycStatus === 'approved'
@@ -179,8 +222,8 @@ export async function onboardInvestidor(
         acao: 'INVESTIDOR_ONBOARDED',
         operador: 'investidor-self-service',
         investidorId: upserted.id,
+        privyId: input.privyId,
         payloadJson: {
-          privyId: input.privyId,
           publicKey,
           etherfuseCustomerId: customer.id,
           kycStatus,
@@ -223,6 +266,13 @@ export async function assertElegivelParaTrustline(opts: {
   if (investidor.status !== StatusInvestidor.AUTORIZADO) {
     throw new Error(
       `Investidor em estado ${investidor.status} — trustline negada.`,
+    );
+  }
+  // N-14: bloqueia operação em mainnet pra investidores carimbados com
+  // CPF sintético no onboard (sandbox que viraria mainnet sem re-KYC).
+  if (STELLAR_NETWORK === 'PUBLIC' && investidor.isSyntheticCpf) {
+    throw new Error(
+      'Investidor com CPF sintético — exige re-KYC antes de operar em mainnet (N-14).',
     );
   }
 }

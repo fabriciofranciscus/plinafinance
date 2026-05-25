@@ -95,7 +95,10 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
     try {
       const res = await fetch('/api/admin/originacao', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-plina-admin': '1',
+        },
         body: JSON.stringify({ action, ...payload }),
       });
       if (!res.ok) {

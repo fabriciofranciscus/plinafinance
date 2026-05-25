@@ -1,35 +1,27 @@
 /**
  * POST /api/lab/ensure-wallet
  *
- * Idempotente — server consulta Privy, retorna endereço Stellar do user,
- * criando server-side se necessário. Evita o bug "uma wallet por login".
+ * Idempotente — devolve o endereço Stellar do user (provisionado via
+ * Privy MPC custody se necessário). Evita "uma wallet por login".
  *
- * Headers: Authorization: Bearer <privy-access-token>
+ * C-07: gateado por LAB_ENABLED (testnet-only opt-in) + withAuth.
+ * Header: Authorization: Bearer <privy-access-token>
  * Returns: { address }
  */
 
 import { NextResponse } from 'next/server';
-import {
-  ensureStellarWallet,
-  getPrivyClient,
-} from '@/lib/wallet/privy';
+import { ensureStellarWallet } from '@/lib/wallet/privy';
+import { withAuth } from '@/lib/wallet/auth-guard';
+import { isLabEnabled } from '@/lib/env/lab';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
+export const POST = withAuth(async (_req, { user }) => {
+  if (!isLabEnabled()) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 });
+  }
   try {
-    const authHeader = req.headers.get('authorization') ?? '';
-    const token = authHeader.replace(/^Bearer\s+/i, '');
-    if (!token) {
-      return NextResponse.json(
-        { error: 'token Privy ausente (header Authorization)' },
-        { status: 401 },
-      );
-    }
-
-    const privy = getPrivyClient();
-    const claims = await privy.verifyAuthToken(token);
-    const address = await ensureStellarWallet(claims.userId);
+    const address = await ensureStellarWallet(user.privyId);
     return NextResponse.json({ address });
   } catch (err) {
     return NextResponse.json(
@@ -37,4 +29,4 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-}
+});

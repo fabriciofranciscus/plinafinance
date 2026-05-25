@@ -1,25 +1,29 @@
 /**
  * POST /api/lab/build-trustline
  *
- * Smoke endpoint pro /lab. Recebe `{pubkey}`, monta XDR de changeTrust pra
- * PLINARF, devolve `{xdr, hashHex}` pro frontend assinar via Privy rawSign.
+ * Smoke endpoint pro /lab. Recebe `{}` (pubkey vem do JWT), monta XDR de
+ * changeTrust pra PLINARF, devolve `{xdr, hashHex}` pro frontend assinar
+ * via Privy rawSign.
  *
- * Não valida JWT do Privy aqui — é smoke; em produção o `verifyPrivyTokenAndExtract`
- * é chamado e a pubkey vem do token, não do body.
+ * C-07: gateado por LAB_ENABLED (testnet-only opt-in) + withAuth.
+ * Em mainnet retorna 404 (não vaza existência). Em testnet exige
+ * Bearer JWT do Privy; pubkey sai do token, nunca do body.
  */
 
 import { NextResponse } from 'next/server';
 import { buildTrustlineXdr } from '@/lib/stellar/transactions';
 import { fundAccountIfNeeded } from '@/lib/stellar/account';
+import { withAuth } from '@/lib/wallet/auth-guard';
+import { isLabEnabled } from '@/lib/env/lab';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
+export const POST = withAuth(async (_req, { user }) => {
+  if (!isLabEnabled()) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 });
+  }
   try {
-    const { pubkey } = (await req.json()) as { pubkey?: string };
-    if (!pubkey || !pubkey.startsWith('G')) {
-      return NextResponse.json({ error: 'pubkey inválida' }, { status: 400 });
-    }
+    const pubkey = user.publicKey;
     const issuerPubkey = process.env.STELLAR_ISSUER_PUBLIC;
     if (!issuerPubkey) {
       return NextResponse.json(
@@ -41,4 +45,4 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-}
+});

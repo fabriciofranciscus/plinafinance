@@ -2,50 +2,53 @@
  * POST /api/comprar/lead
  *
  * Captura lead comprador-usuário + prova on-chain LGPD.
- * Body: { nome, email, telefone?, documento?, tipo, intencaoBem?, ... }
+ *
+ * C-06: body validado por Zod strict (rejeita shapes inesperados) +
+ * rate-limit anti-spam (leadLimiter — 5 req/min por IP).
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { capturarLeadComprador } from '@/lib/services/realizacao';
 import { LeadCompradorTipo } from '@prisma/client';
+import { parseBody } from '@/lib/http/parse-body';
+import { leadLimiter, clientIp } from '@/lib/rate-limit/config';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
-  try {
-    const body = (await req.json()) as {
-      nome?: string;
-      email?: string;
-      telefone?: string;
-      documento?: string;
-      tipo?: string;
-      intencaoBem?: string;
-      faixaCapital?: string;
-      prazoDecisao?: string;
-      consentimentoLgpd?: boolean;
-      origem?: string;
-      utmSource?: string;
-      utmMedium?: string;
-      utmCampaign?: string;
-    };
+const Schema = z
+  .object({
+    nome: z.string().min(1).max(200),
+    email: z.string().email().max(254),
+    telefone: z.string().max(40).optional(),
+    documento: z.string().max(40).optional(),
+    tipo: z.enum(['PESSOA_FISICA', 'PESSOA_JURIDICA']).optional(),
+    intencaoBem: z.string().max(500).optional(),
+    faixaCapital: z.string().max(100).optional(),
+    prazoDecisao: z.string().max(100).optional(),
+    consentimentoLgpd: z.literal(true),
+    origem: z.string().max(100).optional(),
+    utmSource: z.string().max(100).optional(),
+    utmMedium: z.string().max(100).optional(),
+    utmCampaign: z.string().max(100).optional(),
+  })
+  .strict();
 
-    if (!body.nome || !body.email) {
-      return NextResponse.json(
-        { error: 'nome e email obrigatórios' },
-        { status: 400 },
-      );
-    }
-    if (!body.consentimentoLgpd) {
-      return NextResponse.json(
-        { error: 'Consentimento LGPD obrigatório' },
-        { status: 400 },
-      );
-    }
-    const tipo =
+export async function POST(req: Request) {
+  if (!leadLimiter.consume(clientIp(req))) {
+    return NextResponse.json(
+      { error: 'too many requests' },
+      { status: 429 },
+    );
+  }
+  const parsed = await parseBody(req, Schema);
+  if ('response' in parsed) return parsed.response;
+  const body = parsed.data;
+  try {
+    const tipo: LeadCompradorTipo =
       body.tipo === 'PESSOA_JURIDICA'
         ? LeadCompradorTipo.PESSOA_JURIDICA
         : LeadCompradorTipo.PESSOA_FISICA;
-
     const result = await capturarLeadComprador({
       nome: body.nome,
       email: body.email,

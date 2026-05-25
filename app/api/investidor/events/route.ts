@@ -3,59 +3,46 @@
  *
  * Eventos do investidor (audit log filtrado pelo investidor logado).
  * Headers: Authorization: Bearer <privy-access-token>
+ *
+ * 401 sem token / token inválido. 403 se token Privy não tem Investidor
+ * onboardado (auth-guard). Lookup direto por user.investidorId — não
+ * passa mais por email + privy.getUserById.
  */
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getPrivyClient } from '@/lib/wallet/privy';
+import { withAuth } from '@/lib/wallet/auth-guard';
+import { stripInternalKeys } from '@/lib/audit/strip-internal';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: Request) {
-  try {
-    const authHeader = req.headers.get('authorization') ?? '';
-    const token = authHeader.replace(/^Bearer\s+/i, '');
-    if (!token) {
-      return NextResponse.json({ events: [] });
-    }
-
-    const privy = getPrivyClient();
-    const claims = await privy.verifyAuthToken(token);
-    const user = await privy.getUserById(claims.userId);
-    const linked = (user.linkedAccounts ?? []) as Array<{
-      type: string;
-      email?: string;
-      address?: string;
-    }>;
-    const email = linked.find((a) => a.type === 'email')?.email;
-    if (!email) {
-      return NextResponse.json({ events: [] });
-    }
-
-    const investidor = await db.investidor.findUnique({
-      where: { email },
-      include: {
-        eventos: {
-          orderBy: { criadoEm: 'desc' },
-          take: 50,
-        },
+export const GET = withAuth(async (_req, { user }) => {
+  const investidor = await db.investidor.findUnique({
+    where: { id: user.investidorId },
+    include: {
+      eventos: {
+        orderBy: { criadoEm: 'desc' },
+        take: 50,
       },
-    });
-    if (!investidor) return NextResponse.json({ events: [], investidorId: null });
-
-    return NextResponse.json({
-      investidorId: investidor.id,
-      events: investidor.eventos.map((e) => ({
-        id: e.id,
-        acao: e.acao,
-        criadoEm: e.criadoEm,
-        stellarTxHash: e.stellarTxHash,
-        motivoClawback: e.motivoClawback,
-        fundamentoUrl: e.fundamentoUrl,
-        payload: e.payloadJson,
-      })),
-    });
-  } catch {
-    return NextResponse.json({ events: [] });
+    },
+  });
+  if (!investidor) {
+    // Defensiva — guard já validou; só cai aqui se tabela mudou no meio.
+    return NextResponse.json({ events: [], investidorId: null });
   }
-}
+
+  return NextResponse.json({
+    investidorId: investidor.id,
+    events: investidor.eventos.map((e) => ({
+      id: e.id,
+      acao: e.acao,
+      criadoEm: e.criadoEm,
+      stellarTxHash: e.stellarTxHash,
+      motivoClawback: e.motivoClawback,
+      fundamentoUrl: e.fundamentoUrl,
+      // N-17: strip de chaves canônicas internas (_type/_at/_ref) injetadas
+      // por buildAuditPayload. Consumidor não precisa ver o envelope de hash.
+      payload: stripInternalKeys(e.payloadJson),
+    })),
+  });
+});

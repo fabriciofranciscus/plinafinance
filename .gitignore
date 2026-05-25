@@ -45,3 +45,20 @@ smoke-etherfuse-output.json
 *.tsbuildinfo
 next-env.d.ts
 test-results/
+
+# Artefatos pessoais (análises, pitch decks, social media)
+/Plina_Finance_*.html
+/Plina_Finance_*.pdf
+/Plina_Finance_*.md
+/Plina_Pitch_Deck.html
+/linkedin-header.html
+
+# Material de estudo local
+/tutorial-stellar*
+
+# Exports locais (logos LinkedIn + patches gerados pro fork)
+/exports/
+
+# Checkouts paralelos do projeto (clones em layout monorepo) e cache stale
+/plina-finance/
+/plina-landing/
