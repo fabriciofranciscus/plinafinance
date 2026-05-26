@@ -162,7 +162,11 @@ export default function MinhaPosicaoPage() {
             investidorId: string | null;
           })
         : { events: [], investidorId: null };
-      const pj = poolRes.ok ? ((await poolRes.json()) as PoolSummary) : null;
+      // /api/pool/summary migrada pro envelope { data, error }; demais
+      // chamadas ainda usam shape legacy.
+      const pj = poolRes.ok
+        ? ((await poolRes.json()) as { data: PoolSummary; error: null }).data
+        : null;
       setBalances(bj.balances);
       setEvents(ej.events);
       setInvestidorId(ej.investidorId);
