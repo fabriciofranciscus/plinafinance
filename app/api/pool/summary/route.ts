@@ -4,9 +4,13 @@
  * Agregados públicos do pool: parametros + cotas ativas + NAV total +
  * tokens vivos. Usado por surfaces que precisam de visão executiva
  * (/minha-posicao, futuramente widgets em /).
+ *
+ * Migrada pro envelope `{ data, error: { code, message, requestId } }`
+ * via `withApi` — primeira rota a adotar o pattern. Rotas restantes
+ * continuam com `NextResponse.json` cru até serem migradas; envelope é
+ * opt-in.
  */
 
-import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import {
   caixaRealizado,
@@ -16,10 +20,12 @@ import {
   spreadRealizadoAcumulado,
   tokensEmitidosVivos,
 } from '@/lib/services/pool';
+import { withApi } from '@/lib/api/with-api';
+import { ok } from '@/lib/api/response';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export const GET = withApi(async (_req, { requestId }) => {
   const [parametros, cotas, realizacoes] = await Promise.all([
     db.parametrosPool.findUnique({ where: { id: 'singleton' } }),
     db.cota.findMany({
@@ -59,19 +65,22 @@ export async function GET() {
     navPorTipo[c.tipoBem] = (navPorTipo[c.tipoBem] ?? 0) + nav;
   }
 
-  return NextResponse.json({
-    assetCode: parametros?.assetCode ?? 'PLINARF',
-    network: parametros?.network ?? 'TESTNET',
-    issuerPubkey: parametros?.issuerPubkey ?? '',
-    distributorPubkey: parametros?.distributorPubkey ?? '',
-    navTotal,
-    tokensVivos,
-    navPorToken: navUnit,
-    caixaRealizado: caixa,
-    spreadRealizadoAcumulado: spreadAcumulado,
-    realizacoesCount: realizacoes.length,
-    cotasCount: cotas.length,
-    tipoBemCount,
-    navPorTipo,
-  });
-}
+  return ok(
+    {
+      assetCode: parametros?.assetCode ?? 'PLINARF',
+      network: parametros?.network ?? 'TESTNET',
+      issuerPubkey: parametros?.issuerPubkey ?? '',
+      distributorPubkey: parametros?.distributorPubkey ?? '',
+      navTotal,
+      tokensVivos,
+      navPorToken: navUnit,
+      caixaRealizado: caixa,
+      spreadRealizadoAcumulado: spreadAcumulado,
+      realizacoesCount: realizacoes.length,
+      cotasCount: cotas.length,
+      tipoBemCount,
+      navPorTipo,
+    },
+    { requestId },
+  );
+});
