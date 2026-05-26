@@ -48,6 +48,8 @@ export const GET = withAuth(async (req, { user }) => {
         orderId: order.id,
         status: order.status,
         stellarTxHash: order.stellarTxHash,
+        stellarClaimableBalanceId: order.stellarClaimableBalanceId,
+        claimTxHash: order.claimTxHash,
         mock,
         paymentInstructions: instructions,
       });
@@ -82,8 +84,12 @@ export const GET = withAuth(async (req, { user }) => {
 
     const newStatus = remote.status;
     const newTxHash = remote.stellarTxHash ?? null;
+    const newCbId =
+      remote.stellarClaimableBalanceId ?? order.stellarClaimableBalanceId;
     const changed =
-      newStatus !== order.status || newTxHash !== order.stellarTxHash;
+      newStatus !== order.status ||
+      newTxHash !== order.stellarTxHash ||
+      newCbId !== order.stellarClaimableBalanceId;
 
     if (changed) {
       const settledNow = newStatus === 'completed' && !order.settledAt;
@@ -93,6 +99,7 @@ export const GET = withAuth(async (req, { user }) => {
           data: {
             status: newStatus,
             stellarTxHash: newTxHash,
+            stellarClaimableBalanceId: newCbId,
             settledAt: settledNow ? new Date() : order.settledAt,
           },
         });
@@ -117,6 +124,8 @@ export const GET = withAuth(async (req, { user }) => {
       orderId: order.id,
       status: newStatus,
       stellarTxHash: newTxHash,
+      stellarClaimableBalanceId: newCbId,
+      claimTxHash: order.claimTxHash,
       mock: false,
       paymentInstructions: instructions,
     });

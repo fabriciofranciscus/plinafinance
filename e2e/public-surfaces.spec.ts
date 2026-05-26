@@ -12,6 +12,7 @@ const ROUTES: { path: string; expectText: RegExp }[] = [
   { path: '/cotas', expectText: /cota/i },
   { path: '/politica-clawback', expectText: /clawback/i },
   { path: '/investir', expectText: /Acesso institucional|Investir|PLINA-RF/i },
+  { path: '/sacar', expectText: /Sacar|TESOURO|PIX/i },
   { path: '/vender', expectText: /vender|cota|contemplad/i },
   { path: '/comprar', expectText: /comprar|cota|contemplad/i },
   { path: '/minha-posicao', expectText: /posi[çc][ãa]o|institucional|Plina/i },
