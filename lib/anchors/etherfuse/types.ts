@@ -82,6 +82,14 @@ export interface EtherfuseSpeiAccountBody {
 
 /** PIX-shaped account body for Brazilian bank-account registration. */
 export interface EtherfusePixAccountBody {
+    /**
+     * PLINA-MOD-006: probed via SDF DevRel reference
+     * (etherfuse-pix-demo gap #3) — endpoint exige `transactionId` (UUID)
+     * que o starter-pack omite. Sem ele, request rejeita (era o que mascarava
+     * o flow como "iframe-only" no smoke 2026-05-20).
+     * Cliente gera default via `crypto.randomUUID()` quando ausente.
+     */
+    transactionId?: string;
     /** PIX key (CPF, CNPJ, email, phone, or random/EVP UUID). */
     pixKey: string;
     /** PIX key type: `'evp'` (random UUID), `'cpf'`, `'cnpj'`, `'email'`, or `'phone'`. */
@@ -119,6 +127,23 @@ export interface EtherfuseKycIdentityRequest {
         };
         /** ISO 8601 date string (e.g. `"1990-05-15"`). */
         dateOfBirth: string;
+        /**
+         * E.164 phone number (e.g. `"+5511999999999"`). Optional upstream,
+         * mas obrigatório pra `customer-agreement` aceitar em conta business
+         * (PLINA-MOD: descoberto via smoke 2026-05-20).
+         */
+        phoneNumber?: string;
+        /**
+         * Email do customer. Optional upstream, mas exigido pelo
+         * `customer-agreement` em conta business (descoberto via smoke
+         * 2026-05-20, junto com phoneNumber).
+         */
+        email?: string;
+        /**
+         * Ocupação/cargo declarado. Exigido pelo `customer-agreement` em
+         * conta business (descoberto via smoke 2026-05-20).
+         */
+        occupation?: string;
         /** Residential address. */
         address: {
             /** Street address. */
@@ -276,6 +301,18 @@ export interface EtherfuseOrderResponse {
     walletId: string;
     /** ID of the bank account used for the order. */
     bankAccountId: string;
+    /**
+     * Stellar ClaimableBalance ID emitido pela Etherfuse após onramp
+     * `completed` (PIX/BRL). Investor precisa fazer `claimClaimableBalance`
+     * pra TESOURO entrar na trustline. Não é payment direto.
+     * Descoberto via smoke 2026-05-26 (PLINA-MOD-007).
+     */
+    stellarClaimableBalanceId?: string;
+    /**
+     * XDR da tx que a Etherfuse já submeteu pra criar o ClaimableBalance.
+     * Informativo apenas — investor não submete essa tx, só faz claim.
+     */
+    stellarClaimTransaction?: string;
     /** Encoded transaction for the user to sign (off-ramp orders). */
     burnTransaction?: string;
     /** Optional memo for the order. */

@@ -302,6 +302,7 @@ export class EtherfuseClient implements Anchor {
             feeAmount: response.feeAmountInFiat,
             paymentInstructions: this.mapPaymentInstructions(response),
             stellarTxHash: response.confirmedTxSignature,
+            stellarClaimableBalanceId: response.stellarClaimableBalanceId,
             createdAt: response.createdAt,
             updatedAt: response.updatedAt,
         };
@@ -913,10 +914,16 @@ export class EtherfuseClient implements Anchor {
         presignedUrl: string,
         account: EtherfusePixAccountBody,
     ): Promise<EtherfuseBankAccountResponse> {
+        // PLINA-MOD-006: endpoint upstream exige `transactionId` no body
+        // (gap #3 do etherfuse-pix-demo). Gera default se caller não passar.
+        const accountWithTx: EtherfusePixAccountBody = {
+            ...account,
+            transactionId: account.transactionId ?? crypto.randomUUID(),
+        };
         return this.request<EtherfuseBankAccountResponse>(
             'POST',
             '/ramp/bank-account',
-            { presignedUrl, account },
+            { presignedUrl, account: accountWithTx },
         );
     }
 
@@ -928,10 +935,16 @@ export class EtherfuseClient implements Anchor {
         presignedUrl: string,
         account: EtherfuseSpeiAccountBody,
     ): Promise<EtherfuseBankAccountResponse> {
+        // PLINA-MOD-006: simetria com registerPixBankAccount. SPEI também
+        // espera `transactionId` (gap inferido do mesmo enum upstream).
+        const accountWithTx = {
+            ...account,
+            transactionId: crypto.randomUUID(),
+        };
         return this.request<EtherfuseBankAccountResponse>(
             'POST',
             '/ramp/bank-account',
-            { presignedUrl, account },
+            { presignedUrl, account: accountWithTx },
         );
     }
 
@@ -1008,13 +1021,27 @@ export class EtherfuseClient implements Anchor {
             intervalMs?: number;
             timeoutMs?: number;
             indexingGraceMs?: number;
+            /**
+             * Em PIX/BRL sandbox, ordens não avançam pra `completed` —
+             * terminal aceito é `processing` (raw `funded`, burn confirmado).
+             * Opt-in pelos callers PIX (smoke + rotas off-ramp).
+             * Doutrina: etherfuse-pix-demo README quirk #7.
+             */
+            acceptProcessing?: boolean;
             onTick?: (state: { status: string | null; notFound: boolean }) => void;
         } = {},
     ) {
         const intervalMs = opts.intervalMs ?? 2000;
         const timeoutMs = opts.timeoutMs ?? 90_000;
         const indexingGraceMs = opts.indexingGraceMs ?? 12_000;
-        const terminal = new Set(['completed', 'failed', 'expired', 'cancelled', 'refunded']);
+        const terminal = new Set([
+            'completed',
+            'failed',
+            'expired',
+            'cancelled',
+            'refunded',
+            ...(opts.acceptProcessing ? ['processing'] : []),
+        ]);
         const startedAt = Date.now();
         const deadline = startedAt + timeoutMs;
 
@@ -1042,6 +1069,52 @@ export class EtherfuseClient implements Anchor {
 
         throw new AnchorError(
             `pollOnRampUntilTerminal: timeout (${timeoutMs}ms) for order ${orderId}`,
+            'POLL_TIMEOUT',
+            408,
+        );
+    }
+
+    /**
+     * Poll an off-ramp order until `signableTransaction` (burn XDR) is
+     * present, or timeout. Etherfuse demora alguns segundos pra preparar o
+     * burn após `createOffRamp`. Mesmo padrão do `pollOnRampUntilTerminal`
+     * com a janela `indexingGraceMs` pra 404 inicial.
+     */
+    async pollOffRampForSignable(
+        orderId: string,
+        opts: {
+            intervalMs?: number;
+            timeoutMs?: number;
+            indexingGraceMs?: number;
+        } = {},
+    ): Promise<OffRampTransaction> {
+        const intervalMs = opts.intervalMs ?? 2000;
+        const timeoutMs = opts.timeoutMs ?? 120_000;
+        const indexingGraceMs = opts.indexingGraceMs ?? 12_000;
+        const startedAt = Date.now();
+        const deadline = startedAt + timeoutMs;
+
+        while (Date.now() < deadline) {
+            const tx = await this.getOffRampTransaction(orderId);
+            const notFound = tx === null;
+
+            if (notFound) {
+                if (Date.now() - startedAt > indexingGraceMs) {
+                    throw new AnchorError(
+                        `Off-ramp order ${orderId} not found after indexing grace (${indexingGraceMs}ms)`,
+                        'ORDER_NOT_FOUND',
+                        404,
+                    );
+                }
+            } else if (tx.signableTransaction) {
+                return tx;
+            }
+
+            await new Promise((r) => setTimeout(r, intervalMs));
+        }
+
+        throw new AnchorError(
+            `pollOffRampForSignable: timeout (${timeoutMs}ms) for order ${orderId}`,
             'POLL_TIMEOUT',
             408,
         );

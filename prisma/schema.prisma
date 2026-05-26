@@ -98,6 +98,11 @@ enum AcaoAudit {
   TESOURO_TRUSTLINE_AUTORIZADA
   ONRAMP_CRIADA
   ONRAMP_LIQUIDADA
+  OFFRAMP_CRIADA
+  OFFRAMP_BURN_ASSINADO
+  OFFRAMP_PROCESSANDO
+  BANK_ACCOUNT_REGISTRADA
+  CLAIMABLE_BALANCE_RESGATADA
   SWAP_EXECUTADO
   // N-09 — funder XLM em mainnet
   WALLET_FUNDED
@@ -248,6 +253,9 @@ model Investidor {
   /// UUID do customer Etherfuse. Persistido pra idempotência (quote/order
   /// subsequentes reusam sem precisar re-criar customer).
   etherfuseCustomerId String?
+  /// PLINA-MOD-006: bankAccountId retornado por registerPixBankAccount.
+  /// Lido por /offramp/create pra montar fiatAccountId sem hit em getFiatAccounts.
+  etherfuseBankAccountId String?
   /// N-14: CPF normalizado (11 dígitos, sem máscara). Nullable pra rows
   /// pré-fix. Útil pra auditoria + matching com Etherfuse customer.
   cpfNormalizado     String?
@@ -261,6 +269,7 @@ model Investidor {
   eventos         EventoAudit[]
   quotes          Quote[]
   onRampOrders    OnRampOrder[]
+  offRampOrders   OffRampOrder[]
 
   @@index([status])
 }
@@ -295,6 +304,7 @@ model Quote {
   criadoEm        DateTime @default(now())
 
   onRampOrder     OnRampOrder?
+  offRampOrder    OffRampOrder?
 
   @@index([investidorId])
   @@index([expiresAt])
@@ -317,9 +327,45 @@ model OnRampOrder {
   status                  String   @default("pending")
   /// Hash da tx Stellar de payment TESOURO → investor.
   stellarTxHash           String?
+  /// PLINA-MOD-007: ClaimableBalance ID retornado pela Etherfuse quando
+  /// onramp PIX/BRL completa. Investor precisa fazer claimClaimableBalance
+  /// pra TESOURO entrar na trustline (não é payment direto).
+  stellarClaimableBalanceId String?
+  /// Hash da tx Stellar do claim feito pelo investor. Idempotência pro
+  /// handler /buy/claim/submit.
+  claimTxHash             String?
   /// PIX/SPEI instructions retornadas pela Etherfuse na criação da order.
   /// Persistido pra UI poder re-renderizar sem hit no Etherfuse.
   paymentInstructionsJson Json?
+  settledAt               DateTime?
+  criadoEm                DateTime @default(now())
+  atualizadoEm            DateTime @updatedAt
+
+  @@index([investidorId])
+  @@index([status])
+}
+
+/// Ordem de offramp TESOURO → BRL via Etherfuse. Inverso do OnRampOrder:
+/// investor queima TESOURO (burn XDR assinado por Privy, submetido em
+/// Stellar) → Etherfuse paga BRL via PIX off-chain. Em sandbox PIX/BRL o
+/// terminal upstream é `funded` (mapeado pra `processing`) — payout fiat
+/// real não acontece em testnet, mas o burn on-chain é real.
+model OffRampOrder {
+  id                      String   @id
+  quoteId                 String   @unique
+  quote                   Quote    @relation(fields: [quoteId], references: [id])
+  investidorId            String
+  investidor              Investidor @relation(fields: [investidorId], references: [id])
+  /// pending | signable_ready | submitted | processing | completed | failed | cancelled | refunded
+  status                  String   @default("pending")
+  /// XDR do burn devolvido pela Etherfuse (signableTransaction) — pronto
+  /// pra assinatura via Privy raw-hash.
+  burnXdr                 String?
+  /// Hash da tx Stellar de burn submetida (consome TESOURO da wallet).
+  burnStellarTxHash       String?
+  /// Instructions de payout fiat (geralmente vazio em off-ramp; persistido
+  /// pra UI consistência com OnRampOrder.paymentInstructionsJson).
+  fiatInstructionsJson    Json?
   settledAt               DateTime?
   criadoEm                DateTime @default(now())
   atualizadoEm            DateTime @updatedAt

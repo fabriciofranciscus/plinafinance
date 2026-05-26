@@ -113,25 +113,44 @@ no código com `PLINA-MOD-NNN`.
   polling imediatamente após `createOnRamp`.
   Fonte: SDF DevRel `Dev_Setup_Guide.md` (60 build runs).
 
-- **PLINA-MOD-005** — Novos métodos `registerPixBankAccount(presignedUrl, account)`
-  e `registerSpeiBankAccount(presignedUrl, account)` chamando
-  `POST /ramp/bank-account` com presigned URL auth. Métodos **ficam no
-  client** pra futura ativação, mas **API rejeita PIX hoje**.
-  - Testado em smoke 2026-05-15 com body `{pixKey, pixKeyType, firstName, lastName, cpf}`
-    derivado do tipo upstream `EtherfusePixAccountBody`: retornou 400 `"Json deserialize error:
-    data did not match any variant of untagged enum AccountRegistration"`.
-  - A OpenAPI spec da Etherfuse só documenta o shape CLABE (Mexicano).
-  - O tipo upstream pra PIX era especulativo, nunca validado contra API real.
-  - Conclusão arquitetural: **registro PIX + execução TED ficam no iframe
-    hosted da Etherfuse**, conforme `capabilities.fiatAccountRegistration: 'hosted'`
-    sinalizava desde o início. Plina white-label cobre **lead → KYC → quote**;
-    iframe cobre **bank account + TED**. Webhook `bank_account_updated` é o
-    hand-off pra Plina chamar `createOrder` quando a conta ficar `active +
-    compliant`. Decisão consistente com o pitch: Etherfuse é anchor regulada,
-    Plina não duplica camada de compliance bancário.
-  - Manter métodos no código por dois motivos: (a) se Etherfuse expor PIX
-    via API no futuro, é só remover o erro; (b) registerSpei funciona contra
-    o sandbox e pode ser útil pra testes MX.
+- **PLINA-MOD-005** (~~superada~~ por MOD-006 em 2026-05-25, mantida pra
+  contexto histórico) — Smoke de 2026-05-15 marcava `POST /ramp/bank-account`
+  como `iframe-only` baseado no rejeito 400 `"untagged enum AccountRegistration"`
+  contra body `{pixKey, pixKeyType, firstName, lastName, cpf}`. Conclusão era
+  arquitetural: PIX bank registration via iframe hosted da Etherfuse, com
+  webhook `bank_account_updated` como hand-off. **Reavaliada**: o rejeito não
+  era constraint upstream, era body incompleto (faltava `transactionId`).
+
+- **PLINA-MOD-007** — `EtherfuseOrderResponse.stellarClaimableBalanceId?` +
+  `stellarClaimTransaction?` (XDR informativo). Etherfuse PIX/BRL paga
+  TESOURO via Stellar **ClaimableBalance**, não payment direto pro
+  investor. Sem o claim, `trustline.balance = 0` apesar de `order.status =
+  completed`. Propagado em `OnRampTransaction.stellarClaimableBalanceId`
+  pra clientes saberem que precisam construir + assinar um
+  `Operation.claimClaimableBalance` (helper `buildClaimClaimableBalanceXdr`
+  em `lib/stellar/transactions.ts`). Sem isso o off-ramp burn falha 400
+  (op_underfunded).
+  - Fonte: smoke 2026-05-26 contra sandbox — response do GET
+    /ramp/order/{id} retornou claimable balance ID quando status virou
+    completed. Demo etherfuse-pix-demo verifica balance via Horizon e
+    assume payment direto; pra TESOURO/BRL a anchor mudou o mecanismo.
+
+- **PLINA-MOD-006** — `EtherfusePixAccountBody.transactionId?` (UUID) +
+  injeção automática no `registerPixBankAccount` / `registerSpeiBankAccount`.
+  Sem isso, endpoint rejeita com 400 que era interpretado como "iframe-only".
+  Com isso, registro programático funciona contra sandbox (smoke 2026-05-25
+  verdict `bank_account_pix_api: pass`; on-ramp create + simulateFiatReceived
+  passaram em sequência).
+  - Fonte: SDF DevRel `etherfuse-pix-demo/etherfuse-extras.ts:46-58` (gap #3
+    do README do demo).
+  - Implicações arquiteturais: Plina **pode** fazer bank registration
+    server-side via API; iframe vira opcional (não obrigatório). O webhook
+    `bank_account_updated` segue útil como signal de `compliant: true`, mas
+    não é o único hand-off possível.
+  - PIX/BRL sandbox ainda não auto-completa pra `completed` — terminal aceito
+    é `funded` (mapeado pra `processing`) por design upstream. O
+    `pollOnRampUntilTerminal` continua corretto pro caso geral; rotas PIX
+    aceitam `processing` como terminal opt-in.
 
 Quando divergirmos mais, registrar aqui com referência ao patch
 correspondente (`PLINA-MOD-NNN`) pra facilitar merge futuro de bugfixes

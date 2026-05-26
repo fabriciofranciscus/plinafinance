@@ -50,6 +50,25 @@ export async function loadAccount(pubkey: string) {
   return horizon.loadAccount(pubkey);
 }
 
+/**
+ * Saldo de um asset emitido (não-nativo) numa wallet. Útil pra confirmar
+ * mint TESOURO pós-onramp / saldo restante pós-burn.
+ * Retorna "0" se trustline existe mas saldo é zero, ou se trustline ausente.
+ */
+export async function getAssetBalance(
+  pubkey: string,
+  code: string,
+  issuer: string,
+): Promise<string> {
+  const acc = await horizon.loadAccount(pubkey);
+  const balance = acc.balances.find((b) => {
+    if (b.asset_type === 'native') return false;
+    const issued = b as { asset_code?: string; asset_issuer?: string };
+    return issued.asset_code === code && issued.asset_issuer === issuer;
+  });
+  return balance?.balance ?? '0';
+}
+
 export async function accountExists(pubkey: string): Promise<boolean> {
   try {
     await horizon.loadAccount(pubkey);
