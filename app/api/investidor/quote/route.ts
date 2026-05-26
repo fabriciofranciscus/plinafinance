@@ -153,9 +153,12 @@ export const POST = withAuth(async (req, { user }) => {
       data: {
         id: quote.id,
         investidorId: user.investidorId,
-        fromCurrency: quote.fromCurrency,
+        // Persiste códigos normalizados (BRL, TESOURO), não os resolvidos
+        // pela Etherfuse com `:ISSUER` — handlers downstream (/buy/swap,
+        // /buy/offramp/create) comparam contra códigos crus.
+        fromCurrency,
         fromAmount,
-        toCurrency: quote.toCurrency,
+        toCurrency,
         toAmount,
         exchangeRate: quote.exchangeRate,
         fee: quote.fee,

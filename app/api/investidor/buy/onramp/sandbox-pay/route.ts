@@ -85,9 +85,13 @@ export const POST = withAuth(async (req, { user }) => {
       });
 
       await anchor.simulateFiatReceived(order.id);
+      // PIX/BRL sandbox às vezes para em `funded` (= processing) sem auto-completar
+      // pra `completed`. Doutrina demo quirk #7. Aceito como terminal — anchor já
+      // confirmou o pagamento e a CB pode ser claimed pelo investor mesmo assim.
       const terminal = await anchor.pollOnRampUntilTerminal(order.id, {
         intervalMs: 2_000,
-        timeoutMs: 90_000,
+        timeoutMs: 120_000,
+        acceptProcessing: true,
       });
       finalStatus = terminal.status;
       finalTxHash = terminal.stellarTxHash ?? null;

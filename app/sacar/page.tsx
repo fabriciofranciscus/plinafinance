@@ -12,8 +12,10 @@
  * step 'claiming').
  */
 
-import { usePrivy } from '@privy-io/react-auth';
-import { useSignRawHash } from '@privy-io/react-auth/extended-chains';
+import {
+  useAppPrivy as usePrivy,
+  useAppSignRawHash as useSignRawHash,
+} from '@/lib/hooks/privy';
 import { useCallback, useEffect, useState } from 'react';
 
 const NUMBER_BR = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 });

@@ -25,9 +25,50 @@ import { db } from '@/lib/db';
 
 let _privy: PrivyClient | null = null;
 
+/**
+ * E2E stub: retorna um PrivyClient fake que aceita Bearer
+ * `e2e-stub-<G…>` (pubkey Stellar válido). Só ativa com
+ * `PRIVY_VERIFY_STUB=true` (env de CI). Pareado com `lib/hooks/privy.ts`
+ * client-side stub. Branch morto em produção via env constant fold.
+ */
+function getStubPrivyClient(): PrivyClient {
+  return {
+    verifyAuthToken: async (token: string) => {
+      const m = token.match(/^e2e-stub-(G[A-Z2-7]{55})$/);
+      if (!m) throw new Error('e2e stub: token inválido');
+      return { userId: `did:privy:e2e-${m[1]}` };
+    },
+    getUserById: async (userId: string) => {
+      const pubkey = userId.replace(/^did:privy:e2e-/, '');
+      // Email determinístico por pubkey — seed precisa bater pra
+      // `onboardInvestidor.findFirst({ where: { email } })` retornar
+      // idempotente.
+      const email = `e2e-${pubkey.slice(0, 8).toLowerCase()}@plina.test`;
+      return {
+        id: userId,
+        linkedAccounts: [
+          { type: 'wallet', chainType: 'stellar', address: pubkey },
+          { type: 'email', email },
+        ],
+      };
+    },
+    walletApi: {
+      createWallet: async () => {
+        throw new Error('e2e stub: createWallet não suportado (use seed)');
+      },
+    },
+    // Métodos não usados por handlers no flow E2E
+  } as unknown as PrivyClient;
+}
+
 /** Singleton PrivyClient. Falha rápido se env faltar. */
 export function getPrivyClient(): PrivyClient {
   if (_privy) return _privy;
+
+  if (process.env.PRIVY_VERIFY_STUB === 'true') {
+    _privy = getStubPrivyClient();
+    return _privy;
+  }
 
   const appId = process.env.PRIVY_APP_ID;
   const appSecret = process.env.PRIVY_APP_SECRET;

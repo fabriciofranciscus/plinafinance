@@ -12,12 +12,12 @@
  */
 
 import {
-  usePrivy,
-  useLoginWithEmail,
-  useLoginWithOAuth,
-  useLogout,
-} from '@privy-io/react-auth';
-import { useSignRawHash } from '@privy-io/react-auth/extended-chains';
+  useAppPrivy as usePrivy,
+  useAppLoginWithEmail as useLoginWithEmail,
+  useAppLoginWithOAuth as useLoginWithOAuth,
+  useAppLogout as useLogout,
+  useAppSignRawHash as useSignRawHash,
+} from '@/lib/hooks/privy';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { parseBrlAmount } from '@/lib/format/parse-brl';
 
@@ -598,7 +598,14 @@ export default function InvestirPage() {
 
   // Build swap envelope (real) ou executa swap direto (mock).
   const goToConfirm = useCallback(async () => {
-    if (!onboard || !quote || !onRamp || onRamp.status !== 'completed') return;
+    if (!onboard || !quote || !onRamp) return;
+    // PIX/BRL sandbox às vezes para em `processing` — se anchor já emitiu
+    // CB, prossegue (claim move TESOURO pra trustline). Senão exige
+    // `completed`.
+    const onRampReady =
+      onRamp.status === 'completed' ||
+      (onRamp.status === 'processing' && !!onRamp.stellarClaimableBalanceId);
+    if (!onRampReady) return;
     // PLINA-MOD-007: se anchor pagou TESOURO via ClaimableBalance e ainda
     // não foi claimed, desvia pro screen de resgate antes do swap.
     if (onRamp.stellarClaimableBalanceId && !onRamp.claimTxHash) {
@@ -1666,21 +1673,23 @@ function OnRampScreen({
       </div>
 
       <div className="mt-12 flex flex-wrap gap-4">
-        {onRamp.mock ? (
-          <button
-            onClick={onSandboxPay}
-            disabled={paying}
-            className="bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-8 py-4 rounded-full hover:bg-primary-deep transition-colors duration-200 disabled:opacity-50 disabled:cursor-wait inline-flex items-center gap-3"
-          >
-            {paying && (
-              <span
-                className="w-2 h-2 bg-primary rounded-full animate-pulse"
-                aria-hidden
-              />
-            )}
-            {paying ? 'Simulando PIX…' : 'Simular PIX pago (sandbox)'}
-          </button>
-        ) : (
+        {/* Em testnet (mock ou real), botão sandbox-pay funciona pra ambos:
+            mock flippa direto pra completed; real chama simulateFiatReceived
+            + polling no Etherfuse. Pra E2E e demos, sempre exposto. */}
+        <button
+          onClick={onSandboxPay}
+          disabled={paying}
+          className="bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-8 py-4 rounded-full hover:bg-primary-deep transition-colors duration-200 disabled:opacity-50 disabled:cursor-wait inline-flex items-center gap-3"
+        >
+          {paying && (
+            <span
+              className="w-2 h-2 bg-primary rounded-full animate-pulse"
+              aria-hidden
+            />
+          )}
+          {paying ? 'Simulando PIX…' : 'Simular PIX pago (sandbox)'}
+        </button>
+        {!onRamp.mock && (
           <button
             onClick={onSkipToSettling}
             className="bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-8 py-4 rounded-full hover:bg-primary-deep transition-colors duration-200"
@@ -1704,7 +1713,12 @@ function SettlingScreen({
   swapLoading: boolean;
   onContinue: () => void;
 }) {
-  const done = onRamp.status === 'completed';
+  // PIX/BRL sandbox pode parar em `processing` (= funded upstream) sem
+  // auto-completar. Se anchor emitiu CB, o claim já está disponível —
+  // tratamos como "done" pra prosseguir.
+  const done =
+    onRamp.status === 'completed' ||
+    (onRamp.status === 'processing' && !!onRamp.stellarClaimableBalanceId);
   return (
     <div>
       <TestnetBanner />
