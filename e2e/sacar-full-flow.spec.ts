@@ -81,13 +81,17 @@ async function primeTesouroBalance(seed: E2eInvestidorSeed): Promise<void> {
   });
 
   await anchor.simulateFiatReceived(order.id);
-  // Polling manual até anchor emitir CB OU status virar completed. PIX/BRL
-  // sandbox às vezes para em `funded` (= processing) mas a CB chega depois
-  // de alguns segundos. Tolerância 13min — smoke vê CB em ~30s, sandbox
-  // flap pode estender até alguns min.
+  // Polling manual até anchor emitir CB OU status virar completed OU saldo
+  // TESOURO aparecer direto na trustline. PIX/BRL sandbox às vezes prende em
+  // `funded` (= processing) sem emitir CB nem virar `completed`, mesmo
+  // quando a anchor já fez payment direto — checar saldo Stellar cobre
+  // esse caminho. Tolerância 13min — smoke vê CB em ~30s, sandbox flap
+  // pode estender até alguns min.
+  const tesouro = await resolveTesouroAsset(seed.pubkey);
   const deadline = Date.now() + 780_000;
   let cbId: string | null = null;
   let finalStatus = 'pending';
+  let directPayment = false;
   while (Date.now() < deadline) {
     const tx = await anchor.getOnRampTransaction(order.id);
     if (tx) {
@@ -101,6 +105,14 @@ async function primeTesouroBalance(seed: E2eInvestidorSeed): Promise<void> {
         break;
       }
     }
+    // Caminho alternativo: anchor já depositou TESOURO direto na trustline
+    // mas status upstream ainda não virou `completed`. Saldo > 0 é o sinal
+    // real — não precisa esperar o webhook/status flippar.
+    const balance = await getAssetBalance(seed.pubkey, tesouro.code, tesouro.issuer);
+    if (Number(balance) > 0) {
+      directPayment = true;
+      break;
+    }
     await new Promise((r) => setTimeout(r, 5_000));
   }
   await db.onRampOrder.update({
@@ -111,6 +123,9 @@ async function primeTesouroBalance(seed: E2eInvestidorSeed): Promise<void> {
       settledAt: new Date(),
     },
   });
+
+  // Saldo já apareceu via payment direto — não precisa claim nem polling extra.
+  if (directPayment) return;
 
   // Claim CB (PLINA-MOD-007). Sem isso TESOURO não vai pra trustline,
   // off-ramp burn falha com op_underfunded.
@@ -129,7 +144,6 @@ async function primeTesouroBalance(seed: E2eInvestidorSeed): Promise<void> {
   }
 
   // Verifica saldo > 0 antes de continuar (defesa contra op_underfunded).
-  const tesouro = await resolveTesouroAsset(seed.pubkey);
   let attempts = 0;
   while (attempts < 24) {
     const balance = await getAssetBalance(seed.pubkey, tesouro.code, tesouro.issuer);
