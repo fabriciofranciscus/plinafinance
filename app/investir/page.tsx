@@ -242,6 +242,12 @@ export default function InvestirPage() {
   const [claiming, setClaiming] = useState(false);
   const [claimResult, setClaimResult] = useState<ClaimResult | null>(null);
 
+  // Defende contra race: refreshQuote em voo quando user já clicou
+  // "revisar compra". Sem ref, setQuote pode sobrescrever quote.quoteId
+  // enquanto /onramp/create persiste no DB com o quoteId anterior,
+  // quebrando o lookup em /swap/build.
+  const quoteGateRef = useRef({ screen: 'welcome' as Screen, onRampLoading: false });
+
   const runOnboard = useCallback(async () => {
     setError(null);
     setOnboarding(true);
@@ -292,7 +298,13 @@ export default function InvestirPage() {
         }),
       });
       if (!res.ok) throw new Error(await res.text());
-      setQuote((await res.json()) as QuoteData);
+      const data = (await res.json()) as QuoteData;
+      // Descarta resposta stale: user já saiu da tela de quote ou
+      // disparou /onramp/create. Aplicar setQuote aqui sobrescreveria
+      // quoteId já comprometido e quebra /swap/build com 409.
+      const gate = quoteGateRef.current;
+      if (gate.screen !== 'quote' || gate.onRampLoading) return;
+      setQuote(data);
     } catch (err) {
       setError(asFlowError(err));
     } finally {
@@ -301,12 +313,19 @@ export default function InvestirPage() {
   }, [onboard, amountBrl, getAccessToken]);
 
   useEffect(() => {
-    if (screen !== 'quote' || !onboard) return;
+    quoteGateRef.current = { screen, onRampLoading };
+  }, [screen, onRampLoading]);
+
+  useEffect(() => {
+    // Não agenda quote refresh se já está commitando onramp — caso
+    // contrário o timer pode disparar uma fetch que retorna depois e
+    // sobrescreve quoteId em uso pelo /onramp/create.
+    if (screen !== 'quote' || !onboard || onRampLoading) return;
     const t = setTimeout(() => {
       void refreshQuote();
     }, 600);
     return () => clearTimeout(t);
-  }, [amountBrl, screen, onboard, refreshQuote]);
+  }, [amountBrl, screen, onboard, onRampLoading, refreshQuote]);
 
   // Trustline setup (PLINARF + TESOURO). Roda automaticamente quando o
   // investor entra no screen identity já onboardado. Idempotente: se
