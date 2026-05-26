@@ -24,9 +24,11 @@ import { parseBrlAmount } from '@/lib/format/parse-brl';
 type Screen =
   | 'welcome'
   | 'identity'
+  | 'banking'
   | 'quote'
   | 'onramp'
   | 'settling'
+  | 'claiming'
   | 'confirm'
   | 'receipt';
 
@@ -64,6 +66,19 @@ interface OnRampData {
   paymentInstructions: PixInstructions | null;
   mock: boolean;
   stellarTxHash?: string | null;
+  stellarClaimableBalanceId?: string | null;
+  claimTxHash?: string | null;
+}
+
+interface BankRegistered {
+  bankAccountId: string;
+  status: string;
+  idempotent?: boolean;
+}
+
+interface ClaimResult {
+  claimTxHash: string;
+  balanceId: string;
 }
 
 interface SwapEnvelope {
@@ -104,9 +119,11 @@ const BRL = new Intl.NumberFormat('pt-BR', {
 const SCREENS: { id: Screen; label: string }[] = [
   { id: 'welcome', label: 'Acesso' },
   { id: 'identity', label: 'Identidade' },
+  { id: 'banking', label: 'Conta PIX' },
   { id: 'quote', label: 'Cotação' },
   { id: 'onramp', label: 'Pagamento' },
   { id: 'settling', label: 'Liquidação' },
+  { id: 'claiming', label: 'Resgate' },
   { id: 'confirm', label: 'Revisão' },
   { id: 'receipt', label: 'Confirmação' },
 ];
@@ -208,6 +225,22 @@ export default function InvestirPage() {
   const [buying, setBuying] = useState(false);
   const [buyResult, setBuyResult] = useState<BuyResult | null>(null);
   const [error, setError] = useState<FlowError | null>(null);
+
+  // Banking (PLINA-MOD-006): registro PIX programático antes da quote.
+  const [bankPixKey, setBankPixKey] = useState('');
+  const [bankPixKeyType, setBankPixKeyType] = useState<
+    'cpf' | 'email' | 'phone' | 'evp' | 'cnpj'
+  >('cpf');
+  const [bankFirstName, setBankFirstName] = useState('');
+  const [bankLastName, setBankLastName] = useState('');
+  const [bankCpf, setBankCpf] = useState('');
+  const [bankInfo, setBankInfo] = useState<BankRegistered | null>(null);
+  const [bankLoading, setBankLoading] = useState(false);
+
+  // Claim ClaimableBalance (PLINA-MOD-007): TESOURO emitido via CB depois
+  // do onramp completed precisa ser claimado pra entrar na trustline.
+  const [claiming, setClaiming] = useState(false);
+  const [claimResult, setClaimResult] = useState<ClaimResult | null>(null);
 
   const runOnboard = useCallback(async () => {
     setError(null);
@@ -370,6 +403,108 @@ export default function InvestirPage() {
     }
   }, [onboard, signRawHash, trustlinesReady, trustlineLoading, getAccessToken]);
 
+  // PLINA-MOD-006: registra bank PIX programaticamente. Idempotente — se
+  // investidor já tem etherfuseBankAccountId, handler retorna 200 + idempotent.
+  const registerBank = useCallback(async () => {
+    if (!onboard) return;
+    if (!bankPixKey || !bankCpf || !bankFirstName || !bankLastName) {
+      setError(asFlowError(new Error('Preencha PIX, CPF, nome e sobrenome.')));
+      return;
+    }
+    setBankLoading(true);
+    setError(null);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error('Sessão Privy expirada.');
+      const res = await fetch('/api/investidor/bank-account/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          pixKey: bankPixKey,
+          pixKeyType: bankPixKeyType,
+          cpf: bankCpf,
+          firstName: bankFirstName,
+          lastName: bankLastName,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = (await res.json()) as BankRegistered;
+      setBankInfo(data);
+      setScreen('quote');
+    } catch (err) {
+      setError(asFlowError(err));
+    } finally {
+      setBankLoading(false);
+    }
+  }, [
+    onboard,
+    bankPixKey,
+    bankPixKeyType,
+    bankCpf,
+    bankFirstName,
+    bankLastName,
+    getAccessToken,
+  ]);
+
+  // PLINA-MOD-007: investor reclama o ClaimableBalance criado pela Etherfuse
+  // pra TESOURO entrar na trustline. Sem isso, swap atômico falha por saldo 0.
+  const doClaim = useCallback(async () => {
+    if (!onboard || !onRamp || !onRamp.stellarClaimableBalanceId) return;
+    setClaiming(true);
+    setError(null);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error('Sessão Privy expirada.');
+      const buildRes = await fetch('/api/investidor/buy/claim/build', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ orderId: onRamp.orderId }),
+      });
+      if (!buildRes.ok) throw new Error(await buildRes.text());
+      const built = (await buildRes.json()) as {
+        xdr: string;
+        hashHex: string;
+        balanceId: string;
+      };
+      const { signature } = await signRawHash({
+        address: onboard.publicKey,
+        chainType: 'stellar',
+        hash: built.hashHex as `0x${string}`,
+      });
+      const submitRes = await fetch('/api/investidor/buy/claim/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          orderId: onRamp.orderId,
+          xdr: built.xdr,
+          signatureHex: signature,
+        }),
+      });
+      if (!submitRes.ok) throw new Error(await submitRes.text());
+      const data = (await submitRes.json()) as { claimTxHash: string };
+      setClaimResult({
+        claimTxHash: data.claimTxHash,
+        balanceId: built.balanceId,
+      });
+      setOnRamp((prev) =>
+        prev ? { ...prev, claimTxHash: data.claimTxHash } : prev,
+      );
+    } catch (err) {
+      setError(asFlowError(err));
+    } finally {
+      setClaiming(false);
+    }
+  }, [onboard, onRamp, signRawHash, getAccessToken]);
+
   // Cria onramp Etherfuse + transita pra screen de pagamento PIX.
   const goToOnramp = useCallback(async () => {
     if (!quote) return;
@@ -416,6 +551,7 @@ export default function InvestirPage() {
       const data = (await res.json()) as {
         status: string;
         stellarTxHash: string | null;
+        stellarClaimableBalanceId?: string | null;
         mock: boolean;
       };
       setOnRamp({ ...onRamp, ...data });
@@ -442,6 +578,8 @@ export default function InvestirPage() {
         const data = (await res.json()) as {
           status: string;
           stellarTxHash: string | null;
+          stellarClaimableBalanceId?: string | null;
+          claimTxHash?: string | null;
           mock: boolean;
         };
         if (cancelled) return;
@@ -461,6 +599,12 @@ export default function InvestirPage() {
   // Build swap envelope (real) ou executa swap direto (mock).
   const goToConfirm = useCallback(async () => {
     if (!onboard || !quote || !onRamp || onRamp.status !== 'completed') return;
+    // PLINA-MOD-007: se anchor pagou TESOURO via ClaimableBalance e ainda
+    // não foi claimed, desvia pro screen de resgate antes do swap.
+    if (onRamp.stellarClaimableBalanceId && !onRamp.claimTxHash) {
+      setScreen('claiming');
+      return;
+    }
     setSwapLoading(true);
     setError(null);
     setSignConfirmed(false);
@@ -614,8 +758,28 @@ export default function InvestirPage() {
                   trustlinesReady={trustlinesReady}
                   trustlineLoading={trustlineLoading}
                   onSetupTrustlines={setupTrustlines}
-                  onContinue={() => setScreen('quote')}
+                  onContinue={() =>
+                    setScreen(bankInfo ? 'quote' : 'banking')
+                  }
                   onRetry={runOnboard}
+                />
+              )}
+              {screen === 'banking' && onboard && (
+                <BankingScreen
+                  bankInfo={bankInfo}
+                  pixKey={bankPixKey}
+                  setPixKey={setBankPixKey}
+                  pixKeyType={bankPixKeyType}
+                  setPixKeyType={setBankPixKeyType}
+                  firstName={bankFirstName}
+                  setFirstName={setBankFirstName}
+                  lastName={bankLastName}
+                  setLastName={setBankLastName}
+                  cpf={bankCpf}
+                  setCpf={setBankCpf}
+                  loading={bankLoading}
+                  onSubmit={registerBank}
+                  onSkip={() => setScreen('quote')}
                 />
               )}
               {screen === 'quote' && onboard && (
@@ -642,6 +806,16 @@ export default function InvestirPage() {
                   onRamp={onRamp}
                   quote={quote}
                   swapLoading={swapLoading}
+                  onContinue={goToConfirm}
+                />
+              )}
+              {screen === 'claiming' && onboard && onRamp && (
+                <ClaimingScreen
+                  onRamp={onRamp}
+                  claimResult={claimResult}
+                  claiming={claiming}
+                  swapLoading={swapLoading}
+                  onClaim={doClaim}
                   onContinue={goToConfirm}
                 />
               )}
@@ -708,9 +882,25 @@ function Rail({
   const done: Record<Screen, boolean> = {
     welcome: current !== 'welcome',
     identity: onboard && current !== 'identity',
-    quote: quote && current !== 'quote' && current !== 'identity',
-    onramp: current === 'settling' || current === 'confirm' || current === 'receipt',
-    settling: current === 'confirm' || current === 'receipt',
+    banking:
+      current !== 'welcome' &&
+      current !== 'identity' &&
+      current !== 'banking',
+    quote:
+      quote &&
+      current !== 'quote' &&
+      current !== 'identity' &&
+      current !== 'banking',
+    onramp:
+      current === 'settling' ||
+      current === 'claiming' ||
+      current === 'confirm' ||
+      current === 'receipt',
+    settling:
+      current === 'claiming' ||
+      current === 'confirm' ||
+      current === 'receipt',
+    claiming: current === 'confirm' || current === 'receipt',
     confirm: buyResult,
     receipt: false,
   };
@@ -1610,6 +1800,274 @@ function SettlingScreen({
               ? 'Continuar para revisão do swap'
               : 'Aguardando settlement…'}
         </button>
+      </div>
+    </div>
+  );
+}
+
+function BankingScreen({
+  bankInfo,
+  pixKey,
+  setPixKey,
+  pixKeyType,
+  setPixKeyType,
+  firstName,
+  setFirstName,
+  lastName,
+  setLastName,
+  cpf,
+  setCpf,
+  loading,
+  onSubmit,
+  onSkip,
+}: {
+  bankInfo: BankRegistered | null;
+  pixKey: string;
+  setPixKey: (s: string) => void;
+  pixKeyType: 'cpf' | 'email' | 'phone' | 'evp' | 'cnpj';
+  setPixKeyType: (s: 'cpf' | 'email' | 'phone' | 'evp' | 'cnpj') => void;
+  firstName: string;
+  setFirstName: (s: string) => void;
+  lastName: string;
+  setLastName: (s: string) => void;
+  cpf: string;
+  setCpf: (s: string) => void;
+  loading: boolean;
+  onSubmit: () => void;
+  onSkip: () => void;
+}) {
+  const filled =
+    pixKey.length > 0 &&
+    cpf.length >= 11 &&
+    firstName.length > 0 &&
+    lastName.length > 0;
+  return (
+    <div>
+      <TestnetBanner />
+      <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
+        02b // Conta PIX · destinatário do payout
+      </p>
+      <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">
+        Registre sua conta PIX na anchor.
+      </h1>
+      <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
+        A Etherfuse exige uma conta PIX ativa pra cada investidor antes de
+        criar order de pagamento. Registro programático (PLINA-MOD-006). O
+        CPF tem que bater com o KYC aprovado no passo anterior.
+      </p>
+
+      {bankInfo && (
+        <div className="mt-8 border-y border-light-hairline">
+          <dl className="grid grid-cols-1 gap-px bg-base/10">
+            <DataRow
+              k="Bank account"
+              v={
+                <span className="font-mono text-[11px] text-base/75">
+                  {bankInfo.bankAccountId}
+                </span>
+              }
+            />
+            <DataRow
+              k="Status"
+              v={
+                <span className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">
+                  ● {bankInfo.status}
+                  {bankInfo.idempotent && ' · idempotent'}
+                </span>
+              }
+            />
+          </dl>
+          <div className="mt-8">
+            <button
+              onClick={onSkip}
+              className="bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-8 py-4 rounded-full hover:bg-primary-deep transition-colors"
+            >
+              Continuar para cotação
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!bankInfo && (
+        <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl">
+          <label className="block">
+            <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+              Tipo de chave
+            </span>
+            <select
+              value={pixKeyType}
+              onChange={(e) =>
+                setPixKeyType(
+                  e.target.value as 'cpf' | 'email' | 'phone' | 'evp' | 'cnpj',
+                )
+              }
+              className="mt-3 w-full bg-transparent border-b border-base/30 pb-3 font-mono text-sm text-base focus:outline-none focus:border-base"
+            >
+              <option value="cpf">CPF</option>
+              <option value="email">E-mail</option>
+              <option value="phone">Telefone</option>
+              <option value="evp">Aleatória (EVP)</option>
+              <option value="cnpj">CNPJ</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+              Chave PIX
+            </span>
+            <input
+              type="text"
+              value={pixKey}
+              onChange={(e) => setPixKey(e.target.value)}
+              placeholder="ex: 52998224725"
+              className="mt-3 w-full bg-transparent border-b border-base/30 pb-3 font-mono text-sm text-base focus:outline-none focus:border-base"
+            />
+          </label>
+          <label className="block">
+            <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+              CPF (11 dígitos)
+            </span>
+            <input
+              type="text"
+              value={cpf}
+              onChange={(e) => setCpf(e.target.value.replace(/\D/g, ''))}
+              maxLength={11}
+              placeholder="52998224725"
+              className="mt-3 w-full bg-transparent border-b border-base/30 pb-3 font-mono text-sm text-base focus:outline-none focus:border-base"
+            />
+          </label>
+          <label className="block">
+            <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+              Nome
+            </span>
+            <input
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="João"
+              className="mt-3 w-full bg-transparent border-b border-base/30 pb-3 font-mono text-sm text-base focus:outline-none focus:border-base"
+            />
+          </label>
+          <label className="block md:col-span-2">
+            <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+              Sobrenome
+            </span>
+            <input
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Silva"
+              className="mt-3 w-full bg-transparent border-b border-base/30 pb-3 font-mono text-sm text-base focus:outline-none focus:border-base"
+            />
+          </label>
+
+          <div className="md:col-span-2 mt-6">
+            <button
+              onClick={onSubmit}
+              disabled={!filled || loading}
+              className="bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-8 py-4 rounded-full hover:bg-primary-deep transition-colors disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-3"
+            >
+              {loading && (
+                <span className="w-2 h-2 bg-primary rounded-full animate-pulse" aria-hidden />
+              )}
+              {loading ? 'Registrando…' : 'Registrar conta PIX'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClaimingScreen({
+  onRamp,
+  claimResult,
+  claiming,
+  swapLoading,
+  onClaim,
+  onContinue,
+}: {
+  onRamp: OnRampData;
+  claimResult: ClaimResult | null;
+  claiming: boolean;
+  swapLoading: boolean;
+  onClaim: () => void;
+  onContinue: () => void;
+}) {
+  const claimed = !!(claimResult || onRamp.claimTxHash);
+  const txHash = claimResult?.claimTxHash ?? onRamp.claimTxHash ?? null;
+  return (
+    <div>
+      <TestnetBanner />
+      <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
+        06 // Resgate · ClaimableBalance → trustline
+      </p>
+      <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">
+        {claimed
+          ? 'TESOURO na sua trustline — prossiga'
+          : 'Assine pra resgatar o TESOURO emitido'}
+      </h1>
+      <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
+        A Etherfuse emitiu TESOURO num <Term>ClaimableBalance</Term> Stellar
+        (PLINA-MOD-007). Pra ele entrar na sua wallet, você precisa assinar
+        um <Term>claimClaimableBalance</Term>. Sem isso, o swap atômico
+        falha por saldo zero.
+      </p>
+
+      <div className="mt-10 border-y border-light-hairline">
+        <dl className="grid grid-cols-1 gap-px bg-base/10">
+          {onRamp.stellarClaimableBalanceId && (
+            <DataRow
+              k="CB id"
+              v={
+                <span className="font-mono text-[11px] text-base/75 break-all">
+                  {onRamp.stellarClaimableBalanceId}
+                </span>
+              }
+            />
+          )}
+          {txHash && (
+            <DataRow
+              k="Claim tx"
+              v={
+                <a
+                  href={explorerTx(txHash)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-[11px] text-base hover:text-primary-deep underline decoration-base/25 underline-offset-4 break-all"
+                >
+                  {txHash}
+                </a>
+              }
+            />
+          )}
+        </dl>
+      </div>
+
+      <div className="mt-12 flex gap-4">
+        {!claimed && (
+          <button
+            onClick={onClaim}
+            disabled={claiming}
+            className="bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-8 py-4 rounded-full hover:bg-primary-deep transition-colors disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-3"
+          >
+            {claiming && (
+              <span className="w-2 h-2 bg-primary rounded-full animate-pulse" aria-hidden />
+            )}
+            {claiming ? 'Assinando claim…' : 'Assinar e reclamar TESOURO'}
+          </button>
+        )}
+        {claimed && (
+          <button
+            onClick={onContinue}
+            disabled={swapLoading}
+            className="bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-8 py-4 rounded-full hover:bg-primary-deep transition-colors disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-3"
+          >
+            {swapLoading && (
+              <span className="w-2 h-2 bg-primary rounded-full animate-pulse" aria-hidden />
+            )}
+            {swapLoading ? 'Preparando envelope…' : 'Continuar para revisão'}
+          </button>
+        )}
       </div>
     </div>
   );

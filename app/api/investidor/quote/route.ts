@@ -1,15 +1,17 @@
 /**
  * POST /api/investidor/quote
  *
- * Quote BRL → TESOURO via Etherfuse (real). Plina white-label exibe pro
- * investidor o quote da anchor antes de "comprar PLINA-RF".
+ * Quote via Etherfuse (real). Suporta as duas direções:
  *
- * Persiste o quote no DB (`Quote`) pra binding server-side de valor em
- * /buy/swap/{build,submit}. Sem isso, a emissão aceitaria `amount` arbitrário
- * do body → emissão arbitrária de PLINARF (gap fechado 2026-05-18 com
- * Phase 1; Phase 2 fechou doutrinariamente com swap atômico).
+ *   - **On-ramp (default)**: body `{ amountBrl, customerId, stellarAddress }`.
+ *     BRL → TESOURO. Plina white-label exibe quote antes de "comprar PLINA-RF".
+ *   - **Off-ramp** (PLINA-MOD-007 follow-up): body `{ amountTesouro,
+ *     direction: 'offramp', customerId, stellarAddress }`. TESOURO → BRL.
+ *     Usado em `/sacar` pra montar order de saque PIX.
  *
- * Body: { amountBrl: string, customerId: string, stellarAddress: string }
+ * Persiste no DB (`Quote`) pra binding server-side: /buy/swap/{build,submit}
+ * (onramp) ou /buy/offramp/create (offramp). Sem isso a emissão/burn aceitaria
+ * `amount` arbitrário do body.
  */
 
 import { NextResponse } from 'next/server';
@@ -24,25 +26,60 @@ export const dynamic = 'force-dynamic';
 
 export const POST = withAuth(async (req, { user }) => {
   try {
-    const { amountBrl, customerId, stellarAddress } = (await req.json()) as {
+    const body = (await req.json()) as {
       amountBrl?: string;
+      amountTesouro?: string;
+      direction?: 'onramp' | 'offramp';
       customerId?: string;
       stellarAddress?: string;
     };
-    if (!amountBrl || !customerId || !stellarAddress) {
+    const { customerId, stellarAddress } = body;
+    const direction = body.direction ?? 'onramp';
+    if (!customerId || !stellarAddress) {
       return NextResponse.json(
-        { error: 'amountBrl, customerId, stellarAddress obrigatórios' },
+        { error: 'customerId, stellarAddress obrigatórios' },
         { status: 400 },
       );
     }
-    const amountValue = parseBrlAmount(amountBrl);
-    if (amountValue === null) {
-      return NextResponse.json(
-        { error: 'amountBrl inválido' },
-        { status: 400 },
-      );
+
+    let sourceAmount: string;
+    let fromCurrency: string;
+    let toCurrency: string;
+    if (direction === 'offramp') {
+      if (!body.amountTesouro) {
+        return NextResponse.json(
+          { error: 'amountTesouro obrigatório em direction=offramp' },
+          { status: 400 },
+        );
+      }
+      const v = Number(body.amountTesouro);
+      if (!Number.isFinite(v) || v <= 0) {
+        return NextResponse.json(
+          { error: 'amountTesouro inválido' },
+          { status: 400 },
+        );
+      }
+      sourceAmount = v.toFixed(7);
+      fromCurrency = 'TESOURO';
+      toCurrency = 'BRL';
+    } else {
+      if (!body.amountBrl) {
+        return NextResponse.json(
+          { error: 'amountBrl obrigatório em direction=onramp' },
+          { status: 400 },
+        );
+      }
+      const amountValue = parseBrlAmount(body.amountBrl);
+      if (amountValue === null) {
+        return NextResponse.json(
+          { error: 'amountBrl inválido' },
+          { status: 400 },
+        );
+      }
+      sourceAmount = amountValue.toFixed(2);
+      fromCurrency = 'BRL';
+      toCurrency = 'TESOURO';
     }
-    const amountBrlNormalized = amountValue.toFixed(2);
 
     // Defense in depth: body precisa casar com o investidor autenticado.
     // Sem isso, o token só prova identidade — qualquer um logado poderia
@@ -74,9 +111,9 @@ export const POST = withAuth(async (req, { user }) => {
     });
 
     const quote = await anchor.getQuote({
-      fromCurrency: 'BRL',
-      toCurrency: 'TESOURO',
-      fromAmount: amountBrlNormalized,
+      fromCurrency,
+      toCurrency,
+      fromAmount: sourceAmount,
       customerId,
       stellarAddress,
     });
