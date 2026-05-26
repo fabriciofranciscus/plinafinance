@@ -35,9 +35,14 @@ export interface RateLimiterOptions {
 export function createRateLimiter(opts: RateLimiterOptions): RateLimiter {
   const buckets = new Map<string, Bucket>();
   const maxKeys = opts.maxKeys ?? 10_000;
+  // E2E stub: bypass total. Specs disparam dezenas de requests/min do
+  // mesmo IP localhost, batem no limiter (10/min) e quebram. Bypass só
+  // ativa com `PRIVY_VERIFY_STUB=true` (env de CI). Branch morto em prod.
+  const bypass = process.env.PRIVY_VERIFY_STUB === 'true';
 
   return {
     consume(key: string): boolean {
+      if (bypass) return true;
       const now = Date.now();
       let bucket = buckets.get(key);
       if (!bucket || bucket.resetAt <= now) {

@@ -14,6 +14,7 @@
 
 import { PrivyProvider, useLoginWithOAuth } from '@privy-io/react-auth';
 import type { ReactNode } from 'react';
+import { StubPrivyProvider } from '@/lib/hooks/privy';
 
 function OAuthCallbackBridge() {
   useLoginWithOAuth();
@@ -21,6 +22,13 @@ function OAuthCallbackBridge() {
 }
 
 export function PrivyAppProvider({ children }: { children: ReactNode }) {
+  // E2E stub: substitui PrivyProvider por StubPrivyProvider. Hooks reais
+  // não são montados — wrappers em lib/hooks/privy direcionam pra Context
+  // stub. Branch morto em prod via constant fold.
+  if (process.env.NEXT_PUBLIC_E2E_PRIVY_STUB === 'true') {
+    return <StubPrivyProvider>{children}</StubPrivyProvider>;
+  }
+
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
   if (!appId) {
