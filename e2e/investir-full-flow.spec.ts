@@ -120,8 +120,10 @@ test('full /investir flow: BRL → TESOURO → claim CB → swap PLINA-RF', asyn
   await expect(page.locator('body')).toContainText(/Revisão|Confirme/i, {
     timeout: 30_000,
   });
-  // Checkbox de confirmação habilita o botão.
-  await page.getByLabel(/confirmo destinatário/i).check();
+  // Checkbox de confirmação habilita o botão. O <input> é sr-only dentro
+  // do <label> (visual é um <span> custom), então pointer-event vai pro
+  // span — force=true bypassa actionability check; onChange dispara igual.
+  await page.getByLabel(/confirmo destinatário/i).check({ force: true });
   await page
     .getByRole('button', { name: /assinar e executar swap/i })
     .click({ timeout: 30_000 });
