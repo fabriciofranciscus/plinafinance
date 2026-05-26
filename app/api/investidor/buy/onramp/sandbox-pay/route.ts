@@ -20,6 +20,8 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { EtherfuseClient } from '@/lib/anchors/etherfuse';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { getAssetBalance } from '@/lib/stellar/account';
+import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,6 +65,7 @@ export const POST = withAuth(async (req, { user }) => {
 
     let finalStatus = order.status;
     let finalTxHash = order.stellarTxHash;
+    let claimableBalanceId: string | null = order.stellarClaimableBalanceId;
 
     if (mock) {
       finalStatus = 'completed';
@@ -88,6 +91,11 @@ export const POST = withAuth(async (req, { user }) => {
       });
       finalStatus = terminal.status;
       finalTxHash = terminal.stellarTxHash ?? null;
+      // PLINA-MOD-007: anchor pode emitir ClaimableBalance em vez de payment.
+      // Persiste pro /buy/claim/build consumir depois.
+      if (terminal.stellarClaimableBalanceId) {
+        claimableBalanceId = terminal.stellarClaimableBalanceId;
+      }
     }
 
     await db.$transaction(async (tx) => {
@@ -96,6 +104,7 @@ export const POST = withAuth(async (req, { user }) => {
         data: {
           status: finalStatus,
           stellarTxHash: finalTxHash,
+          stellarClaimableBalanceId: claimableBalanceId,
           settledAt: finalStatus === 'completed' ? new Date() : null,
         },
       });
@@ -116,10 +125,33 @@ export const POST = withAuth(async (req, { user }) => {
       }
     });
 
+    let tesouroBalanceAfterMint: string | null = null;
+    if (!mock && finalStatus === 'completed') {
+      try {
+        const investidor = await db.investidor.findUnique({
+          where: { id: order.investidorId },
+          select: { publicKey: true },
+        });
+        if (investidor) {
+          const tesouro = await resolveTesouroAsset(investidor.publicKey);
+          tesouroBalanceAfterMint = await getAssetBalance(
+            investidor.publicKey,
+            tesouro.code,
+            tesouro.issuer,
+          );
+        }
+      } catch (balanceErr) {
+        // read-back é diagnóstico; não falha o request se Horizon recusar
+        console.warn('[sandbox-pay] getAssetBalance falhou:', balanceErr);
+      }
+    }
+
     return NextResponse.json({
       status: finalStatus,
       stellarTxHash: finalTxHash,
+      stellarClaimableBalanceId: claimableBalanceId,
       mock,
+      tesouroBalanceAfterMint,
     });
   } catch (err) {
     return NextResponse.json(

@@ -94,6 +94,63 @@ export async function buildSwapBridgeForPlinarfXdr(input: {
 }
 
 /**
+ * Monta tx de ClaimClaimableBalance pro investor reclamar um
+ * ClaimableBalance criado pela anchor (Etherfuse PIX/BRL paga TESOURO via
+ * CB depois do onramp completed — PLINA-MOD-007).
+ * Source = investor (paga fee). Investor assina via Privy.
+ */
+export async function buildClaimClaimableBalanceXdr(input: {
+  investorPubkey: string;
+  balanceId: string;
+}): Promise<{ xdr: string; hashHex: string }> {
+  const account = await horizon.loadAccount(input.investorPubkey);
+  const tx = new TransactionBuilder(account, {
+    fee: await getDynamicFee(),
+    networkPassphrase,
+  })
+    .addOperation(
+      Operation.claimClaimableBalance({ balanceId: input.balanceId }),
+    )
+    .setTimeout(STELLAR_TX_TIMEOUT_SEC)
+    .build();
+  return { xdr: tx.toXDR(), hashHex: '0x' + tx.hash().toString('hex') };
+}
+
+/**
+ * Monta tx de Payment do investor pra um destino arbitrário (usado pelo
+ * mock-burn do off-ramp: investor consome TESOURO mandando pro distributor
+ * Plina como "queima simbólica" em sandbox sem Etherfuse real).
+ * Source = investor (paga fee). Investor assina via Privy.
+ */
+export async function buildPaymentXdr(input: {
+  investorPubkey: string;
+  destination: string;
+  asset: Asset;
+  amount: string;
+  memo?: string;
+}): Promise<{ xdr: string; hashHex: string }> {
+  const account = await horizon.loadAccount(input.investorPubkey);
+  const builder = new TransactionBuilder(account, {
+    fee: await getDynamicFee(),
+    networkPassphrase,
+  })
+    .addOperation(
+      Operation.payment({
+        source: input.investorPubkey,
+        destination: input.destination,
+        asset: input.asset,
+        amount: input.amount,
+      }),
+    )
+    .setTimeout(STELLAR_TX_TIMEOUT_SEC);
+
+  if (input.memo) builder.addMemo(Memo.text(input.memo.slice(0, 28)));
+
+  const tx = builder.build();
+  return { xdr: tx.toXDR(), hashHex: '0x' + tx.hash().toString('hex') };
+}
+
+/**
  * Submete tx assinada pelo investidor via Privy.
  * Para tx que precisa de signature adicional (ex: distributor), passar
  * `extraSigners` com pubkey + base64 signature.

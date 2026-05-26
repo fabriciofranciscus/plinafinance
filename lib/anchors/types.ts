@@ -230,6 +230,12 @@ export interface OnRampTransaction {
     feeAmount?: string;
     /** Stellar transaction hash once the crypto has been sent. */
     stellarTxHash?: string;
+    /**
+     * Stellar ClaimableBalance ID emitido pela anchor (PLINA-MOD-007:
+     * Etherfuse PIX/BRL paga via CB, não payment direto). Investor faz
+     * `Operation.claimClaimableBalance` pra mover o asset pra trustline.
+     */
+    stellarClaimableBalanceId?: string;
     /** URL for anchor-hosted interactive flow (e.g. SEP-24). */
     interactiveUrl?: string;
     /** ISO 8601 creation timestamp. */
