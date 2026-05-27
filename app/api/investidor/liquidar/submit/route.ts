@@ -9,37 +9,44 @@
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { submitLiquidacao } from '@/lib/services/liquidacao';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { parseBody } from '@/lib/http/parse-body';
+import {
+  stellarPubkey,
+  stellarSignatureHex,
+  stellarXdr,
+} from '@/lib/http/zod-stellar';
 
 export const dynamic = 'force-dynamic';
 
+// C-03: amount no body é ignorado — amount autoritativo sai da própria XDR
+// em submitLiquidacao. Aceito no schema só pra clientes legados não quebrarem.
+const Schema = z
+  .object({
+    xdr: stellarXdr(),
+    pubkey: stellarPubkey(),
+    signatureHex: stellarSignatureHex(),
+    amount: z.string().max(40).optional(),
+  })
+  .strict();
+
 export const POST = withAuth(async (req, { user }) => {
+  const parsed = await parseBody(req, Schema);
+  if ('response' in parsed) return parsed.response;
+  const { xdr, pubkey, signatureHex } = parsed.data;
   try {
-    const body = (await req.json()) as {
-      xdr?: string;
-      pubkey?: string;
-      signatureHex?: string;
-      amount?: string;
-    };
-    if (!body.xdr || !body.pubkey || !body.signatureHex) {
-      return NextResponse.json(
-        { error: 'xdr, pubkey, signatureHex são obrigatórios' },
-        { status: 400 },
-      );
-    }
-    if (body.pubkey !== user.publicKey) {
+    if (pubkey !== user.publicKey) {
       return NextResponse.json(
         { error: 'pubkey não corresponde ao investidor autenticado' },
         { status: 403 },
       );
     }
-    // C-03: body.amount agora é opcional/ignorado — amount autoritativo
-    // sai da própria XDR em submitLiquidacao.
     const result = await submitLiquidacao({
-      xdr: body.xdr,
-      investorPubkey: body.pubkey,
-      signatureHex: body.signatureHex,
+      xdr,
+      investorPubkey: pubkey,
+      signatureHex,
       investidorId: user.investidorId,
       privyId: user.privyId,
     });

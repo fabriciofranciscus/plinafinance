@@ -35,7 +35,7 @@ const Schema = z
   .strict();
 
 export async function POST(req: Request) {
-  if (!leadLimiter.consume(clientIp(req))) {
+  if (!(await leadLimiter.consume(clientIp(req)))) {
     return NextResponse.json(
       { error: 'too many requests' },
       { status: 429 },

@@ -15,43 +15,50 @@
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { EtherfuseClient } from '@/lib/anchors/etherfuse';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { parseBody } from '@/lib/http/parse-body';
+import { stellarPubkey } from '@/lib/http/zod-stellar';
 import { parseBrlAmount } from '@/lib/format/parse-brl';
 import { logStellarError } from '@/lib/stellar/log-error';
 
 export const dynamic = 'force-dynamic';
 
+const Schema = z
+  .object({
+    amountBrl: z.string().max(40).optional(),
+    amountTesouro: z.string().max(40).optional(),
+    direction: z.enum(['onramp', 'offramp']).optional(),
+    customerId: z.string().min(1).max(100),
+    stellarAddress: stellarPubkey(),
+  })
+  .strict()
+  .refine(
+    (b) =>
+      (b.direction ?? 'onramp') === 'offramp'
+        ? typeof b.amountTesouro === 'string' && b.amountTesouro.length > 0
+        : typeof b.amountBrl === 'string' && b.amountBrl.length > 0,
+    {
+      message:
+        'amountBrl obrigatório em direction=onramp; amountTesouro obrigatório em direction=offramp',
+    },
+  );
+
 export const POST = withAuth(async (req, { user }) => {
+  const parsed = await parseBody(req, Schema);
+  if ('response' in parsed) return parsed.response;
+  const body = parsed.data;
   try {
-    const body = (await req.json()) as {
-      amountBrl?: string;
-      amountTesouro?: string;
-      direction?: 'onramp' | 'offramp';
-      customerId?: string;
-      stellarAddress?: string;
-    };
     const { customerId, stellarAddress } = body;
     const direction = body.direction ?? 'onramp';
-    if (!customerId || !stellarAddress) {
-      return NextResponse.json(
-        { error: 'customerId, stellarAddress obrigatórios' },
-        { status: 400 },
-      );
-    }
 
     let sourceAmount: string;
     let fromCurrency: string;
     let toCurrency: string;
     if (direction === 'offramp') {
-      if (!body.amountTesouro) {
-        return NextResponse.json(
-          { error: 'amountTesouro obrigatório em direction=offramp' },
-          { status: 400 },
-        );
-      }
       const v = Number(body.amountTesouro);
       if (!Number.isFinite(v) || v <= 0) {
         return NextResponse.json(
@@ -63,13 +70,7 @@ export const POST = withAuth(async (req, { user }) => {
       fromCurrency = 'TESOURO';
       toCurrency = 'BRL';
     } else {
-      if (!body.amountBrl) {
-        return NextResponse.json(
-          { error: 'amountBrl obrigatório em direction=onramp' },
-          { status: 400 },
-        );
-      }
-      const amountValue = parseBrlAmount(body.amountBrl);
+      const amountValue = parseBrlAmount(body.amountBrl!);
       if (amountValue === null) {
         return NextResponse.json(
           { error: 'amountBrl inválido' },

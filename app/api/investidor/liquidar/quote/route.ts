@@ -12,29 +12,35 @@
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { calcularValorLiquidacao } from '@/lib/services/liquidacao';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { parseBody } from '@/lib/http/parse-body';
 import { sensitiveAuthLimiter, clientIp } from '@/lib/rate-limit/config';
 
 export const dynamic = 'force-dynamic';
 
+const Schema = z
+  .object({
+    amountPlinarf: z
+      .string()
+      .regex(/^\d+(\.\d+)?$/, 'amountPlinarf deve ser numérico')
+      .refine((v) => Number(v) > 0, 'amountPlinarf deve ser > 0'),
+  })
+  .strict();
+
 export const POST = withAuth(async (req, _ctx) => {
-  if (!sensitiveAuthLimiter.consume(clientIp(req))) {
+  if (!(await sensitiveAuthLimiter.consume(clientIp(req)))) {
     return NextResponse.json(
       { error: 'too many requests' },
       { status: 429 },
     );
   }
+  const parsed = await parseBody(req, Schema);
+  if ('response' in parsed) return parsed.response;
   try {
-    const body = (await req.json()) as { amountPlinarf?: string };
-    if (!body.amountPlinarf) {
-      return NextResponse.json(
-        { error: 'amountPlinarf obrigatório' },
-        { status: 400 },
-      );
-    }
     const result = await calcularValorLiquidacao({
-      amountPlinarf: body.amountPlinarf,
+      amountPlinarf: parsed.data.amountPlinarf,
     });
     return NextResponse.json(result);
   } catch (err) {

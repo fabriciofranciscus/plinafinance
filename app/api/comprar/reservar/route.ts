@@ -5,23 +5,25 @@
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { criarReserva } from '@/lib/services/realizacao';
+import { parseBody } from '@/lib/http/parse-body';
 
 export const dynamic = 'force-dynamic';
 
+const Schema = z
+  .object({
+    cotaId: z.string().min(1).max(60),
+    leadCompradorId: z.string().min(1).max(60),
+    sinalSimulado: z.string().max(40).optional(),
+  })
+  .strict();
+
 export async function POST(req: Request) {
+  const parsed = await parseBody(req, Schema);
+  if ('response' in parsed) return parsed.response;
+  const body = parsed.data;
   try {
-    const body = (await req.json()) as {
-      cotaId?: string;
-      leadCompradorId?: string;
-      sinalSimulado?: string;
-    };
-    if (!body.cotaId || !body.leadCompradorId) {
-      return NextResponse.json(
-        { error: 'cotaId e leadCompradorId obrigatórios' },
-        { status: 400 },
-      );
-    }
     const result = await criarReserva({
       cotaId: body.cotaId,
       leadCompradorId: body.leadCompradorId,

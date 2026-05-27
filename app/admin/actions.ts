@@ -19,7 +19,7 @@ import {
   passwordMatches,
   setAdminCookie,
 } from '@/lib/auth/admin';
-import { createRateLimiter } from '@/lib/rate-limit/in-memory';
+import { adminLoginLimiter } from '@/lib/rate-limit/config';
 import {
   atualizarStatusCota,
   executarClawback,
@@ -38,13 +38,8 @@ export interface ActionResult {
 
 // C-05: rate-limit em tentativas de senha. 5 falhas / 15 min por IP.
 // Next 16 Server Actions já têm CSRF protection automática (origin check),
-// então o gap restante é só brute-force. In-memory é OK pra POC (Fluid
-// Compute reusa instância); produção real → Upstash/KV.
-const loginRateLimiter = createRateLimiter({
-  limit: 5,
-  windowMs: 15 * 60_000,
-});
-
+// então o gap restante é só brute-force. Backend é Upstash em prod
+// (compartilhado entre instâncias Fluid Compute) e in-memory em dev/CI.
 async function getClientIp(): Promise<string> {
   const h = await headers();
   const xff = h.get('x-forwarded-for');
@@ -57,7 +52,7 @@ export async function passwordLoginAction(
   formData: FormData,
 ): Promise<ActionResult> {
   const ip = await getClientIp();
-  if (!loginRateLimiter.consume(ip)) {
+  if (!(await adminLoginLimiter.consume(ip))) {
     return {
       ok: false,
       error: 'Muitas tentativas. Tente novamente em alguns minutos.',
@@ -72,7 +67,7 @@ export async function passwordLoginAction(
   }
   // Sucesso: reset do bucket pra esse IP — não penaliza usuário legítimo
   // que acabou de errar uma vez antes.
-  loginRateLimiter.reset(ip);
+  await adminLoginLimiter.reset(ip);
   await setAdminCookie();
   redirect('/admin');
 }

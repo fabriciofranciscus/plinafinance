@@ -11,30 +11,30 @@
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { EtherfuseClient } from '@/lib/anchors/etherfuse';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { parseBody } from '@/lib/http/parse-body';
 
 export const dynamic = 'force-dynamic';
 
-export const POST = withAuth(async (req, { user }) => {
-  try {
-    const body = (await req.json()) as {
-      pixKey?: string;
-      pixKeyType?: string;
-      cpf?: string;
-      firstName?: string;
-      lastName?: string;
-    };
-    const { pixKey, pixKeyType, cpf, firstName, lastName } = body;
-    if (!pixKey || !pixKeyType || !cpf || !firstName || !lastName) {
-      return NextResponse.json(
-        { error: 'pixKey, pixKeyType, cpf, firstName, lastName obrigatórios' },
-        { status: 400 },
-      );
-    }
+const Schema = z
+  .object({
+    pixKey: z.string().min(1).max(200),
+    pixKeyType: z.enum(['cpf', 'email', 'phone', 'random']),
+    cpf: z.string().min(11).max(40),
+    firstName: z.string().min(1).max(100),
+    lastName: z.string().min(1).max(100),
+  })
+  .strict();
 
+export const POST = withAuth(async (req, { user }) => {
+  const parsed = await parseBody(req, Schema);
+  if ('response' in parsed) return parsed.response;
+  const { pixKey, pixKeyType, cpf, firstName, lastName } = parsed.data;
+  try {
     const investidor = await db.investidor.findUnique({
       where: { id: user.investidorId },
       select: {

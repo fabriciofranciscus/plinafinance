@@ -12,29 +12,29 @@
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { parseBody } from '@/lib/http/parse-body';
 import { logStellarError } from '@/lib/stellar/log-error';
 
 export const dynamic = 'force-dynamic';
 
-export const POST = withAuth(async (req, { user }) => {
-  try {
-    const body = (await req.json()) as {
-      orderId?: string;
-      xdr?: string;
-      signatureHex?: string;
-    };
-    const { orderId, xdr, signatureHex } = body;
-    if (!orderId || !xdr || !signatureHex) {
-      return NextResponse.json(
-        { error: 'orderId, xdr, signatureHex obrigatórios' },
-        { status: 400 },
-      );
-    }
+const Schema = z
+  .object({
+    orderId: z.string().min(1).max(60),
+    xdr: z.string().min(1).max(8192),
+    signatureHex: z.string().min(1).max(256),
+  })
+  .strict();
 
+export const POST = withAuth(async (req, { user }) => {
+  const parsed = await parseBody(req, Schema);
+  if ('response' in parsed) return parsed.response;
+  const { orderId, xdr, signatureHex } = parsed.data;
+  try {
     const order = await db.onRampOrder.findUnique({ where: { id: orderId } });
     if (!order) {
       return NextResponse.json({ error: 'order não encontrada' }, { status: 404 });

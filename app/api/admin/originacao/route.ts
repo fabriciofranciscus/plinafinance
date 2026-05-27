@@ -13,8 +13,10 @@
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { isAdminAuthenticated } from '@/lib/auth/admin';
 import { requireAdminCsrf } from '@/lib/auth/admin-csrf';
+import { parseBody } from '@/lib/http/parse-body';
 import {
   executarPixSimulado,
   gerarOferta,
@@ -25,64 +27,90 @@ import { TipoBem } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
+const NumericString = z.string().regex(/^\d+(\.\d+)?$/, 'valor numérico inválido');
+
+const Schema = z.discriminatedUnion('action', [
+  z
+    .object({
+      action: z.literal('gerar-oferta'),
+      leadVendedorId: z.string().min(1).max(60),
+      tipoBem: z.enum(['IMOVEL', 'VEICULO', 'EQUIPAMENTO', 'SERVICO']),
+      valorCarta: NumericString,
+      administradora: z.string().min(1).max(200),
+      desagioAquisicao: NumericString,
+      prazoRestanteMeses: z.number().int().positive().max(600).optional(),
+      validadeHoras: z.number().int().positive().max(168).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('registrar-cessao'),
+      ofertaId: z.string().min(1).max(60),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('executar-pix-simulado'),
+      cessaoId: z.string().min(1).max(60),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('incorporar-cota'),
+      cessaoId: z.string().min(1).max(60),
+      localizacaoAprox: z.string().max(200).optional(),
+      desagioRevenda: NumericString.optional(),
+    })
+    .strict(),
+]);
+
 export async function POST(req: Request) {
   const csrf = requireAdminCsrf(req);
   if (csrf) return csrf;
   if (!(await isAdminAuthenticated())) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
+  const parsed = await parseBody(req, Schema);
+  if ('response' in parsed) return parsed.response;
+  const body = parsed.data;
   try {
-    const body = (await req.json()) as { action?: string } & Record<string, unknown>;
     switch (body.action) {
       case 'gerar-oferta': {
         const result = await gerarOferta({
-          leadVendedorId: String(body.leadVendedorId),
-          tipoBem: String(body.tipoBem) as TipoBem,
-          valorCarta: String(body.valorCarta),
-          administradora: String(body.administradora),
-          desagioAquisicao: String(body.desagioAquisicao),
-          prazoRestanteMeses: body.prazoRestanteMeses
-            ? Number(body.prazoRestanteMeses)
-            : undefined,
-          validadeHoras: body.validadeHoras
-            ? Number(body.validadeHoras)
-            : 48,
+          leadVendedorId: body.leadVendedorId,
+          tipoBem: body.tipoBem as TipoBem,
+          valorCarta: body.valorCarta,
+          administradora: body.administradora,
+          desagioAquisicao: body.desagioAquisicao,
+          prazoRestanteMeses: body.prazoRestanteMeses,
+          validadeHoras: body.validadeHoras ?? 48,
           operador: 'admin-panel',
         });
         return NextResponse.json({ ofertaId: result.id });
       }
       case 'registrar-cessao': {
         const result = await registrarCessao({
-          ofertaId: String(body.ofertaId),
+          ofertaId: body.ofertaId,
           operador: 'admin-panel',
         });
         return NextResponse.json(result);
       }
       case 'executar-pix-simulado': {
         const result = await executarPixSimulado({
-          cessaoId: String(body.cessaoId),
+          cessaoId: body.cessaoId,
           operador: 'admin-panel',
         });
         return NextResponse.json(result);
       }
       case 'incorporar-cota': {
         const result = await incorporarCotaDoFunil({
-          cessaoId: String(body.cessaoId),
-          localizacaoAprox: body.localizacaoAprox
-            ? String(body.localizacaoAprox)
-            : undefined,
-          desagioRevenda: body.desagioRevenda
-            ? String(body.desagioRevenda)
-            : undefined,
+          cessaoId: body.cessaoId,
+          localizacaoAprox: body.localizacaoAprox,
+          desagioRevenda: body.desagioRevenda,
           operador: 'admin-panel',
         });
         return NextResponse.json(result);
       }
-      default:
-        return NextResponse.json(
-          { error: `action desconhecida: ${body.action}` },
-          { status: 400 },
-        );
     }
   } catch (err) {
     return NextResponse.json(

@@ -27,6 +27,8 @@
     "@privy-io/react-auth": "^3.26.0",
     "@privy-io/server-auth": "^1.32.5",
     "@stellar/stellar-sdk": "^13.0.0",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "dotenv": "^16.4.7",

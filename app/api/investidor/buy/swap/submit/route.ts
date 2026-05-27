@@ -14,6 +14,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
@@ -21,48 +22,43 @@ import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { logStellarError } from '@/lib/stellar/log-error';
+import { parseBody } from '@/lib/http/parse-body';
+import {
+  stellarPubkey,
+  stellarSignatureHex,
+  stellarXdr,
+} from '@/lib/http/zod-stellar';
 import { parseStellarAmount } from '@/lib/format/parse-stellar-amount';
 import { assertSwapXdrMatchesQuote } from '@/lib/stellar/parse-swap-xdr';
 import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 
 export const dynamic = 'force-dynamic';
 
+const Schema = z
+  .object({
+    quoteId: z.string().min(1).max(60),
+    investorPubkey: stellarPubkey(),
+    signatureHex: stellarSignatureHex(),
+    xdr: stellarXdr(),
+    distributorSigBase64: z.string().min(1).max(256),
+    distributorPubkey: stellarPubkey(),
+    investidorId: z.string().min(1).max(60).optional(),
+  })
+  .strict();
+
 export const POST = withAuth(async (req, { user }) => {
+  const parsed = await parseBody(req, Schema);
+  if ('response' in parsed) return parsed.response;
+  const {
+    quoteId,
+    investorPubkey,
+    signatureHex,
+    xdr,
+    distributorSigBase64,
+    distributorPubkey,
+    investidorId,
+  } = parsed.data;
   try {
-    const body = (await req.json()) as {
-      quoteId?: string;
-      investorPubkey?: string;
-      signatureHex?: string;
-      xdr?: string;
-      distributorSigBase64?: string;
-      distributorPubkey?: string;
-      investidorId?: string;
-    };
-    const {
-      quoteId,
-      investorPubkey,
-      signatureHex,
-      xdr,
-      distributorSigBase64,
-      distributorPubkey,
-      investidorId,
-    } = body;
-    if (
-      !quoteId ||
-      !investorPubkey ||
-      !signatureHex ||
-      !xdr ||
-      !distributorSigBase64 ||
-      !distributorPubkey
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            'quoteId, investorPubkey, signatureHex, xdr, distributorSigBase64, distributorPubkey obrigatórios',
-        },
-        { status: 400 },
-      );
-    }
     if (user.publicKey !== investorPubkey) {
       return NextResponse.json(
         { error: 'investorPubkey não corresponde ao investidor autenticado' },

@@ -16,30 +16,36 @@
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { authorizeTrustline } from '@/lib/stellar/issuer';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { parseBody } from '@/lib/http/parse-body';
+import {
+  stellarPubkey,
+  stellarSignatureHex,
+  stellarXdr,
+} from '@/lib/http/zod-stellar';
 import { logStellarError } from '@/lib/stellar/log-error';
 
 export const dynamic = 'force-dynamic';
 
+const Schema = z
+  .object({
+    xdr: stellarXdr(),
+    investorPubkey: stellarPubkey(),
+    signatureHex: stellarSignatureHex(),
+  })
+  .strict();
+
 export const POST = withAuth(async (req, { user }) => {
+  const parsed = await parseBody(req, Schema);
+  if ('response' in parsed) return parsed.response;
+  const { xdr, investorPubkey, signatureHex } = parsed.data;
   try {
-    const body = (await req.json()) as {
-      xdr?: string;
-      investorPubkey?: string;
-      signatureHex?: string;
-    };
-    const { xdr, investorPubkey, signatureHex } = body;
-    if (!xdr || !investorPubkey || !signatureHex) {
-      return NextResponse.json(
-        { error: 'xdr, investorPubkey, signatureHex obrigatórios' },
-        { status: 400 },
-      );
-    }
     if (investorPubkey !== user.publicKey) {
       return NextResponse.json(
         { error: 'investorPubkey não corresponde ao investidor autenticado' },

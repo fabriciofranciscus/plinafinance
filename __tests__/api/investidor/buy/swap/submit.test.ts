@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Prisma } from '@prisma/client';
+import { Keypair } from '@stellar/stellar-sdk';
+
+const USER_PK = Keypair.random().publicKey();
+const OTHER_PK = Keypair.random().publicKey();
+const DIST_PK = Keypair.random().publicKey();
 
 const {
   quoteFindUnique,
@@ -33,7 +38,7 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
         user: {
           privyId: 'did:privy:abc',
           investidorId: 'inv_1',
-          publicKey: 'GABC',
+          publicKey: USER_PK,
           email: 'x@y.z',
           etherfuseCustomerId: 'cust_1',
         },
@@ -78,11 +83,11 @@ function req(body: object): Request {
 
 const FULL_BODY = {
   quoteId: 'q_1',
-  investorPubkey: 'GABC',
-  signatureHex: '0xdead',
-  xdr: 'AAAA...',
+  investorPubkey: USER_PK,
+  signatureHex: 'deadbeef',
+  xdr: 'AAAA',
   distributorSigBase64: 'sig==',
-  distributorPubkey: 'GDIST',
+  distributorPubkey: DIST_PK,
 };
 
 function baseQuote(overrides: Partial<Record<string, unknown>> = {}) {
@@ -129,7 +134,7 @@ describe('POST /api/investidor/buy/swap/submit', () => {
   });
 
   it('403 investorPubkey ≠ user.publicKey', async () => {
-    const r = await POST(req({ ...FULL_BODY, investorPubkey: 'GOUTRO' }));
+    const r = await POST(req({ ...FULL_BODY, investorPubkey: OTHER_PK }));
     expect(r.status).toBe(403);
   });
 
@@ -160,7 +165,7 @@ describe('POST /api/investidor/buy/swap/submit', () => {
       baseQuote({
         consumedAt: new Date(),
         consumedTxHash: 'tx_prev',
-        submitXdrHash: 'fe73463a59d79cb4609d5f18447ed88de5be0352298d9c24e55c56297122c5fd', // sha256("AAAA...")
+        submitXdrHash: '63c1dd951ffedf6f7fd968ad4efa39b8ed584f162f46e715114ee184f8de9201', // sha256("AAAA")
       }),
     );
     const r = await POST(req(FULL_BODY));
