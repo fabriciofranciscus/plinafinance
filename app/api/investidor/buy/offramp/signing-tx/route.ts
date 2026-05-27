@@ -18,10 +18,12 @@
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { Transaction } from '@stellar/stellar-sdk';
 import { db } from '@/lib/db';
 import { EtherfuseClient } from '@/lib/anchors/etherfuse';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { parseBody } from '@/lib/http/parse-body';
 import { buildPaymentXdr } from '@/lib/stellar/transactions';
 import { buildAsset } from '@/lib/stellar/account';
 import { networkPassphrase } from '@/lib/stellar/config';
@@ -29,18 +31,18 @@ import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 
 export const dynamic = 'force-dynamic';
 
+const Schema = z.object({ orderId: z.string().min(1).max(60) }).strict();
+
 function hashHexFromXdr(xdr: string): string {
   const tx = new Transaction(xdr, networkPassphrase);
   return '0x' + tx.hash().toString('hex');
 }
 
 export const POST = withAuth(async (req, { user }) => {
+  const parsed = await parseBody(req, Schema);
+  if ('response' in parsed) return parsed.response;
+  const { orderId } = parsed.data;
   try {
-    const { orderId } = (await req.json()) as { orderId?: string };
-    if (!orderId) {
-      return NextResponse.json({ error: 'orderId obrigatório' }, { status: 400 });
-    }
-
     const order = await db.offRampOrder.findUnique({
       where: { id: orderId },
       include: { quote: true },

@@ -21,6 +21,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import {
@@ -32,23 +33,24 @@ import { buildAsset } from '@/lib/stellar/account';
 import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { parseBody } from '@/lib/http/parse-body';
+import { stellarPubkey } from '@/lib/http/zod-stellar';
 
 export const dynamic = 'force-dynamic';
 
+const Schema = z
+  .object({
+    quoteId: z.string().min(1).max(60),
+    investorPubkey: stellarPubkey(),
+    investidorId: z.string().min(1).max(60).optional(),
+  })
+  .strict();
+
 export const POST = withAuth(async (req, { user }) => {
+  const parsed = await parseBody(req, Schema);
+  if ('response' in parsed) return parsed.response;
+  const { quoteId, investorPubkey, investidorId } = parsed.data;
   try {
-    const body = (await req.json()) as {
-      quoteId?: string;
-      investorPubkey?: string;
-      investidorId?: string;
-    };
-    const { quoteId, investorPubkey, investidorId } = body;
-    if (!quoteId || !investorPubkey) {
-      return NextResponse.json(
-        { error: 'quoteId e investorPubkey obrigatórios' },
-        { status: 400 },
-      );
-    }
     if (user.publicKey !== investorPubkey) {
       return NextResponse.json(
         { error: 'investorPubkey não corresponde ao investidor autenticado' },

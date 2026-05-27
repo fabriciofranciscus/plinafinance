@@ -16,30 +16,31 @@
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { EtherfuseClient } from '@/lib/anchors/etherfuse';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { parseBody } from '@/lib/http/parse-body';
 import { getAssetBalance } from '@/lib/stellar/account';
 import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 
 export const dynamic = 'force-dynamic';
 
+const Schema = z.object({ orderId: z.string().min(1).max(60) }).strict();
+
 export const POST = withAuth(async (req, { user }) => {
+  const env = process.env.ETHERFUSE_ENV ?? 'sandbox';
+  if (env === 'production') {
+    return NextResponse.json(
+      { error: 'sandbox-pay desabilitado em produção' },
+      { status: 403 },
+    );
+  }
+  const parsed = await parseBody(req, Schema);
+  if ('response' in parsed) return parsed.response;
+  const { orderId } = parsed.data;
   try {
-    const env = process.env.ETHERFUSE_ENV ?? 'sandbox';
-    if (env === 'production') {
-      return NextResponse.json(
-        { error: 'sandbox-pay desabilitado em produção' },
-        { status: 403 },
-      );
-    }
-
-    const { orderId } = (await req.json()) as { orderId?: string };
-    if (!orderId) {
-      return NextResponse.json({ error: 'orderId obrigatório' }, { status: 400 });
-    }
-
     const order = await db.onRampOrder.findUnique({ where: { id: orderId } });
     if (!order) {
       return NextResponse.json({ error: 'order não encontrada' }, { status: 404 });

@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Keypair } from '@stellar/stellar-sdk';
+
+const USER_PK = Keypair.random().publicKey();
+const OTHER_PK = Keypair.random().publicKey();
 
 const { quoteCreate, getQuote } = vi.hoisted(() => ({
   quoteCreate: vi.fn(),
@@ -17,7 +21,7 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
         user: {
           privyId: 'did:privy:abc',
           investidorId: 'inv_1',
-          publicKey: 'GABC',
+          publicKey: USER_PK,
           email: 'x@y.z',
           etherfuseCustomerId: 'cust_1',
         },
@@ -69,21 +73,21 @@ describe('POST /api/investidor/quote', () => {
 
   it('403 quando customerId não casa', async () => {
     const r = await POST(
-      req({ amountBrl: '100', customerId: 'OUTRO', stellarAddress: 'GABC' }),
+      req({ amountBrl: '100', customerId: 'OUTRO', stellarAddress: USER_PK }),
     );
     expect(r.status).toBe(403);
   });
 
   it('403 quando stellarAddress não casa', async () => {
     const r = await POST(
-      req({ amountBrl: '100', customerId: 'cust_1', stellarAddress: 'GOUTRO' }),
+      req({ amountBrl: '100', customerId: 'cust_1', stellarAddress: OTHER_PK }),
     );
     expect(r.status).toBe(403);
   });
 
   it('200 happy path persiste o quote com user.investidorId', async () => {
     const r = await POST(
-      req({ amountBrl: '100', customerId: 'cust_1', stellarAddress: 'GABC' }),
+      req({ amountBrl: '100', customerId: 'cust_1', stellarAddress: USER_PK }),
     );
     expect(r.status).toBe(200);
     const json = await r.json();
@@ -105,7 +109,7 @@ describe('POST /api/investidor/quote', () => {
       createdAt: new Date().toISOString(),
     });
     const r = await POST(
-      req({ amountBrl: '100', customerId: 'cust_1', stellarAddress: 'GABC' }),
+      req({ amountBrl: '100', customerId: 'cust_1', stellarAddress: USER_PK }),
     );
     expect(r.status).toBe(200);
     const persisted = quoteCreate.mock.calls[0][0].data.toAmount;
@@ -115,7 +119,7 @@ describe('POST /api/investidor/quote', () => {
 
   it('N-12: toAmount com ≤7 decimais não é alterado', async () => {
     const r = await POST(
-      req({ amountBrl: '100', customerId: 'cust_1', stellarAddress: 'GABC' }),
+      req({ amountBrl: '100', customerId: 'cust_1', stellarAddress: USER_PK }),
     );
     expect(r.status).toBe(200);
     const persisted = quoteCreate.mock.calls[0][0].data.toAmount;

@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Keypair } from '@stellar/stellar-sdk';
+
+const USER_PK = Keypair.random().publicKey();
+const OTHER_PK = Keypair.random().publicKey();
 
 const {
   submitWithPrivySignature,
@@ -30,7 +34,7 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
         user: {
           privyId: 'did:privy:abc',
           investidorId: 'inv_1',
-          publicKey: 'GABC',
+          publicKey: USER_PK,
           email: 'x@y.z',
           etherfuseCustomerId: 'cust_1',
         },
@@ -66,8 +70,8 @@ function req(body: object): Request {
 
 const FULL_BODY = {
   xdr: 'AAAA',
-  investorPubkey: 'GABC',
-  signatureHex: '0xsig',
+  investorPubkey: USER_PK,
+  signatureHex: 'a1b2c3d4',
 };
 
 beforeEach(() => {
@@ -90,7 +94,7 @@ describe('POST /api/investidor/buy/trust-plinarf/submit', () => {
   });
 
   it('403 pubkey ≠ user.publicKey', async () => {
-    const r = await POST(req({ ...FULL_BODY, investorPubkey: 'GOUTRO' }));
+    const r = await POST(req({ ...FULL_BODY, investorPubkey: OTHER_PK }));
     expect(r.status).toBe(403);
   });
 

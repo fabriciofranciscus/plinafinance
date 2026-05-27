@@ -12,19 +12,22 @@
  */
 
 import { NextResponse } from 'next/server';
-import { StrKey } from '@stellar/stellar-sdk';
+import { z } from 'zod';
 import { buildTrustlineXdr } from '@/lib/stellar/transactions';
 import { fundAccountIfNeeded } from '@/lib/stellar/account';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { parseBody } from '@/lib/http/parse-body';
+import { stellarPubkey } from '@/lib/http/zod-stellar';
 
 export const dynamic = 'force-dynamic';
 
+const Schema = z.object({ pubkey: stellarPubkey() }).strict();
+
 export const POST = withAuth(async (req, { user }) => {
+  const parsed = await parseBody(req, Schema);
+  if ('response' in parsed) return parsed.response;
+  const { pubkey } = parsed.data;
   try {
-    const { pubkey } = (await req.json()) as { pubkey?: string };
-    if (!pubkey || !StrKey.isValidEd25519PublicKey(pubkey)) {
-      return NextResponse.json({ error: 'pubkey inválida' }, { status: 400 });
-    }
     if (pubkey !== user.publicKey) {
       return NextResponse.json(
         { error: 'pubkey não corresponde ao investidor autenticado' },

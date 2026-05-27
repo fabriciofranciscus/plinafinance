@@ -13,19 +13,23 @@
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { parseBody } from '@/lib/http/parse-body';
 import { buildClaimClaimableBalanceXdr } from '@/lib/stellar/transactions';
 
 export const dynamic = 'force-dynamic';
 
-export const POST = withAuth(async (req, { user }) => {
-  try {
-    const { orderId } = (await req.json()) as { orderId?: string };
-    if (!orderId) {
-      return NextResponse.json({ error: 'orderId obrigatório' }, { status: 400 });
-    }
+const Schema = z
+  .object({ orderId: z.string().min(1).max(60) })
+  .strict();
 
+export const POST = withAuth(async (req, { user }) => {
+  const parsed = await parseBody(req, Schema);
+  if ('response' in parsed) return parsed.response;
+  const { orderId } = parsed.data;
+  try {
     const order = await db.onRampOrder.findUnique({ where: { id: orderId } });
     if (!order) {
       return NextResponse.json({ error: 'order não encontrada' }, { status: 404 });

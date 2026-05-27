@@ -15,13 +15,17 @@
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { EtherfuseClient } from '@/lib/anchors/etherfuse';
 import { AnchorError } from '@/lib/anchors/types';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { parseBody } from '@/lib/http/parse-body';
 
 export const dynamic = 'force-dynamic';
+
+const Schema = z.object({ quoteId: z.string().min(1).max(60) }).strict();
 
 const MOCK_PIX_KEY = 'plina-sandbox@mock.local';
 
@@ -32,15 +36,10 @@ function isBankAccountMissingError(err: unknown): boolean {
 }
 
 export const POST = withAuth(async (req, { user }) => {
+  const parsed = await parseBody(req, Schema);
+  if ('response' in parsed) return parsed.response;
+  const { quoteId } = parsed.data;
   try {
-    const { quoteId } = (await req.json()) as { quoteId?: string };
-    if (!quoteId) {
-      return NextResponse.json(
-        { error: 'quoteId obrigatório' },
-        { status: 400 },
-      );
-    }
-
     const quote = await db.quote.findUnique({
       where: { id: quoteId },
       include: { investidor: true, onRampOrder: true },

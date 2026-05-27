@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Keypair } from '@stellar/stellar-sdk';
+
+const USER_PK = Keypair.random().publicKey();
+const OTHER_PK = Keypair.random().publicKey();
 
 const { submitLiquidacao } = vi.hoisted(() => ({
   submitLiquidacao: vi.fn(),
@@ -16,7 +20,7 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
         user: {
           privyId: 'did:privy:abc',
           investidorId: 'inv_1',
-          publicKey: 'GABC',
+          publicKey: USER_PK,
           email: 'x@y.z',
           etherfuseCustomerId: 'cust_1',
         },
@@ -37,8 +41,8 @@ function req(body: object): Request {
 
 const FULL_BODY = {
   xdr: 'AAAA',
-  pubkey: 'GABC',
-  signatureHex: '0xsig',
+  pubkey: USER_PK,
+  signatureHex: 'a1b2c3d4',
   amount: '10',
 };
 
@@ -58,7 +62,7 @@ describe('POST /api/investidor/liquidar/submit', () => {
   });
 
   it('403 pubkey ≠ user.publicKey', async () => {
-    const r = await POST(req({ ...FULL_BODY, pubkey: 'GOUTRO' }));
+    const r = await POST(req({ ...FULL_BODY, pubkey: OTHER_PK }));
     expect(r.status).toBe(403);
   });
 
@@ -71,7 +75,7 @@ describe('POST /api/investidor/liquidar/submit', () => {
     expect(submitLiquidacao.mock.calls[0][0]).toMatchObject({
       investidorId: 'inv_1',
       privyId: 'did:privy:abc',
-      investorPubkey: 'GABC',
+      investorPubkey: USER_PK,
     });
     // C-03: amount não é mais passado — autoritativo vem do XDR no service.
     expect(submitLiquidacao.mock.calls[0][0].amount).toBeUndefined();
@@ -91,15 +95,15 @@ describe('POST /api/investidor/liquidar/submit', () => {
   });
 
   it('NÃO aceita investidorId do body (drop F-05)', async () => {
-    // Body com investidorId malicioso é simplesmente ignorado — TypeScript
-    // não tipa mais e o service sempre recebe user.investidorId.
+    // Zod .strict() agora rejeita chaves desconhecidas com 400 — antes era
+    // aceito e ignorado. Mais defensivo: nada de investidorId do body chega
+    // ao service.
     const r = await POST(
       req({ ...FULL_BODY, investidorId: 'inv_OUTRO' as never } as Record<
         string,
         unknown
       >),
     );
-    expect(r.status).toBe(200);
-    expect(submitLiquidacao.mock.calls[0][0].investidorId).toBe('inv_1');
+    expect(r.status).toBe(400);
   });
 });

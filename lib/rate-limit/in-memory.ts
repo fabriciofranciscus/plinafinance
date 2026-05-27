@@ -21,8 +21,13 @@ interface Bucket {
 }
 
 export interface RateLimiter {
-  consume(key: string): boolean;
-  reset(key?: string): void;
+  /**
+   * Retorna `true` se a request está dentro do limite. Promise quando o
+   * backend é remoto (Upstash); valor síncrono quando in-memory. Call sites
+   * devem usar `await` — `await <boolean>` é no-op.
+   */
+  consume(key: string): boolean | Promise<boolean>;
+  reset(key?: string): void | Promise<void>;
 }
 
 export interface RateLimiterOptions {
