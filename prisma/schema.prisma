@@ -57,6 +57,30 @@ enum MotivoClawback {
   ERRO_OPERACIONAL
 }
 
+/// PRD v1.0 §M3/M5/M7 — classes do PLINA-RF.
+/// Asset codes on-chain: SENIOR=`PLINARF` (legacy, mantido), SUBORDINADA=`PLINARFB`.
+/// Sênior: yield preferencial CDI+x% / SOFR+y%; Subordinada: skin-in-game Plina.
+enum ClassePLINARF {
+  SENIOR
+  SUBORDINADA
+}
+
+/// PRD v1.0 §M1 — caminho de cessão de direito creditório.
+/// API_ADMINISTRADORA: SLA contratual B2B (preferencial).
+/// CARTORIO_DIGITAL: fallback com taxa de anuência embutida (100-300 bps).
+enum CaminhoCessao {
+  API_ADMINISTRADORA
+  CARTORIO_DIGITAL
+}
+
+/// PRD v1.0 §M3/M4 — persona regulatória do investidor.
+/// Ortogonal a `StatusInvestidor` (que é fase do onboarding).
+enum TipoInvestidor {
+  INST_BR_QUALIFICADO
+  INST_BR_PROFISSIONAL
+  INST_INTERNACIONAL_PROFISSIONAL
+}
+
 enum StatusInvestidor {
   PENDENTE_KYC
   AUTORIZADO
@@ -194,38 +218,38 @@ model ParametrosPool {
 /// veio do funil vendedor) e à RealizacaoCaminho quando sai do pool.
 /// Administradora NÃO é exposta publicamente (PRD_MVP §6.7).
 model Cota {
-  id                  String        @id @default(cuid())
-  tipoBem             TipoBem
-  administradora      String
-  valorCarta          Decimal       @db.Decimal(15, 2)
-  desagioAquisicao    Decimal       @db.Decimal(5, 4)
-  desagioRevenda      Decimal?      @db.Decimal(5, 4)
-  localizacaoAprox    String?
-  prazoRestanteMeses  Int?
-  caminhoPrevisto     CaminhoRealizacao @default(A_REVENDA)
-  dataAquisicao       DateTime      @default(now())
-  statusEstoque       StatusEstoque @default(VERDE)
-  status              StatusCota    @default(DISPONIVEL)
-  tokensEmitidos      Decimal       @db.Decimal(20, 7) @default(0)
-  emissaoTxHash       String?
-  hashCessao          String?
+  id                 String            @id @default(cuid())
+  tipoBem            TipoBem
+  administradora     String
+  valorCarta         Decimal           @db.Decimal(15, 2)
+  desagioAquisicao   Decimal           @db.Decimal(5, 4)
+  desagioRevenda     Decimal?          @db.Decimal(5, 4)
+  localizacaoAprox   String?
+  prazoRestanteMeses Int?
+  caminhoPrevisto    CaminhoRealizacao @default(A_REVENDA)
+  dataAquisicao      DateTime          @default(now())
+  statusEstoque      StatusEstoque     @default(VERDE)
+  status             StatusCota        @default(DISPONIVEL)
+  tokensEmitidos     Decimal           @default(0) @db.Decimal(20, 7)
+  emissaoTxHash      String?
+  hashCessao         String?
   /// SHA-256 do laudo de validação legal (contemplação, adimplência,
   /// titularidade) — whitepaper §6.1. Registrado on-chain via Memo.hash
   /// antes da emissão pra prova pública.
-  hashValidacao       String?
-  validacaoTxHash     String?
-  notas               String?
-  criadaEm            DateTime      @default(now())
-  atualizadaEm        DateTime      @updatedAt
+  hashValidacao      String?
+  validacaoTxHash    String?
+  notas              String?
+  criadaEm           DateTime          @default(now())
+  atualizadaEm       DateTime          @updatedAt
 
   /// Cessao que originou esta cota (quando veio do funil vendedor).
   /// Null em cotas seedadas / incorporadas diretamente via /admin.
-  cessaoId            String?       @unique
-  cessao              Cessao?       @relation(fields: [cessaoId], references: [id])
+  cessaoId String? @unique
+  cessao   Cessao? @relation(fields: [cessaoId], references: [id])
 
-  eventos             EventoAudit[]
-  reservas            Reserva[]
-  realizacao          RealizacaoCaminho?
+  eventos    EventoAudit[]
+  reservas   Reserva[]
+  realizacao RealizacaoCaminho?
 
   @@index([status])
   @@index([statusEstoque])
@@ -234,44 +258,61 @@ model Cota {
 
 /// Investidor onboarded. PII off-chain. Public key on-chain.
 model Investidor {
-  id              String           @id @default(cuid())
-  nome            String
-  email           String           @unique
-  publicKey       String           @unique
+  id                     String           @id @default(cuid())
+  nome                   String
+  email                  String           @unique
+  publicKey              String           @unique
   /// Privy user ID (sub do JWT). Chave estável da sessão — auth-guard
   /// resolve o investidor por aqui em vez de email pra evitar round-trip
   /// `privy.getUserById` por request. Nullable enquanto rows antigas não
   /// foram backfillada (ver scripts/backfill-privy-id.ts).
-  privyId         String?          @unique
-  kycAprovado     Boolean          @default(false)
-  status          StatusInvestidor @default(PENDENTE_KYC)
-  trustlineTxHash String?
+  privyId                String?          @unique
+  kycAprovado            Boolean          @default(false)
+  status                 StatusInvestidor @default(PENDENTE_KYC)
+  trustlineTxHash        String?
   /// Hash da tx que estabeleceu a trustline TESOURO (asset bridge da
   /// Etherfuse). Necessário pra wallet receber TESOURO no caminho real
   /// BRL → TESOURO → PLINARF (whitepaper §6.6).
   tesouroTrustlineTxHash String?
   /// UUID do customer Etherfuse. Persistido pra idempotência (quote/order
   /// subsequentes reusam sem precisar re-criar customer).
-  etherfuseCustomerId String?
+  etherfuseCustomerId    String?
   /// PLINA-MOD-006: bankAccountId retornado por registerPixBankAccount.
   /// Lido por /offramp/create pra montar fiatAccountId sem hit em getFiatAccounts.
   etherfuseBankAccountId String?
   /// N-14: CPF normalizado (11 dígitos, sem máscara). Nullable pra rows
   /// pré-fix. Útil pra auditoria + matching com Etherfuse customer.
-  cpfNormalizado     String?
+  cpfNormalizado         String?
   /// N-14: true quando o CPF veio do fallback dummy de sandbox. Bloqueia
   /// operações em mainnet — exige re-KYC com CPF real.
-  isSyntheticCpf     Boolean          @default(false)
-  saldoEsperado   Decimal          @db.Decimal(20, 7) @default(0)
-  criadoEm        DateTime         @default(now())
-  atualizadoEm    DateTime         @updatedAt
+  isSyntheticCpf         Boolean          @default(false)
+  saldoEsperado          Decimal          @default(0) @db.Decimal(20, 7)
+  /// PRD v1.0 §M3/M4. Persona regulatória; ortogonal ao `status` (fase do
+  /// onboarding). Nullable enquanto KYC institucional não chega.
+  tipo                   TipoInvestidor?
+  /// ISO 3166-1 alpha-2 ("BR", "US", "GB", "SG"). Default BR pré-M4.
+  jurisdicao             String?
+  /// Razão social + CNPJ pra entidades brasileiras (M3). Investidor intl
+  /// usa identificadores próprios via anchor SEP-12 — não tem CNPJ.
+  razaoSocial            String?
+  cnpj                   String?
+  enderecoEntidade       Json?
+  /// PRD §M3 §3.6 — ticket check server-side aprovado.
+  ticketMinimoCheck      Boolean          @default(false)
+  /// PRD §M3 F-M3-5 — Suitability CVM 30. Schema interno do questionário.
+  suitabilityJson        Json?
+  criadoEm               DateTime         @default(now())
+  atualizadoEm           DateTime         @updatedAt
 
-  eventos         EventoAudit[]
-  quotes          Quote[]
-  onRampOrders    OnRampOrder[]
-  offRampOrders   OffRampOrder[]
+  eventos       EventoAudit[]
+  quotes        Quote[]
+  onRampOrders  OnRampOrder[]
+  offRampOrders OffRampOrder[]
+  holdings      HoldingPLINARF[]
 
   @@index([status])
+  @@index([tipo])
+  @@index([jurisdicao])
 }
 
 /// Quote BRL → TESOURO retornado pela Etherfuse, persistido pra binding
@@ -283,28 +324,28 @@ model Investidor {
 /// `id` é o UUID que a Etherfuse devolve em /ramp/quote, reusado como PK.
 /// `consumedAt` marca uso single-shot — quote queimado não pode reemitir.
 model Quote {
-  id              String   @id
-  investidorId    String
-  investidor      Investidor @relation(fields: [investidorId], references: [id])
-  fromCurrency    String
-  fromAmount      Decimal  @db.Decimal(20, 7)
-  toCurrency      String
-  toAmount        Decimal  @db.Decimal(20, 7)
-  exchangeRate    String
-  fee             String
-  expiresAt       DateTime
-  consumedAt      DateTime?
+  id             String     @id
+  investidorId   String
+  investidor     Investidor @relation(fields: [investidorId], references: [id])
+  fromCurrency   String
+  fromAmount     Decimal    @db.Decimal(20, 7)
+  toCurrency     String
+  toAmount       Decimal    @db.Decimal(20, 7)
+  exchangeRate   String
+  fee            String
+  expiresAt      DateTime
+  consumedAt     DateTime?
   /// Hash da tx Stellar que consumiu o quote (swap envelope na Phase 2,
   /// distribute single-shot na Phase 1).
-  consumedTxHash  String?
+  consumedTxHash String?
   /// C-04: sha256(xdr) reservado pelo request idempotente. Unique →
   /// retry com o mesmo XDR não re-submete; com XDR diferente o quote
   /// já está "lacrado" e retorna 409.
-  submitXdrHash   String?  @unique
-  criadoEm        DateTime @default(now())
+  submitXdrHash  String?    @unique
+  criadoEm       DateTime   @default(now())
 
-  onRampOrder     OnRampOrder?
-  offRampOrder    OffRampOrder?
+  onRampOrder  OnRampOrder?
+  offRampOrder OffRampOrder?
 
   @@index([investidorId])
   @@index([expiresAt])
@@ -318,28 +359,28 @@ model Quote {
 /// `id` é o orderId que a Etherfuse devolve. `stellarTxHash` é a tx de
 /// payment TESOURO → investor (preenche quando status=completed).
 model OnRampOrder {
-  id                      String   @id
-  quoteId                 String   @unique
-  quote                   Quote    @relation(fields: [quoteId], references: [id])
-  investidorId            String
-  investidor              Investidor @relation(fields: [investidorId], references: [id])
+  id                        String     @id
+  quoteId                   String     @unique
+  quote                     Quote      @relation(fields: [quoteId], references: [id])
+  investidorId              String
+  investidor                Investidor @relation(fields: [investidorId], references: [id])
   /// Status Etherfuse normalizado: pending | processing | completed | failed | cancelled | refunded.
-  status                  String   @default("pending")
+  status                    String     @default("pending")
   /// Hash da tx Stellar de payment TESOURO → investor.
-  stellarTxHash           String?
+  stellarTxHash             String?
   /// PLINA-MOD-007: ClaimableBalance ID retornado pela Etherfuse quando
   /// onramp PIX/BRL completa. Investor precisa fazer claimClaimableBalance
   /// pra TESOURO entrar na trustline (não é payment direto).
   stellarClaimableBalanceId String?
   /// Hash da tx Stellar do claim feito pelo investor. Idempotência pro
   /// handler /buy/claim/submit.
-  claimTxHash             String?
+  claimTxHash               String?
   /// PIX/SPEI instructions retornadas pela Etherfuse na criação da order.
   /// Persistido pra UI poder re-renderizar sem hit no Etherfuse.
-  paymentInstructionsJson Json?
-  settledAt               DateTime?
-  criadoEm                DateTime @default(now())
-  atualizadoEm            DateTime @updatedAt
+  paymentInstructionsJson   Json?
+  settledAt                 DateTime?
+  criadoEm                  DateTime   @default(now())
+  atualizadoEm              DateTime   @updatedAt
 
   @@index([investidorId])
   @@index([status])
@@ -351,24 +392,24 @@ model OnRampOrder {
 /// terminal upstream é `funded` (mapeado pra `processing`) — payout fiat
 /// real não acontece em testnet, mas o burn on-chain é real.
 model OffRampOrder {
-  id                      String   @id
-  quoteId                 String   @unique
-  quote                   Quote    @relation(fields: [quoteId], references: [id])
-  investidorId            String
-  investidor              Investidor @relation(fields: [investidorId], references: [id])
+  id                   String     @id
+  quoteId              String     @unique
+  quote                Quote      @relation(fields: [quoteId], references: [id])
+  investidorId         String
+  investidor           Investidor @relation(fields: [investidorId], references: [id])
   /// pending | signable_ready | submitted | processing | completed | failed | cancelled | refunded
-  status                  String   @default("pending")
+  status               String     @default("pending")
   /// XDR do burn devolvido pela Etherfuse (signableTransaction) — pronto
   /// pra assinatura via Privy raw-hash.
-  burnXdr                 String?
+  burnXdr              String?
   /// Hash da tx Stellar de burn submetida (consome TESOURO da wallet).
-  burnStellarTxHash       String?
+  burnStellarTxHash    String?
   /// Instructions de payout fiat (geralmente vazio em off-ramp; persistido
   /// pra UI consistência com OnRampOrder.paymentInstructionsJson).
-  fiatInstructionsJson    Json?
-  settledAt               DateTime?
-  criadoEm                DateTime @default(now())
-  atualizadoEm            DateTime @updatedAt
+  fiatInstructionsJson Json?
+  settledAt            DateTime?
+  criadoEm             DateTime   @default(now())
+  atualizadoEm         DateTime   @updatedAt
 
   @@index([investidorId])
   @@index([status])
@@ -381,22 +422,22 @@ model OffRampOrder {
 /// Lead capturado via /vender. PII off-chain. UTMs persistidas pra análise
 /// de canal (Google Ads, parcerias, orgânico).
 model LeadVendedor {
-  id            String   @id @default(cuid())
-  origem        String?
-  utmSource     String?
-  utmMedium     String?
-  utmCampaign   String?
-  nome          String
-  email         String   @unique
-  telefone      String?
-  cpf           String?
-  status        LeadVendedorStatus @default(NOVO)
-  motivoPerda   String?
-  criadoEm      DateTime @default(now())
-  atualizadoEm  DateTime @updatedAt
+  id           String             @id @default(cuid())
+  origem       String?
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+  nome         String
+  email        String             @unique
+  telefone     String?
+  cpf          String?
+  status       LeadVendedorStatus @default(NOVO)
+  motivoPerda  String?
+  criadoEm     DateTime           @default(now())
+  atualizadoEm DateTime           @updatedAt
 
-  ofertas       Oferta[]
-  eventos       EventoAudit[]
+  ofertas Oferta[]
+  eventos EventoAudit[]
 
   @@index([status])
   @@index([criadoEm])
@@ -405,23 +446,23 @@ model LeadVendedor {
 /// Oferta firme calculada pra um lead. Pode ter múltiplas versões
 /// (cada renegociação gera nova Oferta com versao++).
 model Oferta {
-  id                    String   @id @default(cuid())
-  leadVendedorId        String
-  leadVendedor          LeadVendedor @relation(fields: [leadVendedorId], references: [id])
-  tipoBem               TipoBem
-  valorCarta            Decimal  @db.Decimal(15, 2)
-  administradora        String
-  desagioAquisicao      Decimal  @db.Decimal(5, 4)
-  valorLiquidoVendedor  Decimal  @db.Decimal(15, 2)
-  prazoRestanteMeses    Int?
-  validade              DateTime
-  status                OfertaStatus @default(RASCUNHO)
-  versao                Int      @default(1)
-  criadaEm              DateTime @default(now())
-  atualizadaEm          DateTime @updatedAt
+  id                   String       @id @default(cuid())
+  leadVendedorId       String
+  leadVendedor         LeadVendedor @relation(fields: [leadVendedorId], references: [id])
+  tipoBem              TipoBem
+  valorCarta           Decimal      @db.Decimal(15, 2)
+  administradora       String
+  desagioAquisicao     Decimal      @db.Decimal(5, 4)
+  valorLiquidoVendedor Decimal      @db.Decimal(15, 2)
+  prazoRestanteMeses   Int?
+  validade             DateTime
+  status               OfertaStatus @default(RASCUNHO)
+  versao               Int          @default(1)
+  criadaEm             DateTime     @default(now())
+  atualizadaEm         DateTime     @updatedAt
 
-  cessao                Cessao?
-  eventos               EventoAudit[]
+  cessao  Cessao?
+  eventos EventoAudit[]
 
   @@index([leadVendedorId])
   @@index([status])
@@ -430,37 +471,45 @@ model Oferta {
 /// Cessão de direito creditório. Whitepaper §6.1: hash do documento na
 /// Stellar como prova pública. DocuSign sandbox no POC, real no MVP+.
 model Cessao {
-  id                  String   @id @default(cuid())
-  ofertaId            String   @unique
-  oferta              Oferta   @relation(fields: [ofertaId], references: [id])
+  id                  String        @id @default(cuid())
+  ofertaId            String        @unique
+  oferta              Oferta        @relation(fields: [ofertaId], references: [id])
   docusignEnvelopeId  String?
-  hashDocumento       String?  // SHA-256 do PDF assinado
-  onChainTxHash       String?  // tx Stellar com memo hash
+  hashDocumento       String? // SHA-256 do PDF assinado
+  onChainTxHash       String? // tx Stellar com memo hash
   assinadaEm          DateTime?
-  status              CessaoStatus @default(PENDENTE)
-  criadaEm            DateTime @default(now())
-  atualizadaEm        DateTime @updatedAt
+  status              CessaoStatus  @default(PENDENTE)
+  /// PRD v1.0 §M1 — caminho preferencial (API administradora) vs fallback
+  /// (cartório digital). Default CARTORIO_DIGITAL pra cessões pré-M1.
+  caminhoCessao       CaminhoCessao @default(CARTORIO_DIGITAL)
+  /// Taxa de anuência embutida no deságio quando caminho=CARTORIO_DIGITAL
+  /// (100-300 bps configurável por administradora). Nullable quando API.
+  taxaAnuenciaBps     Int?
+  /// Ref externo da administradora (orderId/contractId) quando caminho=API.
+  administradoraApiId String?
+  criadaEm            DateTime      @default(now())
+  atualizadaEm        DateTime      @updatedAt
 
-  pagamento           Pagamento?
-  cota                Cota?
-  eventos             EventoAudit[]
+  pagamento Pagamento?
+  cota      Cota?
+  eventos   EventoAudit[]
 
   @@index([status])
 }
 
 /// Pagamento ao vendedor (Pix simulado no MVP testnet, real em mainnet).
 model Pagamento {
-  id                String   @id @default(cuid())
-  cessaoId          String   @unique
-  cessao            Cessao   @relation(fields: [cessaoId], references: [id])
-  metodo            PagamentoMetodo @default(PIX_SIMULADO)
-  valor             Decimal  @db.Decimal(15, 2)
-  onChainTxHash     String?
-  executadoEm       DateTime?
-  comprovanteUrl    String?
-  status            PagamentoStatus @default(PENDENTE)
-  criadoEm          DateTime @default(now())
-  atualizadoEm      DateTime @updatedAt
+  id             String          @id @default(cuid())
+  cessaoId       String          @unique
+  cessao         Cessao          @relation(fields: [cessaoId], references: [id])
+  metodo         PagamentoMetodo @default(PIX_SIMULADO)
+  valor          Decimal         @db.Decimal(15, 2)
+  onChainTxHash  String?
+  executadoEm    DateTime?
+  comprovanteUrl String?
+  status         PagamentoStatus @default(PENDENTE)
+  criadoEm       DateTime        @default(now())
+  atualizadoEm   DateTime        @updatedAt
 
   @@index([status])
 }
@@ -472,26 +521,26 @@ model Pagamento {
 /// Lead capturado via /comprar. Pode ser PF (Maria) ou PJ (construtora,
 /// transportadora, empresário). Intenção de bem específica.
 model LeadComprador {
-  id            String   @id @default(cuid())
-  origem        String?
-  utmSource     String?
-  utmMedium     String?
-  utmCampaign   String?
-  nome          String
-  email         String   @unique
-  telefone      String?
-  documento     String?  // CPF ou CNPJ
-  tipo          LeadCompradorTipo @default(PESSOA_FISICA)
-  intencaoBem   String?
-  faixaCapital  String?
-  prazoDecisao  String?
-  status        LeadCompradorStatus @default(NOVO)
-  criadoEm      DateTime @default(now())
-  atualizadoEm  DateTime @updatedAt
+  id           String              @id @default(cuid())
+  origem       String?
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+  nome         String
+  email        String              @unique
+  telefone     String?
+  documento    String? // CPF ou CNPJ
+  tipo         LeadCompradorTipo   @default(PESSOA_FISICA)
+  intencaoBem  String?
+  faixaCapital String?
+  prazoDecisao String?
+  status       LeadCompradorStatus @default(NOVO)
+  criadoEm     DateTime            @default(now())
+  atualizadoEm DateTime            @updatedAt
 
-  reservas      Reserva[]
-  realizacoes   RealizacaoCaminho[]
-  eventos       EventoAudit[]
+  reservas    Reserva[]
+  realizacoes RealizacaoCaminho[]
+  eventos     EventoAudit[]
 
   @@index([status])
 }
@@ -499,17 +548,17 @@ model LeadComprador {
 /// Reserva de cota pelo comprador-usuário. 72h por default (PRD_MVP §6.8).
 /// Sinal simulado no testnet.
 model Reserva {
-  id                String   @id @default(cuid())
-  cotaId            String
-  cota              Cota     @relation(fields: [cotaId], references: [id])
-  leadCompradorId   String
-  leadComprador     LeadComprador @relation(fields: [leadCompradorId], references: [id])
-  expiraEm          DateTime
-  sinalSimulado     Decimal  @db.Decimal(15, 2) @default(0)
-  onChainTxHash     String?
-  status            ReservaStatus @default(ATIVA)
-  criadaEm          DateTime @default(now())
-  atualizadaEm      DateTime @updatedAt
+  id              String        @id @default(cuid())
+  cotaId          String
+  cota            Cota          @relation(fields: [cotaId], references: [id])
+  leadCompradorId String
+  leadComprador   LeadComprador @relation(fields: [leadCompradorId], references: [id])
+  expiraEm        DateTime
+  sinalSimulado   Decimal       @default(0) @db.Decimal(15, 2)
+  onChainTxHash   String?
+  status          ReservaStatus @default(ATIVA)
+  criadaEm        DateTime      @default(now())
+  atualizadaEm    DateTime      @updatedAt
 
   @@index([cotaId])
   @@index([status])
@@ -520,18 +569,18 @@ model Reserva {
 /// Quando A: comprador-usuário concluiu a transferência de titularidade
 /// e Plina capturou spread. Cota → REALIZADA. NAV/token sobe pra holders.
 model RealizacaoCaminho {
-  id                  String   @id @default(cuid())
-  cotaId              String   @unique
-  cota                Cota     @relation(fields: [cotaId], references: [id])
-  caminho             CaminhoRealizacao
-  leadCompradorId     String?
-  leadComprador       LeadComprador? @relation(fields: [leadCompradorId], references: [id])
-  valorRealizado      Decimal  @db.Decimal(15, 2)
-  custoAquisicao      Decimal  @db.Decimal(15, 2)
-  spread              Decimal  @db.Decimal(15, 2)
-  onChainTxHash       String?
-  executadaEm         DateTime @default(now())
-  operador            String?
+  id              String            @id @default(cuid())
+  cotaId          String            @unique
+  cota            Cota              @relation(fields: [cotaId], references: [id])
+  caminho         CaminhoRealizacao
+  leadCompradorId String?
+  leadComprador   LeadComprador?    @relation(fields: [leadCompradorId], references: [id])
+  valorRealizado  Decimal           @db.Decimal(15, 2)
+  custoAquisicao  Decimal           @db.Decimal(15, 2)
+  spread          Decimal           @db.Decimal(15, 2)
+  onChainTxHash   String?
+  executadaEm     DateTime          @default(now())
+  operador        String?
 
   @@index([caminho])
 }
@@ -545,35 +594,35 @@ model RealizacaoCaminho {
 /// comprador podem cross-verificar: hash do documento off-chain == memo
 /// da tx Stellar referenciada.
 model EventoAudit {
-  id              String          @id @default(cuid())
-  acao            AcaoAudit
-  operador        String?
-  motivoClawback  MotivoClawback?
-  fundamentoUrl   String?
-  payloadJson     Json?
+  id             String          @id @default(cuid())
+  acao           AcaoAudit
+  operador       String?
+  motivoClawback MotivoClawback?
+  fundamentoUrl  String?
+  payloadJson    Json?
   /// SHA-256 hex do payload canonicalizado. Igual ao Memo.Hash da tx.
-  payloadHash     String?
-  stellarTxHash   String?
+  payloadHash    String?
+  stellarTxHash  String?
   /// Privy user ID da sessão que disparou a ação. Rastreabilidade
   /// individual exigida pela CVM 175 — permite responder "qual sessão
   /// clicou no botão" em incidente. Nullable: rows antigas e fluxos
   /// admin/originador (sem sessão de investidor) ficam null.
-  privyId         String?
-  criadoEm        DateTime        @default(now())
+  privyId        String?
+  criadoEm       DateTime        @default(now())
 
   // Polymorphic-ish FKs (typed) — null exceto o relevante.
   cotaId          String?
-  cota            Cota?           @relation(fields: [cotaId], references: [id])
+  cota            Cota?          @relation(fields: [cotaId], references: [id])
   investidorId    String?
-  investidor      Investidor?     @relation(fields: [investidorId], references: [id])
+  investidor      Investidor?    @relation(fields: [investidorId], references: [id])
   leadVendedorId  String?
-  leadVendedor    LeadVendedor?   @relation(fields: [leadVendedorId], references: [id])
+  leadVendedor    LeadVendedor?  @relation(fields: [leadVendedorId], references: [id])
   ofertaId        String?
-  oferta          Oferta?         @relation(fields: [ofertaId], references: [id])
+  oferta          Oferta?        @relation(fields: [ofertaId], references: [id])
   cessaoId        String?
-  cessao          Cessao?         @relation(fields: [cessaoId], references: [id])
+  cessao          Cessao?        @relation(fields: [cessaoId], references: [id])
   leadCompradorId String?
-  leadComprador   LeadComprador?  @relation(fields: [leadCompradorId], references: [id])
+  leadComprador   LeadComprador? @relation(fields: [leadCompradorId], references: [id])
 
   @@index([acao])
   @@index([cotaId])
@@ -590,11 +639,11 @@ model EventoAudit {
 /// revogacao server-side no logout (vs cookie auto-explicit so via maxAge).
 /// Plano de migracao pra Clerk/Auth.js: SPECS_MVP_TECH.md §6.
 model AdminSession {
-  id          String    @id @default(cuid())
-  sessionId   String    @unique
-  criadoEm    DateTime  @default(now())
-  expiraEm    DateTime
-  revogadoEm  DateTime?
+  id         String    @id @default(cuid())
+  sessionId  String    @unique
+  criadoEm   DateTime  @default(now())
+  expiraEm   DateTime
+  revogadoEm DateTime?
 
   @@index([expiraEm])
 }
@@ -615,12 +664,93 @@ model WalletProvisioning {
 /// após Horizon confirmar. Liquidação não tem Quote (XDR é construída
 /// em /liquidar/quote mas não fica persistida) — daí tabela própria.
 model LiquidacaoSubmit {
-  id            String   @id @default(cuid())
-  xdrHash       String   @unique
-  investidorId  String
-  txHash        String?
-  criadoEm      DateTime @default(now())
-  atualizado    DateTime @updatedAt
+  id           String   @id @default(cuid())
+  xdrHash      String   @unique
+  investidorId String
+  txHash       String?
+  criadoEm     DateTime @default(now())
+  atualizado   DateTime @updatedAt
 
   @@index([investidorId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD v1.0 — extensões §M3/M5/M6/M7 (prd_v1_extensions)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// PRD v1.0 §M3 F-M3-2. Saldo por classe (Sênior/Subordinada) do investidor.
+/// Espelho off-chain do saldo on-chain pra consultas rápidas. Reconciliado
+/// via cron com Horizon balance.
+model HoldingPLINARF {
+  id            String        @id @default(cuid())
+  investidorId  String
+  investidor    Investidor    @relation(fields: [investidorId], references: [id])
+  classe        ClassePLINARF
+  saldo         Decimal       @default(0) @db.Decimal(20, 7)
+  /// Tx Stellar da primeira emissão dessa classe pro investidor.
+  emissaoTxHash String?
+  criadoEm      DateTime      @default(now())
+  atualizadoEm  DateTime      @updatedAt
+
+  @@unique([investidorId, classe])
+  @@index([classe])
+}
+
+/// PRD v1.0 §M5 F-M5-1. NAV diário publicado (snapshot 18:00 BRT). Histórico
+/// pra ficha técnica + auditoria. M7 substitui `publishedTxHash` por escrita
+/// em `nav_oracle.rs` Soroban contract.
+model NavSnapshot {
+  id                   String   @id @default(cuid())
+  data                 DateTime @unique
+  navTotal             Decimal  @db.Decimal(20, 2)
+  navPorToken          Decimal  @db.Decimal(20, 7)
+  tokensVivos          Decimal  @db.Decimal(20, 7)
+  classeSeniorNav      Decimal  @db.Decimal(20, 2)
+  classeSubordinadaNav Decimal  @db.Decimal(20, 2)
+  composicaoJson       Json
+  /// Memo-hash da tx auto-pagamento publicando o snapshot (interim).
+  /// M7 substitui por endereço do Soroban oracle.
+  publishedTxHash      String?
+  criadoEm             DateTime @default(now())
+
+  @@index([data])
+}
+
+/// PRD v1.0 §M5 F-M5-1 + §M7. Janela periódica de liquidez (resgate).
+/// Holders fazem fila no `JanelaLiquidez` ativo; quando fecha, waterfall
+/// executa burn TESOURO → BRL via Etherfuse (interim) ou contrato
+/// `waterfall.rs` Soroban (M7).
+model JanelaLiquidez {
+  id        String   @id @default(cuid())
+  abreEm    DateTime
+  fechaEm   DateTime
+  /// Teto de resgate em TESOURO (nullable = sem cap).
+  capTotal  Decimal? @db.Decimal(20, 2)
+  consumido Decimal  @default(0) @db.Decimal(20, 2)
+  /// AGENDADA · ABERTA · FECHADA. String pra evitar enum migration toda
+  /// vez que adicionar status.
+  status    String   @default("AGENDADA")
+  criadoEm  DateTime @default(now())
+
+  @@index([abreEm])
+  @@index([status])
+}
+
+/// PRD v1.0 §M6 F-M6-2. Prestadores nominais (administrador fiduciário,
+/// custodiante, auditor Big Four, agência de rating, anchor). Renderizado
+/// em /compliance com `urlVerificacao` clicável.
+model PrestadorRegulado {
+  id                String    @id @default(cuid())
+  /// administrador-fiduciario · custodiante · auditor · rating · anchor.
+  papel             String
+  nome              String
+  cnpj              String?
+  numeroRegistroCVM String?
+  urlVerificacao    String?
+  ativoDesde        DateTime?
+  desativadoEm      DateTime?
+  criadoEm          DateTime  @default(now())
+  atualizadoEm      DateTime  @updatedAt
+
+  @@index([papel])
 }
