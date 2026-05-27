@@ -1,38 +1,13 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * Auth-guard contract — `/api/investidor/quote` e `/buy/swap/{build,submit}`
- * exigem Bearer Privy (lib/wallet/auth-guard.ts). Sem token, 401 antes do body.
+ * Rotas legacy removidas — Next devolve 404 antes do handler (sem passar
+ * pelo auth guard). Mantém esse contrato pra evitar regressão acidental
+ * caso alguém reintroduza `/buy/build` ou `/buy/submit` no router.
  *
- * Body/resource validation (incl. amount-binding via quoteId) coberta em
- * __tests__/api/investidor/{quote,buy/swap}/**.
- *
- * Mantemos também os asserts de rotas legacy removidas (404) — Next devolve
- * antes do handler, sem passar pelo auth guard.
+ * Specs autenticadas (com Bearer + seed) vivem em
+ * `buy-quote-binding-authed.spec.ts` (project e2e-stub).
  */
-
-test.describe('quote/swap · auth guard sem Bearer', () => {
-  test('quote → 401', async ({ request }) => {
-    const res = await request.post('/api/investidor/quote', {
-      data: { amountBrl: '100' },
-    });
-    expect(res.status()).toBe(401);
-  });
-
-  test('swap/build → 401', async ({ request }) => {
-    const res = await request.post('/api/investidor/buy/swap/build', {
-      data: {},
-    });
-    expect(res.status()).toBe(401);
-  });
-
-  test('swap/submit → 401', async ({ request }) => {
-    const res = await request.post('/api/investidor/buy/swap/submit', {
-      data: { amount: '999999999' },
-    });
-    expect(res.status()).toBe(401);
-  });
-});
 
 test.describe('legacy · rotas removidas', () => {
   test('/buy/build retorna 404', async ({ request }) => {
