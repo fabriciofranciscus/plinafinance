@@ -40,12 +40,15 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: /-full-flow\.spec\.ts$/,
+      // Specs *-full-flow (UI completo, Friendbot + Etherfuse) e *-authed
+      // (handlers autenticados via seed leve + Privy stub) exigem
+      // PRIVY_VERIFY_STUB — só rodam no project `e2e-stub`.
+      testIgnore: /-(full-flow|authed)\.spec\.ts$/,
     },
     {
       name: 'e2e-stub',
       use: { ...devices['Desktop Chrome'] },
-      testMatch: /-full-flow\.spec\.ts$/,
+      testMatch: /-(full-flow|authed)\.spec\.ts$/,
     },
   ],
   webServer: {
