@@ -26,19 +26,25 @@ Cada hook agora pode ser testado isoladamente com `renderHook` + mocks
 de `fetch`/`signRawHash`. Prioridade dos hooks que protegem invariantes
 de negócio:
 
-- [ ] `_hooks/use-quote.ts` — gate de race condition (screen != 'quote'
+- [x] `_hooks/use-quote.ts` — gate de race condition (screen != 'quote'
       OU onRampLoading=true → descarta resposta). Caso crítico já
-      causou bug em produção (commit `0cc6a24`).
-- [ ] `_hooks/use-swap.ts` — branching mock/real + regra `onRampReady`
+      causou bug em produção (commit `0cc6a24`). **8 testes**
+- [x] `_hooks/use-swap.ts` — branching mock/real + regra `onRampReady`
       (`completed || (processing && stellarClaimableBalanceId)`) +
       desvio pra `claiming` quando `claimableBalanceId && !claimTxHash`.
-- [ ] `_hooks/use-onramp.ts` — polling 3s no settling para quando
+      **11 testes**
+- [x] `_hooks/use-onramp.ts` — polling 3s no settling para quando
       `status === 'completed'` + cleanup `cancelled + clearInterval`.
-- [ ] `_hooks/use-trustlines.ts` — sequência PLINARF → TESOURO,
+      **10 testes**
+- [x] `_hooks/use-trustlines.ts` — sequência PLINARF → TESOURO,
       idempotência via `trustlinesReady`, validação de shape do response
-      do `/build`.
-- [ ] `_hooks/use-claim.ts` — build → sign → submit; propaga
-      `claimTxHash` pro onRamp via `applyClaimTxHash`.
+      do `/build`. **5 testes**
+- [x] `_hooks/use-claim.ts` — build → sign → submit; propaga
+      `claimTxHash` pro onRamp via `applyClaimTxHash`. **6 testes**
+
+Infra adicionada: `@testing-library/react` + `jsdom` em devDeps,
+`vitest.config.ts` inclui `app/**/__tests__/**/*.test.{ts,tsx}`,
+arquivos usam `// @vitest-environment jsdom` per-file.
 
 ## Limpeza / dívidas remanescentes
 
