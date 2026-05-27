@@ -20,11 +20,22 @@ export function stellarXdr(max = 8192) {
   return z.string().min(1).max(max);
 }
 
-/** Assinatura Ed25519 em hex (64 bytes = 128 hex chars). */
+/**
+ * Assinatura Ed25519 em hex (64 bytes = 128 hex chars).
+ *
+ * Aceita o prefixo `0x` opcional porque Privy `useSignRawHash` devolve nesse
+ * formato (contrato Privy: `{ signature: '0x...' }`). `privySignatureToBase64`
+ * em `lib/wallet/privy.ts` strip o prefixo antes de processar — então tanto
+ * `0x<hex>` quanto `<hex>` puro são semanticamente válidos no resto da stack.
+ *
+ * Regressão #35 (zod hardening PR #33): regex sem o `0x?` quebrava trustlines,
+ * swap, claim, sacar e liquidar — todos os 6 call sites do frontend mandam o
+ * prefixo.
+ */
 export function stellarSignatureHex() {
   return z
     .string()
-    .regex(/^[0-9a-fA-F]+$/, 'signatureHex deve ser hex')
+    .regex(/^(0x)?[0-9a-fA-F]+$/, 'signatureHex deve ser hex')
     .min(2)
     .max(256);
 }
