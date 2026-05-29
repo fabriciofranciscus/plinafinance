@@ -14,7 +14,7 @@
  * DocuSign sandbox no MVP — `docusignEnvelopeId` fica null no stub.
  */
 
-import { Prisma, TipoBem, OfertaStatus, CessaoStatus, PagamentoStatus, LeadVendedorStatus } from '@prisma/client';
+import { Prisma, TipoBem, OfertaStatus, CessaoStatus, PagamentoStatus, LeadVendedorStatus, CaminhoCessao } from '@prisma/client';
 import { db } from '../db';
 import {
   buildAuditPayload,
@@ -23,6 +23,18 @@ import {
 } from '../stellar/audit';
 import { incorporarCota } from './tokenizacao';
 import { tokensParaEmitir } from './pool';
+import { taxaAnuenciaBpsFor } from '../config/administradoras';
+import { notifyCedente } from '../email/notify-cedente';
+import { buildComprovantePdf } from '../comprovante/pdf';
+import { uploadComprovante } from '../comprovante/store';
+
+const APP_BASE_URL = process.env.APP_BASE_URL ?? 'https://plina.finance';
+
+const BRL = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  maximumFractionDigits: 2,
+});
 
 // ─── 1. Captura de lead ─────────────────────────────────────────────────────
 
@@ -139,11 +151,16 @@ export function calcularFaixaIndicativa(
   };
   const r = ranges[input.tipoBem] ?? { min: 0.15, max: 0.25 };
   const valor = Number(input.valorCarta);
+  // F-M1-4: a estimativa pública já reflete a taxa de anuência do fallback
+  // (cartório digital) — caminho default até a API da administradora existir.
+  const anuencia = taxaAnuenciaBpsFor(input.administradora) / 10000;
+  const min = r.min + anuencia;
+  const max = r.max + anuencia;
   return {
-    desagioMinimo: r.min,
-    desagioMaximo: r.max,
-    valorLiquidoMinimo: Math.floor(valor * (1 - r.max)),
-    valorLiquidoMaximo: Math.floor(valor * (1 - r.min)),
+    desagioMinimo: min,
+    desagioMaximo: max,
+    valorLiquidoMinimo: Math.floor(valor * (1 - max)),
+    valorLiquidoMaximo: Math.floor(valor * (1 - min)),
   };
 }
 
@@ -156,6 +173,9 @@ export interface GerarOfertaInput {
   prazoRestanteMeses?: number;
   validadeHoras?: number;
   operador: string;
+  /// F-M1-4: caminho da cessão. Fallback (CARTORIO_DIGITAL) embute taxa de
+  /// anuência no deságio; API_ADMINISTRADORA (M1.A) não tem taxa.
+  caminhoCessao?: CaminhoCessao;
 }
 
 export async function gerarOferta(input: GerarOfertaInput) {
@@ -165,8 +185,22 @@ export async function gerarOferta(input: GerarOfertaInput) {
   if (!isFinite(desagio) || desagio < 0 || desagio > 1)
     throw new Error('desagioAquisicao fora de [0, 1]');
 
+  // F-M1-4: taxa de anuência embutida no deságio quando caminho = fallback.
+  const caminho = input.caminhoCessao ?? CaminhoCessao.CARTORIO_DIGITAL;
+  const taxaAnuenciaBps =
+    caminho === CaminhoCessao.CARTORIO_DIGITAL
+      ? taxaAnuenciaBpsFor(input.administradora)
+      : 0;
+  const desagioBase = new Prisma.Decimal(input.desagioAquisicao);
+  const desagioTotal = desagioBase
+    .plus(new Prisma.Decimal(taxaAnuenciaBps).div(10000))
+    .toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_EVEN);
+  if (desagioTotal.greaterThan(1)) {
+    throw new Error('deságio total (base + anuência) excede 100%');
+  }
+
   const valorLiquido = new Prisma.Decimal(input.valorCarta)
-    .mul(new Prisma.Decimal(1).minus(new Prisma.Decimal(input.desagioAquisicao)))
+    .mul(new Prisma.Decimal(1).minus(desagioTotal))
     .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_EVEN);
   const validade = new Date(Date.now() + (input.validadeHoras ?? 48) * 3600 * 1000);
 
@@ -181,7 +215,7 @@ export async function gerarOferta(input: GerarOfertaInput) {
         tipoBem: input.tipoBem,
         valorCarta: input.valorCarta,
         administradora: input.administradora,
-        desagioAquisicao: input.desagioAquisicao,
+        desagioAquisicao: desagioTotal.toFixed(4),
         valorLiquidoVendedor: valorLiquido.toFixed(2),
         prazoRestanteMeses: input.prazoRestanteMeses ?? null,
         validade,
@@ -202,13 +236,29 @@ export async function gerarOferta(input: GerarOfertaInput) {
         payloadJson: {
           versao: existingVersions + 1,
           valorCarta: input.valorCarta,
-          desagioAquisicao: input.desagioAquisicao,
+          // F-M1-4: breakdown do deságio pra transparência/auditoria.
+          desagioBase: desagioBase.toFixed(4),
+          taxaAnuenciaBps,
+          caminhoCessao: caminho,
+          desagioAquisicao: desagioTotal.toFixed(4),
           valorLiquido: valorLiquido.toFixed(2),
           validade: validade.toISOString(),
         } as Prisma.InputJsonValue,
       },
     });
     return created;
+  });
+
+  // F-M1-7: email transacional (best-effort, não bloqueia o funil).
+  const lead = await db.leadVendedor.findUnique({
+    where: { id: input.leadVendedorId },
+    select: { email: true, nome: true },
+  });
+  await notifyCedente(lead?.email, 'oferta', {
+    leadId: input.leadVendedorId,
+    nome: lead?.nome,
+    valorLiquido: BRL.format(Number(valorLiquido)),
+    desagioPct: `${desagioTotal.mul(100).toFixed(2)}%`,
   });
 
   return oferta;
@@ -273,10 +323,13 @@ export async function registrarCessao(input: {
   /// Em produção, DocuSign envelope id ja confirmaria assinatura.
   documentoBase64?: string;
   operador: string;
+  /// F-M1-4: caminho da cessão (default fallback). Define se a taxa de
+  /// anuência é gravada na Cessao.
+  caminhoCessao?: CaminhoCessao;
 }) {
   const oferta = await db.oferta.findUnique({
     where: { id: input.ofertaId },
-    include: { cessao: true },
+    include: { cessao: true, leadVendedor: { select: { email: true, nome: true } } },
   });
   if (!oferta) throw new Error('Oferta não encontrada');
   if (oferta.status !== OfertaStatus.ACEITA) {
@@ -299,6 +352,13 @@ export async function registrarCessao(input: {
   });
   const onChain = await registerOnChainHash(payload);
 
+  // F-M1-4: taxa de anuência gravada na Cessao quando caminho = fallback.
+  const caminho = input.caminhoCessao ?? CaminhoCessao.CARTORIO_DIGITAL;
+  const taxaAnuenciaBps =
+    caminho === CaminhoCessao.CARTORIO_DIGITAL
+      ? taxaAnuenciaBpsFor(oferta.administradora)
+      : null;
+
   const cessao = await db.$transaction(async (tx) => {
     const created = await tx.cessao.create({
       data: {
@@ -308,6 +368,8 @@ export async function registrarCessao(input: {
         onChainTxHash: onChain.txHash,
         assinadaEm: new Date(),
         status: CessaoStatus.ASSINADA,
+        caminhoCessao: caminho,
+        taxaAnuenciaBps,
       },
     });
     await tx.leadVendedor.update({
@@ -329,6 +391,14 @@ export async function registrarCessao(input: {
     return created;
   });
 
+  // F-M1-7: email transacional (best-effort).
+  await notifyCedente(oferta.leadVendedor?.email, 'cessao', {
+    leadId: oferta.leadVendedorId,
+    nome: oferta.leadVendedor?.nome,
+    valorLiquido: BRL.format(Number(oferta.valorLiquidoVendedor)),
+    onChainTxHash: onChain.txHash,
+  });
+
   return { cessaoId: cessao.id, hashDocumento, ...onChain };
 }
 
@@ -340,7 +410,10 @@ export async function executarPixSimulado(input: {
 }) {
   const cessao = await db.cessao.findUnique({
     where: { id: input.cessaoId },
-    include: { oferta: true, pagamento: true },
+    include: {
+      oferta: { include: { leadVendedor: { select: { email: true, nome: true } } } },
+      pagamento: true,
+    },
   });
   if (!cessao) throw new Error('Cessão não encontrada');
   if (cessao.status !== CessaoStatus.ASSINADA) {
@@ -395,6 +468,40 @@ export async function executarPixSimulado(input: {
     return created;
   });
 
+  // F-M1-8: comprovante PDF no Blob privado (best-effort). Falha não bloqueia.
+  let comprovanteUrl: string | undefined;
+  try {
+    const pdf = await buildComprovantePdf({
+      cessaoId: cessao.id,
+      valorLiquido: BRL.format(Number(valor)),
+      desagioPct: `${(Number(cessao.oferta.desagioAquisicao) * 100).toFixed(2)}%`,
+      administradora: cessao.oferta.administradora,
+      tipoBem: cessao.oferta.tipoBem,
+      hashDocumento: cessao.hashDocumento,
+      cessaoTxHash: cessao.onChainTxHash,
+      pixTxHash: onChain.txHash,
+    });
+    const pathname = await uploadComprovante(cessao.id, pdf);
+    if (pathname) {
+      await db.pagamento.update({
+        where: { cessaoId: cessao.id },
+        data: { comprovanteUrl: pathname },
+      });
+      comprovanteUrl = `${APP_BASE_URL}/api/comprovante/${cessao.id}`;
+    }
+  } catch (err) {
+    console.error('[executarPixSimulado] comprovante PDF falhou', err);
+  }
+
+  // F-M1-7: email transacional de Pix (best-effort), com link do comprovante.
+  await notifyCedente(cessao.oferta.leadVendedor?.email, 'pix', {
+    leadId: cessao.oferta.leadVendedorId,
+    nome: cessao.oferta.leadVendedor?.nome,
+    valorLiquido: BRL.format(Number(valor)),
+    onChainTxHash: onChain.txHash,
+    comprovanteUrl,
+  });
+
   return { pagamentoId: pagamento.id, ...onChain };
 }
 
@@ -408,7 +515,11 @@ export async function incorporarCotaDoFunil(input: {
 }) {
   const cessao = await db.cessao.findUnique({
     where: { id: input.cessaoId },
-    include: { oferta: true, pagamento: true, cota: true },
+    include: {
+      oferta: { include: { leadVendedor: { select: { email: true, nome: true } } } },
+      pagamento: true,
+      cota: true,
+    },
   });
   if (!cessao) throw new Error('Cessão não encontrada');
   if (cessao.pagamento?.status !== PagamentoStatus.EXECUTADO) {
@@ -447,6 +558,12 @@ export async function incorporarCotaDoFunil(input: {
         cessaoId: cessao.id,
       },
     });
+  });
+
+  // F-M1-7: email transacional de conclusão (best-effort).
+  await notifyCedente(cessao.oferta.leadVendedor?.email, 'concluido', {
+    leadId: cessao.oferta.leadVendedorId,
+    nome: cessao.oferta.leadVendedor?.nome,
   });
 
   return result;

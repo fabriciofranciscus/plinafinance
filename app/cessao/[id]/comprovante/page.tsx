@@ -165,6 +165,21 @@ export default async function ComprovantePage({ params }: PageProps) {
                 }
               />
             )}
+            {cessao.pagamento.comprovanteUrl && (
+              <Row
+                label="Comprovante (PDF)"
+                value={
+                  <a
+                    href={`/api/comprovante/${cessao.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-details text-[10px] tracking-[0.2em] uppercase underline text-primary-deep hover:text-primary"
+                  >
+                    Baixar comprovante →
+                  </a>
+                }
+              />
+            )}
           </div>
         </section>
       )}

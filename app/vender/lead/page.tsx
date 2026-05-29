@@ -101,6 +101,15 @@ function LeadFormInner() {
           Guarde esse identificador caso precise referenciar com a operação.
         </p>
 
+        <div className="mt-8">
+          <a
+            href={`/vender/acompanhar/${result.leadId}`}
+            className="inline-block bg-base text-lightBg font-details text-xs tracking-[0.2em] uppercase px-8 py-4 hover:bg-primary-deep transition-colors"
+          >
+            Acompanhar minha solicitação →
+          </a>
+        </div>
+
         <div className="mt-10 border-t border-light-hairline pt-8">
           <a
             href="/vender"

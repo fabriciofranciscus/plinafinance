@@ -63,3 +63,6 @@ test-results/
 # Checkouts paralelos do projeto (clones em layout monorepo) e cache stale
 /plina-finance/
 /plina-landing/
+
+# Docs de implementação locais (notas de trabalho, não versionadas)
+docs/M0-foundation-fase1.md
