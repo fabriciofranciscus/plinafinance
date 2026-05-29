@@ -4,6 +4,7 @@ export const SCREENS: { id: Screen; label: string }[] = [
   { id: 'welcome', label: 'Acesso' },
   { id: 'identity', label: 'Identidade' },
   { id: 'banking', label: 'Conta PIX' },
+  { id: 'classe', label: 'Classe' },
   { id: 'quote', label: 'Cotação' },
   { id: 'onramp', label: 'Pagamento' },
   { id: 'settling', label: 'Liquidação' },

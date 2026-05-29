@@ -24,7 +24,11 @@ import { parseBody } from '@/lib/http/parse-body';
 import { stellarPubkey } from '@/lib/http/zod-stellar';
 import { parseBrlAmount } from '@/lib/format/parse-brl';
 import { logStellarError } from '@/lib/stellar/log-error';
-import { mainnetCutoverGuard } from '@/lib/env/feature-gates';
+import {
+  isInstitutionalGatingEnabled,
+  mainnetCutoverGuard,
+} from '@/lib/env/feature-gates';
+import { ticketMinimoFor } from '@/lib/config/suitability';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +37,7 @@ const Schema = z
     amountBrl: z.string().max(40).optional(),
     amountTesouro: z.string().max(40).optional(),
     direction: z.enum(['onramp', 'offramp']).optional(),
+    classe: z.enum(['SENIOR', 'SUBORDINADA']).optional(),
     customerId: z.string().min(1).max(100),
     stellarAddress: stellarPubkey(),
   })
@@ -101,6 +106,49 @@ export const POST = withAuth(async (req, { user }) => {
       );
     }
 
+    // F-M3-5/F-M3-6 — gating institucional. Inerte (off) em testnet/POC; ON em
+    // mainnet/staging cutover. Suitability ausente → 403; ticket abaixo do
+    // mínimo → 400 + audit (aceites #2 e #4).
+    if (direction === 'onramp' && (await isInstitutionalGatingEnabled())) {
+      const investidor = await db.investidor.findUnique({
+        where: { id: user.investidorId },
+        select: { suitabilityJson: true, tipo: true },
+      });
+      if (!investidor?.suitabilityJson) {
+        return NextResponse.json(
+          {
+            error:
+              'suitability CVM 30 obrigatória — POST /api/investidor/suitability primeiro',
+          },
+          { status: 403 },
+        );
+      }
+      const minimo = ticketMinimoFor(investidor.tipo);
+      const amountValue = Number(sourceAmount);
+      if (minimo > 0 && amountValue < minimo) {
+        await db.eventoAudit.create({
+          data: {
+            acao: 'TICKET_MINIMO_REJEITADO',
+            operador: 'investidor-self-service',
+            investidorId: user.investidorId,
+            privyId: user.privyId,
+            payloadJson: {
+              tipo: investidor.tipo,
+              amountBrl: sourceAmount,
+              minimoBrl: minimo.toFixed(2),
+            } as Prisma.InputJsonValue,
+          },
+        });
+        return NextResponse.json(
+          {
+            error: `ticket abaixo do mínimo (R$ ${minimo.toLocaleString('pt-BR')})`,
+            minimoBrl: minimo,
+          },
+          { status: 400 },
+        );
+      }
+    }
+
     const apiKey = process.env.ETHERFUSE_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
@@ -167,6 +215,9 @@ export const POST = withAuth(async (req, { user }) => {
         exchangeRate: quote.exchangeRate,
         fee: quote.fee,
         expiresAt: new Date(quote.expiresAt),
+        // F-M3-4: classe escolhida pelo investidor (só onramp). Default SENIOR
+        // quando ausente — preserva o comportamento single-asset legado.
+        classe: direction === 'offramp' ? null : (body.classe ?? 'SENIOR'),
       },
     });
 

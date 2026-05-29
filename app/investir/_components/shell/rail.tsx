@@ -19,11 +19,17 @@ export function Rail({
       current !== 'welcome' &&
       current !== 'identity' &&
       current !== 'banking',
+    classe:
+      current !== 'welcome' &&
+      current !== 'identity' &&
+      current !== 'banking' &&
+      current !== 'classe',
     quote:
       quote &&
       current !== 'quote' &&
       current !== 'identity' &&
-      current !== 'banking',
+      current !== 'banking' &&
+      current !== 'classe',
     onramp:
       current === 'settling' ||
       current === 'claiming' ||

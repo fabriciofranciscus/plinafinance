@@ -39,13 +39,22 @@ const Schema = z
     xdr: stellarXdr(),
     investorPubkey: stellarPubkey(),
     signatureHex: stellarSignatureHex(),
+    /** F-M3-3. Code do asset Sênior (PLINARF) ou Subordinada (PLINARFB). */
+    assetCode: z.string().min(1).max(12).optional(),
   })
   .strict();
 
 export const POST = withAuth(async (req, { user }) => {
   const parsed = await parseBody(req, Schema);
   if ('response' in parsed) return parsed.response;
-  const { xdr, investorPubkey, signatureHex } = parsed.data;
+  const { xdr, investorPubkey, signatureHex, assetCode: assetCodeInput } =
+    parsed.data;
+  const defaultCode = process.env.ASSET_CODE ?? 'PLINARF';
+  const subordinadaCode = process.env.ASSET_CODE_SUBORDINADA ?? 'PLINARFB';
+  // F-M3-3: PLINARF = Sênior (legacy), PLINARFB = Subordinada (nova).
+  const assetCode =
+    assetCodeInput === subordinadaCode ? subordinadaCode : defaultCode;
+  const isSubordinada = assetCode === subordinadaCode;
   try {
     if (investorPubkey !== user.publicKey) {
       return NextResponse.json(
@@ -67,6 +76,59 @@ export const POST = withAuth(async (req, { user }) => {
       publicKey: investorPubkey,
     });
 
+    // F-M3-3: PLINARFB (Subordinada) usa idempotência via EventoAudit
+    // (payloadJson.assetCode) — não toca `Investidor.trustlineTxHash`, que é
+    // do legado PLINARF (Sênior). On-chain changeTrust/authorize são
+    // idempotentes; aqui só evitamos re-submeter e re-logar.
+    if (isSubordinada) {
+      const existing = await db.eventoAudit.findFirst({
+        where: {
+          investidorId: user.investidorId,
+          acao: 'TRUSTLINE_AUTORIZADA',
+          payloadJson: { path: ['assetCode'], equals: assetCode } as Prisma.JsonFilter,
+        },
+        select: { stellarTxHash: true, payloadJson: true },
+        orderBy: { criadoEm: 'desc' },
+      });
+      if (existing?.stellarTxHash) {
+        const payload = existing.payloadJson as { trustlineTxHash?: string } | null;
+        return NextResponse.json({
+          trustlineTxHash: payload?.trustlineTxHash ?? null,
+          authorizeTxHash: existing.stellarTxHash,
+          assetCode,
+          idempotent: true,
+        });
+      }
+      const trustlineRes = await submitWithPrivySignature({
+        xdr,
+        investorPubkey,
+        investorSignatureHex: signatureHex,
+      });
+      const authRes = await authorizeTrustline(
+        issuerSigner(),
+        investorPubkey,
+        assetCode,
+      );
+      await db.eventoAudit.create({
+        data: {
+          acao: 'TRUSTLINE_AUTORIZADA',
+          operador: 'investidor-self-service',
+          investidorId: user.investidorId,
+          privyId: user.privyId,
+          stellarTxHash: authRes.hash,
+          payloadJson: {
+            trustlineTxHash: trustlineRes.hash,
+            assetCode,
+          } as Prisma.InputJsonValue,
+        },
+      });
+      return NextResponse.json({
+        trustlineTxHash: trustlineRes.hash,
+        authorizeTxHash: authRes.hash,
+        assetCode,
+      });
+    }
+
     // Checkpoint: ler estado persistido antes de submeter qualquer tx.
     const [investidor, existingAuth] = await Promise.all([
       db.investidor.findUnique({
@@ -77,6 +139,13 @@ export const POST = withAuth(async (req, { user }) => {
         where: {
           investidorId: user.investidorId,
           acao: 'TRUSTLINE_AUTORIZADA',
+          // Exclui audits da Subordinada (assetCode=PLINARFB no payload).
+          NOT: {
+            payloadJson: {
+              path: ['assetCode'],
+              equals: subordinadaCode,
+            } as Prisma.JsonFilter,
+          },
         },
         select: { stellarTxHash: true, payloadJson: true },
         orderBy: { criadoEm: 'desc' },
@@ -130,6 +199,7 @@ export const POST = withAuth(async (req, { user }) => {
         stellarTxHash: authRes.hash,
         payloadJson: {
           trustlineTxHash: trustlineHash,
+          assetCode,
         } as Prisma.InputJsonValue,
       },
     });
@@ -137,6 +207,7 @@ export const POST = withAuth(async (req, { user }) => {
     return NextResponse.json({
       trustlineTxHash: trustlineHash,
       authorizeTxHash: authRes.hash,
+      assetCode,
     });
   } catch (err) {
     logStellarError('[trust-plinarf/submit]', err);

@@ -130,6 +130,9 @@ enum AcaoAudit {
   SWAP_EXECUTADO
   // N-09 — funder XLM em mainnet
   WALLET_FUNDED
+  // M3 — gating institucional (suitability CVM 30 + ticket mínimo)
+  SUITABILITY_PREENCHIDA
+  TICKET_MINIMO_REJEITADO
 }
 
 // Funil vendedor
@@ -334,6 +337,10 @@ model Quote {
   exchangeRate   String
   fee            String
   expiresAt      DateTime
+  /// PRD §M3 F-M3-4. Classe escolhida pelo investidor — define o asset code
+  /// emitido no swap (SENIOR → PLINARF, SUBORDINADA → PLINARFB). Nullable
+  /// pra quotes legados/off-ramp; ausência = SENIOR (PLINARF) por default.
+  classe         ClassePLINARF?
   consumedAt     DateTime?
   /// Hash da tx Stellar que consumiu o quote (swap envelope na Phase 2,
   /// distribute single-shot na Phase 1).
