@@ -19,6 +19,7 @@
 import { PrismaClient, TipoBem, CaminhoRealizacao } from '@prisma/client';
 import { config as loadEnv } from 'dotenv';
 import { issueAsset } from '../lib/stellar/issuer';
+import { KeypairSigner } from '../lib/stellar/signer';
 import {
   accountExplorerUrl,
   assetCode,
@@ -142,7 +143,11 @@ async function seedCota(cota: CotaSeed) {
 
   // 1. Emite on-chain ANTES de persistir no DB (key rule CLAUDE.md).
   console.log(`     · emitindo ${quantityStr} ${assetCode} pra distributor...`);
-  const emissionRes = await issueAsset(issuerSecret, distributorPubkey, quantityStr);
+  const emissionRes = await issueAsset(
+    new KeypairSigner(issuerSecret),
+    distributorPubkey,
+    quantityStr,
+  );
   console.log(`       tx: ${txExplorerUrl(emissionRes.hash)}`);
 
   // 2. Sucesso on-chain → persiste DB com hash + tokensEmitidos.

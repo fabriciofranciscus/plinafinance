@@ -11,7 +11,7 @@ const {
   investidorUpdate,
   eventoAuditCreate,
   buildSwapBridgeForPlinarfXdr,
-  preSignWithSecret,
+  preSignWithSigner,
   distribute,
   buildAsset,
   resolveTesouroAsset,
@@ -22,7 +22,7 @@ const {
   investidorUpdate: vi.fn(),
   eventoAuditCreate: vi.fn(),
   buildSwapBridgeForPlinarfXdr: vi.fn(),
-  preSignWithSecret: vi.fn(),
+  preSignWithSigner: vi.fn(),
   distribute: vi.fn(),
   buildAsset: vi.fn(),
   resolveTesouroAsset: vi.fn(),
@@ -68,7 +68,7 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('@/lib/stellar/transactions', () => ({
   buildSwapBridgeForPlinarfXdr,
-  preSignWithSecret,
+  preSignWithSigner,
 }));
 vi.mock('@/lib/stellar/issuer', () => ({ distribute }));
 vi.mock('@/lib/stellar/account', () => ({ buildAsset }));
@@ -113,7 +113,7 @@ beforeEach(() => {
   eventoAuditCreate.mockReset().mockResolvedValue({});
   distribute.mockReset().mockResolvedValue({ hash: 'tx_mock_hash' });
   buildSwapBridgeForPlinarfXdr.mockReset();
-  preSignWithSecret.mockReset();
+  preSignWithSigner.mockReset();
   buildAsset.mockReset().mockReturnValue({});
   resolveTesouroAsset.mockReset();
   assertElegivelParaTrustline.mockReset().mockResolvedValue(undefined);

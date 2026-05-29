@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { onboardInvestidor } from '@/lib/services/investidor';
 import { getPrivyClient } from '@/lib/wallet/privy';
 import { sensitiveAuthLimiter, clientIp } from '@/lib/rate-limit/config';
+import { isIntlInvestorFlowEnabled } from '@/lib/env/feature-gates';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,8 @@ const BodySchema = z
   .object({
     nome: z.string().min(1).max(200).optional(),
     cpf: z.string().max(40).optional(),
+    // M4: jurisdição ISO 3166-1 alpha-2. Gateada por INTL_INVESTOR_FLOW.
+    jurisdicao: z.string().length(2).optional(),
   })
   .strict();
 
@@ -54,6 +57,18 @@ export async function POST(req: Request) {
       );
     }
     const body = bodyParsed.data;
+
+    // F-M0-6 / M4: onboarding de jurisdição não-BR só com INTL_INVESTOR_FLOW on.
+    if (
+      body.jurisdicao &&
+      body.jurisdicao.toUpperCase() !== 'BR' &&
+      !(await isIntlInvestorFlowEnabled())
+    ) {
+      return NextResponse.json(
+        { error: 'trilha internacional ainda não habilitada' },
+        { status: 403 },
+      );
+    }
 
     // Email vem do Privy user (linkedAccounts).
     const user = await privy.getUserById(claims.userId);

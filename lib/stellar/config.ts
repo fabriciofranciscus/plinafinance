@@ -61,6 +61,15 @@ export const FUNDER_DAILY_CAP = Number(process.env.FUNDER_DAILY_CAP ?? '100');
  */
 export const FUNDER_BALANCE_FLOOR = process.env.FUNDER_BALANCE_FLOOR ?? '50';
 
+/**
+ * F-M0-4: pisos de XLM de issuer e distributor pra warn (não bloqueia, mesmo
+ * padrão do funder). Issuer/distributor pagam fee em toda emissão/distribuição;
+ * sem alarme, podem secar em mainnet sem aviso. Operador vê no log e recarrega.
+ */
+export const ISSUER_BALANCE_FLOOR = process.env.ISSUER_BALANCE_FLOOR ?? '5';
+export const DISTRIBUTOR_BALANCE_FLOOR =
+  process.env.DISTRIBUTOR_BALANCE_FLOOR ?? '5';
+
 const stellarExpertBase =
   STELLAR_NETWORK === 'PUBLIC'
     ? 'https://stellar.expert/explorer/public'

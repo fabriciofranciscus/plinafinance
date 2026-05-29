@@ -22,10 +22,15 @@ import {
 } from '@/lib/services/pool';
 import { withApi } from '@/lib/api/with-api';
 import { ok } from '@/lib/api/response';
+import { isSorobanWaterfallEnabled } from '@/lib/env/feature-gates';
 
 export const dynamic = 'force-dynamic';
 
 export const GET = withApi(async (_req, { requestId }) => {
+  // F-M0-6 / M7: fonte do NAV. Hoje sempre Postgres (`lib/services/pool.ts`);
+  // quando SOROBAN_WATERFALL estiver on, o M7 lê do nav_oracle on-chain.
+  const sorobanWaterfall = await isSorobanWaterfallEnabled();
+  const navSource = sorobanWaterfall ? 'soroban' : 'postgres';
   const [parametros, cotas, realizacoes] = await Promise.all([
     db.parametrosPool.findUnique({ where: { id: 'singleton' } }),
     db.cota.findMany({
@@ -80,6 +85,7 @@ export const GET = withApi(async (_req, { requestId }) => {
       cotasCount: cotas.length,
       tipoBemCount,
       navPorTipo,
+      navSource,
     },
     { requestId },
   );
