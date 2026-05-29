@@ -16,11 +16,11 @@
     "smoke:audit": "tsx scripts/smoke-audit.ts",
     "test:e2e": "playwright test",
     "test:e2e:stub": "E2E_STUB=1 playwright test --project=e2e-stub",
-    "prisma:seed": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config -- ./node_modules/.bin/tsx prisma/seed.ts",
+    "prisma:seed": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config node_modules/tsx/dist/cli.mjs prisma/seed.ts",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config ./node_modules/.bin/prisma migrate dev",
-    "prisma:deploy": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config ./node_modules/.bin/prisma migrate deploy",
-    "prisma:studio": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config ./node_modules/.bin/prisma studio"
+    "prisma:migrate": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config node_modules/prisma/build/index.js migrate dev",
+    "prisma:deploy": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config node_modules/prisma/build/index.js migrate deploy",
+    "prisma:studio": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config node_modules/prisma/build/index.js studio"
   },
   "dependencies": {
     "@prisma/client": "^6.1.0",
