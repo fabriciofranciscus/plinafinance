@@ -28,6 +28,34 @@ O mockup formaliza um produto **multilateral** já parcialmente implementado em 
 
 ---
 
+## 0.1 Estado de implementação — verificado contra o repo em 2026-05-29
+
+Legenda: ✅ implementado · 🟡 parcial · 🔲 não iniciado / só preparação.
+
+| Módulo | Status | Implementado hoje | Principais lacunas |
+|---|---|---|---|
+| **M0 Foundation** | 🟡 Parcial | Fase 1 (PR #42): port de assinatura (`lib/stellar/signer.ts`, fail-closed mainnet), alarme de saldo issuer/dist, OTEL spans + `tracer.ts`, 3 feature flags conectadas, BotID nos leads, runbooks | Fase 2: `FireblocksSigner` concreto (só README), Admin→Clerk (ainda cookie POC), Vercel WAF, backend OTEL |
+| **M1 Vender** | 🟡 Parcial | `/vender` (simulador), `/vender/lead` (consentimento on-chain), funil no `/admin` (ofertas/cessão/pagamento), audit on-chain | DocuSign real (hoje `mvp-stub:`), Pix real (`PIX_SIMULADO`), API administradora + fila de fallback, webhook DocuSign, email transacional, PDF Blob |
+| **M2 Comprar** | 🟡 Parcial | `/comprar` (calculadora), `/comprar/lead`, `/comprar/reservar` (72h), `/cotas` + `/cotas/[id]`, caminho A em `RealizacaoCaminho` | Sinal Pix real (hoje `sinalSimulado`), DocuSign comprador, transferência via API administradora, anti-fraude por documento |
+| **M3 Investir BR** | 🟡 Parcial | Fluxo `/investir` completo (welcome→…→receipt), onboard KYC Etherfuse, quote, swap atômico BRL→TESOURO→PLINARF, `/minha-posicao` | Escolha de classe Sênior/Subordinada (UI + emissão PLINARFS/PLINARFB), suitability CVM 30, ticket check server-side, termo FIDC (DocuSign), `HoldingPLINARF` por classe |
+| **M4 Investir Intl** | 🔲 Não iniciado | Só o gate inerte (flag `INTL_INVESTOR_FLOW` + `jurisdicao`/`TipoInvestidor` no schema; guard no `onboard`) | Trilha internacional inteira: seletor de jurisdição, USDC/EURC, SEP-38/24 multi-anchor, i18n EN/PT, Calendly |
+| **M5 PLINA-RF** | 🟡 Parcial | `/pool` (NAV total, tokens, NAV/token, composição por tipo), `/api/pool/summary` (+`navSource`), `/politica-clawback` | `NavSnapshot` cron diário (model só schema), gráfico NAV histórico, `/pool/eventos`, prospecto PDF, export CSV, classes, `JanelaLiquidez` |
+| **M6 Compliance** | 🔲 Mínimo | `/politica-clawback` (4 hipóteses), form de clawback no `/admin`, audit log append-only | `/compliance` expandida, `PrestadorRegulado` (só schema), screening OFAC/PEP (inexistente), `/lgpd`, `/admin/compliance`, parecer jurídico |
+| **M7 Soroban** | 🔲 Não iniciado | Flag `SOROBAN_WATERFALL` + gate inerte em `pool/summary` + campo `NavSnapshot.publishedTxHash` | Zero contratos `.rs` (`waterfall.rs`/`nav_oracle.rs`); waterfall hoje é Postgres (`lib/services/pool.ts`) |
+| **M8 Ops** | 🟡 Mínimo | OTEL scaffold (`instrumentation.ts`) + `tracer.ts` + spans (Fase 1 M0), `/admin`, rate-limit (Upstash), alarme de saldo funder+issuer+dist | `/admin/ops`, alertas (PagerDuty/Opsgenie), reporting mensal por email, status page, métricas de UX |
+| **M9 Cutover** | 🔲 Preparação | Flag `MAINNET_ENABLED` + `mainnetCutoverGuard()` (503) + `docs/runbooks/mainnet-cutover.md` | Execução do checklist 50+, Vercel Rolling Releases (canary), comunicado CVM |
+
+> **Schema vs. código:** as extensões do §2.2 (classes, `HoldingPLINARF`, `NavSnapshot`,
+> `JanelaLiquidez`, `PrestadorRegulado`, campos de `Investidor`/`Cessao`) **já foram
+> migradas** (`prisma/migrations/20260527054949_prd_v1_extensions`), mas a maioria
+> está **só no schema, sem consumidor de código** — preparação para M3/M5/M6/M7.
+> Em uso real hoje: `TipoInvestidor`/`jurisdicao` (guard de onboard), `razaoSocial`/`cnpj` (leads).
+>
+> **Integrações** (`lib/integrations/{docusign,administradoras,fireblocks,psp}`) são
+> apenas READMEs de interface — nenhuma tem implementação concreta ainda.
+
+---
+
 ## 1. Contexto & Premissas
 
 ### 1.1 Regulatório
@@ -108,6 +136,13 @@ O mockup formaliza um produto **multilateral** já parcialmente implementado em 
 - **Alarme de saldo do funder** já implementado (commit `cc4c948` N-09); estender para alarme de saldo do issuer/distributor mainnet.
 
 ### 2.2 Data Model — extensões do schema atual
+
+> **Status (2026-05-29):** ✅ todas as extensões abaixo **já estão no schema** e migradas
+> (`prisma/migrations/20260527054949_prd_v1_extensions`). Mas a maioria está **só no
+> schema, sem consumidor de código** — `ClassePLINARF`, `HoldingPLINARF`, `CaminhoCessao`,
+> `NavSnapshot`, `JanelaLiquidez`, `PrestadorRegulado` e os campos regulatórios de
+> `Investidor`/`Cessao` aguardam M3/M5/M6/M7. Em uso real: `TipoInvestidor`/`jurisdicao`
+> (guard de onboard) e `razaoSocial`/`cnpj` (leads).
 
 Schema existente (`prisma/schema.prisma`) está sólido. Adicionar:
 
@@ -243,10 +278,15 @@ model JanelaLiquidez {
 | CPF normalizado + synthetic flag | ✅ | N-14 |
 | Cap diário do funder + alarme | ✅ | N-09 (`cc4c948`) |
 | Hash on-chain de cessão | ✅ | N-13 (`2f9764b`) |
-| **Migração de admin para Clerk** | ⏳ | M0 |
-| **Custódia Fireblocks de issuer/dist** | ⏳ | M0 |
-| **Sign-off de DocuSign real** | ⏳ | M1 |
-| **OFAC/sanctions check no KYC** | ⏳ | M3 |
+| **OTEL spans (stellar + etherfuse)** | ✅ | M0 (Fase 1, PR #42) |
+| **Alarme de saldo issuer/distributor** | ✅ | M0 (Fase 1, PR #42) |
+| **Feature flags (Edge Config) + guard mainnet** | ✅ | M0 (Fase 1, PR #42) |
+| **BotID nos forms de lead** | ✅ | M0 (Fase 1, PR #42) |
+| **Port de assinatura + fail-closed mainnet** | ✅ | M0 (Fase 1, PR #42) |
+| **Migração de admin para Clerk** | 🔲 | M0 (Fase 2) |
+| **Custódia Fireblocks de issuer/dist** | 🔲 | M0 (Fase 2 — seam pronto, `FireblocksSigner` falta) |
+| **Sign-off de DocuSign real** | 🔲 | M1 |
+| **OFAC/sanctions check no KYC** | 🔲 | M3 |
 
 ---
 
@@ -385,7 +425,13 @@ Os módulos abaixo são **incrementos de valor entregáveis independentemente**.
 
 ---
 
-### M0 — Foundation (Mainnet readiness)
+### M0 — Foundation (Mainnet readiness) · 🟡 PARCIAL
+
+> **Implementado (Fase 1, PR #42):** F-M0-1 port de assinatura + fail-closed mainnet ·
+> F-M0-3 OTEL spans · F-M0-4 alarme issuer/dist · F-M0-6 as 3 flags conectadas ·
+> F-M0-5 BotID nos leads · F-M0-7 runbooks.
+> **Falta (Fase 2 — Trilha A):** `FireblocksSigner` concreto (F-M0-1), Admin→Clerk
+> (F-M0-2, ainda cookie POC), Vercel WAF (F-M0-5), backend OTEL.
 
 **Objetivo.** Preparar o app que hoje roda em testnet POC para suportar mainnet sem refactor estrutural. Substitui secrets em env por Fireblocks, migra admin para Clerk, e levanta observabilidade de produção.
 
@@ -417,7 +463,14 @@ Os módulos abaixo são **incrementos de valor entregáveis independentemente**.
 
 ---
 
-### M1 — Fluxo Cotista produção (Vender com Pix 48h real + DocuSign real)
+### M1 — Fluxo Cotista produção (Vender com Pix 48h real + DocuSign real) · 🟡 PARCIAL
+
+> **Implementado:** `/vender` (simulador via `/api/vender/simular`), `/vender/lead`
+> (captura + consentimento LGPD on-chain), funil no `/admin` (oferta→cessão→pagamento),
+> audit on-chain por estado.
+> **Falta:** F-M1-1 DocuSign real (hoje `mvp-stub:`), F-M1-2 Pix real (hoje `PIX_SIMULADO`),
+> F-M1-3 API administradora, F-M1-4 fila de validação manual + taxa de anuência,
+> F-M1-6 webhook DocuSign, F-M1-7 email transacional, F-M1-8 PDF Blob. `CaminhoCessao` só schema.
 
 **Objetivo.** Levar `/vender` da POC testnet para produção mainnet: DocuSign real, Pix real, hash on-chain de cessão, e suporte ao caminho preferencial (API administradora) vs. fallback (cartório digital com taxa de anuência).
 
@@ -455,7 +508,13 @@ Os módulos abaixo são **incrementos de valor entregáveis independentemente**.
 
 ---
 
-### M2 — Fluxo Comprador produção (Comprar Cota com carta de crédito real)
+### M2 — Fluxo Comprador produção (Comprar Cota com carta de crédito real) · 🟡 PARCIAL
+
+> **Implementado:** `/comprar` (calculadora comparativa), `/comprar/lead`,
+> `/comprar/reservar` (lock 72h via `/api/comprar/reservar`), `/cotas` + `/cotas/[id]`,
+> caminho A em `RealizacaoCaminho` (spread capturado no `/admin`).
+> **Falta:** F-M2-2 sinal Pix real (hoje `sinalSimulado`), F-M2-3 DocuSign comprador,
+> F-M2-4 transferência via API administradora, F-M2-7 anti-fraude por documento.
 
 **Objetivo.** Levar `/comprar` ao MVP mainnet: reserva 72h, sinal real (Pix), assinatura e-CPF do comprador, transferência de titularidade real na administradora (carta de crédito), e captura de spread.
 
@@ -491,7 +550,15 @@ Os módulos abaixo são **incrementos de valor entregáveis independentemente**.
 
 ---
 
-### M3 — Fluxo Investidor Institucional BR (FIDC + classes + tickets)
+### M3 — Fluxo Investidor Institucional BR (FIDC + classes + tickets) · 🟡 PARCIAL
+
+> **Implementado:** fluxo `/investir` end-to-end (welcome→identity→banking→quote→onramp→
+> settling→claiming→confirm→receipt), onboard KYC Etherfuse, quote BRL→TESOURO, swap
+> atômico → PLINARF, `/minha-posicao` (saldo on-chain + NAV + liquidação). Schema
+> `Investidor.tipo/jurisdicao/cnpj/razaoSocial/suitabilityJson` migrado.
+> **Falta:** F-M3-2 `HoldingPLINARF` por classe (só schema), F-M3-3 emissão PLINARFS/PLINARFB
+> (hoje só PLINARF), F-M3-4 seletor de classe na UI, F-M3-5 suitability CVM 30 (campo só schema),
+> F-M3-6 ticket check server-side, F-M3-7 termo FIDC (DocuSign).
 
 **Objetivo.** Habilitar `/investir` para investidor BR com onboarding institucional formal: Suitability CVM 30, ticket mínimo R$ 500k, escolha de classe Sênior/Subordinada, assinatura termo FIDC via DocuSign.
 
@@ -529,7 +596,13 @@ Os módulos abaixo são **incrementos de valor entregáveis independentemente**.
 
 ---
 
-### M4 — Fluxo Investidor Institucional Internacional (SEP intl + USDC/EURC)
+### M4 — Fluxo Investidor Institucional Internacional (SEP intl + USDC/EURC) · 🔲 NÃO INICIADO
+
+> **Implementado:** apenas o gate inerte — flag `INTL_INVESTOR_FLOW` + guard no
+> `/api/investidor/onboard` (jurisdição não-BR exige a flag), `TipoInvestidor`/`jurisdicao`
+> no schema.
+> **Falta:** toda a trilha — F-M4-1 multi-anchor por jurisdição, F-M4-2 seletor de
+> jurisdição, F-M4-3 USDC/EURC, F-M4-4 SEP-38, F-M4-6 Calendly, F-M4-7 i18n EN/PT.
 
 **Objetivo.** Habilitar `/investir` trilha internacional: seletor de jurisdição, KYC anchor SEP-12 não-BR, ticket US$ 100k-5M, settlement via USDC ou EURC.
 
@@ -567,7 +640,14 @@ Os módulos abaixo são **incrementos de valor entregáveis independentemente**.
 
 ---
 
-### M5 — PLINA-RF como ativo distribuível (Ficha técnica, NAV, eventos públicos)
+### M5 — PLINA-RF como ativo distribuível (Ficha técnica, NAV, eventos públicos) · 🟡 PARCIAL
+
+> **Implementado:** `/pool` (NAV total, tokens vivos, NAV/token, composição por tipo de
+> bem), `/api/pool/summary` (+`navSource`), cálculo de NAV em `lib/services/pool.ts`,
+> `/politica-clawback`.
+> **Falta:** F-M5-1 `NavSnapshot` via cron diário (model só schema, sem job),
+> F-M5-3 gráfico de NAV histórico, F-M5-5 `/pool/eventos` (mint/burn/clawback),
+> F-M5-4 prospecto PDF, F-M5-6 export CSV, classes Sênior/Subordinada, `JanelaLiquidez`.
 
 **Objetivo.** Levar `/pool` ao nível de "ficha técnica institucional": NAV diário publicado, composição do pool, eventos on-chain rastreáveis no Stellar Expert, link para prospecto FIDC.
 
@@ -602,7 +682,13 @@ Os módulos abaixo são **incrementos de valor entregáveis independentemente**.
 
 ---
 
-### M6 — Compliance surface (Prestadores nominais + CVM 175 + monitoring)
+### M6 — Compliance surface (Prestadores nominais + CVM 175 + monitoring) · 🔲 MÍNIMO
+
+> **Implementado:** `/politica-clawback` (4 hipóteses), form de clawback no `/admin`
+> (motivo + `fundamentoUrl`), audit log append-only (`EventoAudit`).
+> **Falta:** F-M6-1 `/compliance` expandida, F-M6-2 `PrestadorRegulado` em uso (só schema),
+> F-M6-3 screening OFAC/PEP (inexistente), F-M6-4 `/lgpd`, F-M6-5 `/admin/compliance`,
+> F-M6-6 parecer jurídico, F-M6-7 política de risco.
 
 **Objetivo.** Levar `/compliance` (e o footer regulatório) de declaração para evidência: prestadores nominais com link para registro CVM, parecer jurídico publicado, política de KYC/AML detalhada, e monitoring contínuo (OFAC/PEP).
 
@@ -637,7 +723,12 @@ Os módulos abaixo são **incrementos de valor entregáveis independentemente**.
 
 ---
 
-### M7 — Soroban Waterfall (Smart contract de distribuição)
+### M7 — Soroban Waterfall (Smart contract de distribuição) · 🔲 NÃO INICIADO
+
+> **Implementado:** apenas o gate — flag `SOROBAN_WATERFALL` consumida em
+> `/api/pool/summary` (seleciona `navSource`, inerte) + campo `NavSnapshot.publishedTxHash`.
+> **Falta:** tudo — F-M7-1 `waterfall.rs`, F-M7-2 `nav_oracle.rs` (zero arquivos `.rs`),
+> F-M7-3 auditoria externa, F-M7-4 test suite. Waterfall hoje é Postgres (`pool.ts`).
 
 **Objetivo.** Substituir cálculo de waterfall em Postgres (`lib/services/pool.ts`) por contrato Soroban auditável. Atender o claim do mockup: "Estrutura FIDC sob CVM 175 · Waterfall de distribuição via Soroban".
 
@@ -672,7 +763,13 @@ Os módulos abaixo são **incrementos de valor entregáveis independentemente**.
 
 ---
 
-### M8 — Observabilidade & Ops (Reporting, alertas, NAV diário, runbooks)
+### M8 — Observabilidade & Ops (Reporting, alertas, NAV diário, runbooks) · 🟡 MÍNIMO
+
+> **Implementado:** F-M8-1 OTEL scaffold (`instrumentation.ts`) + `lib/observability/tracer.ts`
+> + spans `stellar.submit`/`etherfuse.request` (via Fase 1 M0), `/admin` (painel operacional),
+> rate-limit (Upstash), alarme de saldo funder+issuer+dist, runbooks em `docs/runbooks/`.
+> **Falta:** F-M8-2 `/admin/ops`, F-M8-3 alertas (PagerDuty/Opsgenie), F-M8-4 reporting
+> mensal por email, F-M8-6 status page, F-M8-7 métricas de UX.
 
 **Objetivo.** Suportar mainnet 24/7 com observability de produção, alertas acionáveis e runbooks de incidente.
 
@@ -710,7 +807,12 @@ Os módulos abaixo são **incrementos de valor entregáveis independentemente**.
 
 ---
 
-### M9 — Mainnet Cutover (Coordenação final)
+### M9 — Mainnet Cutover (Coordenação final) · 🔲 PREPARAÇÃO
+
+> **Implementado:** F-M9-3 flag `MAINNET_ENABLED` + `mainnetCutoverGuard()` (503 nas rotas
+> mainnet sensíveis), F-M9-1 `docs/runbooks/mainnet-cutover.md`.
+> **Falta:** execução do checklist 50+, F-M9-2 Vercel Rolling Releases (canary),
+> F-M9-4 comunicado CVM, F-M9-5 email aos LOI. Operacional/futuro.
 
 **Objetivo.** Trocar `STELLAR_NETWORK=public` em produção, com checklist de pre-launch executado, freeze de mudanças, e capacidade de rollback rápido se necessário.
 
