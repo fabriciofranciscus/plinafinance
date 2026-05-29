@@ -24,6 +24,7 @@ import { parseBody } from '@/lib/http/parse-body';
 import { stellarPubkey } from '@/lib/http/zod-stellar';
 import { parseBrlAmount } from '@/lib/format/parse-brl';
 import { logStellarError } from '@/lib/stellar/log-error';
+import { mainnetCutoverGuard } from '@/lib/env/feature-gates';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +49,8 @@ const Schema = z
   );
 
 export const POST = withAuth(async (req, { user }) => {
+  const cutover = await mainnetCutoverGuard();
+  if (cutover) return cutover;
   const parsed = await parseBody(req, Schema);
   if ('response' in parsed) return parsed.response;
   const body = parsed.data;

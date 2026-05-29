@@ -22,6 +22,7 @@ import {
 } from '@prisma/client';
 import { db } from '../db';
 import { executeClawback, issueAsset } from '../stellar/issuer';
+import { issuerSigner } from '../stellar/signer';
 import { tokensParaEmitir } from './pool';
 import { assetCode } from '../stellar/config';
 import { buildAuditPayload, registerOnChainHash } from '../stellar/audit';
@@ -74,7 +75,11 @@ export async function incorporarCota(
   const quantityStr = quantity.toFixed(7);
 
   // 1) On-chain primeiro (regra CLAUDE.md "DB após on-chain").
-  const emissionRes = await issueAsset(issuerSecret, distributorPubkey, quantityStr);
+  const emissionRes = await issueAsset(
+    issuerSigner(),
+    distributorPubkey,
+    quantityStr,
+  );
 
   // 2) Persist + audit log na mesma transação Prisma.
   const cota = await db.$transaction(async (tx) => {
@@ -187,7 +192,7 @@ export async function executarClawback(
 
   // 2) On-chain (clawback).
   const clawbackRes = await executeClawback(
-    issuerSecret,
+    issuerSigner(),
     investidor.publicKey,
     input.amount,
   );

@@ -19,9 +19,15 @@ import {
   TransactionBuilder,
 } from '@stellar/stellar-sdk';
 import { buildAsset, horizon } from './account';
-import { STELLAR_TX_TIMEOUT_SEC, assetCode, networkPassphrase } from './config';
+import {
+  STELLAR_NETWORK,
+  STELLAR_TX_TIMEOUT_SEC,
+  assetCode,
+  networkPassphrase,
+} from './config';
 import { getDynamicFee } from './fee';
 import { privySignatureToBase64 } from '../wallet/privy';
+import { withSpan } from '../observability/tracer';
 
 type SubmitResult = Horizon.HorizonApi.SubmitTransactionResponse;
 
@@ -171,7 +177,15 @@ export async function submitWithPrivySignature(input: {
   for (const extra of input.extraSignatures ?? []) {
     tx.addSignature(extra.pubkey, extra.sigBase64);
   }
-  return horizon.submitTransaction(tx);
+  return withSpan(
+    'stellar.submit',
+    { 'stellar.flow': 'investor', 'stellar.network': STELLAR_NETWORK },
+    async (span) => {
+      const res = await horizon.submitTransaction(tx);
+      span.setAttribute('stellar.tx_hash', res.hash);
+      return res;
+    },
+  );
 }
 
 /**
@@ -181,13 +195,14 @@ export async function submitWithPrivySignature(input: {
  * Útil pra: investidor assina o swap via Privy, distributor já tem signature
  * pré-computada server-side anexada ANTES de submeter.
  */
-import { Keypair } from '@stellar/stellar-sdk';
-export function preSignWithSecret(xdr: string, secret: string): {
+import type { StellarSigner } from './signer';
+export function preSignWithSigner(
+  signer: StellarSigner,
+  xdr: string,
+): {
   pubkey: string;
   sigBase64: string;
 } {
-  const kp = Keypair.fromSecret(secret);
   const tx = new Transaction(xdr, networkPassphrase);
-  const sigBytes = kp.sign(tx.hash());
-  return { pubkey: kp.publicKey(), sigBase64: sigBytes.toString('base64') };
+  return { pubkey: signer.publicKey(), sigBase64: signer.signatureBase64(tx) };
 }

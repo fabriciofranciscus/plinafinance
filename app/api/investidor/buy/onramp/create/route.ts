@@ -22,6 +22,7 @@ import { EtherfuseClient } from '@/lib/anchors/etherfuse';
 import { AnchorError } from '@/lib/anchors/types';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { parseBody } from '@/lib/http/parse-body';
+import { mainnetCutoverGuard } from '@/lib/env/feature-gates';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +37,8 @@ function isBankAccountMissingError(err: unknown): boolean {
 }
 
 export const POST = withAuth(async (req, { user }) => {
+  const cutover = await mainnetCutoverGuard();
+  if (cutover) return cutover;
   const parsed = await parseBody(req, Schema);
   if ('response' in parsed) return parsed.response;
   const { quoteId } = parsed.data;

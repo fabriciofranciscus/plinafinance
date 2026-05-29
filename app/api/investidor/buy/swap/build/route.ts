@@ -26,9 +26,11 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import {
   buildSwapBridgeForPlinarfXdr,
-  preSignWithSecret,
+  preSignWithSigner,
 } from '@/lib/stellar/transactions';
 import { distribute } from '@/lib/stellar/issuer';
+import { distributorSigner } from '@/lib/stellar/signer';
+import { mainnetCutoverGuard } from '@/lib/env/feature-gates';
 import { buildAsset } from '@/lib/stellar/account';
 import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
@@ -47,6 +49,8 @@ const Schema = z
   .strict();
 
 export const POST = withAuth(async (req, { user }) => {
+  const cutover = await mainnetCutoverGuard();
+  if (cutover) return cutover;
   const parsed = await parseBody(req, Schema);
   if ('response' in parsed) return parsed.response;
   const { quoteId, investorPubkey, investidorId } = parsed.data;
@@ -127,7 +131,7 @@ export const POST = withAuth(async (req, { user }) => {
       // Sem TESOURO real na wallet — emissão direta server-side, consumo
       // atômico do quote + audit log marcando mock.
       const distRes = await distribute(
-        distributorSecret,
+        distributorSigner(),
         issuerPubkey,
         investorPubkey,
         stellarAmount,
@@ -196,7 +200,7 @@ export const POST = withAuth(async (req, { user }) => {
     });
 
     // Distributor pré-assina server-side — investor só co-assina o hash.
-    const distributorSig = preSignWithSecret(xdr, distributorSecret);
+    const distributorSig = preSignWithSigner(distributorSigner(), xdr);
 
     return NextResponse.json({
       xdr,

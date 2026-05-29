@@ -23,6 +23,7 @@
     "prisma:studio": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config node_modules/prisma/build/index.js studio"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/sdk-node": "^0.218.0",
     "@opentelemetry/sdk-trace-base": "^2.7.1",
     "@prisma/client": "^6.1.0",
@@ -34,6 +35,7 @@
     "@vercel/analytics": "^2.0.1",
     "@vercel/edge-config": "^1.4.3",
     "@vercel/speed-insights": "^2.0.0",
+    "botid": "^1.5.11",
     "dotenv": "^16.4.7",
     "lucide-react": "^1.14.0",
     "next": "16.2.4",

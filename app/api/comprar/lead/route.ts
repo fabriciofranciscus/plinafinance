@@ -9,6 +9,7 @@
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { checkBotId } from 'botid/server';
 import { capturarLeadComprador } from '@/lib/services/realizacao';
 import { LeadCompradorTipo } from '@prisma/client';
 import { parseBody } from '@/lib/http/parse-body';
@@ -35,6 +36,10 @@ const Schema = z
   .strict();
 
 export async function POST(req: Request) {
+  // F-M0-5: bloqueia bots antes de qualquer trabalho. No-op em dev/local.
+  if ((await checkBotId()).isBot) {
+    return NextResponse.json({ error: 'acesso negado' }, { status: 403 });
+  }
   if (!(await leadLimiter.consume(clientIp(req)))) {
     return NextResponse.json(
       { error: 'too many requests' },

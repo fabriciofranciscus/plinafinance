@@ -22,14 +22,20 @@
 import { createHash } from 'node:crypto';
 import {
   Asset,
-  Keypair,
   Memo,
   Operation,
   TransactionBuilder,
 } from '@stellar/stellar-sdk';
-import { horizon } from './account';
-import { STELLAR_TX_TIMEOUT_SEC, networkPassphrase } from './config';
+import { horizon, warnIfBalanceBelowFloor } from './account';
+import {
+  ISSUER_BALANCE_FLOOR,
+  STELLAR_NETWORK,
+  STELLAR_TX_TIMEOUT_SEC,
+  networkPassphrase,
+} from './config';
 import { getDynamicFee } from './fee';
+import { issuerSigner } from './signer';
+import { withSpan } from '../observability/tracer';
 
 /**
  * Serialização canônica JSON com chaves sorted recursivamente. Garante que
@@ -105,13 +111,9 @@ export interface RegisterOnChainHashResult {
 export async function registerOnChainHash(
   payload: AuditPayloadBase,
 ): Promise<RegisterOnChainHashResult> {
-  const issuerSecret = process.env.STELLAR_ISSUER_SECRET;
-  if (!issuerSecret) {
-    throw new Error('STELLAR_ISSUER_SECRET ausente.');
-  }
-
-  const source = Keypair.fromSecret(issuerSecret);
+  const source = issuerSigner();
   const account = await horizon.loadAccount(source.publicKey());
+  warnIfBalanceBelowFloor(account.balances, ISSUER_BALANCE_FLOOR, 'issuer');
   const payloadHash = sha256OfPayload(payload);
 
   // Memo.hash exige Buffer de 32 bytes exatos. SHA-256 hex (64 chars) = 32 bytes.
@@ -135,7 +137,15 @@ export async function registerOnChainHash(
     .setTimeout(STELLAR_TX_TIMEOUT_SEC)
     .build();
 
-  tx.sign(source);
-  const result = await horizon.submitTransaction(tx);
+  source.sign(tx);
+  const result = await withSpan(
+    'stellar.submit',
+    { 'stellar.flow': 'audit-hash', 'stellar.network': STELLAR_NETWORK },
+    async (span) => {
+      const res = await horizon.submitTransaction(tx);
+      span.setAttribute('stellar.tx_hash', res.hash);
+      return res;
+    },
+  );
   return { payloadHash, txHash: result.hash };
 }

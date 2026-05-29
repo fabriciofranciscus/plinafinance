@@ -37,6 +37,7 @@ import {
   executeClawback,
   issueAsset,
 } from '../lib/stellar/issuer';
+import { KeypairSigner } from '../lib/stellar/signer';
 
 const step = (n: number, label: string) =>
   console.log(`\n━━━ [${n}/7] ${label}`);
@@ -62,7 +63,10 @@ async function main() {
 
   // 2. Flags
   step(2, 'Configurar AUTH_REQUIRED + AUTH_REVOCABLE + AUTH_CLAWBACK_ENABLED');
-  const flagsRes = await configureIssuerFlags(issuer.secret(), 'plina.finance');
+  const flagsRes = await configureIssuerFlags(
+    new KeypairSigner(issuer.secret()),
+    'plina.finance',
+  );
   ok(`tx = ${txExplorerUrl(flagsRes.hash)}`);
   ok(`asset = ${assetExplorerUrl(issuer.publicKey())}`);
 
@@ -71,12 +75,12 @@ async function main() {
   const distributor = await createFundedAccount();
   ok(`distributor = ${distributor.publicKey()}`);
   const trustDistRes = await createTrustline(
-    distributor.secret(),
+    new KeypairSigner(distributor.secret()),
     issuer.publicKey(),
   );
   ok(`trustline tx = ${txExplorerUrl(trustDistRes.hash)}`);
   const authDistRes = await authorizeTrustline(
-    issuer.secret(),
+    new KeypairSigner(issuer.secret()),
     distributor.publicKey(),
   );
   ok(`authorize tx = ${txExplorerUrl(authDistRes.hash)}`);
@@ -84,7 +88,7 @@ async function main() {
   // 4. Emissão
   step(4, 'Emitir 100000 PLINARF do issuer → distributor');
   const issueRes = await issueAsset(
-    issuer.secret(),
+    new KeypairSigner(issuer.secret()),
     distributor.publicKey(),
     '100000',
   );
@@ -95,12 +99,12 @@ async function main() {
   const investor = await createFundedAccount();
   ok(`investor = ${investor.publicKey()}`);
   const trustInvRes = await createTrustline(
-    investor.secret(),
+    new KeypairSigner(investor.secret()),
     issuer.publicKey(),
   );
   ok(`trustline tx = ${txExplorerUrl(trustInvRes.hash)}`);
   const authInvRes = await authorizeTrustline(
-    issuer.secret(),
+    new KeypairSigner(issuer.secret()),
     investor.publicKey(),
   );
   ok(`authorize tx = ${txExplorerUrl(authInvRes.hash)}`);
@@ -108,7 +112,7 @@ async function main() {
   // 6. Distribuição
   step(6, 'Distribuir 1000 PLINARF distributor → investidor');
   const distRes = await distribute(
-    distributor.secret(),
+    new KeypairSigner(distributor.secret()),
     issuer.publicKey(),
     investor.publicKey(),
     '1000',
@@ -121,7 +125,7 @@ async function main() {
     'Clawback de 500 PLINARF (motivo simulado: ERRO_OPERACIONAL)',
   );
   const clawRes = await executeClawback(
-    issuer.secret(),
+    new KeypairSigner(issuer.secret()),
     investor.publicKey(),
     '500',
   );

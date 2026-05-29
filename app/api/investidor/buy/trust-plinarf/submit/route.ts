@@ -21,6 +21,7 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { authorizeTrustline } from '@/lib/stellar/issuer';
+import { issuerSigner } from '@/lib/stellar/signer';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { parseBody } from '@/lib/http/parse-body';
@@ -118,7 +119,7 @@ export const POST = withAuth(async (req, { user }) => {
     }
 
     // Passo 2: authorize. Hash final só commitado depois do audit log.
-    const authRes = await authorizeTrustline(issuerSecret, investorPubkey);
+    const authRes = await authorizeTrustline(issuerSigner(), investorPubkey);
 
     await db.eventoAudit.create({
       data: {

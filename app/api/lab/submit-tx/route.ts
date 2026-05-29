@@ -14,6 +14,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { authorizeTrustline } from '@/lib/stellar/issuer';
+import { issuerSigner } from '@/lib/stellar/signer';
 import { logStellarError } from '@/lib/stellar/log-error';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { parseBody } from '@/lib/http/parse-body';
@@ -47,7 +48,7 @@ export const POST = withAuth(async (req, { user }) => {
     const issuerSecret = process.env.STELLAR_ISSUER_SECRET;
     if (issuerSecret) {
       try {
-        await authorizeTrustline(issuerSecret, user.publicKey);
+        await authorizeTrustline(issuerSigner(), user.publicKey);
       } catch (authErr) {
         logStellarError('[lab] auto-autorização falhou (não-fatal):', authErr);
       }

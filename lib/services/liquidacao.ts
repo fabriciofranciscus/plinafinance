@@ -21,7 +21,6 @@ import { Prisma } from '@prisma/client';
 import {
   Asset,
   Horizon,
-  Keypair,
   Memo,
   Operation,
   Transaction,
@@ -34,6 +33,7 @@ import {
   networkPassphrase,
 } from '../stellar/config';
 import { buildAsset, horizon } from '../stellar/account';
+import { distributorSigner } from '../stellar/signer';
 import { getDynamicFee } from '../stellar/fee';
 import { privySignatureToBase64 } from '../wallet/privy';
 import { parseStellarAmount } from '../format/parse-stellar-amount';
@@ -310,12 +310,9 @@ export function preSignDistributor(xdr: string): {
   pubkey: string;
   sigBase64: string;
 } {
-  const secret = process.env.STELLAR_DISTRIBUTOR_SECRET;
-  if (!secret) throw new Error('STELLAR_DISTRIBUTOR_SECRET ausente');
-  const kp = Keypair.fromSecret(secret);
+  const signer = distributorSigner();
   const tx = new Transaction(xdr, networkPassphrase);
-  const sigBytes = kp.sign(tx.hash());
-  return { pubkey: kp.publicKey(), sigBase64: sigBytes.toString('base64') };
+  return { pubkey: signer.publicKey(), sigBase64: signer.signatureBase64(tx) };
 }
 
 // Memo import keeper (unused but pre-imported pra adicionar Memo.text futuro).

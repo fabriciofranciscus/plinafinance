@@ -4,13 +4,21 @@ import {
   AuthRequiredFlag,
   AuthRevocableFlag,
   Horizon,
-  Keypair,
   Operation,
   TransactionBuilder,
 } from '@stellar/stellar-sdk';
-import { buildAsset, horizon } from './account';
-import { STELLAR_TX_TIMEOUT_SEC, assetCode, networkPassphrase } from './config';
+import { buildAsset, horizon, warnIfBalanceBelowFloor } from './account';
+import {
+  DISTRIBUTOR_BALANCE_FLOOR,
+  ISSUER_BALANCE_FLOOR,
+  STELLAR_NETWORK,
+  STELLAR_TX_TIMEOUT_SEC,
+  assetCode,
+  networkPassphrase,
+} from './config';
 import { getDynamicFee } from './fee';
+import type { StellarSigner } from './signer';
+import { withSpan } from '../observability/tracer';
 
 /**
  * Wrappers Stellar usados pelo POC e pelo MVP.
@@ -26,9 +34,12 @@ import { getDynamicFee } from './fee';
 
 type SubmitResult = Horizon.HorizonApi.SubmitTransactionResponse;
 
-async function buildSourceTx(sourceSecret: string) {
-  const source = Keypair.fromSecret(sourceSecret);
+async function buildSourceTx(
+  source: StellarSigner,
+  floor?: { xlm: string | number; label: string },
+) {
   const account = await horizon.loadAccount(source.publicKey());
+  if (floor) warnIfBalanceBelowFloor(account.balances, floor.xlm, floor.label);
   const builder = new TransactionBuilder(account, {
     fee: await getDynamicFee(),
     networkPassphrase,
@@ -38,18 +49,26 @@ async function buildSourceTx(sourceSecret: string) {
 
 async function sign(
   builder: TransactionBuilder,
-  signers: Keypair[],
+  signers: StellarSigner[],
 ): Promise<SubmitResult> {
   const tx = builder.setTimeout(STELLAR_TX_TIMEOUT_SEC).build();
-  signers.forEach((s) => tx.sign(s));
-  return horizon.submitTransaction(tx);
+  signers.forEach((s) => s.sign(tx));
+  return withSpan(
+    'stellar.submit',
+    { 'stellar.flow': 'issuer', 'stellar.network': STELLAR_NETWORK },
+    async (span) => {
+      const res = await horizon.submitTransaction(tx);
+      span.setAttribute('stellar.tx_hash', res.hash);
+      return res;
+    },
+  );
 }
 
 export async function configureIssuerFlags(
-  issuerSecret: string,
+  issuer: StellarSigner,
   homeDomain?: string,
 ): Promise<SubmitResult> {
-  const { source, builder } = await buildSourceTx(issuerSecret);
+  const { source, builder } = await buildSourceTx(issuer);
   // Bitmask OR de constantes numéricas vira `number`; o SDK tipa `setFlags`
   // como `AuthFlag`. Cast é necessário — TS não infere bitmasks combinados.
   const flags = (AuthRequiredFlag |
@@ -66,11 +85,11 @@ export async function configureIssuerFlags(
 }
 
 export async function createTrustline(
-  holderSecret: string,
+  holder: StellarSigner,
   issuerPubkey: string,
   code: string = assetCode,
 ): Promise<SubmitResult> {
-  const { source, builder } = await buildSourceTx(holderSecret);
+  const { source, builder } = await buildSourceTx(holder);
   builder.addOperation(
     Operation.changeTrust({ asset: buildAsset(issuerPubkey, code) }),
   );
@@ -78,11 +97,11 @@ export async function createTrustline(
 }
 
 export async function authorizeTrustline(
-  issuerSecret: string,
+  issuer: StellarSigner,
   holderPubkey: string,
   code: string = assetCode,
 ): Promise<SubmitResult> {
-  const { source, builder } = await buildSourceTx(issuerSecret);
+  const { source, builder } = await buildSourceTx(issuer);
   builder.addOperation(
     Operation.setTrustLineFlags({
       trustor: holderPubkey,
@@ -94,11 +113,11 @@ export async function authorizeTrustline(
 }
 
 export async function revokeTrustline(
-  issuerSecret: string,
+  issuer: StellarSigner,
   holderPubkey: string,
   code: string = assetCode,
 ): Promise<SubmitResult> {
-  const { source, builder } = await buildSourceTx(issuerSecret);
+  const { source, builder } = await buildSourceTx(issuer);
   builder.addOperation(
     Operation.setTrustLineFlags({
       trustor: holderPubkey,
@@ -115,12 +134,15 @@ export async function revokeTrustline(
  * `Cota.emissaoTxHash`).
  */
 export async function issueAsset(
-  issuerSecret: string,
+  issuer: StellarSigner,
   destinationPubkey: string,
   amount: string,
   code: string = assetCode,
 ): Promise<SubmitResult> {
-  const { source, builder } = await buildSourceTx(issuerSecret);
+  const { source, builder } = await buildSourceTx(issuer, {
+    xlm: ISSUER_BALANCE_FLOOR,
+    label: 'issuer',
+  });
   builder.addOperation(
     Operation.payment({
       destination: destinationPubkey,
@@ -132,13 +154,16 @@ export async function issueAsset(
 }
 
 export async function distribute(
-  distributorSecret: string,
+  distributor: StellarSigner,
   issuerPubkey: string,
   destinationPubkey: string,
   amount: string,
   code: string = assetCode,
 ): Promise<SubmitResult> {
-  const { source, builder } = await buildSourceTx(distributorSecret);
+  const { source, builder } = await buildSourceTx(distributor, {
+    xlm: DISTRIBUTOR_BALANCE_FLOOR,
+    label: 'distributor',
+  });
   builder.addOperation(
     Operation.payment({
       destination: destinationPubkey,
@@ -155,12 +180,12 @@ export async function distribute(
  * ANTES de chamar.
  */
 export async function executeClawback(
-  issuerSecret: string,
+  issuer: StellarSigner,
   fromPubkey: string,
   amount: string,
   code: string = assetCode,
 ): Promise<SubmitResult> {
-  const { source, builder } = await buildSourceTx(issuerSecret);
+  const { source, builder } = await buildSourceTx(issuer);
   builder.addOperation(
     Operation.clawback({
       asset: buildAsset(source.publicKey(), code),

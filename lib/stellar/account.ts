@@ -5,6 +5,7 @@ import {
   Operation,
   TransactionBuilder,
 } from '@stellar/stellar-sdk';
+import { KeypairSigner } from './signer';
 import {
   FUNDER_BALANCE_FLOOR,
   FUNDER_DAILY_CAP,
@@ -91,6 +92,28 @@ export function buildAsset(issuerPubkey: string, code: string = assetCode): Asse
 }
 
 /**
+ * N-09 / F-M0-4: alarme de saldo nativo (XLM). Não bloqueia — só loga quando
+ * abaixo do piso, pra operador recarregar antes de drenar. Recebe os
+ * `balances` de uma conta já carregada (evita round-trip extra ao Horizon).
+ */
+export function warnIfBalanceBelowFloor(
+  balances: ReadonlyArray<{ asset_type: string; balance: string }>,
+  floorXlm: string | number,
+  label: string,
+): void {
+  const native = balances.find((b) => b.asset_type === 'native');
+  if (!native) return;
+  const balanceXlm = Number(native.balance);
+  const floor = Number(floorXlm);
+  if (balanceXlm < floor) {
+    logStellarError(
+      `[${label}] saldo baixo`,
+      new Error(`${balanceXlm} XLM < ${floor} (floor)`),
+    );
+  }
+}
+
+/**
  * Funda uma conta Stellar. No-op silencioso se já existir. Útil pra wallets
  * recém-criadas pelo Privy (que não fundam automaticamente — só registram o
  * keypair no MPC custody).
@@ -135,27 +158,15 @@ async function fundViaCreateAccount(destination: string): Promise<void> {
     );
   }
 
-  const funderKeypair = Keypair.fromSecret(STELLAR_FUNDER_SECRET);
-  if (funderKeypair.publicKey() !== STELLAR_FUNDER_PUBLIC) {
+  const funderSigner = new KeypairSigner(STELLAR_FUNDER_SECRET);
+  if (funderSigner.publicKey() !== STELLAR_FUNDER_PUBLIC) {
     throw new Error('STELLAR_FUNDER_SECRET não corresponde ao FUNDER_PUBLIC');
   }
   const funderAccount = await horizon.loadAccount(STELLAR_FUNDER_PUBLIC);
 
   // N-09: alarme de saldo. Não bloqueia (resiliência > pureza); operador
   // vê no log e bumpa o funder antes da próxima chamada.
-  const nativeBalance = funderAccount.balances.find(
-    (b) => b.asset_type === 'native',
-  );
-  if (nativeBalance) {
-    const balanceXlm = Number(nativeBalance.balance);
-    const floor = Number(FUNDER_BALANCE_FLOOR);
-    if (balanceXlm < floor) {
-      logStellarError(
-        '[funder] saldo baixo',
-        new Error(`${balanceXlm} XLM < ${floor} (floor)`),
-      );
-    }
-  }
+  warnIfBalanceBelowFloor(funderAccount.balances, FUNDER_BALANCE_FLOOR, 'funder');
 
   const tx = new TransactionBuilder(funderAccount, {
     fee: await getDynamicFee(),
@@ -169,7 +180,7 @@ async function fundViaCreateAccount(destination: string): Promise<void> {
     )
     .setTimeout(STELLAR_TX_TIMEOUT_SEC)
     .build();
-  tx.sign(funderKeypair);
+  funderSigner.sign(tx);
   const submitRes = await horizon.submitTransaction(tx);
 
   // N-09: registra o evento pra contagem do cap e auditoria CVM 175.

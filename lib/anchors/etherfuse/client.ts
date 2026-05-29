@@ -58,6 +58,7 @@ import type {
     EtherfuseSpeiAccountBody,
     EtherfuseBankAccountResponse,
 } from './types';
+import { withSpan } from '../../observability/tracer';
 
 /**
  * Client for the Etherfuse fiat on/off ramp API.
@@ -157,45 +158,58 @@ export class EtherfuseClient implements Anchor {
     ): Promise<T> {
         const url = `${this.config.baseUrl}${endpoint}`;
 
-        console.log(`[Etherfuse] ${method} ${url}`, body ? JSON.stringify(body) : '');
+        // F-M0-3: span único pra toda chamada SEP-12/24/38 da anchor.
+        return withSpan(
+            'etherfuse.request',
+            { 'http.method': method, 'etherfuse.endpoint': endpoint },
+            async (span) => {
+                console.log(
+                    `[Etherfuse] ${method} ${url}`,
+                    body ? JSON.stringify(body) : '',
+                );
 
-        const response = await fetch(url, {
-            method,
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: this.config.apiKey,
+                const response = await fetch(url, {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: this.config.apiKey,
+                    },
+                    body: body ? JSON.stringify(body) : undefined,
+                });
+                span.setAttribute('http.status_code', response.status);
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`[Etherfuse] Error ${response.status}:`, errorText);
+
+                    let errorData: EtherfuseErrorResponse = {
+                        error: { code: 'UNKNOWN_ERROR', message: '' },
+                    };
+                    try {
+                        errorData = JSON.parse(errorText) as EtherfuseErrorResponse;
+                    } catch {
+                        // Not JSON
+                    }
+
+                    throw new AnchorError(
+                        errorData.error?.message ||
+                            errorText ||
+                            `Etherfuse API error: ${response.status}`,
+                        errorData.error?.code || 'UNKNOWN_ERROR',
+                        response.status,
+                    );
+                }
+
+                const text = await response.text();
+                console.log(`[Etherfuse] Response:`, text || '(empty)');
+
+                if (!text) {
+                    return undefined as T;
+                }
+
+                return JSON.parse(text) as T;
             },
-            body: body ? JSON.stringify(body) : undefined,
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`[Etherfuse] Error ${response.status}:`, errorText);
-
-            let errorData: EtherfuseErrorResponse = {
-                error: { code: 'UNKNOWN_ERROR', message: '' },
-            };
-            try {
-                errorData = JSON.parse(errorText) as EtherfuseErrorResponse;
-            } catch {
-                // Not JSON
-            }
-
-            throw new AnchorError(
-                errorData.error?.message || errorText || `Etherfuse API error: ${response.status}`,
-                errorData.error?.code || 'UNKNOWN_ERROR',
-                response.status,
-            );
-        }
-
-        const text = await response.text();
-        console.log(`[Etherfuse] Response:`, text || '(empty)');
-
-        if (!text) {
-            return undefined as T;
-        }
-
-        return JSON.parse(text) as T;
+        );
     }
 
     // =========================================================================
