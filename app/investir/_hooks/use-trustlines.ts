@@ -23,9 +23,11 @@ export function useTrustlines({
   const [trustlinesReady, setTrustlinesReady] = useState(false);
   const [trustlineLoading, setTrustlineLoading] = useState(false);
 
-  // Trustline setup (PLINARF + TESOURO). Idempotente: se trustlinesReady=true,
-  // pula. PLINARF é pré-condição pra receber emissão; TESOURO é pré-condição
-  // pra leg investor→distributor do swap atômico.
+  // Trustline setup (PLINARF Sênior + PLINARFB Subordinada + TESOURO).
+  // F-M3-3: investidor estabelece as duas classes no identity — a escolha de
+  // classe (Sênior vs Subordinada) acontece depois, no quote, sem precisar
+  // voltar pra autorizar trustline da classe que vai receber a emissão.
+  // Idempotente em todos os passos (server-side).
   const setupTrustlines = useCallback(async () => {
     if (!onboard || trustlinesReady || trustlineLoading) return;
     setTrustlineLoading(true);
@@ -35,46 +37,56 @@ export function useTrustlines({
       const authHeaders: Record<string, string> = token
         ? { Authorization: `Bearer ${token}` }
         : {};
-      // PLINARF trustline.
-      const plinarfBuild = await fetch(
-        '/api/investidor/buy/trust-plinarf/build',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
-          body: JSON.stringify({ pubkey: onboard.publicKey }),
-        },
-      );
-      if (!plinarfBuild.ok) throw new Error(await plinarfBuild.text());
-      const plinarfBuildData = (await plinarfBuild.json()) as Partial<{
-        xdr: string;
-        hashHex: string;
-      }>;
-      // Valida shape antes de avançar — sem isso, campos faltantes só
-      // explodem em runtime no signRawHash/submit (PR #5 hardening).
-      {
-        const missing = (['xdr', 'hashHex'] as const).filter((k) => !plinarfBuildData[k]);
+
+      // Helper: build+sign+submit pra um asset code específico de PLINA-RF.
+      const setupClasseTrustline = async (assetCode?: string) => {
+        const buildRes = await fetch(
+          '/api/investidor/buy/trust-plinarf/build',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeaders },
+            body: JSON.stringify({
+              pubkey: onboard.publicKey,
+              ...(assetCode ? { assetCode } : {}),
+            }),
+          },
+        );
+        if (!buildRes.ok) throw new Error(await buildRes.text());
+        const buildData = (await buildRes.json()) as Partial<{
+          xdr: string;
+          hashHex: string;
+        }>;
+        const missing = (['xdr', 'hashHex'] as const).filter((k) => !buildData[k]);
         if (missing.length > 0) {
-          throw new Error(`/buy/trust-plinarf/build devolveu resposta incompleta — faltam: ${missing.join(', ')}`);
+          throw new Error(
+            `/buy/trust-plinarf/build devolveu resposta incompleta — faltam: ${missing.join(', ')}`,
+          );
         }
-      }
-      const plinarfSig = await signRawHash({
-        address: onboard.publicKey,
-        chainType: 'stellar',
-        hash: plinarfBuildData.hashHex as `0x${string}`,
-      });
-      const plinarfSubmit = await fetch(
-        '/api/investidor/buy/trust-plinarf/submit',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
-          body: JSON.stringify({
-            xdr: plinarfBuildData.xdr,
-            investorPubkey: onboard.publicKey,
-            signatureHex: plinarfSig.signature,
-          }),
-        },
-      );
-      if (!plinarfSubmit.ok) throw new Error(await plinarfSubmit.text());
+        const sig = await signRawHash({
+          address: onboard.publicKey,
+          chainType: 'stellar',
+          hash: buildData.hashHex as `0x${string}`,
+        });
+        const submitRes = await fetch(
+          '/api/investidor/buy/trust-plinarf/submit',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeaders },
+            body: JSON.stringify({
+              xdr: buildData.xdr,
+              investorPubkey: onboard.publicKey,
+              signatureHex: sig.signature,
+              ...(assetCode ? { assetCode } : {}),
+            }),
+          },
+        );
+        if (!submitRes.ok) throw new Error(await submitRes.text());
+      };
+
+      // PLINARF (Sênior, legacy).
+      await setupClasseTrustline();
+      // PLINARFB (Subordinada).
+      await setupClasseTrustline('PLINARFB');
 
       // TESOURO trustline (bridge da Etherfuse).
       const tesouroBuild = await fetch(

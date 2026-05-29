@@ -33,3 +33,13 @@ export function isSorobanWaterfallEnabled(): Promise<boolean> {
 export function isIntlInvestorFlowEnabled(): Promise<boolean> {
   return getFlag('INTL_INVESTOR_FLOW');
 }
+
+/**
+ * M3_INSTITUTIONAL_GATING (M3 F-M3-5/6): exige Suitability CVM 30 completada e
+ * ticket ≥ mínimo regulatório em `/api/investidor/quote`. Inerte (off) por
+ * default — testnet/POC permanece com fluxo single-asset sem gating até o
+ * cutover institucional formal.
+ */
+export function isInstitutionalGatingEnabled(): Promise<boolean> {
+  return getFlag('M3_INSTITUTIONAL_GATING');
+}

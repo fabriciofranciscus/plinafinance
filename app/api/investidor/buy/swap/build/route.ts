@@ -32,6 +32,8 @@ import { distribute } from '@/lib/stellar/issuer';
 import { distributorSigner } from '@/lib/stellar/signer';
 import { mainnetCutoverGuard } from '@/lib/env/feature-gates';
 import { buildAsset } from '@/lib/stellar/account';
+import { assetCodeForClasse, classeOrDefault } from '@/lib/stellar/classes';
+import { incrementarHolding } from '@/lib/services/holdings';
 import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
 import { withAuth } from '@/lib/wallet/auth-guard';
@@ -121,6 +123,8 @@ export const POST = withAuth(async (req, { user }) => {
     }
 
     const stellarAmount = quote.toAmount.toFixed(7);
+    const classe = classeOrDefault(quote.classe);
+    const plinarfCode = assetCodeForClasse(classe);
 
     const instructions = quote.onRampOrder.paymentInstructionsJson as
       | (Record<string, unknown> & { __mock?: boolean })
@@ -135,6 +139,7 @@ export const POST = withAuth(async (req, { user }) => {
         issuerPubkey,
         investorPubkey,
         stellarAmount,
+        plinarfCode,
       );
 
       await db.$transaction(async (tx) => {
@@ -156,6 +161,12 @@ export const POST = withAuth(async (req, { user }) => {
             },
           },
         });
+        await incrementarHolding(tx, {
+          investidorId: quote.investidorId,
+          classe,
+          amount: stellarAmount,
+          txHash: distRes.hash,
+        });
         await tx.eventoAudit.create({
           data: {
             acao: 'SWAP_EXECUTADO',
@@ -167,6 +178,8 @@ export const POST = withAuth(async (req, { user }) => {
               quoteId: quote.id,
               orderId: quote.onRampOrder?.id,
               amount: stellarAmount,
+              classe,
+              assetCode: plinarfCode,
               mock: true,
             } as Prisma.InputJsonValue,
           },
@@ -196,6 +209,7 @@ export const POST = withAuth(async (req, { user }) => {
       plinarfAmount: stellarAmount,
       issuerPubkey,
       distributorPubkey,
+      plinarfCode,
       memo: `q:${quote.id.slice(0, 24)}`,
     });
 

@@ -2,12 +2,16 @@ export type Screen =
   | 'welcome'
   | 'identity'
   | 'banking'
+  | 'classe'
   | 'quote'
   | 'onramp'
   | 'settling'
   | 'claiming'
   | 'confirm'
   | 'receipt';
+
+/** F-M3-4. Classe PLINA-RF escolhida pelo investidor. */
+export type ClasseEscolhida = 'SENIOR' | 'SUBORDINADA';
 
 export interface OnboardData {
   investidorId: string;

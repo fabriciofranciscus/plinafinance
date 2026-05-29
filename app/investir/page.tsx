@@ -23,6 +23,7 @@ import { ErrorBlock } from './_components/shell/error-block';
 import { WelcomeScreen } from './_components/screens/welcome';
 import { IdentityScreen } from './_components/screens/identity';
 import { BankingScreen } from './_components/screens/banking';
+import { ClasseScreen } from './_components/screens/classe';
 import { QuoteScreen } from './_components/screens/quote';
 import { OnRampScreen } from './_components/screens/onramp';
 import { SettlingScreen } from './_components/screens/settling';
@@ -134,6 +135,12 @@ export default function InvestirPage() {
                   loading={flow.banking.loading}
                   onSubmit={flow.banking.registerBank}
                   onSkip={flow.skipBanking}
+                />
+              )}
+              {screen === 'classe' && onboard && (
+                <ClasseScreen
+                  initial={flow.classe}
+                  onContinue={flow.onClasseContinue}
                 />
               )}
               {screen === 'quote' && onboard && (

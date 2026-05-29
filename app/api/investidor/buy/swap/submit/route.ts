@@ -30,6 +30,8 @@ import {
 } from '@/lib/http/zod-stellar';
 import { parseStellarAmount } from '@/lib/format/parse-stellar-amount';
 import { assertSwapXdrMatchesQuote } from '@/lib/stellar/parse-swap-xdr';
+import { assetCodeForClasse, classeOrDefault } from '@/lib/stellar/classes';
+import { incrementarHolding } from '@/lib/services/holdings';
 import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 
 export const dynamic = 'force-dynamic';
@@ -138,6 +140,8 @@ export const POST = withAuth(async (req, { user }) => {
       );
     }
     const expectedAmount = parseStellarAmount(quote.toAmount).toFixed(7);
+    const classe = classeOrDefault(quote.classe);
+    const plinarfCode = assetCodeForClasse(classe);
     const tesouro = await resolveTesouroAsset(investorPubkey);
     try {
       assertSwapXdrMatchesQuote(xdr, {
@@ -146,6 +150,7 @@ export const POST = withAuth(async (req, { user }) => {
         issuerPubkey,
         bridgeAsset: { code: tesouro.code, issuer: tesouro.issuer },
         expectedAmount,
+        plinarfCode,
       });
     } catch (err) {
       return NextResponse.json(
@@ -209,6 +214,12 @@ export const POST = withAuth(async (req, { user }) => {
           },
         },
       });
+      await incrementarHolding(tx, {
+        investidorId: quote.investidorId,
+        classe,
+        amount: stellarAmount,
+        txHash: submitRes.hash,
+      });
       await tx.eventoAudit.create({
         data: {
           acao: 'SWAP_EXECUTADO',
@@ -220,6 +231,8 @@ export const POST = withAuth(async (req, { user }) => {
             quoteId: quote.id,
             orderId: onRampOrder.id,
             amount: stellarAmount,
+            classe,
+            assetCode: plinarfCode,
             mock: false,
           } as Prisma.InputJsonValue,
         },

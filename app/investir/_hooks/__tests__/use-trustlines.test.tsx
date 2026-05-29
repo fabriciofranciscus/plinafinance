@@ -30,7 +30,7 @@ function setup() {
   return { result, onError, clearError, getAccessToken, signRawHash };
 }
 
-describe('useTrustlines — sequência PLINARF → TESOURO', () => {
+describe('useTrustlines — sequência PLINARF (Sênior) → PLINARFB (Subordinada) → TESOURO', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
   beforeEach(() => {
     fetchMock = vi.fn();
@@ -38,10 +38,12 @@ describe('useTrustlines — sequência PLINARF → TESOURO', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('executa build→sign→submit PLINARF e depois TESOURO, marcando ready=true', async () => {
+  it('executa build→sign→submit PLINARF (Sênior) → PLINARFB (Subordinada) → TESOURO', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ xdr: 'xdr-p', hashHex: '0xhp' })) // plinarf build
+      .mockResolvedValueOnce(jsonResponse({ xdr: 'xdr-ps', hashHex: '0xhps' })) // plinarf (sênior) build
       .mockResolvedValueOnce(jsonResponse({ ok: true })) // plinarf submit
+      .mockResolvedValueOnce(jsonResponse({ xdr: 'xdr-pb', hashHex: '0xhpb' })) // plinarfb build
+      .mockResolvedValueOnce(jsonResponse({ ok: true })) // plinarfb submit
       .mockResolvedValueOnce(jsonResponse({ xdr: 'xdr-t', hashHex: '0xht' })) // tesouro build
       .mockResolvedValueOnce(jsonResponse({ ok: true })); // tesouro submit
 
@@ -50,22 +52,37 @@ describe('useTrustlines — sequência PLINARF → TESOURO', () => {
       await result.current.setupTrustlines();
     });
 
-    // 4 fetches na ordem certa
     const urls = fetchMock.mock.calls.map((c) => c[0]);
     expect(urls).toEqual([
+      '/api/investidor/buy/trust-plinarf/build',
+      '/api/investidor/buy/trust-plinarf/submit',
       '/api/investidor/buy/trust-plinarf/build',
       '/api/investidor/buy/trust-plinarf/submit',
       '/api/investidor/buy/trust-tesouro/build',
       '/api/investidor/buy/trust-tesouro/submit',
     ]);
 
-    // signRawHash chamado uma vez por trustline com hash correspondente
+    // 2ª chamada de build deve carregar assetCode=PLINARFB no body.
+    const plinarfbBuildBody = JSON.parse(
+      (fetchMock.mock.calls[2][1] as { body: string }).body,
+    );
+    expect(plinarfbBuildBody.assetCode).toBe('PLINARFB');
+    const plinarfbSubmitBody = JSON.parse(
+      (fetchMock.mock.calls[3][1] as { body: string }).body,
+    );
+    expect(plinarfbSubmitBody.assetCode).toBe('PLINARFB');
+
     expect(signRawHash).toHaveBeenNthCalledWith(1, {
       address: onboard.publicKey,
       chainType: 'stellar',
-      hash: '0xhp',
+      hash: '0xhps',
     });
     expect(signRawHash).toHaveBeenNthCalledWith(2, {
+      address: onboard.publicKey,
+      chainType: 'stellar',
+      hash: '0xhpb',
+    });
+    expect(signRawHash).toHaveBeenNthCalledWith(3, {
       address: onboard.publicKey,
       chainType: 'stellar',
       hash: '0xht',
@@ -90,7 +107,7 @@ describe('useTrustlines — sequência PLINARF → TESOURO', () => {
     expect(result.current.trustlinesReady).toBe(false);
   });
 
-  it('aborta se PLINARF submit falha — não tenta TESOURO', async () => {
+  it('aborta se PLINARF submit falha — não tenta PLINARFB nem TESOURO', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ xdr: 'xdr-p', hashHex: '0xhp' }))
       .mockResolvedValueOnce(new Response('stellar horizon down', { status: 500 }));
@@ -101,13 +118,15 @@ describe('useTrustlines — sequência PLINARF → TESOURO', () => {
     });
 
     expect(onError).toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledTimes(2); // não chegou no tesouro
+    expect(fetchMock).toHaveBeenCalledTimes(2); // não chegou em PLINARFB nem TESOURO
     expect(result.current.trustlinesReady).toBe(false);
   });
 
   it('idempotência: noop se trustlinesReady já é true', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ xdr: 'xdr-p', hashHex: '0xhp' }))
+      .mockResolvedValueOnce(jsonResponse({ xdr: 'xdr-ps', hashHex: '0xhps' }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(jsonResponse({ xdr: 'xdr-pb', hashHex: '0xhpb' }))
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
       .mockResolvedValueOnce(jsonResponse({ xdr: 'xdr-t', hashHex: '0xht' }))
       .mockResolvedValueOnce(jsonResponse({ ok: true }));
