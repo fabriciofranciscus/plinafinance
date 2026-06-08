@@ -1,18 +1,28 @@
 'use client';
 
 /**
- * /vender — landing pro vendedor (Ricardo).
+ * /vender — wizard "Para Cotistas" (flow desenhado pelo CEO no mockup Lovable).
  *
- * PRODUCT.md princípio 5: "fricção assimétrica entre superfícies". A landing
- * institucional (/) é alta fricção. Esta é o oposto: copy direto, simulador
- * inline, fricção mínima. Brand visual permanece (mesma palette, mesmo type
- * stack) — só o tom muda.
+ * Passo 1 (Cadastro & KYC) é feito UMA vez e é gated por login Privy:
+ *   (a) não logado          → painel de login (Google / e-mail)
+ *   (b) logado + sem KYC     → form de KYC + conta Pix → POST /api/conta/kyc
+ *   (c) logado + KYC aprovado → pula direto pro passo 2 (chip "verificado")
+ * KYC vive na Pessoa (privyId) e vale pros dois papéis (investidor/cedente).
  *
- * Hero é o simulador. Lead capture acontece depois do número aparecer.
+ * Passo 2 (Envio da cota) cria o lead via /api/vender/lead (autenticado) →
+ * acompanhamento em /vender/acompanhar/[leadId].
  */
 
-import { useState } from 'react';
-import Link from 'next/link';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import WizardHeader from '@/components/vender/WizardHeader';
+import StepperVender from '@/components/vender/StepperVender';
+import { usePessoa } from '@/components/PessoaProvider';
+import {
+  useAppPrivy,
+  useAppLoginWithEmail,
+  useAppLoginWithOAuth,
+} from '@/lib/hooks/privy';
 
 type TipoBem = 'IMOVEL' | 'VEICULO' | 'EQUIPAMENTO' | 'SERVICO';
 
@@ -36,300 +46,661 @@ const TIPO_BEM_LABEL: Record<TipoBem, string> = {
   SERVICO: 'Serviços',
 };
 
-export default function VenderPage() {
-  const [tipoBem, setTipoBem] = useState<TipoBem>('IMOVEL');
-  const [valorCarta, setValorCarta] = useState('150000');
-  const [administradora, setAdministradora] = useState('');
+const inputClass =
+  'mt-2 w-full bg-white border border-light-hairline px-4 py-2.5 font-text text-sm focus:outline-none focus:ring-2 focus:ring-primary';
+
+function WizardInner() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const pessoa = usePessoa();
+  const { getAccessToken } = useAppPrivy();
+
+  const [passo, setPasso] = useState<0 | 1>(0);
+
+  // Passo 2 — Envio da cota
+  const [tipoBem, setTipoBem] = useState<TipoBem>(
+    (params.get('tipoBem') as TipoBem) || 'IMOVEL',
+  );
+  const [valorCarta, setValorCarta] = useState(
+    params.get('valorCarta') || '150000',
+  );
+  const [administradora, setAdministradora] = useState(
+    params.get('administradora') || '',
+  );
   const [faixa, setFaixa] = useState<Faixa | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [simulando, setSimulando] = useState(false);
+
+  const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
+  // (c) já verificado → pula pro passo 2 UMA vez. Depois disso, "Voltar" e o
+  // clique no stepper podem trazer o cedente de volta ao passo 0 sem que o
+  // efeito o empurre pra frente de novo.
+  const autoAvancou = useRef(false);
+  useEffect(() => {
+    if (
+      !autoAvancou.current &&
+      pessoa.authenticated &&
+      pessoa.kycAprovado &&
+      passo === 0
+    ) {
+      autoAvancou.current = true;
+      setPasso(1);
+    }
+  }, [pessoa.authenticated, pessoa.kycAprovado, passo]);
+
+  // Navegação Voltar/Avançar + stepper clicável (igual ao mockup). Passos
+  // futuros (Validação jurídica em diante) são dirigidos pela mesa — ficam
+  // bloqueados aqui; só Cadastro & KYC (0) e Envio da cota (1) são do cedente.
+  const podeEnviar = pessoa.authenticated && pessoa.kycAprovado;
+  function irParaPasso(idx: number) {
+    if (idx === 0) setPasso(0);
+    else if (idx === 1 && podeEnviar) setPasso(1);
+  }
+  function passoHabilitado(idx: number) {
+    if (!pessoa.authenticated) return false;
+    if (idx === 0) return true;
+    if (idx === 1) return podeEnviar;
+    return false; // passos da mesa
+  }
+
   async function simular() {
-    setLoading(true);
+    setSimulando(true);
     setErro(null);
     try {
       const res = await fetch('/api/vender/simular', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tipoBem,
-          valorCarta,
-          administradora,
-        }),
+        body: JSON.stringify({ tipoBem, valorCarta, administradora }),
       });
-      if (!res.ok) {
-        throw new Error((await res.json()).error ?? 'erro');
-      }
+      if (!res.ok) throw new Error((await res.json()).error ?? 'erro');
       setFaixa(await res.json());
     } catch (err) {
       setErro(err instanceof Error ? err.message : String(err));
     } finally {
+      setSimulando(false);
+    }
+  }
+
+  async function enviar() {
+    setEnviando(true);
+    setErro(null);
+    try {
+      const token = await getAccessToken();
+      const res = await fetch('/api/vender/lead', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ consentimentoLgpd: true, origem: 'wizard-vender' }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'erro');
+      const { leadId } = (await res.json()) as { leadId: string };
+      router.push(`/vender/acompanhar/${leadId}`);
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : String(err));
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-sheet-white text-base flex flex-col">
+      <WizardHeader active="cotistas" />
+
+      <main className="flex-1">
+        <div className="mx-auto max-w-3xl px-6 pt-12 pb-20">
+          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">
+            Para Cotistas
+          </p>
+          <h1 className="font-title text-4xl md:text-5xl font-semibold tracking-tight mt-3">
+            Venda sua cota contemplada
+          </h1>
+          <p className="font-text text-lg text-base/70 mt-3">
+            Pix em até 48h. Deságio transparente. Processo 100% digital.
+          </p>
+
+          <div className="mt-12">
+            <StepperVender
+              current={passo}
+              onStepClick={irParaPasso}
+              isStepEnabled={passoHabilitado}
+            />
+          </div>
+
+          <div className="mt-10 border border-light-hairline bg-white p-6 md:p-8">
+            {passo === 0 ? (
+              pessoa.loading ? (
+                <p className="font-text text-sm text-base/60">Carregando…</p>
+              ) : !pessoa.authenticated ? (
+                <LoginPanel />
+              ) : pessoa.kycAprovado ? (
+                <VerificadoPanel email={pessoa.email} nome={pessoa.nome} />
+              ) : (
+                <KycPanel
+                  emailPadrao={pessoa.email}
+                  nomePadrao={pessoa.nome}
+                  getAccessToken={getAccessToken}
+                  onDone={async () => {
+                    await pessoa.refresh();
+                    setPasso(1);
+                  }}
+                />
+              )
+            ) : (
+              <PassoEnvioCota
+                tipoBem={tipoBem}
+                setTipoBem={setTipoBem}
+                valorCarta={valorCarta}
+                setValorCarta={setValorCarta}
+                administradora={administradora}
+                setAdministradora={setAdministradora}
+                faixa={faixa}
+                simulando={simulando}
+                simular={simular}
+                verificado={pessoa.kycAprovado}
+              />
+            )}
+
+            {erro && passo === 1 && (
+              <p className="font-text text-sm text-red-700 mt-6">{erro}</p>
+            )}
+
+            {/* Navegação Voltar/Avançar (igual ao mockup). Aparece quando o
+                cedente já está verificado — antes disso, login/KYC têm os
+                próprios botões de ação. */}
+            {podeEnviar && (
+              <div className="mt-8 flex items-center justify-between border-t border-light-hairline pt-6">
+                <button
+                  type="button"
+                  onClick={() => setPasso(0)}
+                  disabled={passo === 0}
+                  className="font-details text-[11px] tracking-[0.2em] uppercase text-base/60 hover:text-base transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  ← Voltar
+                </button>
+                {passo === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setPasso(1)}
+                    className="bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors"
+                  >
+                    Avançar →
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={enviar}
+                    disabled={enviando}
+                    className="bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors disabled:opacity-50"
+                  >
+                    {enviando ? 'Enviando…' : 'Enviar e acompanhar →'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <p className="font-text text-sm text-base/60 mt-8 leading-relaxed">
+            Depois do envio, nossa mesa faz a validação jurídica, gera a oferta
+            firme e conduz a cessão digital. Você acompanha cada etapa, com Pix
+            em até 48h após a assinatura, por um link auditável.
+          </p>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+// ─── Passo 0a — Login ────────────────────────────────────────────────────────
+
+function LoginPanel() {
+  const { initOAuth, loading: oauthLoading } = useAppLoginWithOAuth();
+  const { sendCode, loginWithCode, state } = useAppLoginWithEmail();
+  const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [erro, setErro] = useState<string | null>(null);
+
+  const sending = state.status === 'sending-code';
+  const verifying = state.status === 'submitting-code';
+  const awaitingCode = state.status === 'awaiting-code-input' || verifying;
+
+  return (
+    <div>
+      <h2 className="font-title text-2xl font-semibold tracking-tight">
+        Entre para começar
+      </h2>
+      <p className="font-text text-sm text-base/70 mt-1">
+        Seu cadastro e verificação são feitos uma única vez. Use Google ou
+        e-mail.
+      </p>
+
+      {!awaitingCode ? (
+        <div className="mt-6 space-y-5">
+          <button
+            type="button"
+            onClick={async () => {
+              setErro(null);
+              try {
+                await initOAuth({ provider: 'google' });
+              } catch (e) {
+                setErro(e instanceof Error ? e.message : 'Falha no Google.');
+              }
+            }}
+            disabled={oauthLoading}
+            className="inline-flex items-center gap-3 border border-base/20 bg-white px-5 py-3 font-details text-[11px] tracking-[0.2em] uppercase hover:border-base transition-colors disabled:opacity-40"
+          >
+            {oauthLoading ? 'Redirecionando…' : 'Continuar com Google'}
+          </button>
+
+          <div className="flex items-center gap-4" aria-hidden>
+            <span className="h-px flex-1 bg-base/15" />
+            <span className="font-details text-[10px] tracking-[0.3em] uppercase text-base/55">
+              ou
+            </span>
+            <span className="h-px flex-1 bg-base/15" />
+          </div>
+
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setErro(null);
+              try {
+                await sendCode({ email });
+              } catch (er) {
+                setErro(er instanceof Error ? er.message : 'Falha ao enviar.');
+              }
+            }}
+          >
+            <label className="block">
+              <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+                E-mail
+              </span>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={sending}
+                className={inputClass}
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={sending || !email}
+              className="mt-4 bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors disabled:opacity-40"
+            >
+              {sending ? 'Enviando…' : 'Enviar código'}
+            </button>
+          </form>
+        </div>
+      ) : (
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setErro(null);
+            try {
+              await loginWithCode({ code });
+            } catch (er) {
+              setErro(er instanceof Error ? er.message : 'Código inválido.');
+            }
+          }}
+          className="mt-6"
+        >
+          <label className="block">
+            <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+              Código enviado para {email}
+            </span>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              required
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              className={inputClass + ' font-mono tracking-[0.3em]'}
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={verifying || code.length < 6}
+            className="mt-4 bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors disabled:opacity-40"
+          >
+            {verifying ? 'Verificando…' : 'Entrar'}
+          </button>
+        </form>
+      )}
+
+      {erro && <p className="font-text text-sm text-red-700 mt-4">{erro}</p>}
+    </div>
+  );
+}
+
+// ─── Passo 0b — KYC + conta Pix ──────────────────────────────────────────────
+
+const PIX_TIPOS = [
+  { v: 'cpf', label: 'CPF' },
+  { v: 'email', label: 'E-mail' },
+  { v: 'phone', label: 'Telefone' },
+  { v: 'random', label: 'Aleatória' },
+] as const;
+
+function KycPanel({
+  emailPadrao,
+  nomePadrao,
+  getAccessToken,
+  onDone,
+}: {
+  emailPadrao: string | null;
+  nomePadrao: string | null;
+  getAccessToken: () => Promise<string | null>;
+  onDone: () => Promise<void>;
+}) {
+  const [nome, setNome] = useState(nomePadrao ?? '');
+  const [cpf, setCpf] = useState('');
+  const [pixKeyType, setPixKeyType] = useState<'cpf' | 'email' | 'phone' | 'random'>('cpf');
+  const [pixKey, setPixKey] = useState('');
+  const [consentimento, setConsentimento] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const valido = nome.trim() && cpf.trim() && pixKey.trim() && consentimento;
+
+  async function submit() {
+    setLoading(true);
+    setErro(null);
+    try {
+      const cpfDigits = cpf.replace(/\D/g, '');
+      const [firstName, ...rest] = nome.trim().split(' ');
+      const token = await getAccessToken();
+      const res = await fetch('/api/conta/kyc', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          nome: nome.trim(),
+          cpf: cpfDigits,
+          papel: 'CEDENTE',
+          bankAccount: {
+            pixKey: pixKey.trim(),
+            pixKeyType,
+            firstName: firstName || nome.trim(),
+            lastName: rest.join(' ') || 'Plina',
+            cpf: cpfDigits,
+          },
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'erro');
+      await onDone();
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : String(err));
       setLoading(false);
     }
   }
 
   return (
-    <div className="bg-sheet-white">
-      {/* Hero */}
-      <section className="px-6 py-16 md:py-24">
-        <div className="mx-auto max-w-5xl">
-          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">
-            Vendedor · Cota contemplada
-          </p>
-          <h1 className="font-title text-4xl md:text-6xl font-semibold tracking-tight mt-4 max-w-3xl">
-            Pix em 48h pela sua cota.
-          </h1>
-          <p className="font-text text-lg md:text-xl text-base/80 mt-4 max-w-2xl leading-relaxed">
-            Você foi contemplado e precisa de liquidez hoje. A Plina paga via
-            Pix em até 48 horas após validação dos documentos. Sem leilão, sem
-            fila, sem grupo de Facebook.
-          </p>
+    <div>
+      <h2 className="font-title text-2xl font-semibold tracking-tight">
+        Cadastro &amp; KYC
+      </h2>
+      <p className="font-text text-sm text-base/70 mt-1">
+        Verificação AML/KYC obrigatória conforme regulação BACEN/COAF. Feita uma
+        única vez{emailPadrao ? ` para ${emailPadrao}` : ''}.
+      </p>
 
-          {/* Simulador inline */}
-          <div className="mt-12 border border-light-hairline">
-            <div className="px-6 py-4 border-b border-light-hairline bg-document-grey/50">
-              <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-                Simulação · faixa indicativa
-              </p>
-            </div>
+      <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Field label="Nome completo" required>
+          <input
+            type="text"
+            required
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+            className={inputClass}
+          />
+        </Field>
+        <Field label="CPF" required>
+          <input
+            type="text"
+            required
+            value={cpf}
+            onChange={(e) => setCpf(e.target.value)}
+            placeholder="000.000.000-00"
+            className={inputClass + ' font-mono'}
+          />
+        </Field>
+      </div>
 
-            <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-              <label className="block">
-                <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-                  Tipo de bem
-                </span>
-                <select
-                  value={tipoBem}
-                  onChange={(e) => setTipoBem(e.target.value as TipoBem)}
-                  className="mt-2 w-full bg-white border border-light-hairline px-3 py-2.5 font-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  {(Object.keys(TIPO_BEM_LABEL) as TipoBem[]).map((t) => (
-                    <option key={t} value={t}>
-                      {TIPO_BEM_LABEL[t]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-                  Valor da carta
-                </span>
-                <input
-                  type="number"
-                  min="1000"
-                  step="1000"
-                  value={valorCarta}
-                  onChange={(e) => setValorCarta(e.target.value)}
-                  className="mt-2 w-full bg-white border border-light-hairline px-3 py-2.5 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </label>
-              <label className="block">
-                <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-                  Administradora (opcional)
-                </span>
-                <input
-                  type="text"
-                  value={administradora}
-                  onChange={(e) => setAdministradora(e.target.value)}
-                  placeholder="Ex: Caixa, Itaú, Porto"
-                  className="mt-2 w-full bg-white border border-light-hairline px-3 py-2.5 font-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </label>
-            </div>
-
-            <div className="px-6 pb-6">
-              <button
-                onClick={simular}
-                disabled={loading}
-                className="w-full md:w-auto bg-base text-lightBg font-details text-xs tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors disabled:opacity-50"
-              >
-                {loading ? 'Calculando…' : 'Calcular o que você recebe'}
-              </button>
-            </div>
-
-            {erro && (
-              <div className="px-6 pb-6">
-                <p className="font-text text-sm text-red-700">{erro}</p>
-              </div>
-            )}
-
-            {faixa && (
-              <div className="border-t border-light-hairline bg-base text-lightBg px-6 py-8">
-                <p className="font-details text-[10px] tracking-[0.2em] uppercase text-primary">
-                  Estimativa · sujeita à análise documental
-                </p>
-                <p className="font-title text-3xl md:text-5xl font-semibold mt-3 tracking-tight">
-                  {BRL.format(faixa.valorLiquidoMinimo)} –{' '}
-                  {BRL.format(faixa.valorLiquidoMaximo)}
-                </p>
-                <p className="font-mono text-xs text-lightBg/60 mt-2">
-                  Deságio {(faixa.desagioMinimo * 100).toFixed(0)}–
-                  {(faixa.desagioMaximo * 100).toFixed(0)}% sobre R${' '}
-                  {Number(valorCarta).toLocaleString('pt-BR')}.
-                </p>
-                <div className="mt-6">
-                  <Link
-                    href={`/vender/lead?tipoBem=${tipoBem}&valorCarta=${valorCarta}${administradora ? `&administradora=${encodeURIComponent(administradora)}` : ''}`}
-                    className="inline-block bg-primary text-base font-details text-[10px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-secondaryLight transition-colors"
-                  >
-                    Continuar e receber oferta firme →
-                  </Link>
-                </div>
-              </div>
-            )}
-          </div>
+      <div className="mt-6">
+        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+          Conta para receber o Pix
+        </p>
+        <div className="mt-2 grid grid-cols-1 md:grid-cols-[160px_1fr] gap-4">
+          <Field label="Tipo de chave">
+            <select
+              value={pixKeyType}
+              onChange={(e) => setPixKeyType(e.target.value as typeof pixKeyType)}
+              className={inputClass}
+            >
+              {PIX_TIPOS.map((t) => (
+                <option key={t.v} value={t.v}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Chave Pix">
+            <input
+              type="text"
+              value={pixKey}
+              onChange={(e) => setPixKey(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
         </div>
-      </section>
+      </div>
 
-      {/* Como funciona */}
-      <section className="bg-document-grey px-6 py-20">
-        <div className="mx-auto max-w-5xl">
-          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-            Como funciona
-          </p>
-          <h2 className="font-title text-3xl md:text-4xl font-semibold tracking-tight mt-4">
-            Três passos. Pix em 48h.
-          </h2>
-          <ol className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-px bg-base/15 border border-light-hairline">
-            <Step
-              n="01"
-              titulo="Simule e envie sua oferta"
-              copy="Você escolhe tipo de bem e valor. Recebe oferta firme em até 24 horas, com prazo de validade claro."
-            />
-            <Step
-              n="02"
-              titulo="Cessão digital + verificação"
-              copy="Assinatura via DocuSign. Hash do contrato registrado na Stellar como prova pública e imutável."
-            />
-            <Step
-              n="03"
-              titulo="Pix em 48h"
-              copy="Após validação, Plina executa o Pix. Comprovante com hash on-chain — você verifica tudo no Stellar Expert."
-            />
-          </ol>
-        </div>
-      </section>
-
-      {/* Trust signals */}
-      <section className="px-6 py-20">
-        <div className="mx-auto max-w-5xl">
-          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-            Por que confiar
-          </p>
-          <h2 className="font-title text-3xl md:text-4xl font-semibold tracking-tight mt-4">
-            Auditável em cada etapa.
-          </h2>
-          <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-px bg-base/15 border border-light-hairline">
-            <TrustBlock
-              titulo="Cessão registrada on-chain"
-              copy="Cada termo de cessão assinado gera uma transação Stellar com o hash do PDF. Você baixa o contrato + recebe link Stellar Expert pra verificar."
-            />
-            <TrustBlock
-              titulo="Pix com comprovante público"
-              copy="Quando o Pix é executado, o hash do comprovante vai pra blockchain. Trilha de auditoria visível, sem depender da Plina."
-            />
-            <TrustBlock
-              titulo="Pool tokenizado regulado"
-              copy="Sua cota entra num pool sob estrutura FIDC CVM 175 (Fase 1). Sua identidade fica off-chain, apenas o hash da cessão é público."
-            />
-            <TrustBlock
-              titulo="Sem leilão, sem grupos de Facebook"
-              copy="Preço firme, validade declarada, processo digital. Velocidade primeiro: Pix em 48h é o compromisso."
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section className="bg-document-grey px-6 py-20">
-        <div className="mx-auto max-w-3xl">
-          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-            FAQ
-          </p>
-          <h2 className="font-title text-3xl md:text-4xl font-semibold tracking-tight mt-4 mb-10">
-            Perguntas frequentes
-          </h2>
-          <div className="space-y-4">
-            <Faq
-              q="Quanto vou receber pela minha cota?"
-              a="Depende do tipo de bem, valor da carta e administradora. Use o simulador acima pra ver a faixa indicativa. Oferta firme sai após análise documental em até 24h."
-            />
-            <Faq
-              q="O que precisa pra cessão acontecer?"
-              a="Contrato de adesão, comprovante de contemplação, extrato atualizado da administradora (até 30d), seu RG/CPF e comprovante de adimplência."
-            />
-            <Faq
-              q="Por que tem deságio?"
-              a="O Pix em 48h vem antes da administradora liquidar (90-180d) ou do bem ser usado. O deságio cobre o tempo de imobilização de capital + risco operacional."
-            />
-            <Faq
-              q="A cessão tem validade jurídica?"
-              a="Sim. Assinatura via DocuSign com validade civil. No POC testnet usamos sandbox, em produção é DocuSign certificado ICP-Brasil."
-            />
-            <Faq
-              q="Posso desistir depois de assinar?"
-              a="Existe uma janela de arrependimento de 24h após a assinatura, antes do Pix ser executado. Após Pix executado, a cessão é irreversível."
-            />
-            <Faq
-              q="Qual a diferença entre vocês e os outros que compram cotas?"
-              a="Operamos sob estrutura tokenizada Stellar — cada operação tem hash público auditável. Sua cota vira parte de um pool com transparência on-chain. Os incumbentes vendem ERC-20 sem essa estrutura."
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* CTA final */}
-      <section className="px-6 py-20">
-        <div className="mx-auto max-w-3xl text-center">
-          <h2 className="font-title text-3xl md:text-4xl font-semibold tracking-tight">
-            Pronto pra receber sua oferta firme?
-          </h2>
-          <p className="font-text text-base/80 mt-4 max-w-xl mx-auto">
-            Cinco minutos pra preencher. Análise em até 24 horas. Pix em 48h
-            após cessão assinada.
-          </p>
-          <Link
-            href="/vender/lead"
-            className="mt-8 inline-block bg-base text-lightBg font-details text-xs tracking-[0.2em] uppercase px-8 py-4 hover:bg-primary-deep transition-colors"
-          >
-            Solicitar oferta firme →
-          </Link>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function Step({ n, titulo, copy }: { n: string; titulo: string; copy: string }) {
-  return (
-    <div className="bg-lightBg p-6 group relative">
-      <span className="absolute top-0 left-0 w-[2px] h-full bg-primary scale-y-0 group-hover:scale-y-100 origin-top transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]" />
-      <p className="font-mono text-xs text-primary-deep">{n}</p>
-      <h3 className="font-title text-lg font-semibold mt-2 tracking-tight">{titulo}</h3>
-      <p className="font-text text-sm text-base/70 mt-2 leading-relaxed">{copy}</p>
-    </div>
-  );
-}
-
-function TrustBlock({ titulo, copy }: { titulo: string; copy: string }) {
-  return (
-    <div className="bg-sheet-white p-6">
-      <h3 className="font-title text-lg font-semibold tracking-tight">{titulo}</h3>
-      <p className="font-text text-sm text-base/70 mt-2 leading-relaxed">{copy}</p>
-    </div>
-  );
-}
-
-function Faq({ q, a }: { q: string; a: string }) {
-  return (
-    <details className="border-b border-light-hairline group">
-      <summary className="cursor-pointer py-4 font-text text-base font-semibold flex justify-between items-center hover:text-primary-deep transition-colors">
-        {q}
-        <span className="font-mono text-xs text-base/50 group-open:rotate-45 transition-transform duration-300">
-          +
+      <div className="mt-5">
+        <span className="inline-flex items-center gap-1.5 border border-primary/30 bg-primary/5 px-3 py-1 font-mono text-[11px] text-base/70">
+          <span className="h-1 w-1 rounded-full bg-primary" />
+          SEP-12 · KYC padronizado
         </span>
-      </summary>
-      <p className="font-text text-sm text-base/75 pb-4 leading-relaxed pr-8">{a}</p>
-    </details>
+      </div>
+
+      <label className="flex items-start gap-3 cursor-pointer mt-6">
+        <input
+          type="checkbox"
+          required
+          checked={consentimento}
+          onChange={(e) => setConsentimento(e.target.checked)}
+          className="mt-1.5 w-4 h-4 accent-primary"
+        />
+        <span className="font-text text-sm text-base/75 leading-relaxed">
+          Concordo com o tratamento dos meus dados pessoais conforme a{' '}
+          <a href="/politica-clawback" className="underline">
+            política
+          </a>
+          . Entendo que o hash desse consentimento será registrado publicamente
+          na Stellar como prova auditável.
+        </span>
+      </label>
+
+      {erro && <p className="font-text text-sm text-red-700 mt-4">{erro}</p>}
+
+      <div className="mt-8 flex justify-end border-t border-light-hairline pt-6">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!valido || loading}
+          className="bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {loading ? 'Verificando…' : 'Concluir cadastro →'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Passo 0c — Conta já verificada (revisão ao voltar) ──────────────────────
+
+function VerificadoPanel({
+  email,
+  nome,
+}: {
+  email: string | null;
+  nome: string | null;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="font-title text-2xl font-semibold tracking-tight">
+          Cadastro &amp; KYC
+        </h2>
+        <span className="inline-flex items-center gap-1.5 border border-primary/30 bg-primary/5 px-3 py-1 font-mono text-[11px] text-base/70 shrink-0">
+          <span className="h-1 w-1 rounded-full bg-primary" />
+          KYC verificado
+        </span>
+      </div>
+      <p className="font-text text-sm text-base/70 mt-1">
+        Sua verificação AML/KYC já está concluída{nome ? `, ${nome}` : ''}. Ela
+        vale para venda e investimento — não precisa refazer.
+      </p>
+      {email && (
+        <p className="font-mono text-xs text-base/55 mt-4">{email}</p>
+      )}
+      <p className="font-text text-sm text-base/60 mt-6">
+        Avance para enviar sua cota.
+      </p>
+    </div>
+  );
+}
+
+// ─── Passo 1 — Envio da cota ─────────────────────────────────────────────────
+
+function PassoEnvioCota(props: {
+  tipoBem: TipoBem;
+  setTipoBem: (v: TipoBem) => void;
+  valorCarta: string;
+  setValorCarta: (v: string) => void;
+  administradora: string;
+  setAdministradora: (v: string) => void;
+  faixa: Faixa | null;
+  simulando: boolean;
+  simular: () => void;
+  verificado: boolean;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="font-title text-2xl font-semibold tracking-tight">
+          Envio da cota
+        </h2>
+        {props.verificado && (
+          <span className="inline-flex items-center gap-1.5 border border-primary/30 bg-primary/5 px-3 py-1 font-mono text-[11px] text-base/70 shrink-0">
+            <span className="h-1 w-1 rounded-full bg-primary" />
+            KYC verificado
+          </span>
+        )}
+      </div>
+      <p className="font-text text-sm text-base/70 mt-1">
+        Informe sua cota para estimarmos o valor líquido. A oferta firme sai
+        após análise documental.
+      </p>
+
+      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Field label="Tipo de bem">
+          <select
+            value={props.tipoBem}
+            onChange={(e) => props.setTipoBem(e.target.value as TipoBem)}
+            className={inputClass}
+          >
+            {(Object.keys(TIPO_BEM_LABEL) as TipoBem[]).map((t) => (
+              <option key={t} value={t}>
+                {TIPO_BEM_LABEL[t]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Valor da carta">
+          <input
+            type="number"
+            min="1000"
+            step="1000"
+            value={props.valorCarta}
+            onChange={(e) => props.setValorCarta(e.target.value)}
+            className={inputClass + ' font-mono'}
+          />
+        </Field>
+        <Field label="Administradora (opcional)">
+          <input
+            type="text"
+            value={props.administradora}
+            onChange={(e) => props.setAdministradora(e.target.value)}
+            placeholder="Ex: Caixa, Itaú, Porto"
+            className={inputClass}
+          />
+        </Field>
+      </div>
+
+      <button
+        type="button"
+        onClick={props.simular}
+        disabled={props.simulando}
+        className="mt-6 font-details text-[11px] tracking-[0.2em] uppercase border border-base/20 px-5 py-2.5 hover:border-base transition-colors disabled:opacity-50"
+      >
+        {props.simulando ? 'Calculando…' : 'Calcular estimativa'}
+      </button>
+
+      {props.faixa && (
+        <div className="mt-6 border-t border-light-hairline bg-base text-lightBg px-6 py-7 -mx-6 md:mx-0 md:border md:border-light-hairline">
+          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-primary">
+            Estimativa · sujeita à análise documental
+          </p>
+          <p className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight">
+            {BRL.format(props.faixa.valorLiquidoMinimo)} –{' '}
+            {BRL.format(props.faixa.valorLiquidoMaximo)}
+          </p>
+          <p className="font-mono text-xs text-lightBg/60 mt-2">
+            Deságio {(props.faixa.desagioMinimo * 100).toFixed(0)}–
+            {(props.faixa.desagioMaximo * 100).toFixed(0)}% sobre R${' '}
+            {Number(props.valorCarta).toLocaleString('pt-BR')}.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Field({
+  label,
+  required,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+        {label} {required && <span className="text-primary-deep">*</span>}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+export default function VenderPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-sheet-white px-6 py-16 font-text text-base/60">
+          Carregando…
+        </div>
+      }
+    >
+      <WizardInner />
+    </Suspense>
   );
 }

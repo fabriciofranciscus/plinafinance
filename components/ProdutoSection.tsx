@@ -19,7 +19,7 @@ const especificacoes = [
   {
     label: 'Aporte',
     value: 'USD · EUR · BRL',
-    detail: 'Aceitamos investidores internacionais e domésticos via moedas digitais reguladas.',
+    detail: 'Investidores internacionais e domésticos, com liquidação em USDC, EURC e moeda local.',
   },
 ];
 

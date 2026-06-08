@@ -86,6 +86,28 @@ export interface PrivyLinkedAccount {
   chainType?: string;
 }
 
+/**
+ * Extrai o melhor e-mail dos linkedAccounts cobrindo os shapes do Privy:
+ *   - conta `email`   → e-mail fica em `address`
+ *   - OAuth (google_oauth, twitter_oauth, …) → e-mail fica em `email`
+ * (o stub E2E usa `email` numa conta type=email — também coberto.)
+ */
+export function extractPrivyEmail(
+  linkedAccounts: PrivyLinkedAccount[],
+): string | undefined {
+  const emailAcct = linkedAccounts.find((a) => a.type === 'email');
+  if (emailAcct?.address?.includes('@')) return emailAcct.address;
+  if (emailAcct?.email?.includes('@')) return emailAcct.email;
+  const oauth = linkedAccounts.find(
+    (a) => typeof a.email === 'string' && a.email.includes('@'),
+  );
+  if (oauth?.email) return oauth.email;
+  const anyAddr = linkedAccounts.find(
+    (a) => typeof a.address === 'string' && a.address.includes('@'),
+  );
+  return anyAddr?.address;
+}
+
 export interface PrivyUserClaims {
   /** Privy user ID (estável, use como FK em `Investidor.privyId`). */
   userId: string;
@@ -121,13 +143,42 @@ export async function verifyPrivyTokenAndExtract(
     );
   }
 
-  const email = linkedAccounts.find((a) => a.type === 'email')?.email;
+  const email = extractPrivyEmail(linkedAccounts);
 
   return {
     userId: claims.userId,
     email,
     stellarAddress: stellarAccount.address,
   };
+}
+
+export interface PrivyIdentityClaims {
+  /** Privy user ID (sub do JWT). FK estável em `Pessoa.privyId`. */
+  userId: string;
+  /** Email do linkedAccount, com fallback determinístico se ausente. */
+  email: string;
+}
+
+/**
+ * Verifica o JWT e devolve só userId + email — SEM exigir wallet Stellar
+ * (ao contrário de `verifyPrivyTokenAndExtract`). Usado pelo guard de
+ * Pessoa/cedente, que pode existir antes de qualquer wallet/onboarding.
+ *
+ * Email: preferência ao linkedAccount type=email; fallback determinístico
+ * (mesmo padrão da rota /api/investidor/onboard) pra contas só-OAuth sem
+ * email vinculado.
+ */
+export async function verifyPrivyTokenLite(
+  accessToken: string,
+): Promise<PrivyIdentityClaims> {
+  const privy = getPrivyClient();
+  const claims = await privy.verifyAuthToken(accessToken);
+  const user = await privy.getUserById(claims.userId);
+  const linkedAccounts = (user.linkedAccounts ?? []) as PrivyLinkedAccount[];
+  const email =
+    extractPrivyEmail(linkedAccounts) ??
+    `${claims.userId.replace(/[^a-z0-9]/g, '')}@privy.plina.local`;
+  return { userId: claims.userId, email };
 }
 
 /**

@@ -58,13 +58,19 @@ export async function requireInvestidor(
     throw new AuthError('token Privy inválido', 401);
   }
 
-  const investidor = await db.investidor.findUnique({
-    where: { privyId: claims.userId },
+  // Resolve o Investidor pela Pessoa (privyId canônico) OU pelo espelho
+  // `Investidor.privyId` (rows ainda não backfilladas). Prefere os campos
+  // da Pessoa quando presentes.
+  const investidor = await db.investidor.findFirst({
+    where: {
+      OR: [{ pessoa: { privyId: claims.userId } }, { privyId: claims.userId }],
+    },
     select: {
       id: true,
       publicKey: true,
       email: true,
       etherfuseCustomerId: true,
+      pessoa: { select: { email: true, etherfuseCustomerId: true } },
     },
   });
   if (!investidor) {
@@ -75,8 +81,9 @@ export async function requireInvestidor(
     privyId: claims.userId,
     investidorId: investidor.id,
     publicKey: investidor.publicKey,
-    email: investidor.email,
-    etherfuseCustomerId: investidor.etherfuseCustomerId,
+    email: investidor.pessoa?.email ?? investidor.email,
+    etherfuseCustomerId:
+      investidor.pessoa?.etherfuseCustomerId ?? investidor.etherfuseCustomerId,
   };
 }
 

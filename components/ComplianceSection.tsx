@@ -20,7 +20,7 @@ const principios = [
     titulo: 'Reversível',
     tag: 'Clawback · Autorização · Revogabilidade',
     detalhe:
-      'Política pública restrita a quatro hipóteses jurídicas explícitas. Reversibilidade institucional como diferencial competitivo, não como limitação técnica.',
+      'Política de clawback pública, restrita a quatro hipóteses jurídicas explícitas. Reversibilidade institucional como diferencial competitivo, não como limitação técnica.',
   },
 ];
 

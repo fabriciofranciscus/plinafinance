@@ -21,6 +21,7 @@
 import { usePrivy, useLogout } from '@privy-io/react-auth';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { usePessoa } from '@/components/PessoaProvider';
 
 interface AppHeaderProps {
   isAdmin: boolean;
@@ -34,6 +35,7 @@ function abbreviate(pubkey: string): string {
 export function AppHeader({ isAdmin }: AppHeaderProps) {
   const { ready, authenticated, user } = usePrivy();
   const { logout } = useLogout();
+  const { papeis } = usePessoa();
   const pathname = usePathname();
 
   const stellarAddress =
@@ -41,22 +43,31 @@ export function AppHeader({ isAdmin }: AppHeaderProps) {
       .filter((a): a is typeof a & { address: string } => 'address' in a)
       .find((a) => a.address.startsWith('G'))?.address ?? null;
 
+  const isInvestidor = papeis.includes('INVESTIDOR');
+  const isCedente = papeis.includes('CEDENTE');
+
+  const base = [
+    { href: '/pool', label: 'Pool' },
+    { href: '/cotas', label: 'Cotas' },
+    { href: '/politica-clawback', label: 'Política' },
+  ];
+
+  // Gating por papel: cedente-only não vê nav de investidor (Investir/Minha
+  // posição); investidor (ou conta sem papel ainda) vê Investir como entrada.
   const links = isAdmin
     ? [{ href: '/admin', label: 'Operação' }, { href: '/pool', label: 'Pool' }]
     : authenticated
       ? [
-          { href: '/pool', label: 'Pool' },
-          { href: '/cotas', label: 'Cotas' },
-          { href: '/politica-clawback', label: 'Política' },
-          { href: '/investir', label: 'Investir' },
-          { href: '/minha-posicao', label: 'Minha posição' },
+          ...base,
+          ...(isInvestidor || !isCedente
+            ? [{ href: '/investir', label: 'Investir' }]
+            : []),
+          ...(isInvestidor
+            ? [{ href: '/minha-posicao', label: 'Minha posição' }]
+            : []),
+          ...(isCedente ? [{ href: '/vender', label: 'Vender' }] : []),
         ]
-      : [
-          { href: '/pool', label: 'Pool' },
-          { href: '/cotas', label: 'Cotas' },
-          { href: '/politica-clawback', label: 'Política' },
-          { href: '/investir', label: 'Investir' },
-        ];
+      : [...base, { href: '/investir', label: 'Investir' }];
 
   return (
     <header className="bg-white border-b border-light-hairline sticky top-0 z-40">
@@ -112,14 +123,16 @@ export function AppHeader({ isAdmin }: AppHeaderProps) {
                 Sair
               </button>
             </>
-          ) : ready && authenticated && stellarAddress ? (
+          ) : ready && authenticated ? (
             <>
-              <span
-                className="hidden sm:inline font-mono text-[11px] text-base/60"
-                title={stellarAddress}
-              >
-                {abbreviate(stellarAddress)}
-              </span>
+              {stellarAddress && (
+                <span
+                  className="hidden sm:inline font-mono text-[11px] text-base/60"
+                  title={stellarAddress}
+                >
+                  {abbreviate(stellarAddress)}
+                </span>
+              )}
               <button
                 onClick={() => logout()}
                 className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 hover:text-base"

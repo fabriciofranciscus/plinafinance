@@ -87,6 +87,22 @@ enum StatusInvestidor {
   REVOGADO
 }
 
+/// KYC da pessoa (keyed por privyId). Feito UMA vez, compartilhado entre
+/// papéis. Ortogonal a `StatusInvestidor` (ciclo de vida do investidor).
+enum KycStatus {
+  NAO_INICIADO
+  PENDENTE
+  APROVADO
+  REJEITADO
+}
+
+/// Papéis que uma Pessoa pode acumular. Metadados de cada papel vivem em
+/// `Investidor` / `LeadVendedor`; aqui é só o flat list pra gating de UI.
+enum Papel {
+  INVESTIDOR
+  CEDENTE
+}
+
 enum CaminhoRealizacao {
   A_REVENDA
   B_ADMINISTRADORA
@@ -105,6 +121,7 @@ enum AcaoAudit {
   CLAWBACK_EXECUTADO
   COTA_REALIZADA
   // Funil vendedor (MVP testnet-first)
+  CEDENTE_ONBOARDED
   LEAD_VENDEDOR_CAPTURADO
   OFERTA_GERADA
   OFERTA_ACEITA
@@ -259,16 +276,52 @@ model Cota {
   @@index([tipoBem])
 }
 
+/// Identidade-pessoa unificada. KYC keyed por `privyId` — feito UMA vez,
+/// compartilhado entre papéis (investidor E cedente). Etherfuse customer +
+/// wallet Stellar vivem aqui (a wallet é provisionada no login do Privy,
+/// idempotente; o cedente a reusa só como identificador do customer Etherfuse
+/// + destino do off-ramp, sem trustline/compra de token). PII off-chain.
+model Pessoa {
+  id                     String    @id @default(cuid())
+  privyId                String    @unique
+  email                  String    @unique
+  nome                   String
+  publicKey              String    @unique
+  kycStatus              KycStatus @default(NAO_INICIADO)
+  kycAprovado            Boolean   @default(false)
+  /// UUID do customer Etherfuse (idempotência KYC/quote/order).
+  etherfuseCustomerId    String?
+  /// bankAccountId Etherfuse pro off-ramp Pix (PLINA-MOD-006).
+  etherfuseBankAccountId String?
+  /// CPF normalizado (11 dígitos). isSyntheticCpf=true quando veio do dummy
+  /// de sandbox (bloqueia operação em mainnet sem re-KYC — N-14).
+  cpfNormalizado         String?
+  isSyntheticCpf         Boolean   @default(false)
+  /// Papéis acumulados pela pessoa (gating de UI).
+  papeis                 Papel[]   @default([])
+  criadoEm               DateTime  @default(now())
+  atualizadoEm           DateTime  @updatedAt
+
+  investidor    Investidor?
+  leadsVendedor LeadVendedor[]
+
+  @@index([kycAprovado])
+}
+
 /// Investidor onboarded. PII off-chain. Public key on-chain.
 model Investidor {
   id                     String           @id @default(cuid())
+  /// FK pra Pessoa (identidade + KYC unificados). Nullable na Fase A
+  /// enquanto rows antigas não foram backfilladas (scripts/backfill-pessoa.ts).
+  pessoaId               String?          @unique
+  pessoa                 Pessoa?          @relation(fields: [pessoaId], references: [id])
   nome                   String
-  email                  String           @unique
+  /// Espelho denormalizado de Pessoa.email (Fase A). @unique removido — a
+  /// unicidade canônica é Pessoa.email. Remoção do espelho fica p/ limpeza.
+  email                  String
   publicKey              String           @unique
-  /// Privy user ID (sub do JWT). Chave estável da sessão — auth-guard
-  /// resolve o investidor por aqui em vez de email pra evitar round-trip
-  /// `privy.getUserById` por request. Nullable enquanto rows antigas não
-  /// foram backfillada (ver scripts/backfill-privy-id.ts).
+  /// Espelho de Pessoa.privyId (Fase A). auth-guard resolve via Pessoa,
+  /// caindo neste espelho pra rows não-backfilladas.
   privyId                String?          @unique
   kycAprovado            Boolean          @default(false)
   status                 StatusInvestidor @default(PENDENTE_KYC)
@@ -327,13 +380,13 @@ model Investidor {
 /// `id` é o UUID que a Etherfuse devolve em /ramp/quote, reusado como PK.
 /// `consumedAt` marca uso single-shot — quote queimado não pode reemitir.
 model Quote {
-  id             String     @id
+  id             String         @id
   investidorId   String
-  investidor     Investidor @relation(fields: [investidorId], references: [id])
+  investidor     Investidor     @relation(fields: [investidorId], references: [id])
   fromCurrency   String
-  fromAmount     Decimal    @db.Decimal(20, 7)
+  fromAmount     Decimal        @db.Decimal(20, 7)
   toCurrency     String
-  toAmount       Decimal    @db.Decimal(20, 7)
+  toAmount       Decimal        @db.Decimal(20, 7)
   exchangeRate   String
   fee            String
   expiresAt      DateTime
@@ -348,8 +401,8 @@ model Quote {
   /// C-04: sha256(xdr) reservado pelo request idempotente. Unique →
   /// retry com o mesmo XDR não re-submete; com XDR diferente o quote
   /// já está "lacrado" e retorna 409.
-  submitXdrHash  String?    @unique
-  criadoEm       DateTime   @default(now())
+  submitXdrHash  String?        @unique
+  criadoEm       DateTime       @default(now())
 
   onRampOrder  OnRampOrder?
   offRampOrder OffRampOrder?
@@ -440,6 +493,10 @@ model LeadVendedor {
   cpf          String?
   status       LeadVendedorStatus @default(NOVO)
   motivoPerda  String?
+  /// FK pra Pessoa (cedente logado + KYC). Nullable: leads legados (pré-auth)
+  /// e o upsert por email continuam funcionando.
+  pessoaId     String?
+  pessoa       Pessoa?            @relation(fields: [pessoaId], references: [id])
   criadoEm     DateTime           @default(now())
   atualizadoEm DateTime           @updatedAt
 
@@ -448,6 +505,7 @@ model LeadVendedor {
 
   @@index([status])
   @@index([criadoEm])
+  @@index([pessoaId])
 }
 
 /// Oferta firme calculada pra um lead. Pode ter múltiplas versões

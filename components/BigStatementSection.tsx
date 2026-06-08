@@ -34,7 +34,7 @@ export default function BigStatementSection() {
 
           <div className="lg:col-span-4">
             <p className="font-text text-white/70 text-lg font-light leading-relaxed mb-8">
-              A Lei 11.795 regulamentou o mercado brasileiro de consórcios em 2008. Há quase duas décadas o direito creditório de cotas contempladas é juridicamente formado, mas nunca chegou ao capital institucional global.
+              A Lei 11.795 regulamentou o mercado brasileiro de consórcios em 2008. Há quase duas décadas o direito creditório de cotas contempladas é juridicamente constituído, mas nunca chegou ao capital institucional global.
             </p>
             <p className="font-text text-white text-lg font-medium leading-relaxed">
               A Plina é a primeira tokenizadora institucional sob CVM 175 desde a origem.

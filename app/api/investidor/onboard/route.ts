@@ -11,7 +11,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { onboardInvestidor } from '@/lib/services/investidor';
-import { getPrivyClient } from '@/lib/wallet/privy';
+import { getPrivyClient, extractPrivyEmail, type PrivyLinkedAccount } from '@/lib/wallet/privy';
 import { sensitiveAuthLimiter, clientIp } from '@/lib/rate-limit/config';
 import { isIntlInvestorFlowEnabled } from '@/lib/env/feature-gates';
 
@@ -70,15 +70,11 @@ export async function POST(req: Request) {
       );
     }
 
-    // Email vem do Privy user (linkedAccounts).
+    // Email vem do Privy user (linkedAccounts) — cobre email + OAuth.
     const user = await privy.getUserById(claims.userId);
-    const linked = (user.linkedAccounts ?? []) as Array<{
-      type: string;
-      email?: string;
-      address?: string;
-    }>;
+    const linked = (user.linkedAccounts ?? []) as PrivyLinkedAccount[];
     const email =
-      linked.find((a) => a.type === 'email')?.email ??
+      extractPrivyEmail(linked) ??
       `${claims.userId.replace(/[^a-z0-9]/g, '')}@privy.plina.local`;
 
     const result = await onboardInvestidor({

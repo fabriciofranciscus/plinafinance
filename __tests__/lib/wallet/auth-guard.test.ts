@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/db', () => ({
-  db: { investidor: { findUnique: vi.fn() } },
+  db: { investidor: { findFirst: vi.fn() } },
 }));
 vi.mock('@/lib/wallet/privy', () => ({
   getPrivyClient: vi.fn(),
@@ -25,7 +25,7 @@ function reqWith(authHeader?: string): Request {
 
 beforeEach(() => {
   verifyAuthToken.mockReset();
-  (db.investidor.findUnique as ReturnType<typeof vi.fn>).mockReset();
+  (db.investidor.findFirst as ReturnType<typeof vi.fn>).mockReset();
 });
 
 describe('requireInvestidor', () => {
@@ -46,7 +46,7 @@ describe('requireInvestidor', () => {
   it('403 quando privy ok mas sem Investidor', async () => {
     verifyAuthToken.mockResolvedValueOnce({ userId: 'did:privy:abc' });
     (
-      db.investidor.findUnique as ReturnType<typeof vi.fn>
+      db.investidor.findFirst as ReturnType<typeof vi.fn>
     ).mockResolvedValueOnce(null);
     await expect(
       requireInvestidor(reqWith('Bearer good')),
@@ -56,12 +56,13 @@ describe('requireInvestidor', () => {
   it('devolve AuthedInvestidor com sucesso', async () => {
     verifyAuthToken.mockResolvedValueOnce({ userId: 'did:privy:abc' });
     (
-      db.investidor.findUnique as ReturnType<typeof vi.fn>
+      db.investidor.findFirst as ReturnType<typeof vi.fn>
     ).mockResolvedValueOnce({
       id: 'inv_1',
       publicKey: 'GABC',
       email: 'x@y.z',
       etherfuseCustomerId: 'cust_1',
+      pessoa: null,
     });
     const u = await requireInvestidor(reqWith('Bearer good'));
     expect(u).toEqual({
