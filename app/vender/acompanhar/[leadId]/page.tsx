@@ -10,6 +10,7 @@
  * oferta, hashes/links públicos) — nunca reexpõe CPF.
  */
 
+import type { Oferta } from '@prisma/client';
 import { db } from '@/lib/db';
 import { txExplorerUrl } from '@/lib/stellar/config';
 import { contextoDoStatus, etapaDoStatus, isEncerrado } from '@/lib/vender/etapas';
@@ -123,30 +124,7 @@ export default async function AcompanharPage({ params }: PageProps) {
         </>
       )}
 
-      {oferta && (
-        <section className="mt-12 border border-light-hairline">
-          <Row label="Status" value={lead.status} mono />
-          <Row
-            label="Valor líquido ofertado"
-            value={BRL.format(Number(oferta.valorLiquidoVendedor))}
-            mono
-          />
-          <Row
-            label="Deságio aplicado"
-            value={`${(Number(oferta.desagioAquisicao) * 100).toFixed(2)}%`}
-            mono
-          />
-          <Row label="Tipo de bem" value={oferta.tipoBem} />
-          <Row label="Administradora" value={oferta.administradora} />
-          <Row
-            label="Validade da oferta"
-            value={new Date(oferta.validade).toLocaleString('pt-BR', {
-              hour12: false,
-            })}
-            mono
-          />
-        </section>
-      )}
+      {oferta && <DetalheOferta oferta={oferta} />}
 
       {cessao && (
         <section className="mt-8 border border-light-hairline">
@@ -267,6 +245,93 @@ function DetalheValidacao({ consentTxHash }: { consentTxHash: string | null }) {
           <span className="font-mono text-xs text-base/50">pendente</span>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Detalhe da etapa "Oferta de preço" (espelha o mockup): tabela com valor de
+ * face, deságio, valor líquido a receber (destacado), prazo e método de
+ * pagamento. Aceite é feito por e-mail (não há CTA aqui — ver contextoDoStatus
+ * de OFERTA_ENVIADA), então não renderizamos um botão "Aceitar" inerte.
+ */
+function DetalheOferta({ oferta }: { oferta: Oferta }) {
+  const desagioPct = (Number(oferta.desagioAquisicao) * 100).toFixed(1);
+  return (
+    <section className="mt-8">
+      <div className="border border-primary/30">
+        <OfertaLinha
+          label="Valor de face da cota"
+          value={BRL.format(Number(oferta.valorCarta))}
+        />
+        <OfertaLinha
+          label="Deságio aplicado"
+          value={`− ${desagioPct}%`}
+          accent
+        />
+        <OfertaLinha
+          label="Valor líquido a receber"
+          value={BRL.format(Number(oferta.valorLiquidoVendedor))}
+          destaque
+        />
+        {oferta.prazoRestanteMeses != null && (
+          <OfertaLinha
+            label="Prazo restante da cota"
+            value={`${oferta.prazoRestanteMeses} meses`}
+          />
+        )}
+        <OfertaLinha label="Prazo de pagamento" value="≤ 48 horas via Pix" />
+        <OfertaLinha
+          label="Método"
+          value="Anchor BR · SEP-24 / BaaS Celcoin"
+          mono
+        />
+        <OfertaLinha
+          label="Validade da oferta"
+          value={new Date(oferta.validade).toLocaleString('pt-BR', {
+            hour12: false,
+          })}
+          mono
+        />
+      </div>
+      <p className="font-text text-xs text-base/55 mt-4 leading-relaxed">
+        Deságio calculado sobre prazo, administradora e curva de yield do pool
+        PLINA-RF.
+      </p>
+    </section>
+  );
+}
+
+function OfertaLinha({
+  label,
+  value,
+  accent = false,
+  destaque = false,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+  destaque?: boolean;
+  mono?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-light-hairline last:border-b-0">
+      <span className="font-text text-sm text-base/70">{label}</span>
+      <span
+        className={[
+          'shrink-0 text-right',
+          destaque
+            ? 'font-title text-2xl font-bold text-primary-deep'
+            : accent
+              ? 'font-mono text-base font-semibold text-primary-deep'
+              : mono
+                ? 'font-mono text-sm text-base'
+                : 'font-text text-base font-semibold text-base',
+        ].join(' ')}
+      >
+        {value}
+      </span>
     </div>
   );
 }
