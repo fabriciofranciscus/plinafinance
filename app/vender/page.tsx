@@ -13,7 +13,7 @@
  * acompanhamento em /vender/acompanhar/[leadId].
  */
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import WizardHeader from '@/components/vender/WizardHeader';
 import StepperVender from '@/components/vender/StepperVender';
@@ -73,12 +73,36 @@ function WizardInner() {
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  // (c) já verificado → pula pro passo 2.
+  // (c) já verificado → pula pro passo 2 UMA vez. Depois disso, "Voltar" e o
+  // clique no stepper podem trazer o cedente de volta ao passo 0 sem que o
+  // efeito o empurre pra frente de novo.
+  const autoAvancou = useRef(false);
   useEffect(() => {
-    if (pessoa.authenticated && pessoa.kycAprovado && passo === 0) {
+    if (
+      !autoAvancou.current &&
+      pessoa.authenticated &&
+      pessoa.kycAprovado &&
+      passo === 0
+    ) {
+      autoAvancou.current = true;
       setPasso(1);
     }
   }, [pessoa.authenticated, pessoa.kycAprovado, passo]);
+
+  // Navegação Voltar/Avançar + stepper clicável (igual ao mockup). Passos
+  // futuros (Validação jurídica em diante) são dirigidos pela mesa — ficam
+  // bloqueados aqui; só Cadastro & KYC (0) e Envio da cota (1) são do cedente.
+  const podeEnviar = pessoa.authenticated && pessoa.kycAprovado;
+  function irParaPasso(idx: number) {
+    if (idx === 0) setPasso(0);
+    else if (idx === 1 && podeEnviar) setPasso(1);
+  }
+  function passoHabilitado(idx: number) {
+    if (!pessoa.authenticated) return false;
+    if (idx === 0) return true;
+    if (idx === 1) return podeEnviar;
+    return false; // passos da mesa
+  }
 
   async function simular() {
     setSimulando(true);
@@ -137,7 +161,11 @@ function WizardInner() {
           </p>
 
           <div className="mt-12">
-            <StepperVender current={passo} />
+            <StepperVender
+              current={passo}
+              onStepClick={irParaPasso}
+              isStepEnabled={passoHabilitado}
+            />
           </div>
 
           <div className="mt-10 border border-light-hairline bg-white p-6 md:p-8">
@@ -147,9 +175,7 @@ function WizardInner() {
               ) : !pessoa.authenticated ? (
                 <LoginPanel />
               ) : pessoa.kycAprovado ? (
-                <p className="font-text text-sm text-base/60">
-                  Conta verificada. Avançando…
-                </p>
+                <VerificadoPanel email={pessoa.email} nome={pessoa.nome} />
               ) : (
                 <KycPanel
                   emailPadrao={pessoa.email}
@@ -180,19 +206,37 @@ function WizardInner() {
               <p className="font-text text-sm text-red-700 mt-6">{erro}</p>
             )}
 
-            {passo === 1 && (
+            {/* Navegação Voltar/Avançar (igual ao mockup). Aparece quando o
+                cedente já está verificado — antes disso, login/KYC têm os
+                próprios botões de ação. */}
+            {podeEnviar && (
               <div className="mt-8 flex items-center justify-between border-t border-light-hairline pt-6">
-                <span className="font-details text-[11px] tracking-[0.2em] uppercase text-base/40">
-                  Cadastro &amp; KYC concluído
-                </span>
                 <button
                   type="button"
-                  onClick={enviar}
-                  disabled={enviando}
-                  className="bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors disabled:opacity-50"
+                  onClick={() => setPasso(0)}
+                  disabled={passo === 0}
+                  className="font-details text-[11px] tracking-[0.2em] uppercase text-base/60 hover:text-base transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 >
-                  {enviando ? 'Enviando…' : 'Enviar e acompanhar →'}
+                  ← Voltar
                 </button>
+                {passo === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setPasso(1)}
+                    className="bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors"
+                  >
+                    Avançar →
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={enviar}
+                    disabled={enviando}
+                    className="bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors disabled:opacity-50"
+                  >
+                    {enviando ? 'Enviando…' : 'Enviar e acompanhar →'}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -494,6 +538,40 @@ function KycPanel({
           {loading ? 'Verificando…' : 'Concluir cadastro →'}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Passo 0c — Conta já verificada (revisão ao voltar) ──────────────────────
+
+function VerificadoPanel({
+  email,
+  nome,
+}: {
+  email: string | null;
+  nome: string | null;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="font-title text-2xl font-semibold tracking-tight">
+          Cadastro &amp; KYC
+        </h2>
+        <span className="inline-flex items-center gap-1.5 border border-primary/30 bg-primary/5 px-3 py-1 font-mono text-[11px] text-base/70 shrink-0">
+          <span className="h-1 w-1 rounded-full bg-primary" />
+          KYC verificado
+        </span>
+      </div>
+      <p className="font-text text-sm text-base/70 mt-1">
+        Sua verificação AML/KYC já está concluída{nome ? `, ${nome}` : ''}. Ela
+        vale para venda e investimento — não precisa refazer.
+      </p>
+      {email && (
+        <p className="font-mono text-xs text-base/55 mt-4">{email}</p>
+      )}
+      <p className="font-text text-sm text-base/60 mt-6">
+        Avance para enviar sua cota.
+      </p>
     </div>
   );
 }

@@ -41,6 +41,13 @@ export default async function AcompanharPage({ params }: PageProps) {
           cessao: { include: { pagamento: true, cota: true } },
         },
       },
+      // Prova on-chain do consentimento registrada na captura do lead —
+      // exibida na etapa de validação jurídica (hash do documento na Stellar).
+      eventos: {
+        where: { acao: 'LEAD_VENDEDOR_CAPTURADO' },
+        orderBy: { criadoEm: 'desc' },
+        take: 1,
+      },
     },
   });
 
@@ -71,6 +78,9 @@ export default async function AcompanharPage({ params }: PageProps) {
   const etapaAtual = etapaDoStatus(lead.status);
   const encerrado = isEncerrado(lead.status);
   const contexto = contextoDoStatus(lead.status);
+  // Etapa 2 = "Validação jurídica" (ver ETAPAS_VENDER / etapaDoStatus).
+  const naValidacao = etapaAtual === 2;
+  const consentTxHash = lead.eventos[0]?.stellarTxHash ?? null;
 
   return (
     <div className="min-h-screen bg-sheet-white text-base">
@@ -105,6 +115,10 @@ export default async function AcompanharPage({ params }: PageProps) {
             <p className="font-text text-sm text-base/70 mt-2 leading-relaxed">
               {contexto.descricao}
             </p>
+
+            {naValidacao && (
+              <DetalheValidacao consentTxHash={consentTxHash} />
+            )}
           </section>
         </>
       )}
@@ -189,6 +203,69 @@ export default async function AcompanharPage({ params }: PageProps) {
           .
         </p>
       )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Detalhe da etapa "Validação jurídica" (espelha o mockup): duas camadas de
+ * anuência — integração B2B com a administradora (caminho preferencial) e
+ * cartório digital com e-CPF (fallback) — mais o hash do consentimento já
+ * registrado on-chain na captura do lead.
+ */
+function DetalheValidacao({ consentTxHash }: { consentTxHash: string | null }) {
+  return (
+    <div className="mt-6 border-t border-light-hairline pt-6">
+      <p className="font-text text-sm text-base/70">
+        Duas camadas — caminho preferencial e fallback.
+      </p>
+
+      <div className="mt-4 space-y-3">
+        <div className="flex items-start gap-4 border border-primary/30 bg-primary/5 p-4">
+          <span className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] text-base shrink-0">
+            ✓
+          </span>
+          <div>
+            <p className="font-text text-sm font-semibold text-base">
+              Integração B2B com administradora via API
+            </p>
+            <p className="font-mono text-xs text-base/60 mt-0.5">
+              Caminho preferencial · SLA contratual
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-4 border border-light-hairline p-4">
+          <span className="mt-0.5 h-5 w-5 rounded-full border border-base/30 shrink-0" />
+          <div>
+            <p className="font-text text-sm font-semibold text-base">
+              Cartório digital com e-CPF
+            </p>
+            <p className="font-mono text-xs text-base/60 mt-0.5">
+              Fallback · Taxa de anuência 1–3% embutida no deságio
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3 border border-primary/30 bg-document-grey/40 p-4">
+        <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
+        <span className="flex-1 font-text text-sm text-base/70 min-w-[12rem]">
+          Hash do consentimento registrado on-chain na Stellar
+        </span>
+        {consentTxHash ? (
+          <a
+            href={txExplorerUrl(consentTxHash)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-xs underline text-primary-deep hover:text-primary"
+          >
+            {consentTxHash.slice(0, 8)}… → Stellar Expert
+          </a>
+        ) : (
+          <span className="font-mono text-xs text-base/50">pendente</span>
+        )}
       </div>
     </div>
   );
