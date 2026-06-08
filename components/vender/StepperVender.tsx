@@ -12,8 +12,15 @@
 import { ETAPAS_VENDER } from '@/lib/vender/etapas';
 
 interface StepperVenderProps {
-  /** Índice 0-based do passo atual. -1 quando o funil foi encerrado. */
+  /** Índice 0-based do passo em foco (destacado). -1 quando encerrado. */
   current: number;
+  /**
+   * Quantos passos já estão concluídos (✓). Default: `current` — assim o uso
+   * estático/wizard não muda. No acompanhamento passamos `current={view}` (passo
+   * em foco para preview) e `completedUpTo={etapaAtual}` (progresso real), pra
+   * separar "o que estou vendo" de "o que já aconteceu".
+   */
+  completedUpTo?: number;
   /**
    * Quando definido, os passos viram botões clicáveis (usado no wizard
    * `/vender`). A página de acompanhamento (server) omite — stepper estático.
@@ -28,14 +35,16 @@ interface StepperVenderProps {
 
 export default function StepperVender({
   current,
+  completedUpTo,
   onStepClick,
   isStepEnabled,
 }: StepperVenderProps) {
+  const doneAte = completedUpTo ?? current;
   return (
     <div className="overflow-x-auto -mx-6 px-6 md:mx-0 md:px-0">
       <ol className="flex min-w-[680px] items-start">
         {ETAPAS_VENDER.map((etapa, idx) => {
-          const isDone = current >= 0 && idx < current;
+          const isDone = doneAte >= 0 && idx < doneAte;
           const isCurrent = idx === current;
           const isLast = idx === ETAPAS_VENDER.length - 1;
           const clickable = !!onStepClick && (isStepEnabled?.(idx) ?? false);
@@ -51,6 +60,8 @@ export default function StepperVender({
                     : isCurrent
                       ? 'bg-primary text-base'
                       : 'bg-white text-base/40 border border-light-hairline',
+                  // anel no passo em foco — distingue mesmo quando já concluído (✓)
+                  isCurrent ? 'ring-2 ring-primary ring-offset-2' : '',
                 ].join(' ')}
               >
                 {isDone ? '✓' : idx + 1}
