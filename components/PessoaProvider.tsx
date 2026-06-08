@@ -13,10 +13,13 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { useAppPrivy } from '@/lib/hooks/privy';
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export interface PessoaState {
   loading: boolean;
@@ -46,20 +49,43 @@ export function PessoaProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(EMPTY);
 
+  // `getAccessToken` do Privy não tem identidade estável; guardamos numa ref pra
+  // o `refresh` não ser recriado a cada render (evita refetch de /me à toa).
+  const getTokenRef = useRef(getAccessToken);
+  getTokenRef.current = getAccessToken;
+  // Estado mais recente, lido dentro do refresh sem entrar nas deps.
+  const dataRef = useRef(data);
+  dataRef.current = data;
+
   const refresh = useCallback(async () => {
+    // Logout real (Privy diz não-autenticado) é o ÚNICO ponto que limpa o estado.
     if (!authenticated) {
       setData(EMPTY);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!dataRef.current.pessoaId) setLoading(true);
     try {
-      const token = await getAccessToken();
+      // O token do Privy pode vir null logo após login/navegação. Espera ele
+      // aparecer antes de decidir qualquer coisa — não chama /me sem Bearer.
+      let token: string | null = null;
+      for (let i = 0; i < 8; i++) {
+        token = await getTokenRef.current();
+        if (token) break;
+        await sleep(300);
+      }
+      if (!token) {
+        // Token não veio, mas Privy diz autenticado → transitório. Mantém o
+        // estado atual (não rebaixa um usuário verificado) e tenta no próximo
+        // disparo.
+        return;
+      }
       const res = await fetch('/api/conta/me', {
-        headers: token ? { authorization: `Bearer ${token}` } : {},
+        headers: { authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
-        setData(EMPTY);
+        // 401/5xx com token presente e Privy autenticado → tratamos como
+        // transitório: preserva o estado anterior em vez de zerar o KYC.
         return;
       }
       const me = await res.json();
@@ -72,11 +98,11 @@ export function PessoaProvider({ children }: { children: ReactNode }) {
         papeis: me.papeis ?? [],
       });
     } catch {
-      setData(EMPTY);
+      // Rede/transitório → não apaga o estado.
     } finally {
       setLoading(false);
     }
-  }, [authenticated, getAccessToken]);
+  }, [authenticated]);
 
   useEffect(() => {
     if (!ready) {

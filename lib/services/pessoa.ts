@@ -138,11 +138,18 @@ export async function ensureKycForPessoa(
       existing.etherfuseCustomerId &&
       existing.publicKey
     ) {
-      bankAccountId = await registerPixForPessoa({
-        etherfuseCustomerId: existing.etherfuseCustomerId,
-        publicKey: existing.publicKey,
-        account: input.bankAccount,
-      });
+      // Best-effort (igual ao caminho completo): uma falha transitória do
+      // Etherfuse não pode derrubar (500) quem já tem KYC aprovado. A conta
+      // pode ser re-registrada depois.
+      try {
+        bankAccountId = await registerPixForPessoa({
+          etherfuseCustomerId: existing.etherfuseCustomerId,
+          publicKey: existing.publicKey,
+          account: input.bankAccount,
+        });
+      } catch (err) {
+        logStellarError('[ensureKyc:bank:idempotente]', err);
+      }
     }
     const papeis = existing.papeis.includes(input.papel)
       ? existing.papeis

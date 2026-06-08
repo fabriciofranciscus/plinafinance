@@ -112,6 +112,54 @@ describe('ensureKycForPessoa — KYC uma vez entre papéis', () => {
     expect(result.papeis).toContain('INVESTIDOR');
   });
 
+  it('já aprovado + registro de banco falhando = best-effort (não lança 500)', async () => {
+    pessoaFindUnique.mockResolvedValueOnce({
+      id: 'pes_1',
+      privyId: 'did:privy:abc',
+      kycAprovado: true,
+      kycStatus: 'APROVADO',
+      publicKey: 'GABC',
+      etherfuseCustomerId: 'cust_1',
+      etherfuseBankAccountId: null, // ainda sem banco → tenta registrar
+      cpfNormalizado: '52998224725',
+      isSyntheticCpf: false,
+      papeis: ['INVESTIDOR'],
+      nome: 'Maria',
+    });
+    // registerPixForPessoa chama getKycUrl primeiro — fazemos falhar.
+    getKycUrl.mockRejectedValueOnce(new Error('etherfuse 503'));
+    pessoaUpdate.mockImplementation(
+      async ({ data }: { data: { papeis: { set: string[] } } }) => ({
+        id: 'pes_1',
+        publicKey: 'GABC',
+        etherfuseCustomerId: 'cust_1',
+        etherfuseBankAccountId: null,
+        kycStatus: 'APROVADO',
+        kycAprovado: true,
+        cpfNormalizado: '52998224725',
+        isSyntheticCpf: false,
+        papeis: data.papeis.set,
+      }),
+    );
+
+    const result = await ensureKycForPessoa({
+      privyId: 'did:privy:abc',
+      email: 'maria@x.com',
+      papel: 'CEDENTE' as never,
+      bankAccount: {
+        pixKey: 'maria@x.com',
+        pixKeyType: 'email',
+        firstName: 'Maria',
+        lastName: 'Silva',
+        cpf: '52998224725',
+      },
+    });
+
+    // Não lançou; KYC segue aprovado mesmo com o banco falhando.
+    expect(result.kycAprovado).toBe(true);
+    expect(result.papeis).toContain('CEDENTE');
+  });
+
   it('roda Etherfuse completo quando a pessoa não existe', async () => {
     pessoaFindUnique.mockResolvedValueOnce(null);
     ensureStellarWallet.mockResolvedValueOnce('GNEW');
