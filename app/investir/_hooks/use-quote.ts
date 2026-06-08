@@ -2,11 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { parseBrlAmount } from '@/lib/format/parse-brl';
-import type { FlowError, OnboardData, QuoteData, Screen } from '../_types';
+import type {
+  ClasseEscolhida,
+  FlowError,
+  OnboardData,
+  QuoteData,
+  Screen,
+} from '../_types';
 import { asFlowError } from '../_lib/errors';
 
 export interface UseQuoteArgs {
   onboard: OnboardData | null;
+  classe: ClasseEscolhida;
   screen: Screen;
   onRampLoading: boolean;
   getAccessToken: () => Promise<string | null>;
@@ -16,6 +23,7 @@ export interface UseQuoteArgs {
 
 export function useQuote({
   onboard,
+  classe,
   screen,
   onRampLoading,
   getAccessToken,
@@ -54,6 +62,7 @@ export function useQuote({
           amountBrl: v.toFixed(2),
           customerId: onboard.etherfuseCustomerId,
           stellarAddress: onboard.publicKey,
+          classe,
         }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -69,7 +78,7 @@ export function useQuote({
     } finally {
       setQuoteLoading(false);
     }
-  }, [onboard, amountBrl, getAccessToken, onError, clearError]);
+  }, [onboard, amountBrl, classe, getAccessToken, onError, clearError]);
 
   useEffect(() => {
     // Não agenda quote refresh se já está commitando onramp — caso

@@ -66,10 +66,12 @@ export async function buildSwapBridgeForPlinarfXdr(input: {
   plinarfAmount: string;
   issuerPubkey: string;
   distributorPubkey: string;
+  /** Code do asset emitido (PLINARF Sênior / PLINARFB Subordinada). Default PLINARF. */
+  plinarfCode?: string;
   memo?: string;
 }): Promise<{ xdr: string; hashHex: string }> {
   const account = await horizon.loadAccount(input.investorPubkey);
-  const plinarf = buildAsset(input.issuerPubkey);
+  const plinarf = buildAsset(input.issuerPubkey, input.plinarfCode ?? assetCode);
 
   const builder = new TransactionBuilder(account, {
     fee: await getDynamicFee(),

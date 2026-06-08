@@ -5,7 +5,7 @@ import {
   useAppPrivy as usePrivy,
   useAppSignRawHash as useSignRawHash,
 } from '@/lib/hooks/privy';
-import type { FlowError, Screen } from '../_types';
+import type { ClasseEscolhida, FlowError, Screen } from '../_types';
 import { SCREENS } from '../_lib/glossary';
 import { useOnboard } from './use-onboard';
 import { useTrustlines } from './use-trustlines';
@@ -24,6 +24,9 @@ export function useInvestirFlow() {
   const [error, setError] = useState<FlowError | null>(null);
   const [kycConsented, setKycConsented] = useState(false);
   const [onRampLoading, setOnRampLoading] = useState(false);
+  // F-M3-4. Default SENIOR — preserva o fluxo single-asset legado se o
+  // usuário não passar pelo seletor (ex.: testes que pulam direto pra quote).
+  const [classe, setClasse] = useState<ClasseEscolhida>('SENIOR');
 
   const onError = useCallback((e: FlowError) => setError(e), []);
   const clearError = useCallback(() => setError(null), []);
@@ -40,7 +43,7 @@ export function useInvestirFlow() {
     clearError,
   });
 
-  const onRegisteredBank = useCallback(() => setScreen('quote'), []);
+  const onRegisteredBank = useCallback(() => setScreen('classe'), []);
   const bankingHook = useBanking({
     onboard,
     getAccessToken,
@@ -51,6 +54,7 @@ export function useInvestirFlow() {
 
   const quoteHook = useQuote({
     onboard,
+    classe,
     screen,
     onRampLoading,
     getAccessToken,
@@ -108,8 +112,16 @@ export function useInvestirFlow() {
   }, [screen]);
 
   const onIdentityContinue = useCallback(() => {
-    setScreen(bankingHook.bankInfo ? 'quote' : 'banking');
+    setScreen(bankingHook.bankInfo ? 'classe' : 'banking');
   }, [bankingHook.bankInfo]);
+
+  const onClasseContinue = useCallback(
+    (chosen: ClasseEscolhida) => {
+      setClasse(chosen);
+      setScreen('quote');
+    },
+    [],
+  );
 
   const onBuyMore = useCallback(() => {
     swapHook.reset();
@@ -123,7 +135,7 @@ export function useInvestirFlow() {
     void onboardHook.runOnboard();
   }, [onboardHook]);
 
-  const skipBanking = useCallback(() => setScreen('quote'), []);
+  const skipBanking = useCallback(() => setScreen('classe'), []);
 
   return {
     privy,
@@ -135,6 +147,8 @@ export function useInvestirFlow() {
     kycConsented,
     consentAndOnboard,
     onIdentityContinue,
+    onClasseContinue,
+    classe,
     onBuyMore,
     skipBanking,
     onboard: onboardHook,

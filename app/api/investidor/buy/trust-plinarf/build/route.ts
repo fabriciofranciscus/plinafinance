@@ -21,12 +21,18 @@ import { stellarPubkey } from '@/lib/http/zod-stellar';
 
 export const dynamic = 'force-dynamic';
 
-const Schema = z.object({ pubkey: stellarPubkey() }).strict();
+const Schema = z
+  .object({
+    pubkey: stellarPubkey(),
+    /** F-M3-3. Code do asset Sênior (PLINARF) ou Subordinada (PLINARFB). */
+    assetCode: z.string().min(1).max(12).optional(),
+  })
+  .strict();
 
 export const POST = withAuth(async (req, { user }) => {
   const parsed = await parseBody(req, Schema);
   if ('response' in parsed) return parsed.response;
-  const { pubkey } = parsed.data;
+  const { pubkey, assetCode: assetCodeInput } = parsed.data;
   try {
     if (pubkey !== user.publicKey) {
       return NextResponse.json(
@@ -42,7 +48,11 @@ export const POST = withAuth(async (req, { user }) => {
       );
     }
     const fund = await fundAccountIfNeeded(pubkey);
-    const assetCode = process.env.ASSET_CODE ?? 'PLINARF';
+    const defaultCode = process.env.ASSET_CODE ?? 'PLINARF';
+    const subordinadaCode = process.env.ASSET_CODE_SUBORDINADA ?? 'PLINARFB';
+    // F-M3-3: aceita PLINARF (Sênior, default) ou PLINARFB (Subordinada).
+    const assetCode =
+      assetCodeInput === subordinadaCode ? subordinadaCode : defaultCode;
     const { xdr, hashHex } = await buildTrustlineXdr(pubkey, issuerPubkey, assetCode);
     return NextResponse.json({
       xdr,

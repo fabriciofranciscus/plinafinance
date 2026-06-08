@@ -10,6 +10,7 @@ const {
   quoteUpdateMany,
   investidorUpdate,
   eventoAuditCreate,
+  holdingUpsert,
   buildSwapBridgeForPlinarfXdr,
   preSignWithSigner,
   distribute,
@@ -21,6 +22,7 @@ const {
   quoteUpdateMany: vi.fn(),
   investidorUpdate: vi.fn(),
   eventoAuditCreate: vi.fn(),
+  holdingUpsert: vi.fn(),
   buildSwapBridgeForPlinarfXdr: vi.fn(),
   preSignWithSigner: vi.fn(),
   distribute: vi.fn(),
@@ -56,12 +58,14 @@ vi.mock('@/lib/db', () => ({
         quote: { updateMany: typeof quoteUpdateMany };
         investidor: { update: typeof investidorUpdate };
         eventoAudit: { create: typeof eventoAuditCreate };
+        holdingPLINARF: { upsert: typeof holdingUpsert };
       }) => Promise<unknown>,
     ) =>
       cb({
         quote: { updateMany: quoteUpdateMany },
         investidor: { update: investidorUpdate },
         eventoAudit: { create: eventoAuditCreate },
+        holdingPLINARF: { upsert: holdingUpsert },
       }),
   },
 }));
@@ -111,6 +115,7 @@ beforeEach(() => {
   quoteUpdateMany.mockReset().mockResolvedValue({ count: 1 });
   investidorUpdate.mockReset().mockResolvedValue({});
   eventoAuditCreate.mockReset().mockResolvedValue({});
+  holdingUpsert.mockReset().mockResolvedValue({});
   distribute.mockReset().mockResolvedValue({ hash: 'tx_mock_hash' });
   buildSwapBridgeForPlinarfXdr.mockReset();
   preSignWithSigner.mockReset();

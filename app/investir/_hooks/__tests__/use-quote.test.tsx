@@ -67,6 +67,7 @@ function setup(initial: HookProps) {
     (props: HookProps) =>
       useQuote({
         onboard,
+        classe: 'SENIOR',
         screen: props.screen,
         onRampLoading: props.onRampLoading,
         getAccessToken,

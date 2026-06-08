@@ -24,6 +24,8 @@ export interface SwapXdrExpectation {
   issuerPubkey: string;
   bridgeAsset: { code: string; issuer: string };
   expectedAmount: string;
+  /** Code do asset emitido (PLINARF Sênior / PLINARFB Subordinada). Default PLINARF. */
+  plinarfCode?: string;
 }
 
 function isPayment(op: AnyOp): op is Operation.Payment {
@@ -90,8 +92,11 @@ export function assertSwapXdrMatchesQuote(
     );
   }
 
-  // Leg 2: distributor → investor, PLINARF.
-  const plinarf = new Asset(assetCode, expected.issuerPubkey);
+  // Leg 2: distributor → investor, PLINARF (Sênior) ou PLINARFB (Subordinada).
+  const plinarf = new Asset(
+    expected.plinarfCode ?? assetCode,
+    expected.issuerPubkey,
+  );
   const op2Source = op2.source ?? tx.source;
   if (op2Source !== expected.distributorPubkey) {
     throw new Error(`leg2 source=${op2Source} ≠ distributor`);

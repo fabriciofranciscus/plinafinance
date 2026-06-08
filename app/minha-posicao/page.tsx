@@ -292,8 +292,12 @@ export default function MinhaPosicaoPage() {
     );
   }
 
+  // F-M3-8 — saldo por classe (Sênior PLINARF + Subordinada PLINARFB).
   const plinarfBal = balances?.find((b) => b.asset_code === 'PLINARF');
-  const plinarfQty = Number(plinarfBal?.balance ?? 0);
+  const plinarfbBal = balances?.find((b) => b.asset_code === 'PLINARFB');
+  const seniorQty = Number(plinarfBal?.balance ?? 0);
+  const subordinadaQty = Number(plinarfbBal?.balance ?? 0);
+  const plinarfQty = seniorQty + subordinadaQty;
   const xlmBal = balances?.find((b) => b.asset_type === 'native');
   const xlmQty = Number(xlmBal?.balance ?? 0);
 
@@ -395,21 +399,44 @@ export default function MinhaPosicaoPage() {
               <div className="md:col-span-5 bg-lightBg px-6 py-8 space-y-6">
                 <div>
                   <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
-                    Asset on-chain
+                    Por classe
                   </p>
-                  <p className="font-mono text-sm mt-1">
-                    PLINARF
-                    {pool?.issuerPubkey && (
+                  <div className="mt-2 space-y-2">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <div>
+                        <p className="font-mono text-sm">PLINARF</p>
+                        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/55">
+                          Sênior
+                        </p>
+                      </div>
+                      <p className="font-mono text-base">
+                        {NUMBER_BR.format(seniorQty)}
+                      </p>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <div>
+                        <p className="font-mono text-sm">PLINARFB</p>
+                        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/55">
+                          Subordinada
+                        </p>
+                      </div>
+                      <p className="font-mono text-base">
+                        {NUMBER_BR.format(subordinadaQty)}
+                      </p>
+                    </div>
+                  </div>
+                  {pool?.issuerPubkey && (
+                    <p className="mt-3 font-mono text-xs">
                       <a
                         href={explorerAsset('PLINARF', pool.issuerPubkey)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="ml-2 text-primary-deep hover:text-primary underline text-xs"
+                        className="text-primary-deep hover:text-primary underline"
                       >
-                        Stellar Expert →
+                        Sênior no Stellar Expert →
                       </a>
-                    )}
-                  </p>
+                    </p>
+                  )}
                 </div>
                 <div>
                   <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
