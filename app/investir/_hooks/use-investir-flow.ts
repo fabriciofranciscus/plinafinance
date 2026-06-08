@@ -5,7 +5,15 @@ import {
   useAppPrivy as usePrivy,
   useAppSignRawHash as useSignRawHash,
 } from '@/lib/hooks/privy';
-import type { ClasseEscolhida, FlowError, Screen } from '../_types';
+import type {
+  ClasseEscolhida,
+  CustodyProvider,
+  DepositCurrency,
+  FlowError,
+  InstitutionalProfile,
+  InvestorTrack,
+  Screen,
+} from '../_types';
 import { SCREENS } from '../_lib/glossary';
 import { useOnboard } from './use-onboard';
 import { useTrustlines } from './use-trustlines';
@@ -27,6 +35,14 @@ export function useInvestirFlow() {
   // F-M3-4. Default SENIOR — preserva o fluxo single-asset legado se o
   // usuário não passar pelo seletor (ex.: testes que pulam direto pra quote).
   const [classe, setClasse] = useState<ClasseEscolhida>('SENIOR');
+
+  // Scaffolds institucionais (aditivos — não alteram transições). Defaults
+  // preservam o caminho BR/retail funcional: BR + SELF + BRL.
+  const [track, setTrack] = useState<InvestorTrack>('BR');
+  const [institutionalProfile, setInstitutionalProfile] =
+    useState<InstitutionalProfile | null>(null);
+  const [custodyProvider, setCustodyProvider] = useState<CustodyProvider>('SELF');
+  const [depositCurrency, setDepositCurrency] = useState<DepositCurrency>('BRL');
 
   const onError = useCallback((e: FlowError) => setError(e), []);
   const clearError = useCallback(() => setError(null), []);
@@ -151,6 +167,15 @@ export function useInvestirFlow() {
     classe,
     onBuyMore,
     skipBanking,
+    // Scaffolds institucionais (client-only nesta fase).
+    track,
+    setTrack,
+    institutionalProfile,
+    setInstitutionalProfile,
+    custodyProvider,
+    setCustodyProvider,
+    depositCurrency,
+    setDepositCurrency,
     onboard: onboardHook,
     trustlines: trustlinesHook,
     banking: bankingHook,
