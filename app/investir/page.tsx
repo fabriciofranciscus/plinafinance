@@ -159,6 +159,8 @@ export default function InvestirPage() {
                   loading={flow.quote.quoteLoading}
                   buildLoading={flow.onRamp.onRampLoading}
                   onContinue={flow.onRamp.goToOnramp}
+                  depositCurrency={flow.depositCurrency}
+                  onCurrencyChange={flow.setDepositCurrency}
                 />
               )}
               {screen === 'onramp' && onboard && quote && onRamp && (
