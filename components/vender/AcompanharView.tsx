@@ -132,6 +132,7 @@ export default function AcompanharView({ data }: { data: AcompanharData }) {
         )}
         {view === 5 && (
           <PainelPix
+            valorLiquido={data.oferta?.valorLiquido ?? null}
             pixTx={data.pixTx}
             cessaoId={data.cessaoId}
             temCota={data.temCota}
@@ -420,46 +421,84 @@ function PainelCessao({
 // ─── Painel: Pix recebido ────────────────────────────────────────────────────
 
 function PainelPix({
+  valorLiquido,
   pixTx,
   cessaoId,
   temCota,
 }: {
+  valorLiquido: number | null;
   pixTx: TxLink | null;
   cessaoId: string | null;
   temCota: boolean;
 }) {
-  if (!pixTx && !cessaoId) {
-    return (
-      <p className="mt-6 border-t border-light-hairline pt-6 font-text text-sm text-base/60">
-        Aguardando o Pix do valor líquido.
-      </p>
-    );
-  }
+  // Sem Pix on-chain ainda → estado ilustrativo (como no mockup).
+  const ilustrativo = !pixTx;
+  const valor = valorLiquido ?? 97800;
+
   return (
-    <div className="mt-6 border-t border-light-hairline pt-6 space-y-3">
-      {pixTx && (
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="font-text text-sm text-base/70">Pix on-chain</span>
-          <a
-            href={pixTx.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-mono text-xs underline text-primary-deep hover:text-primary"
-          >
-            {pixTx.hashShort}… → Stellar Expert
-          </a>
+    <div className="mt-6 border-t border-light-hairline pt-6">
+      <div className="text-center">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-primary text-base">
+          <span className="text-3xl">✓</span>
+        </div>
+        <h3 className="font-title text-3xl font-semibold tracking-tight mt-6">
+          {BRL.format(valor)} enviados via Pix
+        </h3>
+        <p className="font-mono text-sm text-base/60 mt-2">
+          Pix enviado para sua chave cadastrada
+        </p>
+        <p className="font-text text-sm text-base/70 mt-4 max-w-md mx-auto leading-relaxed">
+          Direito creditório incorporado ao pool FIDC · PLINA-RF emitido
+          proporcionalmente na Stellar.
+        </p>
+
+        {/* Cota → Pool FIDC → PLINA-RF mintado · Stellar */}
+        <div className="mx-auto mt-8 flex max-w-2xl items-center justify-between gap-3 border border-light-hairline bg-document-grey/40 p-5 font-mono text-xs">
+          <span className="flex-1 border border-light-hairline bg-white px-3 py-3 text-center text-base/80">
+            Cota
+          </span>
+          <span className="text-primary-deep">→</span>
+          <span className="flex-1 border border-light-hairline bg-white px-3 py-3 text-center text-base/80">
+            Pool FIDC
+          </span>
+          <span className="text-primary-deep">→</span>
+          <span className="flex-1 border border-primary/40 bg-primary/10 px-3 py-3 text-center text-primary-deep">
+            PLINA-RF mintado · Stellar
+          </span>
+        </div>
+
+        {ilustrativo && (
+          <p className="font-mono text-[11px] text-base/55 mt-4">
+            Exemplo ilustrativo — confirmado quando a mesa executar o Pix.
+          </p>
+        )}
+      </div>
+
+      {(pixTx || cessaoId) && (
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-4 border-t border-light-hairline pt-6">
+          {pixTx && (
+            <a
+              href={pixTx.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-xs underline text-primary-deep hover:text-primary"
+            >
+              Pix on-chain: {pixTx.hashShort}… → Stellar Expert
+            </a>
+          )}
+          {cessaoId && (
+            <a
+              href={`/cessao/${cessaoId}/comprovante`}
+              className="font-details text-[10px] tracking-[0.2em] uppercase underline text-primary-deep hover:text-primary"
+            >
+              Ver comprovante →
+            </a>
+          )}
         </div>
       )}
-      {cessaoId && (
-        <a
-          href={`/cessao/${cessaoId}/comprovante`}
-          className="inline-block font-details text-[10px] tracking-[0.2em] uppercase underline text-primary-deep hover:text-primary"
-        >
-          Ver comprovante →
-        </a>
-      )}
+
       {temCota && (
-        <p className="font-text text-sm text-base/70 leading-relaxed">
+        <p className="font-text text-sm text-base/70 mt-6 text-center leading-relaxed">
           Sua cota foi incorporada ao pool tokenizado público. Composição em{' '}
           <a href="/pool" className="underline">
             /pool
