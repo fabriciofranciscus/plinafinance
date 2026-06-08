@@ -1,11 +1,26 @@
 'use client';
 
 import { useState } from 'react';
-import type { OnboardData, QuoteData, SwapEnvelope } from '../../_types';
+import type {
+  CustodyProvider,
+  DepositCurrency,
+  InstitutionalProfile,
+  OnboardData,
+  QuoteData,
+  SwapEnvelope,
+} from '../../_types';
 import { BRL, NUMBER_BR, maskPubkey } from '../../_lib/format';
+import { CUSTODY_PROVIDERS_ENABLED } from '../../_lib/flags-client';
 import { TestnetBanner } from '../shell/testnet-banner';
 import { Term } from '../shared/term';
 import { DataRow } from '../shared/data-row';
+
+const CUSTODY_OPTIONS: { id: CustodyProvider; label: string }[] = [
+  { id: 'SELF', label: 'Self-custody' },
+  { id: 'FIREBLOCKS', label: 'Fireblocks' },
+  { id: 'BITGO', label: 'BitGo' },
+  { id: 'COPPER', label: 'Copper' },
+];
 
 export function ConfirmScreen({
   onboard,
@@ -15,6 +30,10 @@ export function ConfirmScreen({
   setSignConfirmed,
   buying,
   onConfirm,
+  custodyProvider,
+  onCustodyChange,
+  institutionalProfile,
+  depositCurrency,
 }: {
   onboard: OnboardData;
   quote: QuoteData;
@@ -23,6 +42,10 @@ export function ConfirmScreen({
   setSignConfirmed: (v: boolean) => void;
   buying: boolean;
   onConfirm: () => void;
+  custodyProvider: CustodyProvider;
+  onCustodyChange: (c: CustodyProvider) => void;
+  institutionalProfile: InstitutionalProfile | null;
+  depositCurrency: DepositCurrency;
 }) {
   const [showXdr, setShowXdr] = useState(false);
 
@@ -62,6 +85,23 @@ export function ConfirmScreen({
             k="Você paga (BRL)"
             v={<span className="font-mono text-sm">{BRL.format(Number(quote.fromAmount))}</span>}
           />
+          <DataRow
+            k="Moeda de depósito"
+            v={<span className="font-mono text-xs">{depositCurrency}</span>}
+          />
+          {institutionalProfile?.entityName && (
+            <DataRow
+              k="Entidade"
+              v={
+                <span className="font-mono text-xs">
+                  {institutionalProfile.entityName}
+                  {institutionalProfile.jurisdiction
+                    ? ` · ${institutionalProfile.jurisdiction}`
+                    : ''}
+                </span>
+              }
+            />
+          )}
           <DataRow
             k="Wallet destino"
             v={
@@ -124,6 +164,46 @@ export function ConfirmScreen({
             </pre>
           )}
         </div>
+      </div>
+
+      {/* Custódia (cartão 5 do mockup). SELF = wallet Privy embedded (único
+          funcional). Demais são display-only e NÃO alteram a assinatura/swap;
+          ficam selecionáveis só com NEXT_PUBLIC_CUSTODY_PROVIDERS. */}
+      <div className="mt-10">
+        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65">
+          Custódia
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {CUSTODY_OPTIONS.map((c) => {
+            const enabled = c.id === 'SELF' || CUSTODY_PROVIDERS_ENABLED;
+            const active = custodyProvider === c.id;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => enabled && onCustodyChange(c.id)}
+                disabled={!enabled}
+                title={enabled ? undefined : 'Custódia institucional — em integração'}
+                className={`rounded-full border px-4 py-2 font-mono text-xs transition-colors ${
+                  active
+                    ? 'bg-base text-white border-base'
+                    : enabled
+                      ? 'bg-white text-base border-base/20 hover:border-base'
+                      : 'bg-white text-base/30 border-base/10 cursor-not-allowed'
+                }`}
+              >
+                {c.label}
+              </button>
+            );
+          })}
+        </div>
+        {custodyProvider !== 'SELF' && (
+          <p className="font-mono text-[11px] text-base/55 mt-3">
+            Custódia integrada — em integração. A assinatura desta operação segue
+            pela wallet embedded; o roteamento por custodiante entra numa fase
+            posterior.
+          </p>
+        )}
       </div>
 
       <label className="mt-10 flex items-start gap-4 cursor-pointer group">

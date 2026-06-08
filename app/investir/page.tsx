@@ -203,6 +203,10 @@ export default function InvestirPage() {
                     setSignConfirmed={flow.swap.setSignConfirmed}
                     buying={flow.swap.buying}
                     onConfirm={flow.swap.buy}
+                    custodyProvider={flow.custodyProvider}
+                    onCustodyChange={flow.setCustodyProvider}
+                    institutionalProfile={flow.institutionalProfile}
+                    depositCurrency={flow.depositCurrency}
                   />
                 )}
               {screen === 'receipt' && onboard && quote && buyResult && (
