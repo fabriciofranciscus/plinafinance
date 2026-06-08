@@ -63,8 +63,8 @@ export function VendedorPipeline({ leads }: { leads: PipelineLead[] }) {
   if (leads.length === 0) {
     return (
       <p className="font-text text-sm text-base/60">
-        Nenhum lead capturado ainda. Quando alguém preencher{' '}
-        <code className="font-mono text-xs">/vender/lead</code>, aparece aqui
+        Nenhum lead capturado ainda. Quando alguém preencher o wizard em{' '}
+        <code className="font-mono text-xs">/vender</code>, aparece aqui
         pra qualificar e gerar oferta firme.
       </p>
     );

@@ -1,8 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Menu } from 'lucide-react';
 import ConsoleStrip from './ConsoleStrip';
+
+const navLinks = [
+  { label: 'Para Cotistas', href: '/vender', route: true },
+  { label: 'Para Investidores', href: '/investir', route: true },
+  { label: 'Comprar Cota', href: '/comprar', route: true },
+  { label: 'PLINA-RF', href: '#produto', route: false },
+  { label: 'Compliance', href: '#compliance', route: false },
+] as const;
 
 export default function SiteHeader() {
   const [pastHero, setPastHero] = useState(false);
@@ -50,19 +59,26 @@ export default function SiteHeader() {
             </a>
           </div>
 
-          <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 items-center gap-10 font-details text-[11px] text-white/80 uppercase tracking-widest">
-            <a href="#produto" className="hover:text-white transition-colors">
-              Produto
-            </a>
-            <a href="#tese" className="hover:text-white transition-colors">
-              Tese
-            </a>
-            <a href="#compliance" className="hover:text-white transition-colors">
-              Compliance
-            </a>
-            <a href="#equipe" className="hover:text-white transition-colors">
-              Equipe
-            </a>
+          <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 items-center gap-7 font-details text-[11px] text-white/80 uppercase tracking-widest">
+            {navLinks.map((l) =>
+              l.route ? (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className="hover:text-white transition-colors whitespace-nowrap"
+                >
+                  {l.label}
+                </Link>
+              ) : (
+                <a
+                  key={l.href}
+                  href={l.href}
+                  className="hover:text-white transition-colors whitespace-nowrap"
+                >
+                  {l.label}
+                </a>
+              )
+            )}
           </div>
 
           <div
@@ -90,18 +106,25 @@ export default function SiteHeader() {
 
         {menuOpen && (
           <div className="lg:hidden bg-base border-t border-white/10 px-6 py-6 flex flex-col gap-6 font-details text-sm text-white/80 uppercase tracking-widest">
-            <a href="#produto" onClick={() => setMenuOpen(false)}>
-              Produto
-            </a>
-            <a href="#tese" onClick={() => setMenuOpen(false)}>
-              Tese
-            </a>
-            <a href="#compliance" onClick={() => setMenuOpen(false)}>
-              Compliance
-            </a>
-            <a href="#equipe" onClick={() => setMenuOpen(false)}>
-              Equipe
-            </a>
+            {navLinks.map((l) =>
+              l.route ? (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  onClick={() => setMenuOpen(false)}
+                >
+                  {l.label}
+                </Link>
+              ) : (
+                <a
+                  key={l.href}
+                  href={l.href}
+                  onClick={() => setMenuOpen(false)}
+                >
+                  {l.label}
+                </a>
+              )
+            )}
             <a
               href="#lead-capture"
               onClick={() => setMenuOpen(false)}

@@ -12,7 +12,9 @@
 
 import { db } from '@/lib/db';
 import { txExplorerUrl } from '@/lib/stellar/config';
-import { ETAPAS_VENDER, etapaDoStatus, isEncerrado } from '@/lib/vender/etapas';
+import { etapaDoStatus, isEncerrado } from '@/lib/vender/etapas';
+import WizardHeader from '@/components/vender/WizardHeader';
+import StepperVender from '@/components/vender/StepperVender';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,15 +46,20 @@ export default async function AcompanharPage({ params }: PageProps) {
 
   if (!lead) {
     return (
-      <div className="mx-auto max-w-2xl px-6 py-16">
-        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-          Solicitação não encontrada
-        </p>
-        <h1 className="font-title text-3xl font-semibold mt-3">Link inválido</h1>
-        <p className="font-text text-base/70 mt-4">
-          O identificador informado não corresponde a nenhuma solicitação.
-          Confira o link recebido.
-        </p>
+      <div className="min-h-screen bg-sheet-white text-base">
+        <WizardHeader active="cotistas" />
+        <div className="mx-auto max-w-2xl px-6 py-16">
+          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+            Solicitação não encontrada
+          </p>
+          <h1 className="font-title text-3xl font-semibold mt-3">
+            Link inválido
+          </h1>
+          <p className="font-text text-base/70 mt-4">
+            O identificador informado não corresponde a nenhuma solicitação.
+            Confira o link recebido.
+          </p>
+        </div>
       </div>
     );
   }
@@ -65,7 +72,9 @@ export default async function AcompanharPage({ params }: PageProps) {
   const encerrado = isEncerrado(lead.status);
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-12 md:py-16">
+    <div className="min-h-screen bg-sheet-white text-base">
+      <WizardHeader active="cotistas" />
+      <div className="mx-auto max-w-3xl px-6 py-12 md:py-16">
       <header className="border-b border-light-hairline pb-8 mb-10">
         <p className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">
           Acompanhamento · solicitação de venda
@@ -82,60 +91,7 @@ export default async function AcompanharPage({ params }: PageProps) {
           equipe Plina respondendo o último email recebido.
         </p>
       ) : (
-        <ol className="space-y-px bg-base/10 border-y border-light-hairline">
-          {ETAPAS_VENDER.map((etapa, idx) => {
-            const isDone = idx < etapaAtual;
-            const isCurrent = idx === etapaAtual;
-            return (
-              <li
-                key={etapa}
-                className="relative bg-white px-5 py-4 flex items-center gap-5"
-              >
-                <span
-                  aria-hidden
-                  className={`absolute left-0 top-0 h-full w-[2px] ${
-                    isDone || isCurrent ? 'bg-primary' : 'bg-base/15'
-                  }`}
-                />
-                <span
-                  className={`font-mono text-xs ${
-                    isDone
-                      ? 'text-primary-deep'
-                      : isCurrent
-                        ? 'text-base'
-                        : 'text-base/35'
-                  }`}
-                >
-                  {String(idx + 1).padStart(2, '0')}
-                </span>
-                <span
-                  className={`font-text text-sm flex-1 ${
-                    isCurrent
-                      ? 'text-base font-semibold'
-                      : isDone
-                        ? 'text-base/70'
-                        : 'text-base/40'
-                  }`}
-                >
-                  {etapa}
-                </span>
-                {isDone && (
-                  <span
-                    className="font-mono text-[10px] text-primary-deep"
-                    aria-label="concluído"
-                  >
-                    ✓
-                  </span>
-                )}
-                {isCurrent && (
-                  <span className="font-details text-[10px] tracking-[0.2em] uppercase text-primary">
-                    agora
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ol>
+        <StepperVender current={etapaAtual} />
       )}
 
       {oferta && (
@@ -218,6 +174,7 @@ export default async function AcompanharPage({ params }: PageProps) {
           .
         </p>
       )}
+      </div>
     </div>
   );
 }

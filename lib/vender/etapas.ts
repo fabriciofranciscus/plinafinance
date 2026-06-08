@@ -9,22 +9,22 @@ import { LeadVendedorStatus } from '@prisma/client';
 
 export const ETAPAS_VENDER = [
   'Cadastro & KYC',
-  'Validação',
-  'Proposta',
-  'Cessão',
-  'Pix',
-  'Concluído',
+  'Envio da cota',
+  'Validação jurídica',
+  'Oferta de preço',
+  'Cessão digital',
+  'Pix recebido',
 ] as const;
 
 const ETAPA_POR_STATUS: Record<LeadVendedorStatus, number> = {
   NOVO: 0,
   CONTATADO: 1,
   DOCS_SOLICITADOS: 1,
-  DOCS_RECEBIDOS: 1,
-  OFERTA_ENVIADA: 2,
-  OFERTA_ACEITA: 2,
-  CESSAO_ASSINADA: 3,
-  PIX_EXECUTADO: 4,
+  DOCS_RECEBIDOS: 2,
+  OFERTA_ENVIADA: 3,
+  OFERTA_ACEITA: 3,
+  CESSAO_ASSINADA: 4,
+  PIX_EXECUTADO: 5,
   COTA_INCORPORADA: 5,
   PERDIDO: -1,
 };

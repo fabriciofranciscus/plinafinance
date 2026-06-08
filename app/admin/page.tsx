@@ -199,7 +199,7 @@ export default async function AdminPage() {
           Funil vendedor ({leadsVendedor.length})
         </h2>
         <p className="font-text text-sm text-base/70 mb-6 max-w-2xl">
-          Leads capturados via <code className="font-mono text-xs">/vender/lead</code>.
+          Leads capturados via <code className="font-mono text-xs">/vender</code>.
           Cada estágio gera prova on-chain via Memo.hash. Status do lead
           transita conforme operador avança o pipeline.
         </p>
