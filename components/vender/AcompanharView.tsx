@@ -150,14 +150,19 @@ export default function AcompanharView({ data }: { data: AcompanharData }) {
         >
           ← Voltar
         </button>
-        <button
-          type="button"
-          onClick={() => setView((v) => Math.min(ULTIMO, v + 1))}
-          disabled={view === ULTIMO}
-          className="font-details text-[11px] tracking-[0.2em] uppercase text-base/60 hover:text-base transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          Avançar →
-        </button>
+        {view === ULTIMO ? (
+          <span className="bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3">
+            Concluído
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setView((v) => Math.min(ULTIMO, v + 1))}
+            className="font-details text-[11px] tracking-[0.2em] uppercase text-base/60 hover:text-base transition-colors"
+          >
+            Avançar →
+          </button>
+        )}
       </div>
     </>
   );
