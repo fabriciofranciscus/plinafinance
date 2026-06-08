@@ -15,7 +15,7 @@ import {
   useAppLoginWithOAuth as useLoginWithOAuth,
   useAppLogout as useLogout,
 } from '@/lib/hooks/privy';
-import { SCREENS } from './_lib/glossary';
+import { PHASES, phaseForScreen } from './_lib/glossary';
 import { useInvestirFlow } from './_hooks/use-investir-flow';
 import { Rail } from './_components/shell/rail';
 import { ScreenFader } from './_components/shell/screen-fader';
@@ -55,7 +55,7 @@ export default function InvestirPage() {
   const swapBuild = flow.swap.swapBuild;
   const buyResult = flow.swap.buyResult;
 
-  const currentIdx = SCREENS.findIndex((s) => s.id === screen);
+  const { phase, index: phaseIdx } = phaseForScreen(screen);
   const canGoBack = authenticated && screen !== 'welcome' && screen !== 'receipt';
 
   return (
@@ -73,11 +73,11 @@ export default function InvestirPage() {
         <div className="md:hidden bg-lightBg border-b border-light-hairline px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="font-mono text-xs text-primary-deep">
-              {String(currentIdx + 1).padStart(2, '0')} /{' '}
-              {String(SCREENS.length).padStart(2, '0')}
+              {String(phaseIdx + 1).padStart(2, '0')} /{' '}
+              {String(PHASES.length).padStart(2, '0')}
             </span>
             <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base">
-              {SCREENS[currentIdx]?.label}
+              {phase?.label}
             </span>
           </div>
           {authenticated && (
