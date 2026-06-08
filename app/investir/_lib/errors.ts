@@ -6,6 +6,13 @@ export function newTicketId(): string {
 
 export function humanizeError(raw: string): { message: string; technical: string } {
   const t = raw.toLowerCase();
+  if (t.includes('bank account') || t.includes('conta banc')) {
+    return {
+      message:
+        'Conta bancária BRL já registrada nesta organização (limite do sandbox Etherfuse). Você pode pular esta etapa — a conta PIX só é necessária para saques.',
+      technical: raw,
+    };
+  }
   if (t.includes('etherfuse') && t.includes('limit')) {
     return {
       message: 'Limite do sandbox Etherfuse atingido. Em produção, o tíquete é definido pelo seu compromisso institucional.',
