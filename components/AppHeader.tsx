@@ -123,14 +123,16 @@ export function AppHeader({ isAdmin }: AppHeaderProps) {
                 Sair
               </button>
             </>
-          ) : ready && authenticated && stellarAddress ? (
+          ) : ready && authenticated ? (
             <>
-              <span
-                className="hidden sm:inline font-mono text-[11px] text-base/60"
-                title={stellarAddress}
-              >
-                {abbreviate(stellarAddress)}
-              </span>
+              {stellarAddress && (
+                <span
+                  className="hidden sm:inline font-mono text-[11px] text-base/60"
+                  title={stellarAddress}
+                >
+                  {abbreviate(stellarAddress)}
+                </span>
+              )}
               <button
                 onClick={() => logout()}
                 className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 hover:text-base"
