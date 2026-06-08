@@ -48,6 +48,10 @@ export interface CapturarLeadInput {
   utmMedium?: string;
   utmCampaign?: string;
   consentimentoLgpd: boolean;
+  /** Pessoa (cedente) logada + KYC. Liga o lead à conta. */
+  pessoaId?: string;
+  /** privyId pra rastreabilidade individual no EventoAudit (CVM 175). */
+  privyId?: string;
 }
 
 export interface CapturarLeadResult {
@@ -92,11 +96,13 @@ export async function capturarLead(
         utmSource: input.utmSource ?? null,
         utmMedium: input.utmMedium ?? null,
         utmCampaign: input.utmCampaign ?? null,
+        pessoaId: input.pessoaId ?? null,
         status: 'NOVO',
       },
       update: {
         nome: input.nome.trim(),
         telefone: input.telefone?.trim() || undefined,
+        pessoaId: input.pessoaId ?? undefined,
       },
     });
     await tx.eventoAudit.create({
@@ -104,6 +110,7 @@ export async function capturarLead(
         acao: 'LEAD_VENDEDOR_CAPTURADO',
         operador: 'self-service',
         leadVendedorId: created.id,
+        privyId: input.privyId ?? null,
         payloadJson: payload as unknown as Prisma.InputJsonValue,
         payloadHash: onChain.payloadHash,
         stellarTxHash: onChain.txHash,

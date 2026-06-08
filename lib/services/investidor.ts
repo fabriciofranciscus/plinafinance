@@ -17,27 +17,10 @@
  *   - Audit log via EventoAudit (INVESTIDOR_ONBOARDED).
  */
 
-import { Prisma, StatusInvestidor } from '@prisma/client';
+import { Prisma, Papel, StatusInvestidor } from '@prisma/client';
 import { db } from '../db';
-import { ensureStellarWallet } from '../wallet/privy';
-import { fundAccountIfNeeded } from '../stellar/account';
 import { STELLAR_NETWORK } from '../stellar/config';
-import { logStellarError } from '../stellar/log-error';
-import { EtherfuseClient } from '../anchors/etherfuse';
-import { parseCpf } from '../format/parse-cpf';
-
-const DUMMY_PNG_BASE64 =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
-
-function etherfuseFromEnv(): EtherfuseClient {
-  const apiKey = process.env.ETHERFUSE_API_KEY;
-  const baseUrl =
-    process.env.ETHERFUSE_BASE_URL ?? 'https://api.sand.etherfuse.com';
-  if (!apiKey) {
-    throw new Error('ETHERFUSE_API_KEY ausente.');
-  }
-  return new EtherfuseClient({ apiKey, baseUrl });
-}
+import { ensureKycForPessoa } from './pessoa';
 
 export interface OnboardInput {
   privyId: string;
@@ -55,168 +38,61 @@ export interface OnboardResult {
 }
 
 /**
- * Onboarding completo. Idempotente: se já tem investidor pra esse privyId,
- * retorna o que tem (sem re-rodar KYC). Wallet existente do Privy é reusada.
+ * Onboarding completo. Idempotente: o KYC vive na `Pessoa` (keyed por
+ * privyId) e é feito UMA vez — se a pessoa já tem KYC aprovado (inclusive
+ * vindo do papel cedente), `ensureKycForPessoa` reusa sem re-rodar Etherfuse.
+ * Aqui só conectamos/atualizamos o `Investidor` à Pessoa.
  */
 export async function onboardInvestidor(
   input: OnboardInput,
 ): Promise<OnboardResult> {
-  // F-12: em mainnet (proxy de "produção") exigir CPF real do investidor.
-  // Sandbox aceita dummy (Etherfuse auto-aprova; sem responsabilidade real).
-  const isProduction = STELLAR_NETWORK === 'PUBLIC';
-  const parsedCpf = parseCpf(input.cpf);
-  let cpfNormalizado: string;
-  let isSyntheticCpf: boolean;
-  if (isProduction) {
-    if (!parsedCpf) {
-      throw new Error('cpf obrigatório em mainnet (válido por módulo 11)');
-    }
-    cpfNormalizado = parsedCpf;
-    isSyntheticCpf = false;
-  } else {
-    // N-14: persistir a flag explicitamente — se o env flipar pra mainnet
-    // depois, assertElegivelParaTrustline bloqueia esse investidor sem
-    // re-KYC.
-    cpfNormalizado = parsedCpf ?? '52998224725';
-    isSyntheticCpf = !parsedCpf;
-  }
-
-  // 1) Investidor já existente com customer Etherfuse persistido?
-  const existing = await db.investidor.findFirst({
-    where: { email: input.email },
-  });
-  if (
-    existing &&
-    existing.status === 'AUTORIZADO' &&
-    existing.etherfuseCustomerId
-  ) {
-    // Backfill privyId se faltar (rows pré-migration). Único caminho onde
-    // garantimos o vínculo email↔privyId pra o auth-guard funcionar.
-    if (!existing.privyId) {
-      await db.investidor.update({
-        where: { id: existing.id },
-        data: { privyId: input.privyId },
-      });
-    }
-    return {
-      investidorId: existing.id,
-      publicKey: existing.publicKey,
-      etherfuseCustomerId: existing.etherfuseCustomerId,
-      kycStatus: 'approved',
-      fundedNow: false,
-    };
-  }
-
-  // 2) Stellar wallet via Privy (idempotente).
-  const publicKey = await ensureStellarWallet(input.privyId);
-
-  // 3) Funda na testnet se ainda não existir on-chain.
-  const fund = await fundAccountIfNeeded(publicKey);
-
-  // 4) Etherfuse customer + KYC programático.
-  const anchor = etherfuseFromEnv();
-
-  const customer = await anchor.createCustomer({
+  // KYC compartilhado (wallet + Etherfuse + Pessoa). emitAudit:false — o log
+  // INVESTIDOR_ONBOARDED com investidorId é emitido abaixo (consumido por
+  // /minha-posicao + events API).
+  const kyc = await ensureKycForPessoa({
+    privyId: input.privyId,
     email: input.email,
-    publicKey,
-    country: 'BR',
+    nome: input.nome,
+    cpf: input.cpf,
+    papel: Papel.INVESTIDOR,
+    emitAudit: false,
   });
 
-  // 5) KYC: identity + docs + agreements (sandbox auto-aprova).
-  await anchor.submitKycIdentity(customer.id, {
-    pubkey: publicKey,
-    identity: {
-      id: publicKey,
-      name: {
-        givenName: input.nome?.split(' ')[0] ?? 'Investidor',
-        familyName:
-          input.nome?.split(' ').slice(1).join(' ').trim() || 'Institucional',
-      },
-      dateOfBirth: '1985-01-15',
-      address: {
-        street: 'Av. Faria Lima, 1000',
-        city: 'São Paulo',
-        region: 'SP',
-        postalCode: '01310-100',
-        country: 'BR',
-      },
-      idNumbers: [{ value: cpfNormalizado, type: 'CPF' }],
+  const status: StatusInvestidor = kyc.kycAprovado
+    ? StatusInvestidor.AUTORIZADO
+    : StatusInvestidor.PENDENTE_KYC;
+
+  // email não é mais @unique (espelho de Pessoa.email). Localiza o investidor
+  // existente por pessoaId (backfillado), privyId (espelho) ou email (legado)
+  // pra evitar duplicar a row.
+  const found = await db.investidor.findFirst({
+    where: {
+      OR: [
+        { pessoaId: kyc.pessoaId },
+        { privyId: input.privyId },
+        { email: input.email },
+      ],
     },
+    select: { id: true },
   });
-  await anchor.submitKycDocuments(customer.id, {
-    pubkey: publicKey,
-    documentType: 'document',
-    images: [
-      { label: 'id_front', image: DUMMY_PNG_BASE64 },
-      { label: 'id_back', image: DUMMY_PNG_BASE64 },
-    ],
-  });
-  await anchor.submitKycDocuments(customer.id, {
-    pubkey: publicKey,
-    documentType: 'selfie',
-    images: [{ label: 'selfie', image: DUMMY_PNG_BASE64 }],
-  });
-  // Agreements: electronic + terms passam; customer-agreement falha sem phone
-  // (limitação sandbox documentada em PLINA-MOD-005). KYC aprova mesmo assim.
-  const kycUrl = await anchor.getKycUrl(
-    customer.id,
-    publicKey,
-    customer.bankAccountId,
-  );
-  try {
-    await anchor.acceptElectronicSignature(kycUrl);
-    await anchor.acceptTermsAndConditions(kycUrl);
-  } catch (err) {
-    // N-16: agreements falham em sandbox sem phone (PLINA-MOD-005). KYC
-    // já foi aprovado via submit — onboard segue, mas o erro vira visível
-    // (antes ficava swallowed silenciosamente).
-    logStellarError('[onboard:agreements]', err);
-  }
 
-  // 6) Confirma status approved (sandbox deve estar approved após submits).
-  let kycStatus: OnboardResult['kycStatus'] = 'pending';
-  try {
-    const status = await anchor.getKycStatus(customer.id, publicKey);
-    if (status === 'approved') kycStatus = 'approved';
-    else if (status === 'pending') kycStatus = 'pending';
-    else kycStatus = 'not_started';
-  } catch (err) {
-    // N-16: rede flap em getKycStatus — onboard segue com pending, mas
-    // operador vê o erro pra distinguir de "Etherfuse marcou pending".
-    logStellarError('[onboard:kyc-status]', err);
-  }
-
-  // 7) Upsert Investidor no DB.
   const investidor = await db.$transaction(async (tx) => {
-    const upserted = await tx.investidor.upsert({
-      where: { email: input.email },
-      create: {
-        nome: input.nome ?? input.email,
-        email: input.email,
-        publicKey,
-        privyId: input.privyId,
-        etherfuseCustomerId: customer.id,
-        cpfNormalizado,
-        isSyntheticCpf,
-        kycAprovado: kycStatus === 'approved',
-        status:
-          kycStatus === 'approved'
-            ? StatusInvestidor.AUTORIZADO
-            : StatusInvestidor.PENDENTE_KYC,
-      },
-      update: {
-        publicKey,
-        privyId: input.privyId,
-        etherfuseCustomerId: customer.id,
-        cpfNormalizado,
-        isSyntheticCpf,
-        kycAprovado: kycStatus === 'approved',
-        status:
-          kycStatus === 'approved'
-            ? StatusInvestidor.AUTORIZADO
-            : StatusInvestidor.PENDENTE_KYC,
-      },
-    });
+    const data = {
+      publicKey: kyc.publicKey,
+      privyId: input.privyId,
+      pessoaId: kyc.pessoaId,
+      etherfuseCustomerId: kyc.etherfuseCustomerId,
+      etherfuseBankAccountId: kyc.etherfuseBankAccountId ?? undefined,
+      cpfNormalizado: kyc.cpfNormalizado,
+      isSyntheticCpf: kyc.isSyntheticCpf,
+      kycAprovado: kyc.kycAprovado,
+      status,
+    };
+    const upserted = found
+      ? await tx.investidor.update({ where: { id: found.id }, data })
+      : await tx.investidor.create({
+          data: { nome: input.nome ?? input.email, email: input.email, ...data },
+        });
     await tx.eventoAudit.create({
       data: {
         acao: 'INVESTIDOR_ONBOARDED',
@@ -224,9 +100,9 @@ export async function onboardInvestidor(
         investidorId: upserted.id,
         privyId: input.privyId,
         payloadJson: {
-          publicKey,
-          etherfuseCustomerId: customer.id,
-          kycStatus,
+          publicKey: kyc.publicKey,
+          etherfuseCustomerId: kyc.etherfuseCustomerId,
+          kycStatus: kyc.kycStatus,
         } as Prisma.InputJsonValue,
       },
     });
@@ -235,10 +111,14 @@ export async function onboardInvestidor(
 
   return {
     investidorId: investidor.id,
-    publicKey,
-    etherfuseCustomerId: customer.id,
-    kycStatus,
-    fundedNow: fund.funded,
+    publicKey: kyc.publicKey,
+    etherfuseCustomerId: kyc.etherfuseCustomerId ?? '',
+    kycStatus: kyc.kycAprovado
+      ? 'approved'
+      : kyc.kycStatus === 'PENDENTE'
+        ? 'pending'
+        : 'not_started',
+    fundedNow: kyc.fundedNow,
   };
 }
 

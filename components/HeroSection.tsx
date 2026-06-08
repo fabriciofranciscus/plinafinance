@@ -15,19 +15,24 @@ export default function HeroSection() {
         <h1
           className="font-title font-medium text-white drop-shadow-2xl"
           style={{
-            fontSize: 'clamp(3rem, 9vw, 7rem)',
+            fontSize: 'clamp(2.25rem, 6vw, 5rem)',
             lineHeight: 0.95,
             letterSpacing: '-0.04em',
           }}
         >
-          Cotas de consórcio
+          Liquidez para o cotista.
           <br />
-          contempladas, agora
+          Desconto para o comprador.
           <br />
-          com liquidez global.
+          <span style={{ color: 'var(--color-auditable-cyan)' }}>
+            Yield institucional
+          </span>{' '}
+          para o mundo.
         </h1>
-        <p className="font-details text-[10px] sm:text-xs md:text-sm text-white/70 uppercase tracking-[0.18em] sm:tracking-[0.25em] md:tracking-[0.3em] mt-10 max-w-3xl">
-          Cotas de FIDC tokenizadas · Regulação CVM 175 · Investidores Qualificados
+        <p className="font-details text-base sm:text-lg leading-relaxed text-white/70 mt-10 whitespace-normal lg:whitespace-nowrap">
+          Pool tokenizado de cotas de consórcio contempladas, estruturado como
+          FIDC sob CVM 175 e emitido na Stellar como{' '}
+          <span className="font-mono text-white">PLINA-RF</span>.
         </p>
       </div>
 
