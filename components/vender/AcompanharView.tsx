@@ -151,9 +151,12 @@ export default function AcompanharView({ data }: { data: AcompanharData }) {
           ← Voltar
         </button>
         {view === ULTIMO ? (
-          <span className="bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3">
+          <a
+            href="/pool"
+            className="bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors"
+          >
             Concluído
-          </span>
+          </a>
         ) : (
           <button
             type="button"
