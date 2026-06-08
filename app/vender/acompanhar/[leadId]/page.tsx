@@ -12,7 +12,7 @@
 
 import { db } from '@/lib/db';
 import { txExplorerUrl } from '@/lib/stellar/config';
-import { etapaDoStatus, isEncerrado } from '@/lib/vender/etapas';
+import { contextoDoStatus, etapaDoStatus, isEncerrado } from '@/lib/vender/etapas';
 import WizardHeader from '@/components/vender/WizardHeader';
 import StepperVender from '@/components/vender/StepperVender';
 
@@ -70,6 +70,7 @@ export default async function AcompanharPage({ params }: PageProps) {
   const cota = cessao?.cota ?? null;
   const etapaAtual = etapaDoStatus(lead.status);
   const encerrado = isEncerrado(lead.status);
+  const contexto = contextoDoStatus(lead.status);
 
   return (
     <div className="min-h-screen bg-sheet-white text-base">
@@ -91,7 +92,21 @@ export default async function AcompanharPage({ params }: PageProps) {
           equipe Plina respondendo o último email recebido.
         </p>
       ) : (
-        <StepperVender current={etapaAtual} />
+        <>
+          <StepperVender current={etapaAtual} />
+
+          <section className="mt-10 border border-light-hairline bg-white p-6 md:p-7">
+            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">
+              Etapa atual
+            </p>
+            <h2 className="font-title text-xl font-semibold tracking-tight mt-2">
+              {contexto.titulo}
+            </h2>
+            <p className="font-text text-sm text-base/70 mt-2 leading-relaxed">
+              {contexto.descricao}
+            </p>
+          </section>
+        </>
       )}
 
       {oferta && (

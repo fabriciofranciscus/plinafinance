@@ -3,6 +3,7 @@ import { LeadVendedorStatus } from '@prisma/client';
 import {
   etapaDoStatus,
   isEncerrado,
+  contextoDoStatus,
   ETAPAS_VENDER,
 } from '@/lib/vender/etapas';
 
@@ -29,6 +30,14 @@ describe('etapaDoStatus', () => {
     expect(etapaDoStatus(LeadVendedorStatus.PERDIDO)).toBe(-1);
     expect(isEncerrado(LeadVendedorStatus.PERDIDO)).toBe(true);
     expect(isEncerrado(LeadVendedorStatus.NOVO)).toBe(false);
+  });
+
+  it('todo status tem contexto com título e descrição (nunca em branco)', () => {
+    for (const status of Object.values(LeadVendedorStatus)) {
+      const ctx = contextoDoStatus(status);
+      expect(ctx.titulo.length).toBeGreaterThan(0);
+      expect(ctx.descricao.length).toBeGreaterThan(0);
+    }
   });
 
   it('fluxo concluído marca todas as etapas como feitas (current = length)', () => {
