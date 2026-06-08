@@ -1,7 +1,12 @@
 'use client';
 
 import { useAppPrivy as usePrivy } from '@/lib/hooks/privy';
-import type { OnboardData } from '../../_types';
+import type {
+  EntityType,
+  InstitutionalProfile,
+  InvestorTrack,
+  OnboardData,
+} from '../../_types';
 import { explorerAccount, maskId } from '../../_lib/format';
 import { TestnetBanner } from '../shell/testnet-banner';
 import { Term } from '../shared/term';
@@ -19,6 +24,9 @@ export function IdentityScreen({
   onSetupTrustlines,
   onContinue,
   onRetry,
+  track,
+  institutionalProfile,
+  onInstitutionalChange,
 }: {
   onboard: OnboardData | null;
   onboarding: boolean;
@@ -30,6 +38,9 @@ export function IdentityScreen({
   onSetupTrustlines: () => void;
   onContinue: () => void;
   onRetry: () => void;
+  track: InvestorTrack;
+  institutionalProfile: InstitutionalProfile | null;
+  onInstitutionalChange: (p: InstitutionalProfile) => void;
 }) {
   return (
     <div>
@@ -45,6 +56,13 @@ export function IdentityScreen({
         A Plina cria sua wallet Stellar embedded e registra o investidor na
         anchor regulada Etherfuse. KYC auto-aprovado no sandbox.
       </p>
+
+      {track === 'INTL' && (
+        <EntityOnboarding
+          profile={institutionalProfile}
+          onChange={onInstitutionalChange}
+        />
+      )}
 
       <div className="mt-12">
         {!consented && !onboard && (
@@ -168,6 +186,121 @@ export function IdentityScreen({
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+const EMPTY_PROFILE: InstitutionalProfile = {
+  entityName: '',
+  jurisdiction: '',
+  entityType: 'FAMILY_OFFICE',
+  estimatedTicket: '',
+  currency: 'USDC',
+};
+
+const ENTITY_TYPES: { v: EntityType; label: string }[] = [
+  { v: 'FAMILY_OFFICE', label: 'Family Office' },
+  { v: 'ASSET_MANAGER', label: 'Gestora' },
+  { v: 'FUND', label: 'Fundo' },
+  { v: 'OTHER', label: 'Outro' },
+];
+
+const fieldCls =
+  'mt-2 block w-full bg-white border border-base/20 px-3 py-2.5 font-text text-sm text-base focus:outline-none focus:border-base transition-colors';
+
+/**
+ * Onboarding institucional (cartão 1 do mockup do CEO). Client-only nesta fase.
+ * TODO(seam): persistir via extensão de `/api/investidor/suitability` nas
+ * colunas existentes do Investidor (razaoSocial, jurisdicao, tipo,
+ * enderecoEntidade). Hoje só alimenta o resumo da confirmação.
+ */
+function EntityOnboarding({
+  profile,
+  onChange,
+}: {
+  profile: InstitutionalProfile | null;
+  onChange: (p: InstitutionalProfile) => void;
+}) {
+  const p = profile ?? EMPTY_PROFILE;
+  const set = (patch: Partial<InstitutionalProfile>) => onChange({ ...p, ...patch });
+
+  return (
+    <div className="mt-10 border border-base/15 bg-white p-6 md:p-7">
+      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">
+        Onboarding institucional
+      </p>
+      <p className="font-text text-sm text-base/70 mt-1">
+        KYC via anchor regulada na sua jurisdição (MoneyGram · Settle · anchors
+        europeias SEP-compliant).
+      </p>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <label className="block">
+          <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+            Nome da entidade
+          </span>
+          <input
+            type="text"
+            value={p.entityName}
+            onChange={(e) => set({ entityName: e.target.value })}
+            placeholder="Acme Capital Ltd."
+            className={fieldCls}
+          />
+        </label>
+        <label className="block">
+          <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+            Jurisdição
+          </span>
+          <input
+            type="text"
+            value={p.jurisdiction}
+            onChange={(e) => set({ jurisdiction: e.target.value })}
+            placeholder="Cayman Islands"
+            className={fieldCls}
+          />
+        </label>
+        <label className="block">
+          <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+            Tipo
+          </span>
+          <select
+            value={p.entityType}
+            onChange={(e) => set({ entityType: e.target.value as EntityType })}
+            className={fieldCls}
+          >
+            {ENTITY_TYPES.map((t) => (
+              <option key={t.v} value={t.v}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+            Ticket estimado (USD)
+          </span>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={p.estimatedTicket}
+            onChange={(e) => set({ estimatedTicket: e.target.value })}
+            placeholder="500.000"
+            className={fieldCls + ' font-mono'}
+          />
+        </label>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {['SEP-24 · onboarding hosted', 'SEP-12 · KYC reutilizável'].map((c) => (
+          <span
+            key={c}
+            className="inline-flex items-center gap-1.5 border border-primary/30 bg-primary/5 px-3 py-1 font-mono text-[11px] text-base/70"
+          >
+            <span className="h-1 w-1 rounded-full bg-primary" />
+            {c}
+          </span>
+        ))}
       </div>
     </div>
   );

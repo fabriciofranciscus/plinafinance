@@ -103,7 +103,12 @@ export default function InvestirPage() {
 
             <ScreenFader key={screen}>
               {screen === 'welcome' && (
-                <WelcomeScreen emailLogin={emailLogin} oauthLogin={oauthLogin} />
+                <WelcomeScreen
+                  emailLogin={emailLogin}
+                  oauthLogin={oauthLogin}
+                  track={flow.track}
+                  onTrackChange={flow.setTrack}
+                />
               )}
               {screen === 'identity' && (
                 <IdentityScreen
@@ -117,6 +122,9 @@ export default function InvestirPage() {
                   onSetupTrustlines={flow.trustlines.setupTrustlines}
                   onContinue={flow.onIdentityContinue}
                   onRetry={flow.onboard.runOnboard}
+                  track={flow.track}
+                  institutionalProfile={flow.institutionalProfile}
+                  onInstitutionalChange={flow.setInstitutionalProfile}
                 />
               )}
               {screen === 'banking' && onboard && (

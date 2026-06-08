@@ -8,13 +8,19 @@ import {
 import { TestnetBanner } from '../shell/testnet-banner';
 import { Term } from '../shared/term';
 import { GoogleMark } from '../shared/google-mark';
+import type { InvestorTrack } from '../../_types';
+import { INTL_FLOW_ENABLED } from '../../_lib/flags-client';
 
 export function WelcomeScreen({
   emailLogin,
   oauthLogin,
+  track,
+  onTrackChange,
 }: {
   emailLogin: ReturnType<typeof useLoginWithEmail>;
   oauthLogin: ReturnType<typeof useLoginWithOAuth>;
+  track: InvestorTrack;
+  onTrackChange: (t: InvestorTrack) => void;
 }) {
   const { sendCode, loginWithCode, state } = emailLogin;
   const { initOAuth, loading: oauthLoading } = oauthLogin;
@@ -96,6 +102,38 @@ export function WelcomeScreen({
         Onboarding via wallet Stellar embedded e anchor LATAM regulada.
         KYC institucional, quote BRL → PLINA-RF ao vivo e <Term>trustline</Term> assinada por você.
       </p>
+
+      {/* Trilha: Institucional BR (funcional) / Internacional (M4, gated). */}
+      <div className="mt-8 inline-flex rounded-full border border-base/20 p-1">
+        {([
+          { id: 'BR' as const, label: 'Institucional BR', range: 'R$ 500k–10M', enabled: true },
+          { id: 'INTL' as const, label: 'Internacional', range: 'US$ 100k–5M', enabled: INTL_FLOW_ENABLED },
+        ]).map((t) => {
+          const active = track === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => t.enabled && onTrackChange(t.id)}
+              disabled={!t.enabled}
+              aria-pressed={active}
+              title={t.enabled ? undefined : 'Em breve'}
+              className={`rounded-full px-5 py-2 font-details text-[11px] tracking-[0.15em] uppercase transition-colors ${
+                active
+                  ? 'bg-base text-white'
+                  : t.enabled
+                    ? 'text-base/60 hover:text-base'
+                    : 'text-base/30 cursor-not-allowed'
+              }`}
+            >
+              {t.label}
+              <span className="ml-2 font-mono text-[10px] opacity-70">
+                {t.enabled ? t.range : 'em breve'}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
       <div className="mt-12">
         {!awaitingCode && (
