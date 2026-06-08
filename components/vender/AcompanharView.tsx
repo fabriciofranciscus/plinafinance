@@ -236,30 +236,39 @@ function PainelOferta({
   erro: string | null;
   onAceitar: () => void;
 }) {
-  if (!oferta) {
-    return (
-      <p className="mt-6 border-t border-light-hairline pt-6 font-text text-sm text-base/60">
-        Aguardando a oferta firme da mesa.
-      </p>
-    );
-  }
+  // Sem oferta real ainda → mostra um exemplo ilustrativo (como no mockup), em
+  // vez de uma tela "aguardando" vazia. Botão de aceite fica desabilitado.
+  const ilustrativo = !oferta;
+  const v = oferta ?? {
+    valorCarta: 120000,
+    desagioPct: '18.5',
+    valorLiquido: 97800,
+    prazoRestanteMeses: null as number | null,
+    validade: null as string | null,
+  };
+  const desagio = v.desagioPct.replace('.', ',');
+
   return (
     <div className="mt-6 border-t border-light-hairline pt-6">
+      {ilustrativo && (
+        <p className="font-mono text-[11px] text-base/55 mb-4">
+          Exemplo ilustrativo — sua oferta firme aparece aqui quando a mesa
+          concluir a validação.
+        </p>
+      )}
+
       <div className="border border-primary/30">
-        <OfertaLinha
-          label="Valor de face da cota"
-          value={BRL.format(oferta.valorCarta)}
-        />
-        <OfertaLinha label="Deságio aplicado" value={`− ${oferta.desagioPct}%`} accent />
+        <OfertaLinha label="Valor de face da cota" value={BRL.format(v.valorCarta)} />
+        <OfertaLinha label="Deságio aplicado" value={`− ${desagio}%`} accent />
         <OfertaLinha
           label="Valor líquido a receber"
-          value={BRL.format(oferta.valorLiquido)}
+          value={BRL.format(v.valorLiquido)}
           destaque
         />
-        {oferta.prazoRestanteMeses != null && (
+        {v.prazoRestanteMeses != null && (
           <OfertaLinha
             label="Prazo restante da cota"
-            value={`${oferta.prazoRestanteMeses} meses`}
+            value={`${v.prazoRestanteMeses} meses`}
           />
         )}
         <OfertaLinha label="Prazo de pagamento" value="≤ 48 horas via Pix" />
@@ -268,10 +277,20 @@ function PainelOferta({
           value="Anchor BR · SEP-24 / BaaS Celcoin"
           mono
         />
-        <OfertaLinha label="Validade da oferta" value={oferta.validade} mono />
+        {v.validade && (
+          <OfertaLinha label="Validade da oferta" value={v.validade} mono />
+        )}
       </div>
 
-      {podeAceitar && (
+      {ilustrativo ? (
+        <button
+          type="button"
+          disabled
+          className="mt-6 bg-base/40 text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 cursor-not-allowed"
+        >
+          Aceitar oferta →
+        </button>
+      ) : podeAceitar ? (
         <button
           type="button"
           onClick={onAceitar}
@@ -280,7 +299,7 @@ function PainelOferta({
         >
           {aceitando ? 'Enviando…' : 'Aceitar oferta →'}
         </button>
-      )}
+      ) : null}
       {erro && <p className="font-text text-sm text-red-700 mt-4">{erro}</p>}
 
       <p className="font-text text-xs text-base/55 mt-4 leading-relaxed">
