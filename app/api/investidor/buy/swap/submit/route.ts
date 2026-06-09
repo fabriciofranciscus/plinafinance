@@ -104,10 +104,14 @@ export const POST = withAuth(async (req, { user }) => {
       }
       return NextResponse.json({ error: 'quote já consumido' }, { status: 409 });
     }
-    if (quote.expiresAt.getTime() <= Date.now()) {
+    // Validade da cotação FX só vale ANTES do pagamento. Pós-settlement
+    // (onramp completed) a swap é 1:1 NAV; não bloqueia por expiração — o
+    // settlement/claim/assinatura levam mais que o TTL de 60s do quote.
+    const onRampOrder = quote.onRampOrder;
+    const onrampCompleted = onRampOrder?.status === 'completed';
+    if (!onrampCompleted && quote.expiresAt.getTime() <= Date.now()) {
       return NextResponse.json({ error: 'quote expirado' }, { status: 410 });
     }
-    const onRampOrder = quote.onRampOrder;
     if (!onRampOrder || onRampOrder.status !== 'completed') {
       return NextResponse.json(
         { error: 'onramp não está em status completed' },
