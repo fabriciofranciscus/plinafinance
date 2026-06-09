@@ -20,7 +20,44 @@
 import { Prisma, Papel, StatusInvestidor } from '@prisma/client';
 import { db } from '../db';
 import { STELLAR_NETWORK } from '../stellar/config';
+import { loadAccount } from '../stellar/account';
+import { assetCodeForClasse } from '../stellar/classes';
+import { resolveTesouroAsset } from '../anchors/etherfuse/tesouro';
 import { ensureKycForPessoa } from './pessoa';
+
+/**
+ * Trustlines já estabelecidas on-chain? Fonte de verdade pro identity screen —
+ * sem isso o `trustlinesReady` (estado React) reseta a cada reload e o
+ * investidor é forçado a re-assinar trustlines que já existem. Checa as 3
+ * necessárias: TESOURO (bridge) + PLINARF (Sênior) + PLINARFB (Subordinada).
+ * Best-effort: qualquer falha (conta inexistente, Horizon, Etherfuse) → false,
+ * caindo no fluxo de setup (idempotente server-side).
+ */
+export async function investidorTrustlinesReady(
+  publicKey: string,
+): Promise<boolean> {
+  const issuer = process.env.STELLAR_ISSUER_PUBLIC;
+  if (!issuer) return false;
+  try {
+    const [acc, tesouro] = await Promise.all([
+      loadAccount(publicKey),
+      resolveTesouroAsset(publicKey),
+    ]);
+    const lines = acc.balances as Array<{
+      asset_code?: string;
+      asset_issuer?: string;
+    }>;
+    const has = (code: string, iss: string) =>
+      lines.some((b) => b.asset_code === code && b.asset_issuer === iss);
+    return (
+      has(assetCodeForClasse('SENIOR'), issuer) &&
+      has(assetCodeForClasse('SUBORDINADA'), issuer) &&
+      has(tesouro.code, tesouro.issuer)
+    );
+  } catch {
+    return false;
+  }
+}
 
 export interface OnboardInput {
   privyId: string;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAppSignRawHash as useSignRawHash } from '@/lib/hooks/privy';
 import type { FlowError, OnboardData } from '../_types';
 import { asFlowError } from '../_lib/errors';
@@ -22,6 +22,12 @@ export function useTrustlines({
 }: UseTrustlinesArgs) {
   const [trustlinesReady, setTrustlinesReady] = useState(false);
   const [trustlineLoading, setTrustlineLoading] = useState(false);
+
+  // Trustline é estado on-chain — persiste entre reloads. O onboard reporta se
+  // já existem (investidorTrustlinesReady), evitando re-pedir assinatura.
+  useEffect(() => {
+    if (onboard?.trustlinesReady) setTrustlinesReady(true);
+  }, [onboard?.trustlinesReady]);
 
   // Trustline setup (PLINARF Sênior + PLINARFB Subordinada + TESOURO).
   // F-M3-3: investidor estabelece as duas classes no identity — a escolha de

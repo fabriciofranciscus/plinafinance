@@ -50,6 +50,8 @@ export interface OnboardData {
   etherfuseCustomerId: string;
   kycStatus: 'approved' | 'pending' | 'not_started';
   fundedNow: boolean;
+  /** Trustlines (TESOURO + PLINARF + PLINARFB) já existem on-chain. */
+  trustlinesReady?: boolean;
 }
 
 export interface QuoteData {
