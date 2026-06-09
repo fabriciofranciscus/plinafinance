@@ -11,14 +11,14 @@ export function logStellarError(prefix: string, err: unknown): void {
   console.error(prefix, extractSafeError(err));
 }
 
-interface SafeHorizonError {
+export interface SafeHorizonError {
   message?: string;
   status?: number;
   title?: string;
   result_codes?: unknown;
 }
 
-function extractSafeError(err: unknown): SafeHorizonError {
+export function extractSafeError(err: unknown): SafeHorizonError {
   if (!err || typeof err !== 'object') {
     return { message: String(err) };
   }
