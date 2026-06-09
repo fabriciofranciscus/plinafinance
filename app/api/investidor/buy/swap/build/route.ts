@@ -28,10 +28,11 @@ import {
   buildSwapBridgeForPlinarfXdr,
   preSignWithSigner,
 } from '@/lib/stellar/transactions';
-import { distribute } from '@/lib/stellar/issuer';
+import { distribute, createTrustline } from '@/lib/stellar/issuer';
 import { distributorSigner } from '@/lib/stellar/signer';
 import { mainnetCutoverGuard } from '@/lib/env/feature-gates';
-import { buildAsset } from '@/lib/stellar/account';
+import { buildAsset, loadAccount } from '@/lib/stellar/account';
+import { logStellarError } from '@/lib/stellar/log-error';
 import { assetCodeForClasse, classeOrDefault } from '@/lib/stellar/classes';
 import { incrementarHolding } from '@/lib/services/holdings';
 import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
@@ -41,6 +42,32 @@ import { parseBody } from '@/lib/http/parse-body';
 import { stellarPubkey } from '@/lib/http/zod-stellar';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Garante (idempotente) que o distributor confia no TESOURO pra receber a leg 1
+ * do swap. Setup global único: se a trustline já existe, no-op; senão cria
+ * (changeTrust assinado pelo distributor server-side).
+ */
+async function ensureDistributorTesouroTrustline(
+  distributorPubkey: string,
+  tesouro: { code: string; issuer: string },
+): Promise<void> {
+  const acc = await loadAccount(distributorPubkey);
+  const lines = acc.balances as Array<{
+    asset_code?: string;
+    asset_issuer?: string;
+  }>;
+  const has = lines.some(
+    (b) => b.asset_code === tesouro.code && b.asset_issuer === tesouro.issuer,
+  );
+  if (has) return;
+  try {
+    await createTrustline(distributorSigner(), tesouro.issuer, tesouro.code);
+  } catch (err) {
+    // Corrida (outro request criou) ou trustline já presente → segue.
+    logStellarError('[swap/build] distributor trust TESOURO', err);
+  }
+}
 
 const Schema = z
   .object({
@@ -201,6 +228,11 @@ export const POST = withAuth(async (req, { user }) => {
     // Real: envelope atômico com 2 legs.
     const tesouro = await resolveTesouroAsset(investorPubkey);
     const bridgeAsset = buildAsset(tesouro.issuer, tesouro.code);
+
+    // O distributor precisa de trustline TESOURO pra RECEBER a leg 1
+    // (investor → distributor). Sem isso a tx falha com op_no_trust na primeira
+    // operação. Setup único e global: checa antes, só cria se faltar.
+    await ensureDistributorTesouroTrustline(distributorPubkey, tesouro);
 
     // Etherfuse devolve toAmount em TESOURO (já fixou via quote). Mesmo valor
     // serve pra leg TESOURO. PLINARF é 1:1 NAV (whitepaper §6.5) então leg
