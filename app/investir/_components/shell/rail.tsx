@@ -1,5 +1,9 @@
 import type { Screen } from '../../_types';
-import { SCREENS } from '../../_lib/glossary';
+import { PHASES, SCREENS } from '../../_lib/glossary';
+
+const SCREEN_LABEL: Record<Screen, string> = Object.fromEntries(
+  SCREENS.map((s) => [s.id, s.label]),
+) as Record<Screen, string>;
 
 export function Rail({
   current,
@@ -13,14 +17,11 @@ export function Rail({
   buyResult: boolean;
 }) {
   const done: Record<Screen, boolean> = {
-    welcome: current !== 'welcome',
     identity: onboard && current !== 'identity',
     banking:
-      current !== 'welcome' &&
       current !== 'identity' &&
       current !== 'banking',
     classe:
-      current !== 'welcome' &&
       current !== 'identity' &&
       current !== 'banking' &&
       current !== 'classe',
@@ -56,12 +57,15 @@ export function Rail({
       </div>
 
       <ol className="space-y-px bg-base/10 -mx-8">
-        {SCREENS.map((s, idx) => {
-          const isCurrent = s.id === current;
-          const isDone = done[s.id];
+        {PHASES.map((phase, idx) => {
+          // Fase concluída = todas as suas telas concluídas (deriva do mapa
+          // por-tela existente, sem reescrever a lógica). Fase atual = a tela
+          // corrente pertence a ela.
+          const isCurrent = phase.screens.includes(current);
+          const isDone = phase.screens.every((s) => done[s]);
           return (
             <li
-              key={s.id}
+              key={phase.id}
               className={`relative bg-lightBg px-8 py-5 transition-colors duration-300 ${
                 isCurrent ? 'bg-white' : ''
               }`}
@@ -93,9 +97,43 @@ export function Rail({
                         : 'text-base/40'
                   }`}
                 >
-                  {s.label}
+                  {phase.label}
                 </span>
               </div>
+
+              {isCurrent && phase.screens.length > 1 && (
+                <ul className="mt-3 ml-8 space-y-1.5">
+                  {phase.screens.map((sid) => {
+                    const subCurrent = sid === current;
+                    const subDone = done[sid];
+                    return (
+                      <li key={sid} className="flex items-center gap-2">
+                        <span
+                          aria-hidden
+                          className={`h-1 w-1 rounded-full ${
+                            subCurrent
+                              ? 'bg-primary'
+                              : subDone
+                                ? 'bg-base/40'
+                                : 'bg-base/20'
+                          }`}
+                        />
+                        <span
+                          className={`font-details text-[10px] tracking-[0.18em] uppercase ${
+                            subCurrent
+                              ? 'text-base font-bold'
+                              : subDone
+                                ? 'text-base/60'
+                                : 'text-base/35'
+                          }`}
+                        >
+                          {SCREEN_LABEL[sid]}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </li>
           );
         })}

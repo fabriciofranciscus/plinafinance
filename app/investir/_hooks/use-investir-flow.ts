@@ -1,12 +1,22 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   useAppPrivy as usePrivy,
   useAppSignRawHash as useSignRawHash,
 } from '@/lib/hooks/privy';
-import type { ClasseEscolhida, FlowError, Screen } from '../_types';
+import type {
+  ClasseEscolhida,
+  CustodyProvider,
+  DepositCurrency,
+  FlowError,
+  InstitutionalProfile,
+  InvestorTrack,
+  Screen,
+} from '../_types';
 import { SCREENS } from '../_lib/glossary';
+import { asFlowError } from '../_lib/errors';
+import { postJson } from '@/lib/http/client';
 import { useOnboard } from './use-onboard';
 import { useTrustlines } from './use-trustlines';
 import { useBanking } from './use-banking';
@@ -18,15 +28,25 @@ import { useSwap } from './use-swap';
 export function useInvestirFlow() {
   const privy = usePrivy();
   const { signRawHash } = useSignRawHash();
-  const { ready, authenticated, getAccessToken } = privy;
+  const { getAccessToken } = privy;
 
-  const [screen, setScreen] = useState<Screen>('welcome');
+  // O fluxo começa em `identity`: o login agora é a rota dedicada /entrar, e o
+  // /investir é protegido por useRequireAuth — quem chega aqui já está logado.
+  const [screen, setScreen] = useState<Screen>('identity');
   const [error, setError] = useState<FlowError | null>(null);
   const [kycConsented, setKycConsented] = useState(false);
   const [onRampLoading, setOnRampLoading] = useState(false);
   // F-M3-4. Default SENIOR — preserva o fluxo single-asset legado se o
   // usuário não passar pelo seletor (ex.: testes que pulam direto pra quote).
   const [classe, setClasse] = useState<ClasseEscolhida>('SENIOR');
+
+  // Scaffolds institucionais (aditivos — não alteram transições). Defaults
+  // preservam o caminho BR/retail funcional: BR + SELF + BRL.
+  const [track, setTrack] = useState<InvestorTrack>('BR');
+  const [institutionalProfile, setInstitutionalProfile] =
+    useState<InstitutionalProfile | null>(null);
+  const [custodyProvider, setCustodyProvider] = useState<CustodyProvider>('SELF');
+  const [depositCurrency, setDepositCurrency] = useState<DepositCurrency>('BRL');
 
   const onError = useCallback((e: FlowError) => setError(e), []);
   const clearError = useCallback(() => setError(null), []);
@@ -98,22 +118,46 @@ export function useInvestirFlow() {
     onNextScreen,
   });
 
-  // Auto-transição welcome → identity quando Privy autentica.
-  useEffect(() => {
-    if (ready && authenticated && screen === 'welcome') {
-      setScreen('identity');
-    }
-  }, [ready, authenticated, screen]);
-
   const goBack = useCallback(() => {
     const currentIdx = SCREENS.findIndex((s) => s.id === screen);
     const prev = SCREENS[Math.max(0, currentIdx - 1)];
     if (prev) setScreen(prev.id);
   }, [screen]);
 
+  // Persiste o onboarding institucional (razão social/CNPJ/jurisdição) nas
+  // colunas do Investidor. Best-effort no padrão dos outros hooks: token →
+  // Bearer → fetch; falha surfaça via onError mas não trava o avanço local.
+  const saveEntidade = useCallback(async (): Promise<boolean> => {
+    if (!institutionalProfile) return true;
+    clearError();
+    try {
+      await postJson(
+        '/api/investidor/entidade',
+        {
+          track,
+          razaoSocial: institutionalProfile.entityName,
+          ...(track === 'BR' ? { cnpj: institutionalProfile.cnpj } : {}),
+          ...(track === 'INTL'
+            ? { jurisdicao: institutionalProfile.jurisdiction }
+            : {}),
+          entityType: institutionalProfile.entityType,
+          estimatedTicket: institutionalProfile.estimatedTicket || undefined,
+          currency: institutionalProfile.currency,
+        },
+        getAccessToken,
+      );
+      return true;
+    } catch (err) {
+      onError(asFlowError(err));
+      return false;
+    }
+  }, [institutionalProfile, track, getAccessToken, onError, clearError]);
+
   const onIdentityContinue = useCallback(() => {
-    setScreen(bankingHook.bankInfo ? 'classe' : 'banking');
-  }, [bankingHook.bankInfo]);
+    void saveEntidade().then((ok) => {
+      if (ok) setScreen(bankingHook.bankInfo ? 'classe' : 'banking');
+    });
+  }, [saveEntidade, bankingHook.bankInfo]);
 
   const onClasseContinue = useCallback(
     (chosen: ClasseEscolhida) => {
@@ -151,6 +195,15 @@ export function useInvestirFlow() {
     classe,
     onBuyMore,
     skipBanking,
+    // Scaffolds institucionais (client-only nesta fase).
+    track,
+    setTrack,
+    institutionalProfile,
+    setInstitutionalProfile,
+    custodyProvider,
+    setCustodyProvider,
+    depositCurrency,
+    setDepositCurrency,
     onboard: onboardHook,
     trustlines: trustlinesHook,
     banking: bankingHook,

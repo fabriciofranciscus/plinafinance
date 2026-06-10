@@ -1,12 +1,17 @@
 'use client';
 
-import type { QuoteData } from '../../_types';
+import type { DepositCurrency, QuoteData } from '../../_types';
 import { BRL, NUMBER_BR } from '../../_lib/format';
 import { QUOTE_PRESETS } from '../../_lib/glossary';
+import { INTL_FLOW_ENABLED } from '../../_lib/flags-client';
 import { TestnetBanner } from '../shell/testnet-banner';
 import { Term } from '../shared/term';
 import { QuoteCell } from '../shared/quote-cell';
 import { useExpiresIn } from '../shared/use-expires-in';
+
+// BRL é a moeda funcional real (on-ramp Pix → TESOURO). As demais são da trilha
+// internacional (M4) — renderizam desabilitadas salvo NEXT_PUBLIC_INTL_INVESTOR_FLOW.
+const CURRENCIES: DepositCurrency[] = ['BRL', 'USDC', 'EURC', 'USD', 'EUR'];
 
 export function QuoteScreen({
   amountBrl,
@@ -15,6 +20,8 @@ export function QuoteScreen({
   loading,
   buildLoading,
   onContinue,
+  depositCurrency,
+  onCurrencyChange,
 }: {
   amountBrl: string;
   setAmountBrl: (v: string) => void;
@@ -22,6 +29,8 @@ export function QuoteScreen({
   loading: boolean;
   buildLoading: boolean;
   onContinue: () => void;
+  depositCurrency: DepositCurrency;
+  onCurrencyChange: (c: DepositCurrency) => void;
 }) {
   const expiresIn = useExpiresIn(quote?.expiresAt);
 
@@ -42,6 +51,36 @@ export function QuoteScreen({
       </p>
 
       <div className="mt-12">
+        <div className="mb-8">
+          <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+            Moeda de depósito
+          </span>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {CURRENCIES.map((c) => {
+              const enabled = c === 'BRL' || INTL_FLOW_ENABLED;
+              const active = depositCurrency === c;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => enabled && onCurrencyChange(c)}
+                  disabled={!enabled}
+                  title={enabled ? undefined : 'Trilha internacional — em breve'}
+                  className={`font-mono text-xs px-4 py-2 rounded-full border transition-colors ${
+                    active
+                      ? 'bg-base text-white border-base'
+                      : enabled
+                        ? 'bg-white text-base border-base/20 hover:border-base'
+                        : 'bg-white text-base/30 border-base/10 cursor-not-allowed'
+                  }`}
+                >
+                  {c}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <label className="block">
           <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
             Valor BRL
@@ -115,6 +154,22 @@ export function QuoteScreen({
             <p className="font-mono text-[10px] text-base/55 mt-3">
               em produção, swap real <Term>TESOURO</Term> → PLINA-RF via distributor Plina
             </p>
+
+            {/* Bloco SEP-38 (cartão "Depósito & FX" do mockup). Para BR usa os
+                números reais do quote; pernas FX/multimoeda são ilustrativas
+                até a trilha internacional (M4). */}
+            <div className="mt-8">
+              <pre className="overflow-x-auto border border-light-hairline bg-document-grey/40 p-4 font-mono text-xs text-base/80 leading-relaxed whitespace-pre-wrap">
+{`${depositCurrency} ${NUMBER_BR.format(Number(quote.fromAmount))}
+→ FX SEP-38 quote: câmbio ${NUMBER_BR.format(Number(quote.exchangeRate))}
+→ TESOURO (bridge regulado da anchor)
+→ PLINA-RF a receber: ${NUMBER_BR.format(Number(quote.toAmount))} tokens`}
+              </pre>
+              <span className="mt-3 inline-flex items-center gap-1.5 border border-primary/30 bg-primary/5 px-3 py-1 font-mono text-[11px] text-base/70">
+                <span className="h-1 w-1 rounded-full bg-primary" />
+                SEP-38 · cotação de FX antes da construção da transação
+              </span>
+            </div>
 
             <div className="mt-12">
               <button

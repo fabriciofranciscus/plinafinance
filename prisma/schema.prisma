@@ -150,6 +150,8 @@ enum AcaoAudit {
   // M3 — gating institucional (suitability CVM 30 + ticket mínimo)
   SUITABILITY_PREENCHIDA
   TICKET_MINIMO_REJEITADO
+  // M3 — onboarding institucional (entidade: razão social / CNPJ / jurisdição)
+  ENTIDADE_PREENCHIDA
 }
 
 // Funil vendedor

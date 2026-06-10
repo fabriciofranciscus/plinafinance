@@ -10,7 +10,7 @@
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { onboardInvestidor } from '@/lib/services/investidor';
+import { onboardInvestidor, investidorTrustlinesReady } from '@/lib/services/investidor';
 import { getPrivyClient, extractPrivyEmail, type PrivyLinkedAccount } from '@/lib/wallet/privy';
 import { sensitiveAuthLimiter, clientIp } from '@/lib/rate-limit/config';
 import { isIntlInvestorFlowEnabled } from '@/lib/env/feature-gates';
@@ -84,7 +84,10 @@ export async function POST(req: Request) {
       cpf: body.cpf,
     });
 
-    return NextResponse.json(result);
+    // Detecta trustlines on-chain pra não re-pedir assinatura a cada reload.
+    const trustlinesReady = await investidorTrustlinesReady(result.publicKey);
+
+    return NextResponse.json({ ...result, trustlinesReady });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown';
     const isClientError = message.startsWith('cpf obrigatório');

@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import type { FlowError, OnboardData } from '../_types';
 import { asFlowError } from '../_lib/errors';
+import { postJson } from '@/lib/http/client';
 
 export interface UseOnboardArgs {
   getAccessToken: () => Promise<string | null>;
@@ -18,18 +19,12 @@ export function useOnboard({ getAccessToken, onError, clearError }: UseOnboardAr
     clearError();
     setOnboarding(true);
     try {
-      const token = await getAccessToken();
-      if (!token) throw new Error('Sessão Privy expirada.');
-      const res = await fetch('/api/investidor/onboard', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({}),
-      });
-      if (!res.ok) throw new Error(`onboarding: ${await res.text()}`);
-      setOnboard((await res.json()) as OnboardData);
+      const data = await postJson<OnboardData>(
+        '/api/investidor/onboard',
+        {},
+        getAccessToken,
+      );
+      setOnboard(data);
     } catch (err) {
       onError(asFlowError(err));
     } finally {

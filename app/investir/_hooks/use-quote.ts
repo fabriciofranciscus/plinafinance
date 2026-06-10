@@ -10,6 +10,7 @@ import type {
   Screen,
 } from '../_types';
 import { asFlowError } from '../_lib/errors';
+import { postJson } from '@/lib/http/client';
 
 export interface UseQuoteArgs {
   onboard: OnboardData | null;
@@ -38,7 +39,7 @@ export function useQuote({
   // "revisar compra". Sem ref, setQuote pode sobrescrever quote.quoteId
   // enquanto /onramp/create persiste no DB com o quoteId anterior,
   // quebrando o lookup em /swap/build.
-  const quoteGateRef = useRef({ screen: 'welcome' as Screen, onRampLoading: false });
+  const quoteGateRef = useRef({ screen: 'identity' as Screen, onRampLoading: false });
 
   useEffect(() => {
     quoteGateRef.current = { screen, onRampLoading };
@@ -51,22 +52,16 @@ export function useQuote({
     setQuoteLoading(true);
     clearError();
     try {
-      const token = await getAccessToken();
-      const res = await fetch('/api/investidor/quote', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
+      const data = await postJson<QuoteData>(
+        '/api/investidor/quote',
+        {
           amountBrl: v.toFixed(2),
           customerId: onboard.etherfuseCustomerId,
           stellarAddress: onboard.publicKey,
           classe,
-        }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data = (await res.json()) as QuoteData;
+        },
+        getAccessToken,
+      );
       // Descarta resposta stale: user já saiu da tela de quote ou
       // disparou /onramp/create. Aplicar setQuote aqui sobrescreveria
       // quoteId já comprometido e quebra /swap/build com 409.

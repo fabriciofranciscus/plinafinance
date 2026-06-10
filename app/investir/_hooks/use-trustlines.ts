@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAppSignRawHash as useSignRawHash } from '@/lib/hooks/privy';
 import type { FlowError, OnboardData } from '../_types';
 import { asFlowError } from '../_lib/errors';
+import { postJson } from '@/lib/http/client';
 
 export interface UseTrustlinesArgs {
   onboard: OnboardData | null;
@@ -23,6 +24,12 @@ export function useTrustlines({
   const [trustlinesReady, setTrustlinesReady] = useState(false);
   const [trustlineLoading, setTrustlineLoading] = useState(false);
 
+  // Trustline é estado on-chain — persiste entre reloads. O onboard reporta se
+  // já existem (investidorTrustlinesReady), evitando re-pedir assinatura.
+  useEffect(() => {
+    if (onboard?.trustlinesReady) setTrustlinesReady(true);
+  }, [onboard?.trustlinesReady]);
+
   // Trustline setup (PLINARF Sênior + PLINARFB Subordinada + TESOURO).
   // F-M3-3: investidor estabelece as duas classes no identity — a escolha de
   // classe (Sênior vs Subordinada) acontece depois, no quote, sem precisar
@@ -33,29 +40,16 @@ export function useTrustlines({
     setTrustlineLoading(true);
     clearError();
     try {
-      const token = await getAccessToken();
-      const authHeaders: Record<string, string> = token
-        ? { Authorization: `Bearer ${token}` }
-        : {};
-
       // Helper: build+sign+submit pra um asset code específico de PLINA-RF.
       const setupClasseTrustline = async (assetCode?: string) => {
-        const buildRes = await fetch(
+        const buildData = await postJson<Partial<{ xdr: string; hashHex: string }>>(
           '/api/investidor/buy/trust-plinarf/build',
           {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...authHeaders },
-            body: JSON.stringify({
-              pubkey: onboard.publicKey,
-              ...(assetCode ? { assetCode } : {}),
-            }),
+            pubkey: onboard.publicKey,
+            ...(assetCode ? { assetCode } : {}),
           },
+          getAccessToken,
         );
-        if (!buildRes.ok) throw new Error(await buildRes.text());
-        const buildData = (await buildRes.json()) as Partial<{
-          xdr: string;
-          hashHex: string;
-        }>;
         const missing = (['xdr', 'hashHex'] as const).filter((k) => !buildData[k]);
         if (missing.length > 0) {
           throw new Error(
@@ -67,20 +61,16 @@ export function useTrustlines({
           chainType: 'stellar',
           hash: buildData.hashHex as `0x${string}`,
         });
-        const submitRes = await fetch(
+        await postJson(
           '/api/investidor/buy/trust-plinarf/submit',
           {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...authHeaders },
-            body: JSON.stringify({
-              xdr: buildData.xdr,
-              investorPubkey: onboard.publicKey,
-              signatureHex: sig.signature,
-              ...(assetCode ? { assetCode } : {}),
-            }),
+            xdr: buildData.xdr,
+            investorPubkey: onboard.publicKey,
+            signatureHex: sig.signature,
+            ...(assetCode ? { assetCode } : {}),
           },
+          getAccessToken,
         );
-        if (!submitRes.ok) throw new Error(await submitRes.text());
       };
 
       // PLINARF (Sênior, legacy).
@@ -89,37 +79,25 @@ export function useTrustlines({
       await setupClasseTrustline('PLINARFB');
 
       // TESOURO trustline (bridge da Etherfuse).
-      const tesouroBuild = await fetch(
+      const tesouroBuildData = await postJson<{ xdr: string; hashHex: string }>(
         '/api/investidor/buy/trust-tesouro/build',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
-          body: JSON.stringify({ pubkey: onboard.publicKey }),
-        },
+        { pubkey: onboard.publicKey },
+        getAccessToken,
       );
-      if (!tesouroBuild.ok) throw new Error(await tesouroBuild.text());
-      const tesouroBuildData = (await tesouroBuild.json()) as {
-        xdr: string;
-        hashHex: string;
-      };
       const tesouroSig = await signRawHash({
         address: onboard.publicKey,
         chainType: 'stellar',
         hash: tesouroBuildData.hashHex as `0x${string}`,
       });
-      const tesouroSubmit = await fetch(
+      await postJson(
         '/api/investidor/buy/trust-tesouro/submit',
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
-          body: JSON.stringify({
-            xdr: tesouroBuildData.xdr,
-            investorPubkey: onboard.publicKey,
-            signatureHex: tesouroSig.signature,
-          }),
+          xdr: tesouroBuildData.xdr,
+          investorPubkey: onboard.publicKey,
+          signatureHex: tesouroSig.signature,
         },
+        getAccessToken,
       );
-      if (!tesouroSubmit.ok) throw new Error(await tesouroSubmit.text());
 
       setTrustlinesReady(true);
     } catch (err) {

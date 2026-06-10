@@ -76,22 +76,73 @@ export const POST = withAuth(async (req, { user }) => {
         process.env.ETHERFUSE_BASE_URL ?? 'https://api.sand.etherfuse.com',
     });
 
+    const custId = investidor.etherfuseCustomerId;
+    const persistBank = async (
+      id: string,
+      status: string,
+      reused: boolean,
+    ) => {
+      await db.$transaction(async (tx) => {
+        await tx.investidor.update({
+          where: { id: investidor.id },
+          data: { etherfuseBankAccountId: id },
+        });
+        await tx.eventoAudit.create({
+          data: {
+            acao: 'BANK_ACCOUNT_REGISTRADA',
+            operador: 'investidor-self-service',
+            investidorId: investidor.id,
+            privyId: user.privyId,
+            payloadJson: { accountId: id, status, reused } as Prisma.InputJsonValue,
+          },
+        });
+      });
+    };
+
+    // Reuso: se o customer já tem fiat account na Etherfuse (re-teste, ou
+    // registrada noutro fluxo), reaproveita em vez de criar — evita o limite
+    // "Only one BRL bank account is allowed per organization" do sandbox.
+    // Usado no pré-check e de novo no catch do register (corrida org-level).
+    const tryReusePix = async () => {
+      const accounts = await anchor.getFiatAccounts(custId).catch(() => []);
+      const pix = accounts.find((a) => a.type === 'PIX') ?? accounts[0];
+      if (!pix) return null;
+      await persistBank(pix.id, 'active', true);
+      return NextResponse.json({
+        bankAccountId: pix.id,
+        status: 'active',
+        idempotent: true,
+      });
+    };
+
+    const reused = await tryReusePix();
+    if (reused) return reused;
+
     // Gera novo stub bankAccountId pro presignedUrl. Etherfuse aceita
     // qualquer UUID; o register depois amarra esse UUID ao customer.
     const bankAccountStubId = crypto.randomUUID();
     const presignedUrl = await anchor.getKycUrl(
-      investidor.etherfuseCustomerId,
+      custId,
       investidor.publicKey,
       bankAccountStubId,
     );
 
-    const bankResp = await anchor.registerPixBankAccount(presignedUrl, {
-      pixKey,
-      pixKeyType,
-      cpf,
-      firstName,
-      lastName,
-    });
+    let bankResp;
+    try {
+      bankResp = await anchor.registerPixBankAccount(presignedUrl, {
+        pixKey,
+        pixKeyType,
+        cpf,
+        firstName,
+        lastName,
+      });
+    } catch (regErr) {
+      // Limite org-level do sandbox: pode haver uma conta criada após o check
+      // acima (corrida) ou sob este customer. Tenta reaproveitar antes de falhar.
+      const reusedAfterRace = await tryReusePix();
+      if (reusedAfterRace) return reusedAfterRace;
+      throw regErr;
+    }
 
     const accountId = (bankResp as unknown as { accountId?: string; bankAccountId?: string })
       .accountId ?? bankResp.bankAccountId;
@@ -102,25 +153,7 @@ export const POST = withAuth(async (req, { user }) => {
       );
     }
 
-    await db.$transaction(async (tx) => {
-      await tx.investidor.update({
-        where: { id: investidor.id },
-        data: { etherfuseBankAccountId: accountId },
-      });
-      await tx.eventoAudit.create({
-        data: {
-          acao: 'BANK_ACCOUNT_REGISTRADA',
-          operador: 'investidor-self-service',
-          investidorId: investidor.id,
-          privyId: user.privyId,
-          payloadJson: {
-            accountId,
-            status: bankResp.status,
-            compliant: bankResp.compliant ?? null,
-          } as Prisma.InputJsonValue,
-        },
-      });
-    });
+    await persistBank(accountId, bankResp.status, false);
 
     return NextResponse.json({
       bankAccountId: accountId,

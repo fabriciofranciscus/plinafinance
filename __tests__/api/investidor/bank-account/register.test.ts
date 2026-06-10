@@ -5,6 +5,7 @@ const { mockEtherfuseInstance, mockInvestidorFindUnique, mockInvestidorUpdate, m
     mockEtherfuseInstance: {
       getKycUrl: vi.fn(),
       registerPixBankAccount: vi.fn(),
+      getFiatAccounts: vi.fn(),
     },
     mockInvestidorFindUnique: vi.fn(),
     mockInvestidorUpdate: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock('@/lib/anchors/etherfuse', () => ({
   EtherfuseClient: class {
     getKycUrl = mockEtherfuseInstance.getKycUrl;
     registerPixBankAccount = mockEtherfuseInstance.registerPixBankAccount;
+    getFiatAccounts = mockEtherfuseInstance.getFiatAccounts;
   },
 }));
 
@@ -80,6 +82,7 @@ beforeEach(() => {
       eventoAudit: { create: mockEventoAuditCreate },
     }),
   );
+  mockEtherfuseInstance.getFiatAccounts.mockReset().mockResolvedValue([]);
   mockEtherfuseInstance.getKycUrl
     .mockReset()
     .mockResolvedValue('https://devnet.etherfuse.com/ramp/onboarding?...sig=...');
@@ -139,6 +142,29 @@ describe('POST /api/investidor/bank-account/register (PLINA-MOD-006)', () => {
     expect(json.bankAccountId).toBe('existing-bank');
     expect(json.idempotent).toBe(true);
     expect(mockEtherfuseInstance.registerPixBankAccount).not.toHaveBeenCalled();
+  });
+
+  it('200 reuso: conta PIX já existe na Etherfuse — reaproveita sem registrar', async () => {
+    mockInvestidorFindUnique.mockResolvedValueOnce({
+      id: 'inv_1',
+      publicKey: 'GABC',
+      etherfuseCustomerId: 'cust_1',
+      etherfuseBankAccountId: null,
+    });
+    mockEtherfuseInstance.getFiatAccounts.mockResolvedValueOnce([
+      { id: 'bank-existente', type: 'PIX', accountNumber: '529***', bankName: 'x', accountHolderName: 'y', createdAt: '' },
+    ]);
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(200);
+    const json = await r.json();
+    expect(json.bankAccountId).toBe('bank-existente');
+    expect(json.idempotent).toBe(true);
+    expect(mockEtherfuseInstance.registerPixBankAccount).not.toHaveBeenCalled();
+    expect(mockInvestidorUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ etherfuseBankAccountId: 'bank-existente' }),
+      }),
+    );
   });
 
   it('200 happy path: registra na Etherfuse, persiste no DB, audita', async () => {

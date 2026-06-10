@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { FlowError } from '../../_types';
+import { IncidentReportModal } from './incident-report-modal';
 
 export function ErrorBlock({
   error,
@@ -11,6 +12,7 @@ export function ErrorBlock({
   onDismiss: () => void;
 }) {
   const [showTech, setShowTech] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   return (
     <div role="alert" className="mt-10 bg-white border border-base/20">
       <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-light-hairline">
@@ -34,12 +36,12 @@ export function ErrorBlock({
         >
           {showTech ? '— Detalhes técnicos' : '+ Detalhes técnicos'}
         </button>
-        <a
-          href={`mailto:contato@plina.finance?subject=Incidente%20${encodeURIComponent(error.ticketId)}&body=${encodeURIComponent(`Ticket: ${error.ticketId}\n\nMensagem técnica:\n${error.technical}`)}`}
+        <button
+          onClick={() => setReportOpen(true)}
           className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep hover:text-base"
         >
           Reportar incidente →
-        </a>
+        </button>
         <button
           onClick={onDismiss}
           className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 hover:text-base ml-auto"
@@ -51,6 +53,12 @@ export function ErrorBlock({
         <pre className="bg-lightBg/60 border-t border-light-hairline px-5 py-4 font-mono text-[10px] text-base/70 whitespace-pre-wrap break-all">
           {error.technical}
         </pre>
+      )}
+      {reportOpen && (
+        <IncidentReportModal
+          error={error}
+          onClose={() => setReportOpen(false)}
+        />
       )}
     </div>
   );

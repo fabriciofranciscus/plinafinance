@@ -18,6 +18,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import WizardHeader from '@/components/vender/WizardHeader';
 import StepperVender from '@/components/vender/StepperVender';
 import { usePessoa } from '@/components/PessoaProvider';
+import { useRequireAuth } from '@/lib/hooks/use-require-auth';
 import {
   useAppPrivy,
   useAppLoginWithEmail,
@@ -54,6 +55,9 @@ function WizardInner() {
   const params = useSearchParams();
   const pessoa = usePessoa();
   const { getAccessToken } = useAppPrivy();
+  // Não-logado → /entrar?next=/vender. O LoginPanel embutido abaixo permanece
+  // como fallback defensivo na janela curta antes do redirect.
+  useRequireAuth();
 
   const [passo, setPasso] = useState<0 | 1>(0);
 

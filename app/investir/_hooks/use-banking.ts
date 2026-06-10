@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import type { BankRegistered, FlowError, OnboardData, PixKeyType } from '../_types';
 import { asFlowError } from '../_lib/errors';
+import { postJson } from '@/lib/http/client';
 
 export interface UseBankingArgs {
   onboard: OnboardData | null;
@@ -38,24 +39,11 @@ export function useBanking({
     setLoading(true);
     clearError();
     try {
-      const token = await getAccessToken();
-      if (!token) throw new Error('Sessão Privy expirada.');
-      const res = await fetch('/api/investidor/bank-account/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          pixKey,
-          pixKeyType,
-          cpf,
-          firstName,
-          lastName,
-        }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data = (await res.json()) as BankRegistered;
+      const data = await postJson<BankRegistered>(
+        '/api/investidor/bank-account/register',
+        { pixKey, pixKeyType, cpf, firstName, lastName },
+        getAccessToken,
+      );
       setBankInfo(data);
       onRegistered();
     } catch (err) {

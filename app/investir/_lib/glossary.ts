@@ -1,7 +1,6 @@
 import type { Screen } from '../_types';
 
 export const SCREENS: { id: Screen; label: string }[] = [
-  { id: 'welcome', label: 'Acesso' },
   { id: 'identity', label: 'Identidade' },
   { id: 'banking', label: 'Conta PIX' },
   { id: 'classe', label: 'Classe' },
@@ -12,6 +11,34 @@ export const SCREENS: { id: Screen; label: string }[] = [
   { id: 'confirm', label: 'Revisão' },
   { id: 'receipt', label: 'Confirmação' },
 ];
+
+/**
+ * Fases do fluxo "Para Investidores" (estrutura do CEO) sobre as telas reais.
+ * As 10 telas do MVP são agrupadas em 4 fases — sem re-sequenciar a máquina de
+ * estado. `classe` e `quote` ficam na MESMA fase porque o fluxo real faz classe
+ * antes do quote (ordem que o mockup do CEO inverte); agrupar evita que o rail
+ * "ande pra trás". Card "Controles on-chain" do mockup é conteúdo informativo
+ * dentro da fase de liquidação, não uma fase própria.
+ */
+export interface InvestPhase {
+  id: string;
+  label: string;
+  screens: Screen[];
+}
+
+export const PHASES: InvestPhase[] = [
+  { id: 'onboarding', label: 'Onboarding institucional', screens: ['identity', 'banking'] },
+  { id: 'alocacao', label: 'Classe & depósito', screens: ['classe', 'quote'] },
+  { id: 'liquidacao', label: 'Liquidação on-chain', screens: ['onramp', 'settling', 'claiming'] },
+  { id: 'confirmacao', label: 'Confirmação & custódia', screens: ['confirm', 'receipt'] },
+];
+
+/** Fase (e seu índice 0-based) que contém a tela atual. */
+export function phaseForScreen(screen: Screen): { phase: InvestPhase; index: number } {
+  const index = PHASES.findIndex((p) => p.screens.includes(screen));
+  const safe = index === -1 ? 0 : index;
+  return { phase: PHASES[safe], index: safe };
+}
 
 export const QUOTE_PRESETS = ['100', '250', '430'];
 export const QUOTE_TTL_MS = 60_000;

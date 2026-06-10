@@ -21,7 +21,7 @@ import { db } from '@/lib/db';
 import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
 import { withAuth } from '@/lib/wallet/auth-guard';
-import { logStellarError } from '@/lib/stellar/log-error';
+import { extractSafeError, logStellarError } from '@/lib/stellar/log-error';
 import { parseBody } from '@/lib/http/parse-body';
 import {
   stellarPubkey,
@@ -104,10 +104,14 @@ export const POST = withAuth(async (req, { user }) => {
       }
       return NextResponse.json({ error: 'quote já consumido' }, { status: 409 });
     }
-    if (quote.expiresAt.getTime() <= Date.now()) {
+    // Validade da cotação FX só vale ANTES do pagamento. Pós-settlement
+    // (onramp completed) a swap é 1:1 NAV; não bloqueia por expiração — o
+    // settlement/claim/assinatura levam mais que o TTL de 60s do quote.
+    const onRampOrder = quote.onRampOrder;
+    const onrampCompleted = onRampOrder?.status === 'completed';
+    if (!onrampCompleted && quote.expiresAt.getTime() <= Date.now()) {
       return NextResponse.json({ error: 'quote expirado' }, { status: 410 });
     }
-    const onRampOrder = quote.onRampOrder;
     if (!onRampOrder || onRampOrder.status !== 'completed') {
       return NextResponse.json(
         { error: 'onramp não está em status completed' },
@@ -242,8 +246,16 @@ export const POST = withAuth(async (req, { user }) => {
     return NextResponse.json({ swapTxHash: submitRes.hash });
   } catch (err) {
     logStellarError('[swap/submit]', err);
+    // Surfacing dos result_codes do Horizon (tx_/op_*) no corpo — sem eles, o
+    // err.message do SDK é genérico ("Request failed with status code 400") e
+    // o motivo real (op_underfunded, op_no_trust, tx_bad_auth…) fica só no log.
+    const safe = extractSafeError(err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'unknown' },
+      {
+        error: safe.message ?? 'unknown',
+        title: safe.title,
+        resultCodes: safe.result_codes,
+      },
       { status: 500 },
     );
   }

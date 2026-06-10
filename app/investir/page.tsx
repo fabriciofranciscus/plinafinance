@@ -3,24 +3,20 @@
 /**
  * /investir — fluxo do investidor institucional.
  *
- * Telas guiadas: welcome → identity → banking → quote → onramp →
+ * Telas guiadas: identity → banking → classe → quote → onramp →
  * settling → claiming → confirm → receipt. Whitepaper §6.6. ARCHITECTURE §3.5/§3.6.
  *
  * Shell de orquestração: estado de fluxo + composição de hooks vive em
  * `_hooks/use-investir-flow.ts`. Cada Screen em `_components/screens/`.
  */
 
-import {
-  useAppLoginWithEmail as useLoginWithEmail,
-  useAppLoginWithOAuth as useLoginWithOAuth,
-  useAppLogout as useLogout,
-} from '@/lib/hooks/privy';
-import { SCREENS } from './_lib/glossary';
+import { useAppLogout as useLogout } from '@/lib/hooks/privy';
+import { useRequireAuth } from '@/lib/hooks/use-require-auth';
+import { PHASES, phaseForScreen } from './_lib/glossary';
 import { useInvestirFlow } from './_hooks/use-investir-flow';
 import { Rail } from './_components/shell/rail';
 import { ScreenFader } from './_components/shell/screen-fader';
 import { ErrorBlock } from './_components/shell/error-block';
-import { WelcomeScreen } from './_components/screens/welcome';
 import { IdentityScreen } from './_components/screens/identity';
 import { BankingScreen } from './_components/screens/banking';
 import { ClasseScreen } from './_components/screens/classe';
@@ -34,15 +30,16 @@ import { ReceiptScreen } from './_components/screens/receipt';
 export default function InvestirPage() {
   const flow = useInvestirFlow();
   const { logout } = useLogout();
-  const emailLogin = useLoginWithEmail();
-  const oauthLogin = useLoginWithOAuth();
-  const { ready, authenticated, user } = flow.privy;
+  const { checking, authenticated } = useRequireAuth();
+  const { user } = flow.privy;
 
-  if (!ready) {
+  // useRequireAuth redireciona não-logado pra /entrar; enquanto assenta ou
+  // redireciona, mostra espera silenciosa (nunca o wizard sem sessão).
+  if (checking || !authenticated) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/55 animate-pulse">
-          Carregando Privy…
+          Verificando acesso…
         </p>
       </div>
     );
@@ -55,8 +52,8 @@ export default function InvestirPage() {
   const swapBuild = flow.swap.swapBuild;
   const buyResult = flow.swap.buyResult;
 
-  const currentIdx = SCREENS.findIndex((s) => s.id === screen);
-  const canGoBack = authenticated && screen !== 'welcome' && screen !== 'receipt';
+  const { phase, index: phaseIdx } = phaseForScreen(screen);
+  const canGoBack = screen !== 'identity' && screen !== 'receipt';
 
   return (
     <div className="bg-lightBg min-h-screen">
@@ -73,11 +70,11 @@ export default function InvestirPage() {
         <div className="md:hidden bg-lightBg border-b border-light-hairline px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="font-mono text-xs text-primary-deep">
-              {String(currentIdx + 1).padStart(2, '0')} /{' '}
-              {String(SCREENS.length).padStart(2, '0')}
+              {String(phaseIdx + 1).padStart(2, '0')} /{' '}
+              {String(PHASES.length).padStart(2, '0')}
             </span>
             <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base">
-              {SCREENS[currentIdx]?.label}
+              {phase?.label}
             </span>
           </div>
           {authenticated && (
@@ -102,9 +99,6 @@ export default function InvestirPage() {
             )}
 
             <ScreenFader key={screen}>
-              {screen === 'welcome' && (
-                <WelcomeScreen emailLogin={emailLogin} oauthLogin={oauthLogin} />
-              )}
               {screen === 'identity' && (
                 <IdentityScreen
                   onboard={onboard}
@@ -117,6 +111,10 @@ export default function InvestirPage() {
                   onSetupTrustlines={flow.trustlines.setupTrustlines}
                   onContinue={flow.onIdentityContinue}
                   onRetry={flow.onboard.runOnboard}
+                  track={flow.track}
+                  onTrackChange={flow.setTrack}
+                  institutionalProfile={flow.institutionalProfile}
+                  onInstitutionalChange={flow.setInstitutionalProfile}
                 />
               )}
               {screen === 'banking' && onboard && (
@@ -151,6 +149,8 @@ export default function InvestirPage() {
                   loading={flow.quote.quoteLoading}
                   buildLoading={flow.onRamp.onRampLoading}
                   onContinue={flow.onRamp.goToOnramp}
+                  depositCurrency={flow.depositCurrency}
+                  onCurrencyChange={flow.setDepositCurrency}
                 />
               )}
               {screen === 'onramp' && onboard && quote && onRamp && (
@@ -193,6 +193,10 @@ export default function InvestirPage() {
                     setSignConfirmed={flow.swap.setSignConfirmed}
                     buying={flow.swap.buying}
                     onConfirm={flow.swap.buy}
+                    custodyProvider={flow.custodyProvider}
+                    onCustodyChange={flow.setCustodyProvider}
+                    institutionalProfile={flow.institutionalProfile}
+                    depositCurrency={flow.depositCurrency}
                   />
                 )}
               {screen === 'receipt' && onboard && quote && buyResult && (

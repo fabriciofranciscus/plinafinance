@@ -35,6 +35,17 @@ export function isIntlInvestorFlowEnabled(): Promise<boolean> {
 }
 
 /**
+ * CUSTODY_PROVIDERS (M4): habilita custódia institucional (Fireblocks/BitGo/
+ * Copper) no fluxo do investidor. Inerte (off) por default — só SELF (wallet
+ * Privy embedded) é funcional até existir o adapter de assinatura por custódia.
+ * Consumo no client via `NEXT_PUBLIC_CUSTODY_PROVIDERS`; este consumer server
+ * fica pronto pra enforcement futuro.
+ */
+export function isCustodyProvidersEnabled(): Promise<boolean> {
+  return getFlag('CUSTODY_PROVIDERS');
+}
+
+/**
  * M3_INSTITUTIONAL_GATING (M3 F-M3-5/6): exige Suitability CVM 30 completada e
  * ticket ≥ mínimo regulatório em `/api/investidor/quote`. Inerte (off) por
  * default — testnet/POC permanece com fluxo single-asset sem gating até o

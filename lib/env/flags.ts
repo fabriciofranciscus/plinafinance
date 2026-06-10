@@ -12,7 +12,8 @@ type FlagName =
   | 'MAINNET_ENABLED'           // M9 — toggle de cutover canary
   | 'INTL_INVESTOR_FLOW'        // M4 — trilha internacional
   | 'SOROBAN_WATERFALL'         // M7 — waterfall on-chain
-  | 'M3_INSTITUTIONAL_GATING';  // M3 — exige suitability + ticket mínimo em /quote
+  | 'M3_INSTITUTIONAL_GATING'   // M3 — exige suitability + ticket mínimo em /quote
+  | 'CUSTODY_PROVIDERS';        // M4 — custódia institucional (Fireblocks/BitGo/Copper)
 
 function readFromEnv(name: FlagName): boolean {
   return process.env[name] === 'true';
