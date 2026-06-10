@@ -17,14 +17,11 @@ export function Rail({
   buyResult: boolean;
 }) {
   const done: Record<Screen, boolean> = {
-    welcome: current !== 'welcome',
     identity: onboard && current !== 'identity',
     banking:
-      current !== 'welcome' &&
       current !== 'identity' &&
       current !== 'banking',
     classe:
-      current !== 'welcome' &&
       current !== 'identity' &&
       current !== 'banking' &&
       current !== 'classe',

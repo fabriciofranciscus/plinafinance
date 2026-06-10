@@ -1,5 +1,4 @@
 export type Screen =
-  | 'welcome'
   | 'identity'
   | 'banking'
   | 'classe'
@@ -38,6 +37,8 @@ export interface InstitutionalProfile {
   entityName: string;
   /** ISO 3166-1 alpha-2 ("BR", "US", "GB", "SG"). */
   jurisdiction: string;
+  /** CNPJ (14 dígitos, com ou sem máscara). Só na trilha BR. */
+  cnpj?: string;
   entityType: EntityType;
   /** String decimal (USD ou BRL conforme a trilha). */
   estimatedTicket: string;

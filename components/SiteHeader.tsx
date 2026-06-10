@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Menu } from 'lucide-react';
 import ConsoleStrip from './ConsoleStrip';
+import { usePessoa } from './PessoaProvider';
+import { useAppLogout } from '@/lib/hooks/privy';
 
 const navLinks = [
   { label: 'Para Cotistas', href: '/vender', route: true },
@@ -16,6 +18,8 @@ const navLinks = [
 export default function SiteHeader() {
   const [pastHero, setPastHero] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const pessoa = usePessoa();
+  const { logout } = useAppLogout();
 
   useEffect(() => {
     let ticking = false;
@@ -81,14 +85,35 @@ export default function SiteHeader() {
             )}
           </div>
 
-          <div
-            className={`hidden md:block transition-[opacity,transform] duration-300 ease-out ${
-              pastHero ? 'opacity-100 translate-y-0' : 'opacity-0 pointer-events-none -translate-y-1'
-            }`}
-          >
+          <div className="hidden md:flex items-center gap-5">
+            {pessoa.authenticated ? (
+              <>
+                <Link
+                  href="/painel"
+                  className="font-details text-[10px] uppercase tracking-widest text-white/85 hover:text-white transition-colors whitespace-nowrap"
+                >
+                  Painel
+                </Link>
+                <button
+                  onClick={() => logout()}
+                  className="font-details text-[10px] uppercase tracking-widest text-white/55 hover:text-white transition-colors whitespace-nowrap"
+                >
+                  Sair
+                </button>
+              </>
+            ) : (
+              <Link
+                href="/entrar"
+                className="font-details text-[10px] uppercase tracking-widest text-white/85 hover:text-white transition-colors whitespace-nowrap"
+              >
+                Entrar
+              </Link>
+            )}
             <a
               href="#lead-capture"
-              className="font-details text-[10px] uppercase tracking-widest bg-white text-base font-bold px-5 py-2.5 rounded-full hover:bg-lightBg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary transition-colors shadow-xl"
+              className={`font-details text-[10px] uppercase tracking-widest bg-white text-base font-bold px-5 py-2.5 rounded-full hover:bg-lightBg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary transition-colors shadow-xl ${
+                pastHero ? 'opacity-100 translate-y-0' : 'opacity-0 pointer-events-none -translate-y-1'
+              } transition-[opacity,transform] duration-300 ease-out`}
             >
               Solicitar Prospecto
             </a>
@@ -124,6 +149,26 @@ export default function SiteHeader() {
                   {l.label}
                 </a>
               )
+            )}
+            {pessoa.authenticated ? (
+              <>
+                <Link href="/painel" onClick={() => setMenuOpen(false)}>
+                  Painel
+                </Link>
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    void logout();
+                  }}
+                  className="text-left text-white/60"
+                >
+                  Sair
+                </button>
+              </>
+            ) : (
+              <Link href="/entrar" onClick={() => setMenuOpen(false)}>
+                Entrar
+              </Link>
             )}
             <a
               href="#lead-capture"

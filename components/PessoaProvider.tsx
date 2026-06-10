@@ -80,9 +80,20 @@ export function PessoaProvider({ children }: { children: ReactNode }) {
         // disparo.
         return;
       }
-      const res = await fetch('/api/conta/me', {
-        headers: { authorization: `Bearer ${token}` },
-      });
+      // Timeout defensivo: sem isso, um /me lento/travado deixaria `loading`
+      // preso em true pra sempre, e as páginas que esperam o estado assentar
+      // (/entrar, /painel) ficariam presas em "Verificando acesso".
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      let res: Response;
+      try {
+        res = await fetch('/api/conta/me', {
+          headers: { authorization: `Bearer ${token}` },
+          signal: ctrl.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
       if (!res.ok) {
         // 401/5xx com token presente e Privy autenticado → tratamos como
         // transitório: preserva o estado anterior em vez de zerar o KYC.

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FlowError, OnRampData, QuoteData, Screen } from '../_types';
 import { asFlowError } from '../_lib/errors';
+import { postJson } from '@/lib/http/client';
 
 export interface UseOnRampArgs {
   quote: QuoteData | null;
@@ -36,17 +37,11 @@ export function useOnRamp({
     setOnRampLoading(true);
     clearError();
     try {
-      const token = await getAccessToken();
-      const res = await fetch('/api/investidor/buy/onramp/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ quoteId: quote.quoteId }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data = (await res.json()) as OnRampData;
+      const data = await postJson<OnRampData>(
+        '/api/investidor/buy/onramp/create',
+        { quoteId: quote.quoteId },
+        getAccessToken,
+      );
       setOnRamp(data);
       onCreated();
     } catch (err) {
@@ -63,22 +58,16 @@ export function useOnRamp({
     setPaying(true);
     clearError();
     try {
-      const token = await getAccessToken();
-      const res = await fetch('/api/investidor/buy/onramp/sandbox-pay', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ orderId: onRamp.orderId }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data = (await res.json()) as {
+      const data = await postJson<{
         status: string;
         stellarTxHash: string | null;
         stellarClaimableBalanceId?: string | null;
         mock: boolean;
-      };
+      }>(
+        '/api/investidor/buy/onramp/sandbox-pay',
+        { orderId: onRamp.orderId },
+        getAccessToken,
+      );
       setOnRamp({ ...onRamp, ...data });
       onSandboxPaid();
     } catch (err) {

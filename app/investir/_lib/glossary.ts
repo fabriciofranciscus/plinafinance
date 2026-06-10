@@ -1,7 +1,6 @@
 import type { Screen } from '../_types';
 
 export const SCREENS: { id: Screen; label: string }[] = [
-  { id: 'welcome', label: 'Acesso' },
   { id: 'identity', label: 'Identidade' },
   { id: 'banking', label: 'Conta PIX' },
   { id: 'classe', label: 'Classe' },
@@ -28,7 +27,7 @@ export interface InvestPhase {
 }
 
 export const PHASES: InvestPhase[] = [
-  { id: 'onboarding', label: 'Onboarding institucional', screens: ['welcome', 'identity', 'banking'] },
+  { id: 'onboarding', label: 'Onboarding institucional', screens: ['identity', 'banking'] },
   { id: 'alocacao', label: 'Classe & depósito', screens: ['classe', 'quote'] },
   { id: 'liquidacao', label: 'Liquidação on-chain', screens: ['onramp', 'settling', 'claiming'] },
   { id: 'confirmacao', label: 'Confirmação & custódia', screens: ['confirm', 'receipt'] },

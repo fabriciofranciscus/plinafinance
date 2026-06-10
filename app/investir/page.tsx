@@ -3,24 +3,20 @@
 /**
  * /investir — fluxo do investidor institucional.
  *
- * Telas guiadas: welcome → identity → banking → quote → onramp →
+ * Telas guiadas: identity → banking → classe → quote → onramp →
  * settling → claiming → confirm → receipt. Whitepaper §6.6. ARCHITECTURE §3.5/§3.6.
  *
  * Shell de orquestração: estado de fluxo + composição de hooks vive em
  * `_hooks/use-investir-flow.ts`. Cada Screen em `_components/screens/`.
  */
 
-import {
-  useAppLoginWithEmail as useLoginWithEmail,
-  useAppLoginWithOAuth as useLoginWithOAuth,
-  useAppLogout as useLogout,
-} from '@/lib/hooks/privy';
+import { useAppLogout as useLogout } from '@/lib/hooks/privy';
+import { useRequireAuth } from '@/lib/hooks/use-require-auth';
 import { PHASES, phaseForScreen } from './_lib/glossary';
 import { useInvestirFlow } from './_hooks/use-investir-flow';
 import { Rail } from './_components/shell/rail';
 import { ScreenFader } from './_components/shell/screen-fader';
 import { ErrorBlock } from './_components/shell/error-block';
-import { WelcomeScreen } from './_components/screens/welcome';
 import { IdentityScreen } from './_components/screens/identity';
 import { BankingScreen } from './_components/screens/banking';
 import { ClasseScreen } from './_components/screens/classe';
@@ -34,15 +30,16 @@ import { ReceiptScreen } from './_components/screens/receipt';
 export default function InvestirPage() {
   const flow = useInvestirFlow();
   const { logout } = useLogout();
-  const emailLogin = useLoginWithEmail();
-  const oauthLogin = useLoginWithOAuth();
-  const { ready, authenticated, user } = flow.privy;
+  const { checking, authenticated } = useRequireAuth();
+  const { user } = flow.privy;
 
-  if (!ready) {
+  // useRequireAuth redireciona não-logado pra /entrar; enquanto assenta ou
+  // redireciona, mostra espera silenciosa (nunca o wizard sem sessão).
+  if (checking || !authenticated) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/55 animate-pulse">
-          Carregando Privy…
+          Verificando acesso…
         </p>
       </div>
     );
@@ -56,7 +53,7 @@ export default function InvestirPage() {
   const buyResult = flow.swap.buyResult;
 
   const { phase, index: phaseIdx } = phaseForScreen(screen);
-  const canGoBack = authenticated && screen !== 'welcome' && screen !== 'receipt';
+  const canGoBack = screen !== 'identity' && screen !== 'receipt';
 
   return (
     <div className="bg-lightBg min-h-screen">
@@ -102,14 +99,6 @@ export default function InvestirPage() {
             )}
 
             <ScreenFader key={screen}>
-              {screen === 'welcome' && (
-                <WelcomeScreen
-                  emailLogin={emailLogin}
-                  oauthLogin={oauthLogin}
-                  track={flow.track}
-                  onTrackChange={flow.setTrack}
-                />
-              )}
               {screen === 'identity' && (
                 <IdentityScreen
                   onboard={onboard}
@@ -123,6 +112,7 @@ export default function InvestirPage() {
                   onContinue={flow.onIdentityContinue}
                   onRetry={flow.onboard.runOnboard}
                   track={flow.track}
+                  onTrackChange={flow.setTrack}
                   institutionalProfile={flow.institutionalProfile}
                   onInstitutionalChange={flow.setInstitutionalProfile}
                 />

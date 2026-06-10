@@ -102,16 +102,21 @@ export const POST = withAuth(async (req, { user }) => {
     // Reuso: se o customer já tem fiat account na Etherfuse (re-teste, ou
     // registrada noutro fluxo), reaproveita em vez de criar — evita o limite
     // "Only one BRL bank account is allowed per organization" do sandbox.
-    const existing = await anchor.getFiatAccounts(custId).catch(() => []);
-    const reusable = existing.find((a) => a.type === 'PIX') ?? existing[0];
-    if (reusable) {
-      await persistBank(reusable.id, 'active', true);
+    // Usado no pré-check e de novo no catch do register (corrida org-level).
+    const tryReusePix = async () => {
+      const accounts = await anchor.getFiatAccounts(custId).catch(() => []);
+      const pix = accounts.find((a) => a.type === 'PIX') ?? accounts[0];
+      if (!pix) return null;
+      await persistBank(pix.id, 'active', true);
       return NextResponse.json({
-        bankAccountId: reusable.id,
+        bankAccountId: pix.id,
         status: 'active',
         idempotent: true,
       });
-    }
+    };
+
+    const reused = await tryReusePix();
+    if (reused) return reused;
 
     // Gera novo stub bankAccountId pro presignedUrl. Etherfuse aceita
     // qualquer UUID; o register depois amarra esse UUID ao customer.
@@ -134,16 +139,8 @@ export const POST = withAuth(async (req, { user }) => {
     } catch (regErr) {
       // Limite org-level do sandbox: pode haver uma conta criada após o check
       // acima (corrida) ou sob este customer. Tenta reaproveitar antes de falhar.
-      const retry = await anchor.getFiatAccounts(custId).catch(() => []);
-      const pix = retry.find((a) => a.type === 'PIX') ?? retry[0];
-      if (pix) {
-        await persistBank(pix.id, 'active', true);
-        return NextResponse.json({
-          bankAccountId: pix.id,
-          status: 'active',
-          idempotent: true,
-        });
-      }
+      const reusedAfterRace = await tryReusePix();
+      if (reusedAfterRace) return reusedAfterRace;
       throw regErr;
     }
 

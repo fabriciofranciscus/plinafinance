@@ -12,6 +12,7 @@ import type {
   SwapBuild,
 } from '../_types';
 import { asFlowError } from '../_lib/errors';
+import { postJson } from '@/lib/http/client';
 
 export interface UseSwapArgs {
   onboard: OnboardData | null;
@@ -60,21 +61,15 @@ export function useSwap({
     clearError();
     setSignConfirmed(false);
     try {
-      const token = await getAccessToken();
-      const res = await fetch('/api/investidor/buy/swap/build', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
+      const data = await postJson<SwapBuild>(
+        '/api/investidor/buy/swap/build',
+        {
           quoteId: quote.quoteId,
           investorPubkey: onboard.publicKey,
           investidorId: onboard.investidorId,
-        }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data = (await res.json()) as SwapBuild;
+        },
+        getAccessToken,
+      );
       setSwapBuild(data);
       if (data.mock) {
         // Mock: server já executou. Vai direto pro receipt.
@@ -99,20 +94,14 @@ export function useSwap({
     clearError();
     setBuying(true);
     try {
-      const token = await getAccessToken();
-      if (!token) throw new Error('Sessão Privy expirada.');
       const { signature } = await signRawHash({
         address: onboard.publicKey,
         chainType: 'stellar',
         hash: swapBuild.hashHex as `0x${string}`,
       });
-      const submitRes = await fetch('/api/investidor/buy/swap/submit', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+      const data = await postJson<{ swapTxHash: string }>(
+        '/api/investidor/buy/swap/submit',
+        {
           quoteId: quote.quoteId,
           investorPubkey: onboard.publicKey,
           signatureHex: signature,
@@ -120,10 +109,9 @@ export function useSwap({
           distributorSigBase64: swapBuild.distributorSigBase64,
           distributorPubkey: swapBuild.distributorPubkey,
           investidorId: onboard.investidorId,
-        }),
-      });
-      if (!submitRes.ok) throw new Error(await submitRes.text());
-      const data = (await submitRes.json()) as { swapTxHash: string };
+        },
+        getAccessToken,
+      );
       setBuyResult({
         swapTxHash: data.swapTxHash,
         onRampTxHash: onRamp?.stellarTxHash ?? null,

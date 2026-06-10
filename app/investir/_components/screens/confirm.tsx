@@ -102,6 +102,12 @@ export function ConfirmScreen({
               }
             />
           )}
+          {institutionalProfile?.cnpj && (
+            <DataRow
+              k="CNPJ"
+              v={<span className="font-mono text-xs">{institutionalProfile.cnpj}</span>}
+            />
+          )}
           <DataRow
             k="Wallet destino"
             v={
