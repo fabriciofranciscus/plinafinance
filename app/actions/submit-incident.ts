@@ -12,7 +12,7 @@
 
 import { headers } from 'next/headers';
 import { z } from 'zod';
-import { getTransporter } from '@/lib/email/transporter';
+import { getIncidentTransporter, incidentFromAddress } from '@/lib/email/transporter';
 import { renderIncidentEmail } from '@/lib/email/templates-incident';
 import { leadLimiter } from '@/lib/rate-limit/config';
 
@@ -72,7 +72,7 @@ export async function submitIncident(
   }
   const data = parsed.data;
 
-  const tx = getTransporter();
+  const tx = getIncidentTransporter();
   if (!tx) {
     return {
       status: 'error',
@@ -88,7 +88,7 @@ export async function submitIncident(
 
   try {
     await tx.sendMail({
-      from: `"Plina Incidentes" <${process.env.SMTP_USER}>`,
+      from: `"Plina Incidentes" <${incidentFromAddress()}>`,
       to: process.env.INCIDENT_EMAIL_TO || 'help@plina.finance',
       replyTo: data.email,
       subject,
