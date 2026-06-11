@@ -102,7 +102,7 @@ export function AppFooter({ issuerPubkey }: AppFooterProps) {
             </li>
             <li className="pt-2">
               <span className="font-details text-[10px] tracking-[0.2em] uppercase bg-lightBg/10 text-lightBg/80 px-2 py-1 inline-block">
-                POC · não negociável
+                Ambiente de testnet · tokens sem valor real
               </span>
             </li>
           </ul>
@@ -112,7 +112,7 @@ export function AppFooter({ issuerPubkey }: AppFooterProps) {
       <div className="border-t border-lightBg/10">
         <div className="mx-auto max-w-6xl px-6 py-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-2 font-details text-[10px] tracking-[0.2em] uppercase text-lightBg/50">
           <span>© 2026 Plina Finance</span>
-          <span>Versão POC · sem oferta pública (Lei 11.795/2008)</span>
+          <span>Testnet · sem oferta pública (Lei 11.795/2008)</span>
         </div>
       </div>
     </footer>
