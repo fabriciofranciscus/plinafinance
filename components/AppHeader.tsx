@@ -3,10 +3,11 @@
 /**
  * AppHeader — chrome compartilhado das superfícies do app (não-landing).
  *
- * Role-aware:
- *   - public (não logado): Pool · Política · Investir
- *   - investor (Privy logado): Pool · Política · Investir · Minha posição · address abreviado · Sair
- *   - admin (cookie plina_admin): Pool · Operação · Sair
+ * Nav fixa (não muda por papel): Pool · Cotas · Investir · Vender · Política.
+ * O Painel é pessoal e fica à direita, junto do Sair (só quando logado):
+ *   - público (não logado): nav + chip Testnet
+ *   - logado (Privy): nav + address abreviado · Painel · Sair
+ *   - admin (cookie plina_admin): Operação · Pool · Sair
  *
  * Doutrina DESIGN.md:
  *   - Hairline border-bottom, sem sombra.
@@ -21,7 +22,6 @@
 import { usePrivy, useLogout } from '@privy-io/react-auth';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { usePessoa } from '@/components/PessoaProvider';
 
 interface AppHeaderProps {
   isAdmin: boolean;
@@ -35,7 +35,6 @@ function abbreviate(pubkey: string): string {
 export function AppHeader({ isAdmin }: AppHeaderProps) {
   const { ready, authenticated, user } = usePrivy();
   const { logout } = useLogout();
-  const { papeis } = usePessoa();
   const pathname = usePathname();
 
   const stellarAddress =
@@ -43,31 +42,19 @@ export function AppHeader({ isAdmin }: AppHeaderProps) {
       .filter((a): a is typeof a & { address: string } => 'address' in a)
       .find((a) => a.address.startsWith('G'))?.address ?? null;
 
-  const isInvestidor = papeis.includes('INVESTIDOR');
-  const isCedente = papeis.includes('CEDENTE');
-
+  // Nav fixa do app (superfícies públicas/transacionais). Painel não entra
+  // aqui: é pessoal e mora à direita, junto do Sair.
   const base = [
     { href: '/pool', label: 'Pool' },
     { href: '/cotas', label: 'Cotas' },
+    { href: '/investir', label: 'Investir' },
+    { href: '/vender', label: 'Vender' },
     { href: '/politica-clawback', label: 'Política' },
   ];
 
-  // Gating por papel: cedente-only não vê nav de investidor (Investir/Minha
-  // posição); investidor (ou conta sem papel ainda) vê Investir como entrada.
   const links = isAdmin
     ? [{ href: '/admin', label: 'Operação' }, { href: '/pool', label: 'Pool' }]
-    : authenticated
-      ? [
-          ...base,
-          ...(isInvestidor || !isCedente
-            ? [{ href: '/investir', label: 'Investir' }]
-            : []),
-          ...(isInvestidor
-            ? [{ href: '/minha-posicao', label: 'Minha posição' }]
-            : []),
-          ...(isCedente ? [{ href: '/vender', label: 'Vender' }] : []),
-        ]
-      : [...base, { href: '/investir', label: 'Investir' }];
+    : base;
 
   return (
     <header className="bg-white border-b border-light-hairline sticky top-0 z-40">
@@ -133,9 +120,17 @@ export function AppHeader({ isAdmin }: AppHeaderProps) {
                   {abbreviate(stellarAddress)}
                 </span>
               )}
+              <Link
+                href="/painel"
+                className={`font-details text-[10px] tracking-[0.2em] uppercase hover:text-base transition-colors ${
+                  pathname.startsWith('/painel') ? 'text-base' : 'text-base/70'
+                }`}
+              >
+                Painel
+              </Link>
               <button
                 onClick={() => logout()}
-                className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 hover:text-base"
+                className="font-details text-[10px] tracking-[0.2em] uppercase text-base/55 hover:text-base"
               >
                 Sair
               </button>
