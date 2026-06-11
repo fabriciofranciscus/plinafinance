@@ -143,6 +143,60 @@ export async function capturarLeadComprador(
   };
 }
 
+/**
+ * Resolve (ou cria) o LeadComprador do comprador LOGADO (Pessoa via Privy).
+ *
+ * O pipeline de realização (criarReserva/executarCaminhoA) é keyed em
+ * `leadCompradorId`; o wizard /comprar opera com uma sessão Privy autenticada.
+ * Esta ponte: acha por `pessoaId` (quando já houver Pessoa — criada no KYC),
+ * senão por email (o @unique do model), senão cria — carimbando `pessoaId`
+ * quando disponível. A reserva (passo 3) roda ANTES do KYC (passo 4), então
+ * `pessoaId` pode vir null; o carimbo acontece quando a Pessoa existir.
+ * Espelha o upsert-por-email de `capturarLeadComprador` + o stamping de
+ * `pessoaId` de `capturarLead` (originacao.ts).
+ */
+export async function resolverLeadCompradorPorPessoa(input: {
+  pessoaId?: string | null;
+  email: string;
+  nome: string;
+}): Promise<{ id: string }> {
+  const normalizedEmail = input.email.toLowerCase().trim();
+
+  if (input.pessoaId) {
+    const porPessoa = await db.leadComprador.findFirst({
+      where: { pessoaId: input.pessoaId },
+      select: { id: true },
+    });
+    if (porPessoa) return porPessoa;
+  }
+
+  const porEmail = await db.leadComprador.findUnique({
+    where: { email: normalizedEmail },
+    select: { id: true, pessoaId: true },
+  });
+  if (porEmail) {
+    if (input.pessoaId && !porEmail.pessoaId) {
+      await db.leadComprador.update({
+        where: { id: porEmail.id },
+        data: { pessoaId: input.pessoaId },
+      });
+    }
+    return { id: porEmail.id };
+  }
+
+  const created = await db.leadComprador.create({
+    data: {
+      nome: input.nome.trim() || normalizedEmail,
+      email: normalizedEmail,
+      pessoaId: input.pessoaId ?? null,
+      origem: 'comprar-wizard',
+      status: LeadCompradorStatus.NOVO,
+    },
+    select: { id: true },
+  });
+  return created;
+}
+
 // ─── 2. Cotas disponíveis pra compra ────────────────────────────────────────
 
 export async function listarCotasParaCompra() {
@@ -164,6 +218,49 @@ export async function listarCotasParaCompra() {
       // administradora NÃO retornada (whitepaper: exposta só pós-qualificação).
     },
   });
+}
+
+/**
+ * Due diligence de uma cota pro passo 2 do wizard /comprar. Leitura pura:
+ * dados jurídicos (hash do laudo) + on-chain (emissão/validação) + trilha de
+ * EventoAudit da cota. Nenhuma escrita / tx nova. Administradora NÃO exposta.
+ */
+export async function diligenciaDaCota(cotaId: string) {
+  const cota = await db.cota.findUnique({
+    where: { id: cotaId },
+    select: {
+      id: true,
+      tipoBem: true,
+      valorCarta: true,
+      desagioRevenda: true,
+      localizacaoAprox: true,
+      prazoRestanteMeses: true,
+      status: true,
+      statusEstoque: true,
+      tokensEmitidos: true,
+      emissaoTxHash: true,
+      hashValidacao: true,
+      validacaoTxHash: true,
+      hashCessao: true,
+    },
+  });
+  if (!cota) return null;
+
+  const eventos = await db.eventoAudit.findMany({
+    where: {
+      cotaId,
+      acao: { in: ['COTA_VALIDADA', 'COTA_INCORPORADA', 'TOKEN_EMITIDO'] },
+    },
+    orderBy: { criadoEm: 'asc' },
+    select: {
+      acao: true,
+      payloadHash: true,
+      stellarTxHash: true,
+      criadoEm: true,
+    },
+  });
+
+  return { cota, eventos };
 }
 
 // ─── 3. Reserva ─────────────────────────────────────────────────────────────

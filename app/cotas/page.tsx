@@ -46,7 +46,7 @@ export default async function CotasPage() {
             href="/comprar"
             className="font-details tracking-[0.2em] uppercase underline text-base/70 hover:text-primary-deep"
           >
-            ← Calculadora comparativa
+            Comprar cota →
           </Link>
           <span className="text-base/30">·</span>
           <Link
