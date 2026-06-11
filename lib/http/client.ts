@@ -25,3 +25,18 @@ export async function postJson<T>(
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<T>;
 }
+
+/** Variante GET do `postJson` — Bearer + !res.ok→throw. Usada pelos passos de
+ *  leitura do wizard /comprar (lista de cotas, due diligence). */
+export async function getJson<T>(
+  url: string,
+  getAccessToken: () => Promise<string | null>,
+): Promise<T> {
+  const token = await getAccessToken();
+  if (!token) throw new Error('Sessão Privy expirada.');
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<T>;
+}

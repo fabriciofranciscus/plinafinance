@@ -13,7 +13,8 @@ type FlagName =
   | 'INTL_INVESTOR_FLOW'        // M4 — trilha internacional
   | 'SOROBAN_WATERFALL'         // M7 — waterfall on-chain
   | 'M3_INSTITUTIONAL_GATING'   // M3 — exige suitability + ticket mínimo em /quote
-  | 'CUSTODY_PROVIDERS';        // M4 — custódia institucional (Fireblocks/BitGo/Copper)
+  | 'CUSTODY_PROVIDERS'         // M4 — custódia institucional (Fireblocks/BitGo/Copper)
+  | 'BUYER_SELF_REALIZACAO';    // /comprar — comprador dispara executarCaminhoA self-service
 
 function readFromEnv(name: FlagName): boolean {
   return process.env[name] === 'true';

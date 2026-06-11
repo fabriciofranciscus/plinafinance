@@ -101,6 +101,7 @@ enum KycStatus {
 enum Papel {
   INVESTIDOR
   CEDENTE
+  COMPRADOR
 }
 
 enum CaminhoRealizacao {
@@ -132,6 +133,8 @@ enum AcaoAudit {
   RESERVA_CRIADA
   RESERVA_CANCELADA
   RESERVA_EXPIRADA
+  KYC_COMPRADOR
+  CESSAO_COMPRADOR_ASSINADA
   CAMINHO_A_EXECUTADO
   // Liquidação investidor (whitepaper §6.4 janela de resgate)
   PLINARF_LIQUIDADO
@@ -304,8 +307,10 @@ model Pessoa {
   criadoEm               DateTime  @default(now())
   atualizadoEm           DateTime  @updatedAt
 
-  investidor    Investidor?
-  leadsVendedor LeadVendedor[]
+  investidor      Investidor?
+  leadsVendedor   LeadVendedor[]
+  leadsComprador  LeadComprador[]   @relation("PessoaLeadsComprador")
+  cessoesComprador CessaoComprador[]
 
   @@index([kycAprovado])
 }
@@ -602,6 +607,10 @@ model LeadComprador {
   faixaCapital String?
   prazoDecisao String?
   status       LeadCompradorStatus @default(NOVO)
+  /// FK pra Pessoa (comprador logado + KYC). Nullable: leads legados (pré-auth)
+  /// e o upsert por email continuam funcionando. Espelha LeadVendedor.pessoaId.
+  pessoaId     String?
+  pessoa       Pessoa?             @relation("PessoaLeadsComprador", fields: [pessoaId], references: [id])
   criadoEm     DateTime            @default(now())
   atualizadoEm DateTime            @updatedAt
 
@@ -610,6 +619,7 @@ model LeadComprador {
   eventos     EventoAudit[]
 
   @@index([status])
+  @@index([pessoaId])
 }
 
 /// Reserva de cota pelo comprador-usuário. 72h por default (PRD_MVP §6.8).
@@ -627,9 +637,35 @@ model Reserva {
   criadaEm        DateTime      @default(now())
   atualizadaEm    DateTime      @updatedAt
 
+  cessaoComprador CessaoComprador?
+
   @@index([cotaId])
   @@index([status])
   @@index([expiraEm])
+}
+
+/// Cessão digital do lado COMPRADOR (espelha o conceito de `Cessao` do
+/// vendedor, mas ancorada na `Reserva` — não há `Oferta`). Assinatura
+/// DocuSign/e-CPF fica no stub MVP (`docusignEnvelopeId = "mvp-stub:..."`);
+/// o hash do documento é registrado on-chain de verdade (Memo.hash).
+model CessaoComprador {
+  id                 String       @id @default(cuid())
+  reservaId          String       @unique
+  reserva            Reserva      @relation(fields: [reservaId], references: [id])
+  pessoaId           String
+  pessoa             Pessoa       @relation(fields: [pessoaId], references: [id])
+  docusignEnvelopeId String?
+  hashDocumento      String? // SHA-256 do documento de cessão
+  onChainTxHash      String? // tx Stellar com memo hash
+  assinadaEm         DateTime?
+  status             CessaoStatus @default(PENDENTE)
+  criadaEm           DateTime     @default(now())
+  atualizadaEm       DateTime     @updatedAt
+
+  eventos EventoAudit[]
+
+  @@index([status])
+  @@index([pessoaId])
 }
 
 /// Realização de uma cota por um dos 3 caminhos. POC MVP foca em A.
@@ -690,6 +726,8 @@ model EventoAudit {
   cessao          Cessao?        @relation(fields: [cessaoId], references: [id])
   leadCompradorId String?
   leadComprador   LeadComprador? @relation(fields: [leadCompradorId], references: [id])
+  cessaoCompradorId String?
+  cessaoComprador   CessaoComprador? @relation(fields: [cessaoCompradorId], references: [id])
 
   @@index([acao])
   @@index([cotaId])
@@ -698,6 +736,7 @@ model EventoAudit {
   @@index([leadVendedorId])
   @@index([leadCompradorId])
   @@index([cessaoId])
+  @@index([cessaoCompradorId])
   @@index([criadoEm])
   @@index([stellarTxHash])
 }
