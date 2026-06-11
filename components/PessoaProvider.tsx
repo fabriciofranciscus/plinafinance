@@ -56,29 +56,63 @@ export function PessoaProvider({ children }: { children: ReactNode }) {
   // Estado mais recente, lido dentro do refresh sem entrar nas deps.
   const dataRef = useRef(data);
   dataRef.current = data;
+  // Retry agendado (sem F5) enquanto o token ainda não mintou pós-login.
+  const refreshRef = useRef<() => void>(() => {});
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryCount = useRef(0);
 
   const refresh = useCallback(async () => {
     // Logout real (Privy diz não-autenticado) é o ÚNICO ponto que limpa o estado.
     if (!authenticated) {
       setData(EMPTY);
       setLoading(false);
+      retryCount.current = 0;
+      if (retryTimer.current) {
+        clearTimeout(retryTimer.current);
+        retryTimer.current = null;
+      }
       return;
     }
     if (!dataRef.current.pessoaId) setLoading(true);
     try {
       // O token do Privy pode vir null logo após login/navegação. Espera ele
       // aparecer antes de decidir qualquer coisa — não chama /me sem Bearer.
+      //
+      // CRÍTICO: logo após login interativo, `getAccessToken()` pode TRAVAR
+      // (promise pendente pra sempre) até um reload — o token ainda não foi
+      // mintado/trocado. Um await sem timeout aqui nunca chega no `finally`,
+      // deixando `loading` preso e as telas em "Verificando acesso…" eterno
+      // (some no F5 porque aí o token já está em storage). Corrida com timeout
+      // garante que o loop sempre termina e o loading sempre resolve.
       let token: string | null = null;
       for (let i = 0; i < 8; i++) {
-        token = await getTokenRef.current();
+        token = await Promise.race([
+          getTokenRef.current().catch(() => null),
+          sleep(2000).then(() => null),
+        ]);
         if (token) break;
         await sleep(300);
       }
       if (!token) {
-        // Token não veio, mas Privy diz autenticado → transitório. Mantém o
-        // estado atual (não rebaixa um usuário verificado) e tenta no próximo
-        // disparo.
+        // Token ainda não veio, mas Privy diz autenticado → transitório.
+        // Mantém o estado atual (não rebaixa um usuário verificado) e agenda
+        // uma nova tentativa pra carregar /me SEM exigir F5 do usuário.
+        // Limitado: ~10 tentativas (15s) evitam polling infinito se o token
+        // genuinamente nunca mintar.
+        if (!retryTimer.current && retryCount.current < 10) {
+          retryCount.current += 1;
+          retryTimer.current = setTimeout(() => {
+            retryTimer.current = null;
+            refreshRef.current();
+          }, 1500);
+        }
         return;
+      }
+      // Token chegou: cancela qualquer retry pendente e zera o contador.
+      retryCount.current = 0;
+      if (retryTimer.current) {
+        clearTimeout(retryTimer.current);
+        retryTimer.current = null;
       }
       // Timeout defensivo: sem isso, um /me lento/travado deixaria `loading`
       // preso em true pra sempre, e as páginas que esperam o estado assentar
@@ -114,6 +148,19 @@ export function PessoaProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
   }, [authenticated]);
+
+  // Mantém a ref do refresh atual pro retry agendado disparar a versão certa.
+  refreshRef.current = () => {
+    void refresh();
+  };
+
+  // Limpa qualquer retry pendente ao desmontar.
+  useEffect(
+    () => () => {
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!ready) {
