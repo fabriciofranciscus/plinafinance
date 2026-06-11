@@ -142,7 +142,7 @@ export function AppHeader({ isAdmin }: AppHeaderProps) {
             </>
           ) : (
             <span className="hidden sm:inline-flex font-details text-[10px] tracking-[0.2em] uppercase bg-lightBg text-base/70 px-2 py-1">
-              POC · Testnet
+              Testnet
             </span>
           )}
         </div>

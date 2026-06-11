@@ -7,12 +7,13 @@ import ConsoleStrip from './ConsoleStrip';
 import { usePessoa } from './PessoaProvider';
 import { useAppLogout } from '@/lib/hooks/privy';
 
+// Header da landing (/) navega pelas seções da própria página; os botões de
+// login/painel (abaixo) é que levam pras superfícies do app.
 const navLinks = [
-  { label: 'Para Cotistas', href: '/vender', route: true },
-  { label: 'Para Investidores', href: '/investir', route: true },
-  { label: 'Comprar Cota', href: '/comprar', route: true },
-  { label: 'PLINA-RF', href: '#produto', route: false },
+  { label: 'Produto', href: '#produto', route: false },
+  { label: 'Tese', href: '#tese', route: false },
   { label: 'Compliance', href: '#compliance', route: false },
+  { label: 'Equipe', href: '#equipe', route: false },
 ] as const;
 
 export default function SiteHeader() {
