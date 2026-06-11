@@ -60,7 +60,7 @@ export function ReceiptScreen({
 
       <div className="mt-12 flex flex-wrap items-center gap-x-6 gap-y-3">
         <a
-          href="/minha-posicao"
+          href="/painel"
           className="bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-8 py-4 rounded-full hover:bg-primary-deep transition-colors duration-200"
         >
           Minha posição
