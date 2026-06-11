@@ -7,23 +7,49 @@
 
 import nodemailer from 'nodemailer';
 
-let cached: nodemailer.Transporter | null = null;
+// Cache por credencial (host:port:user) — suporta múltiplas caixas (contato@
+// pro lead, help@ pros incidentes) sem recriar transporters a cada chamada.
+const cache = new Map<string, nodemailer.Transporter>();
 
-export function getTransporter(): nodemailer.Transporter | null {
-  if (cached) return cached;
-
+function build(
+  user: string | undefined,
+  pass: string | undefined,
+): nodemailer.Transporter | null {
   const host = process.env.SMTP_HOST;
   const port = Number(process.env.SMTP_PORT || 465);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-
   if (!host || !user || !pass) return null;
 
-  cached = nodemailer.createTransport({
+  const key = `${host}:${port}:${user}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+
+  const tx = nodemailer.createTransport({
     host,
     port,
     secure: port === 465,
     auth: { user, pass },
   });
-  return cached;
+  cache.set(key, tx);
+  return tx;
+}
+
+/** Caixa padrão (contato@) — lead institucional / contato. */
+export function getTransporter(): nodemailer.Transporter | null {
+  return build(process.env.SMTP_USER, process.env.SMTP_PASS);
+}
+
+/**
+ * Caixa de incidentes (help@). Usa INCIDENT_SMTP_USER/PASS; se não
+ * configuradas, cai na caixa padrão (mantém o comportamento anterior).
+ */
+export function getIncidentTransporter(): nodemailer.Transporter | null {
+  return build(
+    process.env.INCIDENT_SMTP_USER ?? process.env.SMTP_USER,
+    process.env.INCIDENT_SMTP_PASS ?? process.env.SMTP_PASS,
+  );
+}
+
+/** Endereço autenticado da caixa de incidentes (pro campo `from`). */
+export function incidentFromAddress(): string | undefined {
+  return process.env.INCIDENT_SMTP_USER ?? process.env.SMTP_USER;
 }
