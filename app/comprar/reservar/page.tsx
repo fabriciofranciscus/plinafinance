@@ -1,14 +1,17 @@
 'use client';
 
 /**
- * /comprar/reservar?cotaId=... — reserva expressa.
+ * /comprar/reservar?cotaId=... — reserva expressa (72h).
  *
- * Se o usuário ainda não é lead, captura email + nome inline (cria
- * LeadComprador NOVO + audit), em seguida cria reserva. Reserva expira em 72h.
+ * Exige login Privy: o lead é derivado server-side da sessão (sem IDOR). A tela
+ * é uma confirmação de consentimento + reserva; nome/email vêm da sessão.
  */
 
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useAppPrivy } from '@/lib/hooks/privy';
+import { useRequireAuth } from '@/lib/hooks/use-require-auth';
+import { postJson } from '@/lib/http/client';
 
 function explorerTx(hash: string) {
   return `https://stellar.expert/explorer/testnet/tx/${hash}`;
@@ -23,14 +26,23 @@ interface ReservaResult {
 function Inner() {
   const params = useSearchParams();
   const router = useRouter();
+  const { getAccessToken } = useAppPrivy();
+  const { checking, authenticated } = useRequireAuth();
   const cotaId = params.get('cotaId');
-  const [nome, setNome] = useState('');
-  const [email, setEmail] = useState('');
-  const [telefone, setTelefone] = useState('');
   const [consentimento, setConsentimento] = useState(false);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [result, setResult] = useState<ReservaResult | null>(null);
+
+  if (checking || !authenticated) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/55 animate-pulse">
+          Verificando acesso…
+        </p>
+      </div>
+    );
+  }
 
   if (!cotaId) {
     return (
@@ -53,31 +65,12 @@ function Inner() {
     setLoading(true);
     setErro(null);
     try {
-      // 1) cria/recupera lead
-      const leadRes = await fetch('/api/comprar/lead', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nome,
-          email,
-          telefone,
-          tipo: 'PESSOA_FISICA',
-          consentimentoLgpd: consentimento,
-          origem: 'reservar-direto',
-        }),
-      });
-      if (!leadRes.ok) throw new Error((await leadRes.json()).error ?? 'erro no lead');
-      const { leadId } = (await leadRes.json()) as { leadId: string };
-
-      // 2) cria reserva
-      const reservaRes = await fetch('/api/comprar/reservar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cotaId, leadCompradorId: leadId }),
-      });
-      if (!reservaRes.ok)
-        throw new Error((await reservaRes.json()).error ?? 'erro na reserva');
-      setResult((await reservaRes.json()) as ReservaResult);
+      const data = await postJson<ReservaResult>(
+        '/api/comprar/reservar',
+        { cotaId },
+        getAccessToken,
+      );
+      setResult(data);
     } catch (err) {
       setErro(err instanceof Error ? err.message : String(err));
     } finally {
@@ -141,38 +134,11 @@ function Inner() {
         Trave a cota enquanto qualifica.
       </h1>
       <p className="font-text text-base/80 mt-4 max-w-2xl leading-relaxed">
-        Cinco campos. Após reserva, Plina entra em contato em até 24 horas
-        com instruções de qualificação + transferência.
+        Confirme a reserva. Após travada, a Plina entra em contato em até 24
+        horas com instruções de qualificação + transferência.
       </p>
 
       <form onSubmit={submit} className="mt-10 space-y-5">
-        <Field label="Nome completo" required>
-          <input
-            type="text"
-            required
-            value={nome}
-            onChange={(e) => setNome(e.target.value)}
-            className={inputCls}
-          />
-        </Field>
-        <Field label="Email" required>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className={inputCls}
-          />
-        </Field>
-        <Field label="Telefone (WhatsApp)">
-          <input
-            type="tel"
-            value={telefone}
-            onChange={(e) => setTelefone(e.target.value)}
-            className={inputCls}
-          />
-        </Field>
-
         <label className="flex items-start gap-3 cursor-pointer pt-2">
           <input
             type="checkbox"
@@ -198,28 +164,6 @@ function Inner() {
         </button>
       </form>
     </div>
-  );
-}
-
-const inputCls =
-  'mt-2 w-full bg-white border border-light-hairline px-4 py-2.5 font-text text-sm focus:outline-none focus:ring-2 focus:ring-primary';
-
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block">
-      <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-        {label} {required && <span className="text-primary-deep">*</span>}
-      </span>
-      {children}
-    </label>
   );
 }
 
