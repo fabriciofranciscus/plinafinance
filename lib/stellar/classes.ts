@@ -19,6 +19,15 @@ export function assetCodeForClasse(classe: ClassePLINARF | null | undefined): st
   return classe === 'SUBORDINADA' ? SUBORDINADA_ASSET_CODE : assetCode;
 }
 
+/**
+ * Reverso de {@link assetCodeForClasse}: mapeia o asset code on-chain de volta
+ * pra classe. Só `SUBORDINADA_ASSET_CODE` é Subordinada; qualquer outro
+ * (incl. o `PLINARF` legacy = Sênior) cai em Sênior.
+ */
+export function classeFromAssetCode(code: string): ClassePLINARF {
+  return code === SUBORDINADA_ASSET_CODE ? 'SUBORDINADA' : 'SENIOR';
+}
+
 /** Default quando o quote não traz classe (legados/off-ramp): Sênior. */
 export function classeOrDefault(
   classe: ClassePLINARF | null | undefined,
