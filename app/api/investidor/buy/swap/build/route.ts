@@ -40,6 +40,7 @@ import { assertElegivelParaTrustline } from '@/lib/services/investidor';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { parseBody } from '@/lib/http/parse-body';
 import { stellarPubkey } from '@/lib/http/zod-stellar';
+import { sandboxMockAllowed } from '@/lib/env/etherfuse';
 
 export const dynamic = 'force-dynamic';
 
@@ -162,6 +163,16 @@ export const POST = withAuth(async (req, { user }) => {
       | (Record<string, unknown> & { __mock?: boolean })
       | null;
     const mock = instructions?.__mock === true;
+
+    // Defesa em profundidade: uma order mock NUNCA pode emitir PLINARF sem
+    // perna TESOURO fora de sandbox (ex.: dados de testnet num DB promovido a
+    // mainnet). `distribute()` é free-mint — recusa antes de tocar a chain.
+    if (mock && !sandboxMockAllowed()) {
+      return NextResponse.json(
+        { error: 'order mock fora de sandbox — emissão recusada' },
+        { status: 409 },
+      );
+    }
 
     if (mock) {
       // Sem TESOURO real na wallet — emissão direta server-side, consumo

@@ -25,6 +25,7 @@ import { EtherfuseClient } from '@/lib/anchors/etherfuse';
 import { AnchorError } from '@/lib/anchors/types';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { parseBody } from '@/lib/http/parse-body';
+import { sandboxMockAllowed } from '@/lib/env/etherfuse';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,7 +91,6 @@ export const POST = withAuth(async (req, { user }) => {
         { status: 500 },
       );
     }
-    const env = process.env.ETHERFUSE_ENV ?? 'sandbox';
     const anchor = new EtherfuseClient({
       apiKey,
       baseUrl:
@@ -131,7 +131,7 @@ export const POST = withAuth(async (req, { user }) => {
       status = order.status;
       fiatInstructionsJson = { type: 'pix' } as Prisma.InputJsonValue;
     } catch (err) {
-      if (env === 'sandbox' && isBankAccountMissingError(err)) {
+      if (sandboxMockAllowed() && isBankAccountMissingError(err)) {
         // Espelha PLINA-MOD-005 fallback do on-ramp: bank PIX exige iframe
         // (ou MOD-006 transactionId pode falhar em alguma edge). Mock
         // permite E2E sandbox; burn XDR continua sendo tx Stellar REAL

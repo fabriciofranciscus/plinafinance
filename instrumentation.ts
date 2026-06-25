@@ -13,6 +13,12 @@
  */
 
 export async function register() {
+  // Fail-fast em cutover mal configurado: aborta o boot (em vez de cair
+  // silenciosamente no mock free-mint) se STELLAR_NETWORK/ETHERFUSE_ENV forem
+  // inconsistentes. Roda antes do early-return de OTEL pra valer em todo boot.
+  const { assertEtherfuseEnvConsistency } = await import('@/lib/env/etherfuse');
+  assertEtherfuseEnvConsistency();
+
   const env = process.env.NODE_ENV;
   const otelMode = process.env.OTEL_MODE;
 

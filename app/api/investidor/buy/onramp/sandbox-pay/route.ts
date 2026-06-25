@@ -22,6 +22,7 @@ import { db } from '@/lib/db';
 import { EtherfuseClient } from '@/lib/anchors/etherfuse';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { parseBody } from '@/lib/http/parse-body';
+import { sandboxMockAllowed } from '@/lib/env/etherfuse';
 import { getAssetBalance } from '@/lib/stellar/account';
 import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 
@@ -30,10 +31,11 @@ export const dynamic = 'force-dynamic';
 const Schema = z.object({ orderId: z.string().min(1).max(60) }).strict();
 
 export const POST = withAuth(async (req, { user }) => {
-  const env = process.env.ETHERFUSE_ENV ?? 'sandbox';
-  if (env === 'production') {
+  // Fail-closed na rede: mainnet (PUBLIC) bloqueia mesmo com ETHERFUSE_ENV
+  // ausente — esta rota só existe pra simular PIX em sandbox/testnet.
+  if (!sandboxMockAllowed()) {
     return NextResponse.json(
-      { error: 'sandbox-pay desabilitado em produção' },
+      { error: 'sandbox-pay desabilitado fora de sandbox' },
       { status: 403 },
     );
   }

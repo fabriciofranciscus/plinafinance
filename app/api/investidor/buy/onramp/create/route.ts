@@ -23,6 +23,7 @@ import { AnchorError } from '@/lib/anchors/types';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { parseBody } from '@/lib/http/parse-body';
 import { mainnetCutoverGuard } from '@/lib/env/feature-gates';
+import { sandboxMockAllowed } from '@/lib/env/etherfuse';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,7 +89,6 @@ export const POST = withAuth(async (req, { user }) => {
         { status: 500 },
       );
     }
-    const env = process.env.ETHERFUSE_ENV ?? 'sandbox';
     const anchor = new EtherfuseClient({
       apiKey,
       baseUrl:
@@ -113,7 +113,7 @@ export const POST = withAuth(async (req, { user }) => {
       status = order.status;
       paymentInstructionsJson = (order.paymentInstructions ?? {}) as Prisma.InputJsonValue;
     } catch (err) {
-      if (env === 'sandbox' && isBankAccountMissingError(err)) {
+      if (sandboxMockAllowed() && isBankAccountMissingError(err)) {
         // PLINA-MOD-005: bank account PIX exige iframe Etherfuse, indisponível
         // em testes programáticos. Mock só pra desbloquear E2E sandbox.
         orderId = `mock-${crypto.randomUUID()}`;
