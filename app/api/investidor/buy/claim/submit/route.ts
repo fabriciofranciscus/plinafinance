@@ -15,7 +15,11 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
-import { submitWithPrivySignature } from '@/lib/stellar/transactions';
+import {
+  submitWithPrivySignature,
+  txHashFromXdr,
+  fetchTransactionByHash,
+} from '@/lib/stellar/transactions';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { parseBody } from '@/lib/http/parse-body';
 import { logStellarError } from '@/lib/stellar/log-error';
@@ -54,11 +58,19 @@ export const POST = withAuth(async (req, { user }) => {
       });
     }
 
-    const res = await submitWithPrivySignature({
-      xdr,
-      investorPubkey: user.publicKey,
-      investorSignatureHex: signatureHex,
-    });
+    // Fecha a janela de crash submit→commit: o hash é determinístico a partir
+    // da XDR, então um retry pós-submit (CB já resgatada, hash não persistido)
+    // reconcilia pela chain em vez de re-submeter a mesma tx (que daria
+    // tx_bad_seq ou resultado confuso).
+    const expectedTxHash = txHashFromXdr(xdr);
+    const onchain = await fetchTransactionByHash(expectedTxHash);
+    const res = onchain?.successful
+      ? { hash: onchain.hash }
+      : await submitWithPrivySignature({
+          xdr,
+          investorPubkey: user.publicKey,
+          investorSignatureHex: signatureHex,
+        });
 
     await db.$transaction(async (tx) => {
       await tx.onRampOrder.update({

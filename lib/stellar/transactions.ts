@@ -191,6 +191,36 @@ export async function submitWithPrivySignature(input: {
 }
 
 /**
+ * Hash determinístico da tx a partir da XDR — igual ao `hash` que o Horizon
+ * devolve após o submit (o hash NÃO inclui assinaturas). Permite reconciliar
+ * uma tx possivelmente já aplicada on-chain sem re-submetê-la: o retry
+ * idempotente reenvia a MESMA XDR, então o hash esperado é recomputável.
+ */
+export function txHashFromXdr(xdr: string): string {
+  return new Transaction(xdr, networkPassphrase).hash().toString('hex');
+}
+
+/**
+ * Busca uma tx no Horizon por hash. `null` em 404 (tx não aplicada — seguro
+ * submeter). Demais erros propagam. Usado pra fechar a janela de crash entre
+ * o submit on-chain e o commit no DB: no retry, se a tx já está on-chain com
+ * sucesso, escritura sem re-mintar.
+ */
+export async function fetchTransactionByHash(
+  hash: string,
+): Promise<{ hash: string; successful: boolean } | null> {
+  try {
+    const r = await horizon.transactions().transaction(hash).call();
+    return { hash: r.hash, successful: r.successful };
+  } catch (err) {
+    if ((err as { response?: { status?: number } })?.response?.status === 404) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+/**
  * Helper: pré-assina uma tx com uma chave server-side (issuer ou distributor)
  * e retorna a signature base64 pronta pra usar em `submitWithPrivySignature.extraSignatures`.
  *

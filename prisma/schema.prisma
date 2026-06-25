@@ -624,6 +624,11 @@ model LeadComprador {
 
 /// Reserva de cota pelo comprador-usuário. 72h por default (PRD_MVP §6.8).
 /// Sinal simulado no testnet.
+///
+/// Índice unique PARCIAL `Reserva_cotaId_ativa_key` em (cotaId) WHERE
+/// status='ATIVA' — backstop no DB contra dupla-reserva concorrente (ver
+/// criarReserva). Não expressável no schema Prisma; vive na migration
+/// 20260625000000_reserva_cota_ativa_unique.
 model Reserva {
   id              String        @id @default(cuid())
   cotaId          String

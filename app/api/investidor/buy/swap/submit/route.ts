@@ -18,7 +18,11 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
-import { submitWithPrivySignature } from '@/lib/stellar/transactions';
+import {
+  submitWithPrivySignature,
+  txHashFromXdr,
+  fetchTransactionByHash,
+} from '@/lib/stellar/transactions';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { extractSafeError, logStellarError } from '@/lib/stellar/log-error';
@@ -174,28 +178,54 @@ export const POST = withAuth(async (req, { user }) => {
     if (reserved.count !== 1) {
       const fresh = await db.quote.findUnique({
         where: { id: quote.id },
-        select: { submitXdrHash: true, consumedTxHash: true },
+        select: { submitXdrHash: true, consumedTxHash: true, consumedAt: true },
       });
-      if (fresh?.submitXdrHash === xdrHash && fresh.consumedTxHash) {
+      // Já totalmente escriturado → idempotente.
+      if (fresh?.consumedAt && fresh.submitXdrHash === xdrHash && fresh.consumedTxHash) {
         return NextResponse.json({
           swapTxHash: fresh.consumedTxHash,
           idempotent: true,
         });
       }
-      return NextResponse.json(
-        { error: 'quote já em flight com outra XDR' },
-        { status: 409 },
-      );
+      // Reservado por OUTRA xdr → 409 real.
+      if (fresh?.submitXdrHash !== xdrHash) {
+        return NextResponse.json(
+          { error: 'quote já em flight com outra XDR' },
+          { status: 409 },
+        );
+      }
+      // Mesma xdr, sem consumedAt → reserva órfã: o submit pode ter mintado
+      // on-chain mas o commit no DB morreu no meio. NÃO trava em 409 — cai no
+      // fluxo de submit-or-reconcile abaixo, que checa a chain antes de agir.
     }
 
-    const submitRes = await submitWithPrivySignature({
-      xdr,
-      investorPubkey,
-      investorSignatureHex: signatureHex,
-      extraSignatures: [
-        { pubkey: distributorPubkey, sigBase64: distributorSigBase64 },
-      ],
-    });
+    // Fecha a janela de crash: numa reserva nova (count===1) a tx ainda não foi
+    // submetida; numa reserva órfã (recovery), o hash é determinístico a partir
+    // da XDR, então consultamos o Horizon — se a tx já está on-chain com sucesso,
+    // os tokens já foram mintados e só falta escriturar (sem re-submeter).
+    const expectedTxHash = txHashFromXdr(xdr);
+    const onchain =
+      reserved.count === 1 ? null : await fetchTransactionByHash(expectedTxHash);
+
+    let finalHash: string;
+    if (onchain?.successful) {
+      finalHash = onchain.hash;
+    } else if (onchain && !onchain.successful) {
+      return NextResponse.json(
+        { error: 'tx anterior falhou on-chain — refaça o swap (rebuild)' },
+        { status: 409 },
+      );
+    } else {
+      const submitRes = await submitWithPrivySignature({
+        xdr,
+        investorPubkey,
+        investorSignatureHex: signatureHex,
+        extraSignatures: [
+          { pubkey: distributorPubkey, sigBase64: distributorSigBase64 },
+        ],
+      });
+      finalHash = submitRes.hash;
+    }
 
     const stellarAmount = expectedAmount;
 
@@ -204,7 +234,7 @@ export const POST = withAuth(async (req, { user }) => {
         where: { id: quote.id, consumedAt: null },
         data: {
           consumedAt: new Date(),
-          consumedTxHash: submitRes.hash,
+          consumedTxHash: finalHash,
         },
       });
       if (consumed.count !== 1) {
@@ -222,7 +252,7 @@ export const POST = withAuth(async (req, { user }) => {
         investidorId: quote.investidorId,
         classe,
         amount: stellarAmount,
-        txHash: submitRes.hash,
+        txHash: finalHash,
       });
       await tx.eventoAudit.create({
         data: {
@@ -230,7 +260,7 @@ export const POST = withAuth(async (req, { user }) => {
           operador: 'investidor-self-service',
           investidorId: quote.investidorId,
           privyId: user.privyId,
-          stellarTxHash: submitRes.hash,
+          stellarTxHash: finalHash,
           payloadJson: {
             quoteId: quote.id,
             orderId: onRampOrder.id,
@@ -243,7 +273,7 @@ export const POST = withAuth(async (req, { user }) => {
       });
     });
 
-    return NextResponse.json({ swapTxHash: submitRes.hash });
+    return NextResponse.json({ swapTxHash: finalHash });
   } catch (err) {
     logStellarError('[swap/submit]', err);
     // Surfacing dos result_codes do Horizon (tx_/op_*) no corpo — sem eles, o
