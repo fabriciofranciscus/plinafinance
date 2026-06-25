@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint:auth-guard": "node scripts/lint/require-auth-guard.mjs",
+    "postinstall": "prisma generate",
     "prebuild": "pnpm lint:auth-guard",
     "smoke:stellar": "tsx scripts/smoke-stellar.ts",
     "smoke:etherfuse": "tsx scripts/smoke-etherfuse.ts",
@@ -21,6 +22,13 @@
     "prisma:migrate": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config node_modules/prisma/build/index.js migrate dev",
     "prisma:deploy": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config node_modules/prisma/build/index.js migrate deploy",
     "prisma:studio": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config node_modules/prisma/build/index.js studio"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "prisma",
+      "@prisma/client",
+      "@prisma/engines"
+    ]
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
