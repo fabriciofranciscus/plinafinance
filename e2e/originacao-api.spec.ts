@@ -55,10 +55,10 @@ test.describe('vender · simulador', () => {
 });
 
 test.describe('comprar · reservar contract', () => {
-  test('rejeita reserva sem cotaId', async ({ request }) => {
+  test('exige autenticação (sem token Privy → 401)', async ({ request }) => {
     const res = await request.post('/api/comprar/reservar', {
-      data: { leadId: 'noop' },
+      data: { cotaId: 'qualquer', leadCompradorId: 'alheio' },
     });
-    expect(res.status()).toBeGreaterThanOrEqual(400);
+    expect(res.status()).toBe(401);
   });
 });
