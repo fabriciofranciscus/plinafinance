@@ -273,9 +273,17 @@ export async function gerarOferta(input: GerarOfertaInput) {
 
 // ─── 3. Aceite da oferta (vendedor) ─────────────────────────────────────────
 
-export async function aceitarOferta(ofertaId: string) {
-  const oferta = await db.oferta.findUnique({ where: { id: ofertaId } });
+export async function aceitarOferta(ofertaId: string, pessoaId: string) {
+  const oferta = await db.oferta.findUnique({
+    where: { id: ofertaId },
+    include: { leadVendedor: { select: { pessoaId: true } } },
+  });
   if (!oferta) throw new Error('Oferta não encontrada');
+  // Ownership: só o cedente dono do lead pode aceitar. Checado antes de
+  // qualquer side effect (nenhuma tx on-chain emitida num aceite alheio).
+  if (oferta.leadVendedor.pessoaId !== pessoaId) {
+    throw new Error('Oferta não pertence ao usuário');
+  }
   if (oferta.status !== OfertaStatus.ENVIADA) {
     throw new Error(`Oferta em estado ${oferta.status} — não aceitável`);
   }

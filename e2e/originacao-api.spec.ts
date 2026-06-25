@@ -62,3 +62,14 @@ test.describe('comprar · reservar contract', () => {
     expect(res.status()).toBe(401);
   });
 });
+
+test.describe('vender · aceitar-oferta', () => {
+  test('exige autenticação (sem token Privy → 401)', async ({ request }) => {
+    // Aceite forjado: sem login, não deve gravar aceite on-chain de cessão
+    // alheia. Guard ausente → 401 antes de qualquer side effect.
+    const res = await request.post('/api/vender/aceitar-oferta', {
+      data: { ofertaId: 'alheia' },
+    });
+    expect(res.status()).toBe(401);
+  });
+});
