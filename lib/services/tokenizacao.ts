@@ -25,6 +25,8 @@ import { executeClawback, issueAsset } from '../stellar/issuer';
 import { issuerSigner } from '../stellar/signer';
 import { tokensParaEmitir } from './pool';
 import { assetCode } from '../stellar/config';
+import { classeFromAssetCode } from '../stellar/classes';
+import { decrementarHolding } from './holdings';
 import { buildAuditPayload, registerOnChainHash } from '../stellar/audit';
 
 export interface IncorporarCotaInput {
@@ -236,6 +238,14 @@ export async function executarClawback(
           decrement: new Prisma.Decimal(input.amount),
         },
       },
+    });
+    // Mantém o ledger por-classe coerente com o saldoEsperado (PRD §M3).
+    // Clawback é SENIOR-only: executeClawback usa o `code` default (assetCode).
+    await decrementarHolding(tx, {
+      investidorId: input.investidorId,
+      classe: classeFromAssetCode(assetCode),
+      amount: input.amount,
+      txHash: clawbackRes.hash,
     });
   });
 

@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { assetCodeForClasse, classeOrDefault } from '@/lib/stellar/classes';
+import {
+  assetCodeForClasse,
+  classeOrDefault,
+  classeFromAssetCode,
+} from '@/lib/stellar/classes';
 
 describe('lib/stellar/classes', () => {
   it('SENIOR → PLINARF (asset code legacy)', () => {
@@ -20,5 +24,17 @@ describe('lib/stellar/classes', () => {
     expect(classeOrDefault(undefined)).toBe('SENIOR');
     expect(classeOrDefault('SUBORDINADA')).toBe('SUBORDINADA');
     expect(classeOrDefault('SENIOR')).toBe('SENIOR');
+  });
+
+  it('classeFromAssetCode: reverso de assetCodeForClasse', () => {
+    expect(classeFromAssetCode('PLINARF')).toBe('SENIOR');
+    expect(classeFromAssetCode('PLINARFB')).toBe('SUBORDINADA');
+    // Qualquer code desconhecido cai em SENIOR (preserva single-asset legado).
+    expect(classeFromAssetCode('OUTRO')).toBe('SENIOR');
+    // Round-trip nas duas classes.
+    expect(classeFromAssetCode(assetCodeForClasse('SENIOR'))).toBe('SENIOR');
+    expect(classeFromAssetCode(assetCodeForClasse('SUBORDINADA'))).toBe(
+      'SUBORDINADA',
+    );
   });
 });

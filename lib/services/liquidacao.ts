@@ -38,6 +38,8 @@ import { getDynamicFee } from '../stellar/fee';
 import { privySignatureToBase64 } from '../wallet/privy';
 import { parseStellarAmount } from '../format/parse-stellar-amount';
 import { extractLiquidacaoAmount } from '../stellar/parse-liquidacao-xdr';
+import { classeFromAssetCode } from '../stellar/classes';
+import { decrementarHolding } from './holdings';
 import { logStellarError } from '../stellar/log-error';
 import {
   buildAuditPayload,
@@ -287,6 +289,15 @@ export async function submitLiquidacao(input: {
           decrement: new Prisma.Decimal(stellarAmount),
         },
       },
+    });
+    // Debita o ledger por-classe junto com o saldoEsperado (PRD §M3). A
+    // liquidação é SENIOR-only enquanto o parser (parse-liquidacao-xdr) pina
+    // PLINARF; quando SUBORDINADA for habilitada, a classe sai do asset da XDR.
+    await decrementarHolding(tx, {
+      investidorId: input.investidorId,
+      classe: classeFromAssetCode(assetCode),
+      amount: stellarAmount,
+      txHash: liquidationTxHash,
     });
     await tx.liquidacaoSubmit.update({
       where: { xdrHash },
