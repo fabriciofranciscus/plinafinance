@@ -320,10 +320,23 @@ export async function criarReserva(
         status: ReservaStatus.ATIVA,
       },
     });
-    await tx.cota.update({
-      where: { id: input.cotaId },
+    // Claim atômico da cota: o flip DISPONIVEL→RESERVADA é a barreira
+    // autoritativa contra a corrida (a checagem em :290 é só fast-fail de UX).
+    // Dois compradores concorrentes: o 1º tx a commitar vence (count=1); o 2º
+    // casa 0 linhas (status já RESERVADA) → throw → rollback de toda a tx
+    // (reserva, lead e audit do perdedor são desfeitos). Sem reserva dupla.
+    // (O perdedor já gravou 1 memo on-chain em registerOnChainHash acima — fica
+    // órfão, sem token nem dinheiro movido; aceito pra não segurar a tx Prisma
+    // durante a chamada de rede on-chain.)
+    const claimed = await tx.cota.updateMany({
+      where: { id: input.cotaId, status: StatusCota.DISPONIVEL },
       data: { status: StatusCota.RESERVADA },
     });
+    if (claimed.count !== 1) {
+      throw new Error(
+        'Cota não está mais disponível — reservada concorrentemente',
+      );
+    }
     await tx.leadComprador.update({
       where: { id: input.leadCompradorId },
       data: { status: LeadCompradorStatus.RESERVOU },
