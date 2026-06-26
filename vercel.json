@@ -1,0 +1,4 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "DIRECT_URL=\"$DATABASE_URL_UNPOOLED\" npx prisma migrate deploy && pnpm build"
+}
