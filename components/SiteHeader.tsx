@@ -116,7 +116,7 @@ export default function SiteHeader() {
                 pastHero ? 'opacity-100 translate-y-0' : 'opacity-0 pointer-events-none -translate-y-1'
               } transition-[opacity,transform] duration-300 ease-out`}
             >
-              Solicitar Prospecto
+              Registrar interesse
             </a>
           </div>
 
@@ -176,7 +176,7 @@ export default function SiteHeader() {
               onClick={() => setMenuOpen(false)}
               className="text-primary font-bold"
             >
-              Solicitar Prospecto
+              Registrar interesse
             </a>
           </div>
         )}

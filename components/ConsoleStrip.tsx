@@ -16,7 +16,7 @@ export default function ConsoleStrip() {
             href="#lead-capture"
             className="shrink-0 text-primary hover:text-white transition-colors duration-200"
           >
-            Solicitar Prospecto →
+            Registrar interesse →
           </a>
       </div>
     </div>

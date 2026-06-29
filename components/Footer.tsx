@@ -22,7 +22,7 @@ export default function Footer() {
               <li><a href="#tese" className="hover:text-primary transition-colors">Tese</a></li>
               <li><a href="#compliance" className="hover:text-primary transition-colors">Compliance</a></li>
               <li><a href="#equipe" className="hover:text-primary transition-colors">Equipe</a></li>
-              <li><a href="#lead-capture" className="hover:text-primary transition-colors">Solicitar Prospecto</a></li>
+              <li><a href="#lead-capture" className="hover:text-primary transition-colors">Registrar interesse</a></li>
             </ul>
           </div>
           <div>
