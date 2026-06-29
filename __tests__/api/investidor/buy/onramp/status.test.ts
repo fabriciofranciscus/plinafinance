@@ -5,24 +5,20 @@ const { findUnique, getOnRampTransaction } = vi.hoisted(() => ({
   getOnRampTransaction: vi.fn(),
 }));
 
-vi.mock('@/lib/wallet/auth-guard', () => ({
-  withAuth: (
-    handler: (
-      req: Request,
-      ctx: { user: Record<string, unknown> },
-    ) => Promise<Response>,
-  ) =>
-    (req: Request) =>
-      handler(req, {
-        user: {
-          privyId: 'did:privy:abc',
-          investidorId: 'inv_1',
-          publicKey: 'GABC',
-          email: 'x@y.z',
-          etherfuseCustomerId: 'cust_1',
-        },
-      }),
-}));
+vi.mock('@/lib/wallet/auth-guard', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/wallet/auth-guard')>();
+  return {
+    ...actual, // mantém AuthError real (withApi precisa dele)
+    requireInvestidor: vi.fn().mockResolvedValue({
+      privyId: 'did:privy:abc',
+      investidorId: 'inv_1',
+      publicKey: 'GABC',
+      email: 'x@y.z',
+      etherfuseCustomerId: 'cust_1',
+    }),
+  };
+});
 
 vi.mock('@/lib/db', () => ({
   db: { onRampOrder: { findUnique } },
@@ -84,7 +80,7 @@ describe('GET /api/investidor/buy/onramp/status', () => {
     const r = await GET(req('?orderId=ord_1'));
     expect(r.status).toBe(200);
     const json = await r.json();
-    expect(json.mock).toBe(true);
+    expect(json.data.mock).toBe(true);
     expect(getOnRampTransaction).not.toHaveBeenCalled();
   });
 });

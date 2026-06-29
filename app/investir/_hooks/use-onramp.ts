@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FlowError, OnRampData, QuoteData, Screen } from '../_types';
 import { asFlowError } from '../_lib/errors';
-import { postJson } from '@/lib/http/client';
+import { postJson, unwrapEnvelope } from '@/lib/http/client';
 
 export interface UseOnRampArgs {
   quote: QuoteData | null;
@@ -88,14 +88,14 @@ export function useOnRamp({
           `/api/investidor/buy/onramp/status?orderId=${encodeURIComponent(onRamp.orderId)}`,
           { headers: token ? { Authorization: `Bearer ${token}` } : {} },
         );
-        if (!res.ok) return;
-        const data = (await res.json()) as {
+        // Desembrulha o envelope `{ data, error }` (rota migrada pro withApi).
+        const data = await unwrapEnvelope<{
           status: string;
           stellarTxHash: string | null;
           stellarClaimableBalanceId?: string | null;
           claimTxHash?: string | null;
           mock: boolean;
-        };
+        }>(res);
         if (cancelled) return;
         setOnRamp((prev) => (prev ? { ...prev, ...data } : prev));
       } catch {

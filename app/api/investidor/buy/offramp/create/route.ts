@@ -17,14 +17,15 @@
  * Returns: { orderId, status, mock }
  */
 
-import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { EtherfuseClient } from '@/lib/anchors/etherfuse';
 import { AnchorError } from '@/lib/anchors/types';
-import { withAuth } from '@/lib/wallet/auth-guard';
-import { parseBody } from '@/lib/http/parse-body';
+import { requireInvestidor } from '@/lib/wallet/auth-guard';
+import { withApi } from '@/lib/api/with-api';
+import { ok } from '@/lib/api/response';
+import { ApiError } from '@/lib/api/errors';
 import { sandboxMockAllowed } from '@/lib/env/etherfuse';
 
 export const dynamic = 'force-dynamic';
@@ -37,150 +38,151 @@ function isBankAccountMissingError(err: unknown): boolean {
   return msg.includes('proxy account') || msg.includes('bank account');
 }
 
-export const POST = withAuth(async (req, { user }) => {
-  const parsed = await parseBody(req, Schema);
-  if ('response' in parsed) return parsed.response;
-  const { quoteId } = parsed.data;
-  try {
-    const quote = await db.quote.findUnique({
-      where: { id: quoteId },
-      include: { investidor: true, offRampOrder: true },
-    });
-    if (!quote) {
-      return NextResponse.json({ error: 'quote não encontrado' }, { status: 404 });
-    }
-    if (quote.investidorId !== user.investidorId) {
-      return NextResponse.json(
-        { error: 'quote não pertence ao investidor autenticado' },
-        { status: 403 },
-      );
-    }
-    if (quote.fromCurrency !== 'TESOURO' || quote.toCurrency !== 'BRL') {
-      return NextResponse.json(
-        {
-          error: `quote inválido pra off-ramp: ${quote.fromCurrency} → ${quote.toCurrency}`,
-        },
-        { status: 400 },
-      );
-    }
-    if (quote.consumedAt) {
-      return NextResponse.json({ error: 'quote já consumido' }, { status: 409 });
-    }
-    if (quote.expiresAt.getTime() <= Date.now()) {
-      return NextResponse.json({ error: 'quote expirado' }, { status: 410 });
-    }
-    if (quote.offRampOrder) {
-      return NextResponse.json({
-        orderId: quote.offRampOrder.id,
-        status: quote.offRampOrder.status,
-        mock: !!(quote.offRampOrder.fiatInstructionsJson as Record<string, unknown> | null)
-          ?.__mock,
-      });
-    }
-    if (!quote.investidor.etherfuseCustomerId) {
-      return NextResponse.json(
-        { error: 'investidor sem etherfuseCustomerId — refaça onboarding' },
-        { status: 409 },
-      );
-    }
+export const POST = withApi(async (req, { requestId }) => {
+  const user = await requireInvestidor(req);
+  const { quoteId } = Schema.parse(await req.json());
 
-    const apiKey = process.env.ETHERFUSE_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'ETHERFUSE_API_KEY ausente' },
-        { status: 500 },
-      );
-    }
-    const anchor = new EtherfuseClient({
-      apiKey,
-      baseUrl:
-        process.env.ETHERFUSE_BASE_URL ?? 'https://api.sand.etherfuse.com',
-    });
-
-    let orderId: string;
-    let status: string;
-    let fiatInstructionsJson: Prisma.InputJsonValue;
-    let mock = false;
-
-    try {
-      // PLINA-MOD-006: bankAccountId persistido em Investidor após
-      // /bank-account/register. Fallback pra getFiatAccounts (chamada de
-      // rede) pra investidores pré-PR sem o field preenchido.
-      let bankAccountId = quote.investidor.etherfuseBankAccountId;
-      if (!bankAccountId) {
-        const accounts = await anchor.getFiatAccounts(quote.investidor.etherfuseCustomerId);
-        bankAccountId = accounts[0]?.id ?? null;
-      }
-      if (!bankAccountId) {
-        throw new AnchorError(
-          'Investidor sem fiat account registrada — chame /bank-account/register primeiro',
-          'PROXY_ACCOUNT_NOT_FOUND',
-          409,
-        );
-      }
-      const order = await anchor.createOffRamp({
-        customerId: quote.investidor.etherfuseCustomerId,
-        quoteId: quote.id,
-        stellarAddress: quote.investidor.publicKey,
-        fromCurrency: quote.fromCurrency,
-        toCurrency: quote.toCurrency,
-        amount: quote.fromAmount.toFixed(7),
-        fiatAccountId: bankAccountId,
-      });
-      orderId = order.id;
-      status = order.status;
-      fiatInstructionsJson = { type: 'pix' } as Prisma.InputJsonValue;
-    } catch (err) {
-      if (sandboxMockAllowed() && isBankAccountMissingError(err)) {
-        // Espelha PLINA-MOD-005 fallback do on-ramp: bank PIX exige iframe
-        // (ou MOD-006 transactionId pode falhar em alguma edge). Mock
-        // permite E2E sandbox; burn XDR continua sendo tx Stellar REAL
-        // (Payment investor → distributor) em /signing-tx.
-        orderId = `mock-${crypto.randomUUID()}`;
-        status = 'pending';
-        fiatInstructionsJson = {
-          __mock: true,
-          type: 'pix',
-          beneficiary: 'Plina Sandbox (mock)',
-          amount: quote.fromAmount.toFixed(7),
-          currency: 'BRL',
-        };
-        mock = true;
-      } else {
-        throw err;
-      }
-    }
-
-    await db.$transaction(async (tx) => {
-      await tx.offRampOrder.create({
-        data: {
-          id: orderId,
-          quoteId: quote.id,
-          investidorId: quote.investidorId,
-          status,
-          fiatInstructionsJson,
-        },
-      });
-      await tx.eventoAudit.create({
-        data: {
-          acao: 'OFFRAMP_CRIADA',
-          operador: 'investidor-self-service',
-          investidorId: quote.investidorId,
-          privyId: user.privyId,
-          payloadJson: {
-            orderId,
-            quoteId: quote.id,
-            mock,
-          } as Prisma.InputJsonValue,
-        },
-      });
-    });
-
-    return NextResponse.json({ orderId, status, mock });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'unknown' },
-      { status: 500 },
+  const quote = await db.quote.findUnique({
+    where: { id: quoteId },
+    include: { investidor: true, offRampOrder: true },
+  });
+  if (!quote) {
+    throw new ApiError('NOT_FOUND', 404, 'quote não encontrado');
+  }
+  if (quote.investidorId !== user.investidorId) {
+    throw new ApiError(
+      'FORBIDDEN',
+      403,
+      'quote não pertence ao investidor autenticado',
     );
   }
+  if (quote.fromCurrency !== 'TESOURO' || quote.toCurrency !== 'BRL') {
+    throw new ApiError(
+      'VALIDATION_FAILED',
+      400,
+      `quote inválido pra off-ramp: ${quote.fromCurrency} → ${quote.toCurrency}`,
+    );
+  }
+  if (quote.consumedAt) {
+    throw new ApiError('CONFLICT', 409, 'quote já consumido');
+  }
+  if (quote.expiresAt.getTime() <= Date.now()) {
+    throw new ApiError('GONE', 410, 'quote expirado');
+  }
+  if (quote.offRampOrder) {
+    return ok(
+      {
+        orderId: quote.offRampOrder.id,
+        status: quote.offRampOrder.status,
+        mock: !!(
+          quote.offRampOrder.fiatInstructionsJson as Record<
+            string,
+            unknown
+          > | null
+        )?.__mock,
+      },
+      { requestId },
+    );
+  }
+  if (!quote.investidor.etherfuseCustomerId) {
+    throw new ApiError(
+      'CONFLICT',
+      409,
+      'investidor sem etherfuseCustomerId — refaça onboarding',
+    );
+  }
+
+  const apiKey = process.env.ETHERFUSE_API_KEY;
+  if (!apiKey) {
+    // env ausente: erro interno, vira INTERNAL genérico (não surfacia).
+    throw new Error('ETHERFUSE_API_KEY ausente');
+  }
+  const anchor = new EtherfuseClient({
+    apiKey,
+    baseUrl: process.env.ETHERFUSE_BASE_URL ?? 'https://api.sand.etherfuse.com',
+  });
+
+  let orderId: string;
+  let status: string;
+  let fiatInstructionsJson: Prisma.InputJsonValue;
+  let mock = false;
+
+  try {
+    // PLINA-MOD-006: bankAccountId persistido em Investidor após
+    // /bank-account/register. Fallback pra getFiatAccounts (chamada de
+    // rede) pra investidores pré-PR sem o field preenchido.
+    let bankAccountId = quote.investidor.etherfuseBankAccountId;
+    if (!bankAccountId) {
+      const accounts = await anchor.getFiatAccounts(
+        quote.investidor.etherfuseCustomerId,
+      );
+      bankAccountId = accounts[0]?.id ?? null;
+    }
+    if (!bankAccountId) {
+      // Estado de UX real (sem conta bancária) — safe surfaciar como 409.
+      throw new ApiError(
+        'CONFLICT',
+        409,
+        'Investidor sem fiat account registrada — chame /bank-account/register primeiro',
+      );
+    }
+    const order = await anchor.createOffRamp({
+      customerId: quote.investidor.etherfuseCustomerId,
+      quoteId: quote.id,
+      stellarAddress: quote.investidor.publicKey,
+      fromCurrency: quote.fromCurrency,
+      toCurrency: quote.toCurrency,
+      amount: quote.fromAmount.toFixed(7),
+      fiatAccountId: bankAccountId,
+    });
+    orderId = order.id;
+    status = order.status;
+    fiatInstructionsJson = { type: 'pix' } as Prisma.InputJsonValue;
+  } catch (err) {
+    if (sandboxMockAllowed() && isBankAccountMissingError(err)) {
+      // Espelha PLINA-MOD-005 fallback do on-ramp: bank PIX exige iframe
+      // (ou MOD-006 transactionId pode falhar em alguma edge). Mock
+      // permite E2E sandbox; burn XDR continua sendo tx Stellar REAL
+      // (Payment investor → distributor) em /signing-tx.
+      orderId = `mock-${crypto.randomUUID()}`;
+      status = 'pending';
+      fiatInstructionsJson = {
+        __mock: true,
+        type: 'pix',
+        beneficiary: 'Plina Sandbox (mock)',
+        amount: quote.fromAmount.toFixed(7),
+        currency: 'BRL',
+      };
+      mock = true;
+    } else {
+      throw err;
+    }
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.offRampOrder.create({
+      data: {
+        id: orderId,
+        quoteId: quote.id,
+        investidorId: quote.investidorId,
+        status,
+        fiatInstructionsJson,
+      },
+    });
+    await tx.eventoAudit.create({
+      data: {
+        acao: 'OFFRAMP_CRIADA',
+        operador: 'investidor-self-service',
+        investidorId: quote.investidorId,
+        privyId: user.privyId,
+        payloadJson: {
+          orderId,
+          quoteId: quote.id,
+          mock,
+        } as Prisma.InputJsonValue,
+      },
+    });
+  });
+
+  return ok({ orderId, status, mock }, { requestId });
 });

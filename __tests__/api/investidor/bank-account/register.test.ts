@@ -13,24 +13,20 @@ const { mockEtherfuseInstance, mockInvestidorFindUnique, mockInvestidorUpdate, m
     mockDbTransaction: vi.fn(),
   }));
 
-vi.mock('@/lib/wallet/auth-guard', () => ({
-  withAuth: (
-    handler: (
-      req: Request,
-      ctx: { user: Record<string, unknown> },
-    ) => Promise<Response>,
-  ) =>
-    (req: Request) =>
-      handler(req, {
-        user: {
-          privyId: 'did:privy:abc',
-          investidorId: 'inv_1',
-          publicKey: 'GABC',
-          email: 'x@y.z',
-          etherfuseCustomerId: 'cust_1',
-        },
-      }),
-}));
+vi.mock('@/lib/wallet/auth-guard', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/wallet/auth-guard')>();
+  return {
+    ...actual, // mantém AuthError real (withApi precisa dele)
+    requireInvestidor: vi.fn().mockResolvedValue({
+      privyId: 'did:privy:abc',
+      investidorId: 'inv_1',
+      publicKey: 'GABC',
+      email: 'x@y.z',
+      etherfuseCustomerId: 'cust_1',
+    }),
+  };
+});
 
 vi.mock('@/lib/anchors/etherfuse', () => ({
   EtherfuseClient: class {
@@ -139,8 +135,8 @@ describe('POST /api/investidor/bank-account/register (PLINA-MOD-006)', () => {
     const r = await POST(req(FULL_BODY));
     expect(r.status).toBe(200);
     const json = await r.json();
-    expect(json.bankAccountId).toBe('existing-bank');
-    expect(json.idempotent).toBe(true);
+    expect(json.data.bankAccountId).toBe('existing-bank');
+    expect(json.data.idempotent).toBe(true);
     expect(mockEtherfuseInstance.registerPixBankAccount).not.toHaveBeenCalled();
   });
 
@@ -157,8 +153,8 @@ describe('POST /api/investidor/bank-account/register (PLINA-MOD-006)', () => {
     const r = await POST(req(FULL_BODY));
     expect(r.status).toBe(200);
     const json = await r.json();
-    expect(json.bankAccountId).toBe('bank-existente');
-    expect(json.idempotent).toBe(true);
+    expect(json.data.bankAccountId).toBe('bank-existente');
+    expect(json.data.idempotent).toBe(true);
     expect(mockEtherfuseInstance.registerPixBankAccount).not.toHaveBeenCalled();
     expect(mockInvestidorUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -177,8 +173,8 @@ describe('POST /api/investidor/bank-account/register (PLINA-MOD-006)', () => {
     const r = await POST(req(FULL_BODY));
     expect(r.status).toBe(200);
     const json = await r.json();
-    expect(json.bankAccountId).toBe('bank-xyz');
-    expect(json.status).toBe('active');
+    expect(json.data.bankAccountId).toBe('bank-xyz');
+    expect(json.data.status).toBe('active');
     expect(mockEtherfuseInstance.getKycUrl).toHaveBeenCalledOnce();
     expect(mockEtherfuseInstance.registerPixBankAccount).toHaveBeenCalledOnce();
     // Body do registerPixBankAccount chega com os 5 campos PIX (transactionId é injetado dentro do client).

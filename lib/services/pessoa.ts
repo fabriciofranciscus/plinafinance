@@ -22,6 +22,7 @@ import { STELLAR_NETWORK } from '../stellar/config';
 import { logStellarError } from '../stellar/log-error';
 import { EtherfuseClient } from '../anchors/etherfuse';
 import { parseCpf } from '../format/parse-cpf';
+import { ApiError } from '../api/errors';
 
 const DUMMY_PNG_BASE64 =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
@@ -85,7 +86,12 @@ function resolveCpf(cpf?: string): { cpfNormalizado: string; isSyntheticCpf: boo
   const isProduction = STELLAR_NETWORK === 'PUBLIC';
   const parsed = parseCpf(cpf);
   if (isProduction) {
-    if (!parsed) throw new Error('cpf obrigatório em mainnet (válido por módulo 11)');
+    if (!parsed)
+      throw new ApiError(
+        'VALIDATION_FAILED',
+        400,
+        'cpf obrigatório em mainnet (válido por módulo 11)',
+      );
     return { cpfNormalizado: parsed, isSyntheticCpf: false };
   }
   return { cpfNormalizado: parsed ?? '52998224725', isSyntheticCpf: !parsed };

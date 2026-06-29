@@ -15,6 +15,7 @@
 import { usePrivy, useLogin, useLogout } from '@privy-io/react-auth';
 import { useSignRawHash } from '@privy-io/react-auth/extended-chains';
 import { useEffect, useState } from 'react';
+import { unwrapEnvelope } from '@/lib/http/client';
 
 export default function LabPage() {
   const { ready, authenticated, user, getAccessToken } = usePrivy();
@@ -77,15 +78,11 @@ export default function LabPage() {
         },
         body: JSON.stringify({ pubkey: stellarAddress }),
       });
-      if (!buildRes.ok) {
-        const err = await buildRes.text();
-        throw new Error(`build falhou: ${err}`);
-      }
-      const { xdr, hashHex, funded } = (await buildRes.json()) as {
+      const { xdr, hashHex, funded } = await unwrapEnvelope<{
         xdr: string;
         hashHex: string;
         funded?: boolean;
-      };
+      }>(buildRes);
       if (funded) append('     · conta fundada via friendbot');
       append(`     ✓ XDR recebido, hash=${hashHex.slice(0, 18)}...`);
 
@@ -110,11 +107,7 @@ export default function LabPage() {
           signatureHex: signature,
         }),
       });
-      if (!submitRes.ok) {
-        const err = await submitRes.text();
-        throw new Error(`submit falhou: ${err}`);
-      }
-      const { hash } = (await submitRes.json()) as { hash: string };
+      const { hash } = await unwrapEnvelope<{ hash: string }>(submitRes);
       append(`     ✓ tx hash=${hash}`);
       append(`     → https://stellar.expert/explorer/testnet/tx/${hash}`);
     } catch (err) {

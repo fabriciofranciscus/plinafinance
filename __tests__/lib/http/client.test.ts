@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { postJson } from '@/lib/http/client';
+import { postJson, unwrapEnvelope } from '@/lib/http/client';
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
 describe('postJson', () => {
   afterEach(() => {
