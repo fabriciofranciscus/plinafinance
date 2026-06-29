@@ -214,6 +214,13 @@ enum LeadCompradorStatus {
   PERDIDO
 }
 
+enum LeadEoiStatus {
+  NOVO
+  CONTATADO
+  CONVERTIDO
+  PERDIDO
+}
+
 enum ReservaStatus {
   ATIVA
   EXPIRADA
@@ -620,6 +627,29 @@ model LeadComprador {
 
   @@index([status])
   @@index([pessoaId])
+}
+
+/// Lead capturado via form EOI (Expression of Interest) da landing page.
+/// Persiste todos os campos do formulário de waitlist para exportação CSV.
+model LeadEoi {
+  id           String        @id @default(cuid())
+  nome         String
+  org          String
+  email        String        @unique
+  telefone     String?
+  perfil       String
+  jurisdiction String?
+  ticket       String
+  currency     String?
+  classe       String?
+  timeline     String?
+  notes        String?
+  status       LeadEoiStatus @default(NOVO)
+  criadoEm     DateTime      @default(now())
+  atualizadoEm DateTime      @updatedAt
+
+  @@index([status])
+  @@index([criadoEm])
 }
 
 /// Reserva de cota pelo comprador-usuário. 72h por default (PRD_MVP §6.8).

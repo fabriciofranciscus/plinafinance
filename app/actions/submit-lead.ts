@@ -6,6 +6,7 @@ import {
   renderInvestorReply,
   type LeadData,
 } from './email-templates';
+import { db } from '@/lib/db';
 
 export type LeadState = {
   status: 'idle' | 'success' | 'error';
@@ -135,6 +136,41 @@ export async function submitLead(
     notes: notes || undefined,
     recebido: new Date().toISOString(),
   };
+
+  // Persiste no banco. Upsert por email — resubmissão atualiza sem duplicar.
+  try {
+    await db.leadEoi.upsert({
+      where: { email: lead.email },
+      update: {
+        nome: lead.name,
+        org: lead.org,
+        telefone: lead.phone ?? null,
+        perfil: lead.profile,
+        jurisdiction: lead.jurisdiction ?? null,
+        ticket: lead.ticket,
+        currency: lead.currency ?? null,
+        classe: lead.classe ?? null,
+        timeline: lead.timeline ?? null,
+        notes: lead.notes ?? null,
+      },
+      create: {
+        nome: lead.name,
+        org: lead.org,
+        email: lead.email,
+        telefone: lead.phone ?? null,
+        perfil: lead.profile,
+        jurisdiction: lead.jurisdiction ?? null,
+        ticket: lead.ticket,
+        currency: lead.currency ?? null,
+        classe: lead.classe ?? null,
+        timeline: lead.timeline ?? null,
+        notes: lead.notes ?? null,
+      },
+    });
+  } catch (err) {
+    console.error('[submitLead] DB upsert error', err);
+    // Não bloqueia o fluxo — e-mail ainda vai.
+  }
 
   let tx: nodemailer.Transporter;
   try {
