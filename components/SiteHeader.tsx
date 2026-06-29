@@ -102,14 +102,7 @@ export default function SiteHeader() {
                   Sair
                 </button>
               </>
-            ) : (
-              <Link
-                href="/entrar"
-                className="font-details text-[10px] uppercase tracking-widest text-white/85 hover:text-white transition-colors whitespace-nowrap"
-              >
-                Entrar
-              </Link>
-            )}
+            ) : null}
             <a
               href="#lead-capture"
               className={`font-details text-[10px] uppercase tracking-widest bg-white text-base font-bold px-5 py-2.5 rounded-full hover:bg-lightBg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary transition-colors shadow-xl ${
@@ -166,11 +159,7 @@ export default function SiteHeader() {
                   Sair
                 </button>
               </>
-            ) : (
-              <Link href="/entrar" onClick={() => setMenuOpen(false)}>
-                Entrar
-              </Link>
-            )}
+            ) : null}
             <a
               href="#lead-capture"
               onClick={() => setMenuOpen(false)}
