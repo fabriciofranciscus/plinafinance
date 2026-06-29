@@ -31,24 +31,23 @@ const {
   assertElegivelParaTrustline: vi.fn(),
 }));
 
-vi.mock('@/lib/wallet/auth-guard', () => ({
-  withAuth: (
-    handler: (
-      req: Request,
-      ctx: { user: Record<string, unknown> },
-    ) => Promise<Response>,
-  ) =>
-    (req: Request) =>
-      handler(req, {
-        user: {
-          privyId: 'did:privy:abc',
-          investidorId: 'inv_1',
-          publicKey: USER_PK,
-          email: 'x@y.z',
-          etherfuseCustomerId: 'cust_1',
-        },
+vi.mock('@/lib/wallet/auth-guard', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/wallet/auth-guard')>();
+  return {
+    ...actual, // mantém AuthError real (withApi precisa dele)
+    // Lazy: USER_PK só é lido na chamada (request time), não no hoist do vi.mock.
+    requireInvestidor: vi.fn(() =>
+      Promise.resolve({
+        privyId: 'did:privy:abc',
+        investidorId: 'inv_1',
+        publicKey: USER_PK,
+        email: 'x@y.z',
+        etherfuseCustomerId: 'cust_1',
       }),
-}));
+    ),
+  };
+});
 
 vi.mock('@/lib/db', () => ({
   db: {
@@ -158,9 +157,9 @@ describe('POST /api/investidor/buy/swap/build', () => {
     const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
     expect(r.status).toBe(200);
     const json = await r.json();
-    expect(json.mock).toBe(true);
-    expect(json.alreadyExecuted).toBe(true);
-    expect(json.txHash).toBe('tx_mock_hash');
+    expect(json.data.mock).toBe(true);
+    expect(json.data.alreadyExecuted).toBe(true);
+    expect(json.data.txHash).toBe('tx_mock_hash');
     expect(distribute).toHaveBeenCalledOnce();
     expect(eventoAuditCreate).toHaveBeenCalledOnce();
     expect(eventoAuditCreate.mock.calls[0][0].data.acao).toBe('SWAP_EXECUTADO');

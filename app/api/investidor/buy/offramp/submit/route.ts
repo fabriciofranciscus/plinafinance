@@ -12,7 +12,6 @@
  * Returns: { burnStellarTxHash, mock }
  */
 
-import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
@@ -21,8 +20,10 @@ import {
   txHashFromXdr,
   fetchTransactionByHash,
 } from '@/lib/stellar/transactions';
-import { withAuth } from '@/lib/wallet/auth-guard';
-import { parseBody } from '@/lib/http/parse-body';
+import { requireInvestidor } from '@/lib/wallet/auth-guard';
+import { withApi } from '@/lib/api/with-api';
+import { ok } from '@/lib/api/response';
+import { ApiError } from '@/lib/api/errors';
 import { logStellarError } from '@/lib/stellar/log-error';
 
 export const dynamic = 'force-dynamic';
@@ -35,83 +36,84 @@ const Schema = z
   })
   .strict();
 
-export const POST = withAuth(async (req, { user }) => {
-  const parsed = await parseBody(req, Schema);
-  if ('response' in parsed) return parsed.response;
-  const { orderId, xdr, signatureHex } = parsed.data;
+export const POST = withApi(async (req, { requestId }) => {
+  const user = await requireInvestidor(req);
+  const { orderId, xdr, signatureHex } = Schema.parse(await req.json());
+
+  const order = await db.offRampOrder.findUnique({ where: { id: orderId } });
+  if (!order) {
+    throw new ApiError('NOT_FOUND', 404, 'order não encontrada');
+  }
+  if (order.investidorId !== user.investidorId) {
+    throw new ApiError(
+      'FORBIDDEN',
+      403,
+      'order não pertence ao investidor autenticado',
+    );
+  }
+  if (order.status !== 'signable_ready' && !order.burnStellarTxHash) {
+    throw new ApiError(
+      'CONFLICT',
+      409,
+      `order em status ${order.status} — chame /signing-tx primeiro`,
+    );
+  }
+
+  const mock =
+    (order.fiatInstructionsJson as Record<string, unknown> | null)?.__mock ===
+    true;
+
+  // Idempotência.
+  if (order.burnStellarTxHash) {
+    return ok(
+      { burnStellarTxHash: order.burnStellarTxHash, mock },
+      { requestId },
+    );
+  }
+
+  // Fecha a janela de crash submit→commit: o hash é determinístico a partir
+  // da XDR, então um retry pós-submit (burn já submetido, hash não persistido)
+  // reconcilia pela chain em vez de re-submeter a mesma tx assinada.
+  let res: { hash: string };
   try {
-    const order = await db.offRampOrder.findUnique({ where: { id: orderId } });
-    if (!order) {
-      return NextResponse.json({ error: 'order não encontrada' }, { status: 404 });
-    }
-    if (order.investidorId !== user.investidorId) {
-      return NextResponse.json(
-        { error: 'order não pertence ao investidor autenticado' },
-        { status: 403 },
-      );
-    }
-    if (order.status !== 'signable_ready' && !order.burnStellarTxHash) {
-      return NextResponse.json(
-        { error: `order em status ${order.status} — chame /signing-tx primeiro` },
-        { status: 409 },
-      );
-    }
-
-    const mock =
-      (order.fiatInstructionsJson as Record<string, unknown> | null)?.__mock ===
-      true;
-
-    // Idempotência.
-    if (order.burnStellarTxHash) {
-      return NextResponse.json({
-        burnStellarTxHash: order.burnStellarTxHash,
-        mock,
-      });
-    }
-
-    // Fecha a janela de crash submit→commit: o hash é determinístico a partir
-    // da XDR, então um retry pós-submit (burn já submetido, hash não persistido)
-    // reconcilia pela chain em vez de re-submeter a mesma tx assinada.
     const expectedTxHash = txHashFromXdr(xdr);
     const onchain = await fetchTransactionByHash(expectedTxHash);
-    const res = onchain?.successful
+    res = onchain?.successful
       ? { hash: onchain.hash }
       : await submitWithPrivySignature({
           xdr,
           investorPubkey: user.publicKey,
           investorSignatureHex: signatureHex,
         });
-
-    await db.$transaction(async (tx) => {
-      await tx.offRampOrder.update({
-        where: { id: order.id },
-        data: {
-          status: 'submitted',
-          burnStellarTxHash: res.hash,
-        },
-      });
-      await tx.eventoAudit.create({
-        data: {
-          acao: 'OFFRAMP_BURN_ASSINADO',
-          operador: mock ? 'sandbox-mock' : 'etherfuse-anchor',
-          investidorId: order.investidorId,
-          privyId: user.privyId,
-          stellarTxHash: res.hash,
-          payloadJson: {
-            orderId: order.id,
-            burnStellarTxHash: res.hash,
-            mock,
-          } as Prisma.InputJsonValue,
-        },
-      });
-    });
-
-    return NextResponse.json({ burnStellarTxHash: res.hash, mock });
   } catch (err) {
+    // Log redigido server-side (F-20); cliente recebe INTERNAL genérico.
     logStellarError('[offramp/submit]', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'unknown' },
-      { status: 500 },
-    );
+    throw err;
   }
+
+  await db.$transaction(async (tx) => {
+    await tx.offRampOrder.update({
+      where: { id: order.id },
+      data: {
+        status: 'submitted',
+        burnStellarTxHash: res.hash,
+      },
+    });
+    await tx.eventoAudit.create({
+      data: {
+        acao: 'OFFRAMP_BURN_ASSINADO',
+        operador: mock ? 'sandbox-mock' : 'etherfuse-anchor',
+        investidorId: order.investidorId,
+        privyId: user.privyId,
+        stellarTxHash: res.hash,
+        payloadJson: {
+          orderId: order.id,
+          burnStellarTxHash: res.hash,
+          mock,
+        } as Prisma.InputJsonValue,
+      },
+    });
+  });
+
+  return ok({ burnStellarTxHash: res.hash, mock }, { requestId });
 });

@@ -17,6 +17,7 @@ import {
   useAppSignRawHash as useSignRawHash,
 } from '@/lib/hooks/privy';
 import { useCallback, useEffect, useState } from 'react';
+import { unwrapEnvelope } from '@/lib/http/client';
 
 const NUMBER_BR = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 });
 const BRL = new Intl.NumberFormat('pt-BR', {
@@ -87,11 +88,10 @@ export default function SacarPage() {
           },
           body: JSON.stringify({}),
         });
-        if (!res.ok) throw new Error(await res.text());
-        const data = (await res.json()) as {
+        const data = await unwrapEnvelope<{
           publicKey: string;
           etherfuseCustomerId: string;
-        };
+        }>(res);
         if (!cancelled) {
           setPubkey(data.publicKey);
           setCustomerId(data.etherfuseCustomerId);
@@ -160,8 +160,7 @@ export default function SacarPage() {
         },
         body: JSON.stringify({ quoteId: quote.quoteId }),
       });
-      if (!res.ok) throw new Error(await res.text());
-      const data = (await res.json()) as OffRampData;
+      const data = await unwrapEnvelope<OffRampData>(res);
       setOffRamp(data);
       setStep('signing');
     } catch (err) {
@@ -186,11 +185,10 @@ export default function SacarPage() {
         },
         body: JSON.stringify({ orderId: offRamp.orderId }),
       });
-      if (!buildRes.ok) throw new Error(await buildRes.text());
-      const built = (await buildRes.json()) as {
+      const built = await unwrapEnvelope<{
         xdr: string;
         hashHex: string;
-      };
+      }>(buildRes);
       const { signature } = await signRawHash({
         address: pubkey,
         chainType: 'stellar',
@@ -208,8 +206,9 @@ export default function SacarPage() {
           signatureHex: signature,
         }),
       });
-      if (!submitRes.ok) throw new Error(await submitRes.text());
-      const data = (await submitRes.json()) as { burnStellarTxHash: string };
+      const data = await unwrapEnvelope<{ burnStellarTxHash: string }>(
+        submitRes,
+      );
       setBurnTxHash(data.burnStellarTxHash);
       setStep('processing');
     } catch (err) {
@@ -230,8 +229,7 @@ export default function SacarPage() {
           `/api/investidor/buy/offramp/status?orderId=${encodeURIComponent(offRamp.orderId)}`,
           { headers: token ? { Authorization: `Bearer ${token}` } : {} },
         );
-        if (!res.ok) return;
-        const data = (await res.json()) as OffRampStatusData;
+        const data = await unwrapEnvelope<OffRampStatusData>(res);
         if (cancelled) return;
         setFinalStatus(data);
         if (data.status === 'processing' || data.status === 'completed') {

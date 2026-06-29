@@ -22,24 +22,23 @@ const {
   eventoAuditCreate: vi.fn(),
 }));
 
-vi.mock('@/lib/wallet/auth-guard', () => ({
-  withAuth: (
-    handler: (
-      req: Request,
-      ctx: { user: Record<string, unknown> },
-    ) => Promise<Response>,
-  ) =>
-    (req: Request) =>
-      handler(req, {
-        user: {
-          privyId: 'did:privy:abc',
-          investidorId: 'inv_1',
-          publicKey: USER_PK,
-          email: 'x@y.z',
-          etherfuseCustomerId: 'cust_1',
-        },
+vi.mock('@/lib/wallet/auth-guard', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/wallet/auth-guard')>();
+  return {
+    ...actual, // mantém AuthError real (withApi precisa dele)
+    // Lazy: USER_PK só é lido na chamada (request time), não no hoist do vi.mock.
+    requireInvestidor: vi.fn(() =>
+      Promise.resolve({
+        privyId: 'did:privy:abc',
+        investidorId: 'inv_1',
+        publicKey: USER_PK,
+        email: 'x@y.z',
+        etherfuseCustomerId: 'cust_1',
       }),
-}));
+    ),
+  };
+});
 
 vi.mock('@/lib/db', () => ({
   db: {
@@ -109,8 +108,8 @@ describe('POST /api/investidor/buy/trust-plinarf/submit', () => {
     const r = await POST(req(FULL_BODY));
     expect(r.status).toBe(200);
     const json = await r.json();
-    expect(json.trustlineTxHash).toBe('tx_trust_hash');
-    expect(json.authorizeTxHash).toBe('tx_auth_hash');
+    expect(json.data.trustlineTxHash).toBe('tx_trust_hash');
+    expect(json.data.authorizeTxHash).toBe('tx_auth_hash');
     expect(submitWithPrivySignature).toHaveBeenCalledOnce();
     expect(authorizeTrustline).toHaveBeenCalledOnce();
     expect(investidorUpdate).toHaveBeenCalledWith({
@@ -133,9 +132,9 @@ describe('POST /api/investidor/buy/trust-plinarf/submit', () => {
     const r = await POST(req(FULL_BODY));
     expect(r.status).toBe(200);
     const json = await r.json();
-    expect(json.trustlineTxHash).toBe('existing_trust');
-    expect(json.authorizeTxHash).toBe('existing_auth');
-    expect(json.idempotent).toBe(true);
+    expect(json.data.trustlineTxHash).toBe('existing_trust');
+    expect(json.data.authorizeTxHash).toBe('existing_auth');
+    expect(json.data.idempotent).toBe(true);
     expect(submitWithPrivySignature).not.toHaveBeenCalled();
     expect(authorizeTrustline).not.toHaveBeenCalled();
   });
@@ -148,8 +147,8 @@ describe('POST /api/investidor/buy/trust-plinarf/submit', () => {
     const r = await POST(req(FULL_BODY));
     expect(r.status).toBe(200);
     const json = await r.json();
-    expect(json.trustlineTxHash).toBe('existing_trust');
-    expect(json.authorizeTxHash).toBe('tx_auth_hash');
+    expect(json.data.trustlineTxHash).toBe('existing_trust');
+    expect(json.data.authorizeTxHash).toBe('tx_auth_hash');
     expect(submitWithPrivySignature).not.toHaveBeenCalled();
     expect(authorizeTrustline).toHaveBeenCalledOnce();
     expect(investidorUpdate).not.toHaveBeenCalled();

@@ -5,7 +5,7 @@
  * JWT, não do body. Anexa signature e submete via Horizon. Devolve
  * `{hash}` da tx confirmada.
  *
- * C-07: gateado por LAB_ENABLED (testnet-only opt-in) + withAuth.
+ * C-07: gateado por LAB_ENABLED (testnet-only opt-in) + auth.
  * Auto-autoriza trustline server-side (só no /lab; em produção a Plina
  * decide quando autorizar após KYC).
  */
@@ -16,8 +16,9 @@ import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { authorizeTrustline } from '@/lib/stellar/issuer';
 import { issuerSigner } from '@/lib/stellar/signer';
 import { logStellarError } from '@/lib/stellar/log-error';
-import { withAuth } from '@/lib/wallet/auth-guard';
-import { parseBody } from '@/lib/http/parse-body';
+import { requireInvestidor } from '@/lib/wallet/auth-guard';
+import { withApi } from '@/lib/api/with-api';
+import { ok } from '@/lib/api/response';
 import { stellarSignatureHex, stellarXdr } from '@/lib/http/zod-stellar';
 import { isLabEnabled } from '@/lib/env/lab';
 
@@ -30,36 +31,35 @@ const Schema = z
   })
   .strict();
 
-export const POST = withAuth(async (req, { user }) => {
+export const POST = withApi(async (req, { requestId }) => {
   if (!isLabEnabled()) {
     return NextResponse.json({ error: 'not found' }, { status: 404 });
   }
-  const parsed = await parseBody(req, Schema);
-  if ('response' in parsed) return parsed.response;
-  const { xdr, signatureHex } = parsed.data;
+  const user = await requireInvestidor(req);
+  const { xdr, signatureHex } = Schema.parse(await req.json());
+
+  let result;
   try {
-    const result = await submitWithPrivySignature({
+    result = await submitWithPrivySignature({
       xdr,
       investorPubkey: user.publicKey,
       investorSignatureHex: signatureHex,
     });
-
-    // Auto-autorizar a trustline pra ela aparecer como AUTHORIZED.
-    const issuerSecret = process.env.STELLAR_ISSUER_SECRET;
-    if (issuerSecret) {
-      try {
-        await authorizeTrustline(issuerSigner(), user.publicKey);
-      } catch (authErr) {
-        logStellarError('[lab] auto-autorização falhou (não-fatal):', authErr);
-      }
-    }
-
-    return NextResponse.json({ hash: result.hash });
   } catch (err) {
+    // Log redigido server-side (F-20); cliente recebe INTERNAL genérico.
     logStellarError('[lab/submit-tx]', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'unknown' },
-      { status: 500 },
-    );
+    throw err;
   }
+
+  // Auto-autorizar a trustline pra ela aparecer como AUTHORIZED.
+  const issuerSecret = process.env.STELLAR_ISSUER_SECRET;
+  if (issuerSecret) {
+    try {
+      await authorizeTrustline(issuerSigner(), user.publicKey);
+    } catch (authErr) {
+      logStellarError('[lab] auto-autorização falhou (não-fatal):', authErr);
+    }
+  }
+
+  return ok({ hash: result.hash }, { requestId });
 });

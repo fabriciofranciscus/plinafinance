@@ -15,7 +15,6 @@
  * Returns: { trustlineTxHash, authorizeTxHash }
  */
 
-import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
@@ -23,8 +22,10 @@ import { submitWithPrivySignature } from '@/lib/stellar/transactions';
 import { authorizeTrustline } from '@/lib/stellar/issuer';
 import { issuerSigner } from '@/lib/stellar/signer';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
-import { withAuth } from '@/lib/wallet/auth-guard';
-import { parseBody } from '@/lib/http/parse-body';
+import { requireInvestidor } from '@/lib/wallet/auth-guard';
+import { withApi } from '@/lib/api/with-api';
+import { ok } from '@/lib/api/response';
+import { ApiError } from '@/lib/api/errors';
 import {
   stellarPubkey,
   stellarSignatureHex,
@@ -44,11 +45,14 @@ const Schema = z
   })
   .strict();
 
-export const POST = withAuth(async (req, { user }) => {
-  const parsed = await parseBody(req, Schema);
-  if ('response' in parsed) return parsed.response;
-  const { xdr, investorPubkey, signatureHex, assetCode: assetCodeInput } =
-    parsed.data;
+export const POST = withApi(async (req, { requestId }) => {
+  const user = await requireInvestidor(req);
+  const {
+    xdr,
+    investorPubkey,
+    signatureHex,
+    assetCode: assetCodeInput,
+  } = Schema.parse(await req.json());
   const defaultCode = process.env.ASSET_CODE ?? 'PLINARF';
   const subordinadaCode = process.env.ASSET_CODE_SUBORDINADA ?? 'PLINARFB';
   // F-M3-3: PLINARF = Sênior (legacy), PLINARFB = Subordinada (nova).
@@ -57,18 +61,17 @@ export const POST = withAuth(async (req, { user }) => {
   const isSubordinada = assetCode === subordinadaCode;
   try {
     if (investorPubkey !== user.publicKey) {
-      return NextResponse.json(
-        { error: 'investorPubkey não corresponde ao investidor autenticado' },
-        { status: 403 },
+      throw new ApiError(
+        'FORBIDDEN',
+        403,
+        'investorPubkey não corresponde ao investidor autenticado',
       );
     }
 
     const issuerSecret = process.env.STELLAR_ISSUER_SECRET;
     if (!issuerSecret) {
-      return NextResponse.json(
-        { error: 'STELLAR_ISSUER_SECRET ausente' },
-        { status: 500 },
-      );
+      // env ausente: erro interno, vira INTERNAL genérico (não surfacia).
+      throw new Error('STELLAR_ISSUER_SECRET ausente');
     }
 
     await assertElegivelParaTrustline({
@@ -85,19 +88,27 @@ export const POST = withAuth(async (req, { user }) => {
         where: {
           investidorId: user.investidorId,
           acao: 'TRUSTLINE_AUTORIZADA',
-          payloadJson: { path: ['assetCode'], equals: assetCode } as Prisma.JsonFilter,
+          payloadJson: {
+            path: ['assetCode'],
+            equals: assetCode,
+          } as Prisma.JsonFilter,
         },
         select: { stellarTxHash: true, payloadJson: true },
         orderBy: { criadoEm: 'desc' },
       });
       if (existing?.stellarTxHash) {
-        const payload = existing.payloadJson as { trustlineTxHash?: string } | null;
-        return NextResponse.json({
-          trustlineTxHash: payload?.trustlineTxHash ?? null,
-          authorizeTxHash: existing.stellarTxHash,
-          assetCode,
-          idempotent: true,
-        });
+        const payload = existing.payloadJson as {
+          trustlineTxHash?: string;
+        } | null;
+        return ok(
+          {
+            trustlineTxHash: payload?.trustlineTxHash ?? null,
+            authorizeTxHash: existing.stellarTxHash,
+            assetCode,
+            idempotent: true,
+          },
+          { requestId },
+        );
       }
       const trustlineRes = await submitWithPrivySignature({
         xdr,
@@ -122,11 +133,14 @@ export const POST = withAuth(async (req, { user }) => {
           } as Prisma.InputJsonValue,
         },
       });
-      return NextResponse.json({
-        trustlineTxHash: trustlineRes.hash,
-        authorizeTxHash: authRes.hash,
-        assetCode,
-      });
+      return ok(
+        {
+          trustlineTxHash: trustlineRes.hash,
+          authorizeTxHash: authRes.hash,
+          assetCode,
+        },
+        { requestId },
+      );
     }
 
     // Checkpoint: ler estado persistido antes de submeter qualquer tx.
@@ -158,11 +172,14 @@ export const POST = withAuth(async (req, { user }) => {
         '[trust-plinarf/submit] idempotente (ambos passos)',
         new Error('retry após sucesso completo'),
       );
-      return NextResponse.json({
-        trustlineTxHash: investidor.trustlineTxHash,
-        authorizeTxHash: existingAuth.stellarTxHash,
-        idempotent: true,
-      });
+      return ok(
+        {
+          trustlineTxHash: investidor.trustlineTxHash,
+          authorizeTxHash: existingAuth.stellarTxHash,
+          idempotent: true,
+        },
+        { requestId },
+      );
     }
 
     // Estado 2: trustline persistida mas authorize falhou → retomar só passo 2.
@@ -204,16 +221,20 @@ export const POST = withAuth(async (req, { user }) => {
       },
     });
 
-    return NextResponse.json({
-      trustlineTxHash: trustlineHash,
-      authorizeTxHash: authRes.hash,
-      assetCode,
-    });
-  } catch (err) {
-    logStellarError('[trust-plinarf/submit]', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'unknown' },
-      { status: 500 },
+    return ok(
+      {
+        trustlineTxHash: trustlineHash,
+        authorizeTxHash: authRes.hash,
+        assetCode,
+      },
+      { requestId },
     );
+  } catch (err) {
+    // Log redigido server-side (F-20) só pra erros internos/Stellar; ApiError
+    // já é tratado (mensagem intencional) e iria virar ruído no log.
+    if (!(err instanceof ApiError)) {
+      logStellarError('[trust-plinarf/submit]', err);
+    }
+    throw err;
   }
 });

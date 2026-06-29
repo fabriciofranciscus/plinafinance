@@ -24,6 +24,7 @@ import { loadAccount } from '../stellar/account';
 import { assetCodeForClasse } from '../stellar/classes';
 import { resolveTesouroAsset } from '../anchors/etherfuse/tesouro';
 import { ensureKycForPessoa } from './pessoa';
+import { ApiError } from '../api/errors';
 
 /**
  * Trustlines já estabelecidas on-chain? Fonte de verdade pro identity screen —
@@ -175,20 +176,32 @@ export async function assertElegivelParaTrustline(opts: {
     ? await db.investidor.findUnique({ where: { id: opts.investidorId } })
     : await db.investidor.findUnique({ where: { publicKey: opts.publicKey! } });
   if (!investidor) {
-    throw new Error('Investidor não onboardado — trustline negada.');
+    throw new ApiError(
+      'NOT_ONBOARDED',
+      403,
+      'Investidor não onboardado — trustline negada.',
+    );
   }
   if (!investidor.kycAprovado) {
-    throw new Error('KYC pendente — trustline negada (whitepaper §6.5).');
+    throw new ApiError(
+      'FORBIDDEN',
+      403,
+      'KYC pendente — trustline negada (whitepaper §6.5).',
+    );
   }
   if (investidor.status !== StatusInvestidor.AUTORIZADO) {
-    throw new Error(
+    throw new ApiError(
+      'FORBIDDEN',
+      403,
       `Investidor em estado ${investidor.status} — trustline negada.`,
     );
   }
   // N-14: bloqueia operação em mainnet pra investidores carimbados com
   // CPF sintético no onboard (sandbox que viraria mainnet sem re-KYC).
   if (STELLAR_NETWORK === 'PUBLIC' && investidor.isSyntheticCpf) {
-    throw new Error(
+    throw new ApiError(
+      'FORBIDDEN',
+      403,
       'Investidor com CPF sintético — exige re-KYC antes de operar em mainnet (N-14).',
     );
   }

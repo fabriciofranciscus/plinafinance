@@ -10,13 +10,14 @@
  * Returns: { bankAccountId, status, idempotent? }
  */
 
-import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { EtherfuseClient } from '@/lib/anchors/etherfuse';
-import { withAuth } from '@/lib/wallet/auth-guard';
-import { parseBody } from '@/lib/http/parse-body';
+import { requireInvestidor } from '@/lib/wallet/auth-guard';
+import { withApi } from '@/lib/api/with-api';
+import { ok } from '@/lib/api/response';
+import { ApiError } from '@/lib/api/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,139 +31,134 @@ const Schema = z
   })
   .strict();
 
-export const POST = withAuth(async (req, { user }) => {
-  const parsed = await parseBody(req, Schema);
-  if ('response' in parsed) return parsed.response;
-  const { pixKey, pixKeyType, cpf, firstName, lastName } = parsed.data;
-  try {
-    const investidor = await db.investidor.findUnique({
-      where: { id: user.investidorId },
-      select: {
-        id: true,
-        publicKey: true,
-        etherfuseCustomerId: true,
-        etherfuseBankAccountId: true,
-      },
-    });
-    if (!investidor) {
-      return NextResponse.json({ error: 'investidor não encontrado' }, { status: 404 });
-    }
-    if (!investidor.etherfuseCustomerId) {
-      return NextResponse.json(
-        { error: 'investidor sem etherfuseCustomerId — refaça onboarding' },
-        { status: 409 },
-      );
-    }
+export const POST = withApi(async (req, { requestId }) => {
+  const user = await requireInvestidor(req);
+  const { pixKey, pixKeyType, cpf, firstName, lastName } = Schema.parse(
+    await req.json(),
+  );
 
-    // Idempotência: bank já registrado.
-    if (investidor.etherfuseBankAccountId) {
-      return NextResponse.json({
+  const investidor = await db.investidor.findUnique({
+    where: { id: user.investidorId },
+    select: {
+      id: true,
+      publicKey: true,
+      etherfuseCustomerId: true,
+      etherfuseBankAccountId: true,
+    },
+  });
+  if (!investidor) {
+    throw new ApiError('NOT_FOUND', 404, 'investidor não encontrado');
+  }
+  if (!investidor.etherfuseCustomerId) {
+    throw new ApiError(
+      'CONFLICT',
+      409,
+      'investidor sem etherfuseCustomerId — refaça onboarding',
+    );
+  }
+
+  // Idempotência: bank já registrado.
+  if (investidor.etherfuseBankAccountId) {
+    return ok(
+      {
         bankAccountId: investidor.etherfuseBankAccountId,
         status: 'active',
         idempotent: true,
-      });
-    }
-
-    const apiKey = process.env.ETHERFUSE_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'ETHERFUSE_API_KEY ausente' },
-        { status: 500 },
-      );
-    }
-    const anchor = new EtherfuseClient({
-      apiKey,
-      baseUrl:
-        process.env.ETHERFUSE_BASE_URL ?? 'https://api.sand.etherfuse.com',
-    });
-
-    const custId = investidor.etherfuseCustomerId;
-    const persistBank = async (
-      id: string,
-      status: string,
-      reused: boolean,
-    ) => {
-      await db.$transaction(async (tx) => {
-        await tx.investidor.update({
-          where: { id: investidor.id },
-          data: { etherfuseBankAccountId: id },
-        });
-        await tx.eventoAudit.create({
-          data: {
-            acao: 'BANK_ACCOUNT_REGISTRADA',
-            operador: 'investidor-self-service',
-            investidorId: investidor.id,
-            privyId: user.privyId,
-            payloadJson: { accountId: id, status, reused } as Prisma.InputJsonValue,
-          },
-        });
-      });
-    };
-
-    // Reuso: se o customer já tem fiat account na Etherfuse (re-teste, ou
-    // registrada noutro fluxo), reaproveita em vez de criar — evita o limite
-    // "Only one BRL bank account is allowed per organization" do sandbox.
-    // Usado no pré-check e de novo no catch do register (corrida org-level).
-    const tryReusePix = async () => {
-      const accounts = await anchor.getFiatAccounts(custId).catch(() => []);
-      const pix = accounts.find((a) => a.type === 'PIX') ?? accounts[0];
-      if (!pix) return null;
-      await persistBank(pix.id, 'active', true);
-      return NextResponse.json({
-        bankAccountId: pix.id,
-        status: 'active',
-        idempotent: true,
-      });
-    };
-
-    const reused = await tryReusePix();
-    if (reused) return reused;
-
-    // Gera novo stub bankAccountId pro presignedUrl. Etherfuse aceita
-    // qualquer UUID; o register depois amarra esse UUID ao customer.
-    const bankAccountStubId = crypto.randomUUID();
-    const presignedUrl = await anchor.getKycUrl(
-      custId,
-      investidor.publicKey,
-      bankAccountStubId,
-    );
-
-    let bankResp;
-    try {
-      bankResp = await anchor.registerPixBankAccount(presignedUrl, {
-        pixKey,
-        pixKeyType,
-        cpf,
-        firstName,
-        lastName,
-      });
-    } catch (regErr) {
-      // Limite org-level do sandbox: pode haver uma conta criada após o check
-      // acima (corrida) ou sob este customer. Tenta reaproveitar antes de falhar.
-      const reusedAfterRace = await tryReusePix();
-      if (reusedAfterRace) return reusedAfterRace;
-      throw regErr;
-    }
-
-    const accountId = (bankResp as unknown as { accountId?: string; bankAccountId?: string })
-      .accountId ?? bankResp.bankAccountId;
-    if (!accountId) {
-      return NextResponse.json(
-        { error: 'Etherfuse retornou response sem accountId' },
-        { status: 502 },
-      );
-    }
-
-    await persistBank(accountId, bankResp.status, false);
-
-    return NextResponse.json({
-      bankAccountId: accountId,
-      status: bankResp.status,
-    });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'unknown' },
-      { status: 500 },
+      },
+      { requestId },
     );
   }
+
+  const apiKey = process.env.ETHERFUSE_API_KEY;
+  if (!apiKey) {
+    // env ausente: erro interno, vira INTERNAL genérico (não surfacia).
+    throw new Error('ETHERFUSE_API_KEY ausente');
+  }
+  const anchor = new EtherfuseClient({
+    apiKey,
+    baseUrl: process.env.ETHERFUSE_BASE_URL ?? 'https://api.sand.etherfuse.com',
+  });
+
+  const custId = investidor.etherfuseCustomerId;
+  const persistBank = async (id: string, status: string, reused: boolean) => {
+    await db.$transaction(async (tx) => {
+      await tx.investidor.update({
+        where: { id: investidor.id },
+        data: { etherfuseBankAccountId: id },
+      });
+      await tx.eventoAudit.create({
+        data: {
+          acao: 'BANK_ACCOUNT_REGISTRADA',
+          operador: 'investidor-self-service',
+          investidorId: investidor.id,
+          privyId: user.privyId,
+          payloadJson: {
+            accountId: id,
+            status,
+            reused,
+          } as Prisma.InputJsonValue,
+        },
+      });
+    });
+  };
+
+  // Reuso: se o customer já tem fiat account na Etherfuse (re-teste, ou
+  // registrada noutro fluxo), reaproveita em vez de criar — evita o limite
+  // "Only one BRL bank account is allowed per organization" do sandbox.
+  // Usado no pré-check e de novo no catch do register (corrida org-level).
+  const tryReusePix = async () => {
+    const accounts = await anchor.getFiatAccounts(custId).catch(() => []);
+    const pix = accounts.find((a) => a.type === 'PIX') ?? accounts[0];
+    if (!pix) return null;
+    await persistBank(pix.id, 'active', true);
+    return ok(
+      { bankAccountId: pix.id, status: 'active', idempotent: true },
+      { requestId },
+    );
+  };
+
+  const reused = await tryReusePix();
+  if (reused) return reused;
+
+  // Gera novo stub bankAccountId pro presignedUrl. Etherfuse aceita
+  // qualquer UUID; o register depois amarra esse UUID ao customer.
+  const bankAccountStubId = crypto.randomUUID();
+  const presignedUrl = await anchor.getKycUrl(
+    custId,
+    investidor.publicKey,
+    bankAccountStubId,
+  );
+
+  let bankResp;
+  try {
+    bankResp = await anchor.registerPixBankAccount(presignedUrl, {
+      pixKey,
+      pixKeyType,
+      cpf,
+      firstName,
+      lastName,
+    });
+  } catch (regErr) {
+    // Limite org-level do sandbox: pode haver uma conta criada após o check
+    // acima (corrida) ou sob este customer. Tenta reaproveitar antes de falhar.
+    const reusedAfterRace = await tryReusePix();
+    if (reusedAfterRace) return reusedAfterRace;
+    throw regErr;
+  }
+
+  const accountId =
+    (bankResp as unknown as { accountId?: string; bankAccountId?: string })
+      .accountId ?? bankResp.bankAccountId;
+  if (!accountId) {
+    // Erro operacional do anchor — safe surfaciar (não vaza secret).
+    throw new ApiError(
+      'ETHERFUSE_ERROR',
+      502,
+      'Etherfuse retornou response sem accountId',
+    );
+  }
+
+  await persistBank(accountId, bankResp.status, false);
+
+  return ok({ bankAccountId: accountId, status: bankResp.status }, { requestId });
 });

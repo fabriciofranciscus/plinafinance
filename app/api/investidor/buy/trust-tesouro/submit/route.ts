@@ -9,13 +9,14 @@
  * Returns: { trustlineTxHash }
  */
 
-import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { submitWithPrivySignature } from '@/lib/stellar/transactions';
-import { withAuth } from '@/lib/wallet/auth-guard';
-import { parseBody } from '@/lib/http/parse-body';
+import { requireInvestidor } from '@/lib/wallet/auth-guard';
+import { withApi } from '@/lib/api/with-api';
+import { ok } from '@/lib/api/response';
+import { ApiError } from '@/lib/api/errors';
 import {
   stellarPubkey,
   stellarSignatureHex,
@@ -33,61 +34,61 @@ const Schema = z
   })
   .strict();
 
-export const POST = withAuth(async (req, { user }) => {
-  const parsed = await parseBody(req, Schema);
-  if ('response' in parsed) return parsed.response;
-  const { xdr, investorPubkey, signatureHex } = parsed.data;
+export const POST = withApi(async (req, { requestId }) => {
+  const user = await requireInvestidor(req);
+  const { xdr, investorPubkey, signatureHex } = Schema.parse(await req.json());
+
+  if (investorPubkey !== user.publicKey) {
+    throw new ApiError(
+      'FORBIDDEN',
+      403,
+      'investorPubkey não corresponde ao investidor autenticado',
+    );
+  }
+
+  // F-11: idempotente. Trustline TESOURO já persistida → retorna existente.
+  const existing = await db.investidor.findUnique({
+    where: { id: user.investidorId },
+    select: { tesouroTrustlineTxHash: true },
+  });
+  if (existing?.tesouroTrustlineTxHash) {
+    return ok(
+      { trustlineTxHash: existing.tesouroTrustlineTxHash, idempotent: true },
+      { requestId },
+    );
+  }
+
+  let res;
   try {
-    if (investorPubkey !== user.publicKey) {
-      return NextResponse.json(
-        { error: 'investorPubkey não corresponde ao investidor autenticado' },
-        { status: 403 },
-      );
-    }
-
-    // F-11: idempotente. Trustline TESOURO já persistida → retorna existente.
-    const existing = await db.investidor.findUnique({
-      where: { id: user.investidorId },
-      select: { tesouroTrustlineTxHash: true },
-    });
-    if (existing?.tesouroTrustlineTxHash) {
-      return NextResponse.json({
-        trustlineTxHash: existing.tesouroTrustlineTxHash,
-        idempotent: true,
-      });
-    }
-
-    const res = await submitWithPrivySignature({
+    res = await submitWithPrivySignature({
       xdr,
       investorPubkey,
       investorSignatureHex: signatureHex,
     });
-
-    await db.$transaction(async (tx) => {
-      await tx.investidor.update({
-        where: { id: user.investidorId },
-        data: { tesouroTrustlineTxHash: res.hash },
-      });
-      await tx.eventoAudit.create({
-        data: {
-          acao: 'TESOURO_TRUSTLINE_AUTORIZADA',
-          operador: 'investidor-self-service',
-          investidorId: user.investidorId,
-          privyId: user.privyId,
-          stellarTxHash: res.hash,
-          payloadJson: {
-            targetPubkey: investorPubkey,
-          } as Prisma.InputJsonValue,
-        },
-      });
-    });
-
-    return NextResponse.json({ trustlineTxHash: res.hash });
   } catch (err) {
+    // Log redigido server-side (F-20); cliente recebe INTERNAL genérico.
     logStellarError('[trust-tesouro/submit]', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'unknown' },
-      { status: 500 },
-    );
+    throw err;
   }
+
+  await db.$transaction(async (tx) => {
+    await tx.investidor.update({
+      where: { id: user.investidorId },
+      data: { tesouroTrustlineTxHash: res.hash },
+    });
+    await tx.eventoAudit.create({
+      data: {
+        acao: 'TESOURO_TRUSTLINE_AUTORIZADA',
+        operador: 'investidor-self-service',
+        investidorId: user.investidorId,
+        privyId: user.privyId,
+        stellarTxHash: res.hash,
+        payloadJson: {
+          targetPubkey: investorPubkey,
+        } as Prisma.InputJsonValue,
+      },
+    });
+  });
+
+  return ok({ trustlineTxHash: res.hash }, { requestId });
 });

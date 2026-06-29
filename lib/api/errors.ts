@@ -18,6 +18,8 @@ export const API_ERROR_CODES = [
   'VALIDATION_FAILED',     // 400 — Zod rejeitou body/query
   'NOT_FOUND',             // 404 — recurso inexistente
   'CONFLICT',              // 409 — estado inválido (cota já realizada, etc.)
+  'GONE',                  // 410 — recurso expirado (quote vencido)
+  'RATE_LIMITED',          // 429 — rate-limit estourado
   'STELLAR_SUBMIT_FAILED', // 502 — Horizon retornou erro
   'ETHERFUSE_ERROR',       // 502 — anchor retornou erro
   'INTERNAL',              // 500 — erro inesperado (não vaza mensagem original)

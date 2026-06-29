@@ -8,12 +8,14 @@
  * programático + DB record. Idempotente.
  */
 
-import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { onboardInvestidor, investidorTrustlinesReady } from '@/lib/services/investidor';
 import { getPrivyClient, extractPrivyEmail, type PrivyLinkedAccount } from '@/lib/wallet/privy';
 import { sensitiveAuthLimiter, clientIp } from '@/lib/rate-limit/config';
 import { isIntlInvestorFlowEnabled } from '@/lib/env/feature-gates';
+import { withApi } from '@/lib/api/with-api';
+import { ok } from '@/lib/api/response';
+import { ApiError } from '@/lib/api/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,68 +31,58 @@ const BodySchema = z
   })
   .strict();
 
-export async function POST(req: Request) {
+export const POST = withApi(async (req, { requestId }) => {
   if (!(await sensitiveAuthLimiter.consume(clientIp(req)))) {
-    return NextResponse.json(
-      { error: 'too many requests' },
-      { status: 429 },
+    throw new ApiError('RATE_LIMITED', 429, 'too many requests');
+  }
+
+  const authHeader = req.headers.get('authorization') ?? '';
+  const token = authHeader.replace(/^Bearer\s+/i, '');
+  if (!token) {
+    throw new ApiError('UNAUTHORIZED', 401, 'token Privy ausente');
+  }
+  const privy = getPrivyClient();
+  let claims;
+  try {
+    claims = await privy.verifyAuthToken(token);
+  } catch {
+    throw new ApiError('UNAUTHORIZED', 401, 'token Privy inválido');
+  }
+
+  // Zod rejeitado → ZodError → VALIDATION_FAILED 400 (withApi).
+  const body = BodySchema.parse(await req.json().catch(() => ({})));
+
+  // F-M0-6 / M4: onboarding de jurisdição não-BR só com INTL_INVESTOR_FLOW on.
+  if (
+    body.jurisdicao &&
+    body.jurisdicao.toUpperCase() !== 'BR' &&
+    !(await isIntlInvestorFlowEnabled())
+  ) {
+    throw new ApiError(
+      'FORBIDDEN',
+      403,
+      'trilha internacional ainda não habilitada',
     );
   }
-  try {
-    const authHeader = req.headers.get('authorization') ?? '';
-    const token = authHeader.replace(/^Bearer\s+/i, '');
-    if (!token) {
-      return NextResponse.json(
-        { error: 'token Privy ausente' },
-        { status: 401 },
-      );
-    }
-    const privy = getPrivyClient();
-    const claims = await privy.verifyAuthToken(token);
 
-    const raw = await req.json().catch(() => ({}));
-    const bodyParsed = BodySchema.safeParse(raw);
-    if (!bodyParsed.success) {
-      return NextResponse.json(
-        { error: 'body inválido', issues: bodyParsed.error.issues },
-        { status: 400 },
-      );
-    }
-    const body = bodyParsed.data;
+  // Email vem do Privy user (linkedAccounts) — cobre email + OAuth.
+  const user = await privy.getUserById(claims.userId);
+  const linked = (user.linkedAccounts ?? []) as PrivyLinkedAccount[];
+  const email =
+    extractPrivyEmail(linked) ??
+    `${claims.userId.replace(/[^a-z0-9]/g, '')}@privy.plina.local`;
 
-    // F-M0-6 / M4: onboarding de jurisdição não-BR só com INTL_INVESTOR_FLOW on.
-    if (
-      body.jurisdicao &&
-      body.jurisdicao.toUpperCase() !== 'BR' &&
-      !(await isIntlInvestorFlowEnabled())
-    ) {
-      return NextResponse.json(
-        { error: 'trilha internacional ainda não habilitada' },
-        { status: 403 },
-      );
-    }
+  // `cpf obrigatório` é lançado como ApiError('VALIDATION_FAILED',400) no
+  // service (lib/services/pessoa.ts) — chega ao cliente com mensagem e status.
+  const result = await onboardInvestidor({
+    privyId: claims.userId,
+    email,
+    nome: body.nome,
+    cpf: body.cpf,
+  });
 
-    // Email vem do Privy user (linkedAccounts) — cobre email + OAuth.
-    const user = await privy.getUserById(claims.userId);
-    const linked = (user.linkedAccounts ?? []) as PrivyLinkedAccount[];
-    const email =
-      extractPrivyEmail(linked) ??
-      `${claims.userId.replace(/[^a-z0-9]/g, '')}@privy.plina.local`;
+  // Detecta trustlines on-chain pra não re-pedir assinatura a cada reload.
+  const trustlinesReady = await investidorTrustlinesReady(result.publicKey);
 
-    const result = await onboardInvestidor({
-      privyId: claims.userId,
-      email,
-      nome: body.nome,
-      cpf: body.cpf,
-    });
-
-    // Detecta trustlines on-chain pra não re-pedir assinatura a cada reload.
-    const trustlinesReady = await investidorTrustlinesReady(result.publicKey);
-
-    return NextResponse.json({ ...result, trustlinesReady });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'unknown';
-    const isClientError = message.startsWith('cpf obrigatório');
-    return NextResponse.json({ error: message }, { status: isClientError ? 400 : 500 });
-  }
-}
+  return ok({ ...result, trustlinesReady }, { requestId });
+});

@@ -16,24 +16,23 @@ const {
   eventoAuditCreate: vi.fn(),
 }));
 
-vi.mock('@/lib/wallet/auth-guard', () => ({
-  withAuth: (
-    handler: (
-      req: Request,
-      ctx: { user: Record<string, unknown> },
-    ) => Promise<Response>,
-  ) =>
-    (req: Request) =>
-      handler(req, {
-        user: {
-          privyId: 'did:privy:abc',
-          investidorId: 'inv_1',
-          publicKey: USER_PK,
-          email: 'x@y.z',
-          etherfuseCustomerId: 'cust_1',
-        },
+vi.mock('@/lib/wallet/auth-guard', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/wallet/auth-guard')>();
+  return {
+    ...actual, // mantém AuthError real (withApi precisa dele)
+    // Lazy: USER_PK só é lido na chamada (request time), não no hoist do vi.mock.
+    requireInvestidor: vi.fn(() =>
+      Promise.resolve({
+        privyId: 'did:privy:abc',
+        investidorId: 'inv_1',
+        publicKey: USER_PK,
+        email: 'x@y.z',
+        etherfuseCustomerId: 'cust_1',
       }),
-}));
+    ),
+  };
+});
 
 vi.mock('@/lib/db', () => ({
   db: {
@@ -121,8 +120,8 @@ describe('POST /api/investidor/buy/trust-tesouro/submit', () => {
     const r = await POST(req(FULL_BODY));
     expect(r.status).toBe(200);
     const json = await r.json();
-    expect(json.trustlineTxHash).toBe('existing_tesouro');
-    expect(json.idempotent).toBe(true);
+    expect(json.data.trustlineTxHash).toBe('existing_tesouro');
+    expect(json.data.idempotent).toBe(true);
     expect(submitWithPrivySignature).not.toHaveBeenCalled();
     expect(investidorUpdate).not.toHaveBeenCalled();
   });
