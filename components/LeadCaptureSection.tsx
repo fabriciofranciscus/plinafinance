@@ -7,17 +7,6 @@ import { submitLead, type LeadState } from '@/app/actions/submit-lead';
 
 const initialState: LeadState = { status: 'idle' };
 
-function formatCNPJInput(raw: string): string {
-  const d = raw.replace(/\D/g, '').slice(0, 14);
-  if (d.length <= 2) return d;
-  if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`;
-  if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
-  if (d.length <= 12) {
-    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`;
-  }
-  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
-}
-
 const inputBaseClass =
   'w-full px-7 py-4 rounded-full border border-light-hairline font-text text-base focus:outline-none focus-visible:border-primary-deep focus-visible:ring-2 focus-visible:ring-primary-deep/20 bg-lightBg/30 transition-colors';
 
@@ -28,9 +17,6 @@ export default function LeadCaptureSection() {
   const [state, formAction, pending] = useActionState(submitLead, initialState);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
-  // Quando muda pra success ou error, garante que o conteúdo está visível
-  // (bypass do reveal opacity:0 caso o IntersectionObserver não tenha disparado)
-  // e rola pra seção pra a mensagem ficar à vista.
   useEffect(() => {
     if (state.status !== 'idle') {
       wrapperRef.current?.classList.add('active');
@@ -58,18 +44,18 @@ export default function LeadCaptureSection() {
           >
             {state.status === 'success' ? (
               <>
-                Aplicação<br />recebida.
+                Interesse<br />registrado.
               </>
             ) : (
               <>
-                Solicite o<br />Prospecto.
+                Registre seu<br />interesse.
               </>
             )}
           </h2>
           <p className="lg:col-span-4 font-text text-base/70 text-lg font-light leading-relaxed">
             {state.status === 'success'
-              ? 'Nossa equipe de Relações com Investidores entrará em contato em até 2 dias úteis com Prospecto, regulamento do FIDC e cronograma de Due Diligence.'
-              : 'Solicite acesso ao Prospecto e à próxima janela de captação. Nossa equipe de Relações com Investidores entrará em contato com a documentação de habilitação institucional.'}
+              ? 'Nossa equipe entrará em contato em até 48 horas com apresentação detalhada do instrumento e documentação do FIDC.'
+              : 'Preencha os campos abaixo para manifestar interesse no PLINA-RF. Nossa equipe entrará em contato em até 48 horas para apresentação detalhada do instrumento.'}
           </p>
         </div>
 
@@ -97,109 +83,224 @@ export default function LeadCaptureSection() {
               }}
             />
 
+            {/* Linha 1: nome + organização */}
             <fieldset
               disabled={pending}
-              className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6 mb-10 border-0 p-0"
+              className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6 mb-6 border-0 p-0"
             >
-              <legend className="sr-only">Identificação do Responsável</legend>
+              <legend className="sr-only">Identificação</legend>
 
               <div className="space-y-1.5">
-                <label htmlFor="lc-nome" className={labelBaseClass}>
-                  Responsável Corporativo
+                <label htmlFor="lc-name" className={labelBaseClass}>
+                  Nome completo *
                 </label>
                 <input
-                  id="lc-nome"
-                  name="nome"
+                  id="lc-name"
+                  name="name"
                   type="text"
                   autoComplete="name"
-                  placeholder="Nome Completo"
+                  placeholder="Nome e sobrenome"
                   required
                   className={inputBaseClass}
                 />
               </div>
 
               <div className="space-y-1.5">
+                <label htmlFor="lc-org" className={labelBaseClass}>
+                  Organização *
+                </label>
+                <input
+                  id="lc-org"
+                  name="org"
+                  type="text"
+                  autoComplete="organization"
+                  placeholder="Family office, gestora, fundo..."
+                  required
+                  className={inputBaseClass}
+                />
+              </div>
+            </fieldset>
+
+            {/* Linha 2: email + telefone */}
+            <fieldset
+              disabled={pending}
+              className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6 mb-6 border-0 p-0"
+            >
+              <legend className="sr-only">Contato</legend>
+
+              <div className="space-y-1.5">
                 <label htmlFor="lc-email" className={labelBaseClass}>
-                  E-mail Corporativo
+                  E-mail corporativo *
                 </label>
                 <input
                   id="lc-email"
                   name="email"
                   type="email"
                   autoComplete="email"
-                  placeholder="email@instituicao.com"
+                  placeholder="nome@organização.com"
                   required
+                  className={inputBaseClass}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="lc-phone" className={labelBaseClass}>
+                  Telefone / WhatsApp
+                </label>
+                <input
+                  id="lc-phone"
+                  name="phone"
+                  type="tel"
+                  autoComplete="tel"
+                  placeholder="+55 11 99999-9999"
                   className={inputBaseClass}
                 />
               </div>
             </fieldset>
 
+            {/* Linha 3: perfil + jurisdição */}
             <fieldset
               disabled={pending}
-              className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6 mb-10 border-0 p-0"
+              className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6 mb-6 border-0 p-0"
             >
-              <legend className="sr-only">Identificação da Instituição</legend>
+              <legend className="sr-only">Perfil</legend>
 
               <div className="space-y-1.5">
-                <label htmlFor="lc-razao" className={labelBaseClass}>
-                  Razão Social
+                <label htmlFor="lc-profile" className={labelBaseClass}>
+                  Perfil do investidor *
                 </label>
-                <input
-                  id="lc-razao"
-                  name="razao"
-                  type="text"
-                  autoComplete="organization"
-                  placeholder="Family Office / Gestora"
-                  required
-                  className={inputBaseClass}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="lc-cnpj" className={labelBaseClass}>
-                  CNPJ
-                </label>
-                <input
-                  id="lc-cnpj"
-                  name="cnpj"
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="00.000.000/0001-00"
-                  required
-                  maxLength={18}
-                  onInput={(e) => {
-                    e.currentTarget.value = formatCNPJInput(e.currentTarget.value);
-                  }}
-                  className={inputBaseClass}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="lc-tipo" className={labelBaseClass}>
-                  Tipo de Instituição
-                </label>
-                <SelectField id="lc-tipo" name="tipo">
-                  <option>Family Office</option>
-                  <option>Gestora Multimercado</option>
-                  <option>Custodiante Institucional</option>
-                  <option>Parceiro Estratégico</option>
-                  <option>Fintech LATAM</option>
-                  <option>Outro</option>
+                <SelectField id="lc-profile" name="profile" required>
+                  <option value="family-office-br">Family office brasileiro</option>
+                  <option value="family-office-int">Family office internacional</option>
+                  <option value="gestora-br">Gestora de fundos (BR)</option>
+                  <option value="gestora-int">Gestora multi-mercado (Internacional)</option>
+                  <option value="fintech-latam">Fintech de investimento LATAM</option>
+                  <option value="outro">Outro — descrever nas observações</option>
                 </SelectField>
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="lc-aum" className={labelBaseClass}>
-                  Ativos sob Gestão (AUM)
+                <label htmlFor="lc-jurisdiction" className={labelBaseClass}>
+                  Jurisdição principal
                 </label>
-                <SelectField id="lc-aum" name="aum">
-                  <option>Acima de R$ 50M</option>
-                  <option>Acima de R$ 100M</option>
-                  <option>Acima de R$ 500M</option>
-                  <option>Acima de US$ 100M</option>
+                <input
+                  id="lc-jurisdiction"
+                  name="jurisdiction"
+                  type="text"
+                  placeholder="Brasil, EUA, Cingapura..."
+                  className={inputBaseClass}
+                />
+              </div>
+            </fieldset>
+
+            {/* Linha 4: tíquete + moeda */}
+            <fieldset
+              disabled={pending}
+              className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6 mb-6 border-0 p-0"
+            >
+              <legend className="sr-only">Investimento</legend>
+
+              <div className="space-y-1.5">
+                <label htmlFor="lc-ticket" className={labelBaseClass}>
+                  Tíquete indicativo *
+                </label>
+                <SelectField id="lc-ticket" name="ticket" required>
+                  <option value="100k-500k">US$ 100k – 500k</option>
+                  <option value="500k-1m">US$ 500k – 1M</option>
+                  <option value="1m-5m">US$ 1M – 5M</option>
+                  <option value="5m+">US$ 5M+</option>
+                  <option value="500k-2m-brl">R$ 500k – 2M</option>
+                  <option value="2m-10m-brl">R$ 2M – 10M</option>
+                  <option value="10m+brl">R$ 10M+</option>
+                </SelectField>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="lc-currency" className={labelBaseClass}>
+                  Moeda de preferência
+                </label>
+                <SelectField id="lc-currency" name="currency" required={false}>
+                  <option value="">Selecione (opcional)</option>
+                  <option value="USDC">USDC</option>
+                  <option value="EURC">EURC</option>
+                  <option value="BRL stablecoin (BRZ / BRLA)">BRL stablecoin (BRZ / BRLA)</option>
+                  <option value="BRL fiat">BRL fiat</option>
+                  <option value="Ainda indefinido">Ainda indefinido</option>
                 </SelectField>
               </div>
             </fieldset>
+
+            {/* Linha 5: classe + prazo */}
+            <fieldset
+              disabled={pending}
+              className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6 mb-6 border-0 p-0"
+            >
+              <legend className="sr-only">Estrutura</legend>
+
+              <div className="space-y-1.5">
+                <label htmlFor="lc-classe" className={labelBaseClass}>
+                  Classe de interesse
+                </label>
+                <SelectField id="lc-classe" name="classe" required={false}>
+                  <option value="">Selecione (opcional)</option>
+                  <option value="Sênior">Sênior (menor risco, retorno prioritário)</option>
+                  <option value="Subordinada">Subordinada (primeiras perdas, maior retorno potencial)</option>
+                  <option value="Ambas">Ambas — sujeito a modelagem</option>
+                  <option value="Indefinido">Indefinido</option>
+                </SelectField>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="lc-timeline" className={labelBaseClass}>
+                  Prazo de decisão
+                </label>
+                <SelectField id="lc-timeline" name="timeline" required={false}>
+                  <option value="">Selecione (opcional)</option>
+                  <option value="Até 30 dias">Até 30 dias</option>
+                  <option value="1 a 3 meses">1 a 3 meses</option>
+                  <option value="3 a 6 meses">3 a 6 meses</option>
+                  <option value="Mais de 6 meses">Mais de 6 meses</option>
+                  <option value="Fase exploratória">Fase exploratória</option>
+                </SelectField>
+              </div>
+            </fieldset>
+
+            {/* Linha 6: observações */}
+            <fieldset
+              disabled={pending}
+              className="mb-6 border-0 p-0"
+            >
+              <legend className="sr-only">Observações</legend>
+              <div className="space-y-1.5">
+                <label htmlFor="lc-notes" className={labelBaseClass}>
+                  Observações / perguntas
+                </label>
+                <textarea
+                  id="lc-notes"
+                  name="notes"
+                  rows={4}
+                  placeholder="Restrições de compliance, exigências específicas de estrutura, perguntas iniciais..."
+                  className={
+                    inputBaseClass.replace('rounded-full', 'rounded-2xl') +
+                    ' resize-none'
+                  }
+                />
+              </div>
+            </fieldset>
+
+            {/* LGPD */}
+            <div className="flex items-start gap-3 mb-8">
+              <input
+                type="checkbox"
+                id="lc-lgpd"
+                name="lgpd"
+                required
+                className="mt-1 w-4 h-4 accent-primary-deep flex-shrink-0 cursor-pointer"
+              />
+              <label htmlFor="lc-lgpd" className="font-text text-sm text-base/60 leading-relaxed cursor-pointer">
+                Autorizo o uso dos dados fornecidos para contato sobre o PLINA-RF. As informações são tratadas com confidencialidade, em conformidade com a LGPD, e não são compartilhadas com terceiros sem consentimento.
+              </label>
+            </div>
 
             {state.status === 'error' && state.message && (
               <p
@@ -215,13 +316,13 @@ export default function LeadCaptureSection() {
               disabled={pending}
               className="w-full bg-base text-white py-5 font-details text-xs uppercase tracking-[0.2em] font-bold rounded-full hover:bg-primary focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary transition-[background-color,box-shadow,opacity] duration-300 ease-out shadow-xl hover:shadow-primary/20 disabled:opacity-60 disabled:cursor-wait"
             >
-              {pending ? 'Enviando…' : 'Solicitar Prospecto'}
+              {pending ? 'Enviando…' : 'Registrar interesse'}
             </button>
           </form>
         )}
 
         <p className="font-details text-[10px] uppercase tracking-widest text-base/60 mt-8">
-          Oferta restrita · Investidor qualificado · Lei 11.795/2008 · CVM 175
+          Processo confidencial · Não caracteriza oferta pública · Oferta restrita · Investidor qualificado · CVM 175
         </p>
       </div>
     </section>
@@ -231,10 +332,12 @@ export default function LeadCaptureSection() {
 function SelectField({
   id,
   name,
+  required = true,
   children,
 }: {
   id: string;
   name: string;
+  required?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -242,9 +345,11 @@ function SelectField({
       <select
         id={id}
         name={name}
-        required
+        required={required}
+        defaultValue=""
         className={inputBaseClass + ' appearance-none pr-12'}
       >
+        {required && <option value="" disabled>Selecione</option>}
         {children}
       </select>
       <svg
@@ -265,8 +370,8 @@ function SelectField({
 
 function SuccessPanel() {
   const passos = [
-    { ordem: '01', titulo: 'Confirmação imediata', detalhe: 'Recebemos sua aplicação e o protocolo foi gerado.' },
-    { ordem: '02', titulo: 'Em até 2 dias úteis', detalhe: 'Nossa equipe de RI envia Prospecto, regulamento do FIDC e cronograma de Due Diligence.' },
+    { ordem: '01', titulo: 'Confirmação imediata', detalhe: 'Recebemos seu interesse no PLINA-RF e o registro foi gerado.' },
+    { ordem: '02', titulo: 'Em até 48 horas', detalhe: 'Nossa equipe de RI envia apresentação detalhada do instrumento e documentação do FIDC.' },
     { ordem: '03', titulo: 'Roadshow institucional', detalhe: 'Agendamento com o time fundador. Slots em Miami, São Paulo, Cingapura e Londres.' },
   ];
 
