@@ -6,26 +6,30 @@ import {
   renderInvestorReply,
   type LeadData,
 } from './email-templates';
+import { db } from '@/lib/db';
 
 export type LeadState = {
   status: 'idle' | 'success' | 'error';
   message?: string;
 };
 
-const TIPOS_VALIDOS = new Set([
-  'Family Office',
-  'Gestora Multimercado',
-  'Custodiante Institucional',
-  'Parceiro Estratégico',
-  'Fintech LATAM',
-  'Outro',
+const PROFILES_VALIDOS = new Set([
+  'family-office-br',
+  'family-office-int',
+  'gestora-br',
+  'gestora-int',
+  'fintech-latam',
+  'outro',
 ]);
 
-const AUMS_VALIDOS = new Set([
-  'Acima de R$ 50M',
-  'Acima de R$ 100M',
-  'Acima de R$ 500M',
-  'Acima de US$ 100M',
+const TICKETS_VALIDOS = new Set([
+  '100k-500k',
+  '500k-1m',
+  '1m-5m',
+  '5m+',
+  '500k-2m-brl',
+  '2m-10m-brl',
+  '10m+brl',
 ]);
 
 let transporter: nodemailer.Transporter | null = null;
@@ -57,42 +61,24 @@ function sanitize(raw: FormDataEntryValue | null, max = 500) {
   return raw.trim().slice(0, max);
 }
 
-function isValidCNPJ(raw: string): boolean {
-  const digits = raw.replace(/\D/g, '');
-  if (digits.length !== 14) return false;
-  if (/^(\d)\1+$/.test(digits)) return false;
+const PROFILE_LABELS: Record<string, string> = {
+  'family-office-br': 'Family office brasileiro',
+  'family-office-int': 'Family office internacional',
+  'gestora-br': 'Gestora de fundos (BR)',
+  'gestora-int': 'Gestora multi-mercado (Internacional)',
+  'fintech-latam': 'Fintech de investimento LATAM',
+  'outro': 'Outro',
+};
 
-  const calcDigit = (slice: string, weights: number[]) => {
-    const sum = weights.reduce(
-      (acc, w, i) => acc + parseInt(slice[i], 10) * w,
-      0
-    );
-    const mod = sum % 11;
-    return mod < 2 ? 0 : 11 - mod;
-  };
-
-  const w1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-  const w2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-
-  if (calcDigit(digits.slice(0, 12), w1) !== parseInt(digits[12], 10)) {
-    return false;
-  }
-  if (calcDigit(digits.slice(0, 13), w2) !== parseInt(digits[13], 10)) {
-    return false;
-  }
-  return true;
-}
-
-function formatCNPJ(raw: string): string {
-  const d = raw.replace(/\D/g, '').slice(0, 14);
-  if (d.length <= 2) return d;
-  if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`;
-  if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
-  if (d.length <= 12) {
-    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`;
-  }
-  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
-}
+const TICKET_LABELS: Record<string, string> = {
+  '100k-500k': 'US$ 100k – 500k',
+  '500k-1m': 'US$ 500k – 1M',
+  '1m-5m': 'US$ 1M – 5M',
+  '5m+': 'US$ 5M+',
+  '500k-2m-brl': 'R$ 500k – 2M',
+  '2m-10m-brl': 'R$ 2M – 10M',
+  '10m+brl': 'R$ 10M+',
+};
 
 export async function submitLead(
   _prev: LeadState,
@@ -103,38 +89,88 @@ export async function submitLead(
     return { status: 'success' };
   }
 
-  const nome = sanitize(formData.get('nome'), 200);
+  const name = sanitize(formData.get('name'), 200);
+  const org = sanitize(formData.get('org'), 200);
   const email = sanitize(formData.get('email'), 200);
-  const razao = sanitize(formData.get('razao'), 200);
-  const cnpj = sanitize(formData.get('cnpj'), 30);
-  const tipo = sanitize(formData.get('tipo'), 60);
-  const aum = sanitize(formData.get('aum'), 60);
+  const phone = sanitize(formData.get('phone'), 50);
+  const profile = sanitize(formData.get('profile'), 60);
+  const jurisdiction = sanitize(formData.get('jurisdiction'), 100);
+  const ticket = sanitize(formData.get('ticket'), 30);
+  const currency = sanitize(formData.get('currency'), 30);
+  const classe = sanitize(formData.get('classe'), 30);
+  const timeline = sanitize(formData.get('timeline'), 30);
+  const notes = sanitize(formData.get('notes'), 1000);
+  const lgpd = formData.get('lgpd');
 
-  if (!nome || !email || !razao || !cnpj || !tipo || !aum) {
-    return { status: 'error', message: 'Preencha todos os campos.' };
+  if (!name || !org || !email || !profile || !ticket) {
+    return { status: 'error', message: 'Preencha todos os campos obrigatórios.' };
   }
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { status: 'error', message: 'E-mail inválido.' };
   }
 
-  if (!isValidCNPJ(cnpj)) {
-    return { status: 'error', message: 'CNPJ inválido. Verifique os dígitos.' };
+  if (!PROFILES_VALIDOS.has(profile)) {
+    return { status: 'error', message: 'Selecione um perfil de investidor válido.' };
   }
 
-  if (!TIPOS_VALIDOS.has(tipo) || !AUMS_VALIDOS.has(aum)) {
-    return { status: 'error', message: 'Selecione tipo e AUM válidos.' };
+  if (!TICKETS_VALIDOS.has(ticket)) {
+    return { status: 'error', message: 'Selecione um tíquete indicativo válido.' };
+  }
+
+  if (lgpd !== 'on') {
+    return { status: 'error', message: 'É necessário aceitar os termos de privacidade (LGPD).' };
   }
 
   const lead: LeadData = {
-    nome,
+    name,
+    org,
     email,
-    razao,
-    cnpj: formatCNPJ(cnpj),
-    tipo,
-    aum,
+    phone: phone || undefined,
+    profile: PROFILE_LABELS[profile] ?? profile,
+    jurisdiction: jurisdiction || undefined,
+    ticket: TICKET_LABELS[ticket] ?? ticket,
+    currency: currency || undefined,
+    classe: classe || undefined,
+    timeline: timeline || undefined,
+    notes: notes || undefined,
     recebido: new Date().toISOString(),
   };
+
+  // Persiste no banco. Upsert por email — resubmissão atualiza sem duplicar.
+  try {
+    await db.leadEoi.upsert({
+      where: { email: lead.email },
+      update: {
+        nome: lead.name,
+        org: lead.org,
+        telefone: lead.phone ?? null,
+        perfil: lead.profile,
+        jurisdiction: lead.jurisdiction ?? null,
+        ticket: lead.ticket,
+        currency: lead.currency ?? null,
+        classe: lead.classe ?? null,
+        timeline: lead.timeline ?? null,
+        notes: lead.notes ?? null,
+      },
+      create: {
+        nome: lead.name,
+        org: lead.org,
+        email: lead.email,
+        telefone: lead.phone ?? null,
+        perfil: lead.profile,
+        jurisdiction: lead.jurisdiction ?? null,
+        ticket: lead.ticket,
+        currency: lead.currency ?? null,
+        classe: lead.classe ?? null,
+        timeline: lead.timeline ?? null,
+        notes: lead.notes ?? null,
+      },
+    });
+  } catch (err) {
+    console.error('[submitLead] DB upsert error', err);
+    // Não bloqueia o fluxo — e-mail ainda vai.
+  }
 
   let tx: nodemailer.Transporter;
   try {

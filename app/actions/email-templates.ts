@@ -1,4 +1,4 @@
-// Templates de e-mail HTML para o fluxo de Lead Capture.
+// Templates de e-mail HTML para o fluxo de Lead Capture (EOI / Waitlist).
 // Design alinhado ao DESIGN.md — paleta institucional, hairlines, mono para dados.
 // Cores e fontes são pré-computadas (sem alpha, sem web fonts) para máxima
 // compatibilidade com clientes de e-mail (Outlook, Gmail, Apple Mail, etc).
@@ -21,13 +21,18 @@ const SANS = `-apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-s
 const MONO = `SFMono-Regular, Consolas, Menlo, "Liberation Mono", monospace`;
 
 export type LeadData = {
-  nome: string;
+  name: string;
+  org: string;
   email: string;
-  razao: string;
-  cnpj: string; // já formatado
-  tipo: string;
-  aum: string;
-  recebido: string; // ISO timestamp
+  phone?: string;
+  profile: string;       // já com label legível
+  jurisdiction?: string;
+  ticket: string;        // já com label legível
+  currency?: string;
+  classe?: string;
+  timeline?: string;
+  notes?: string;
+  recebido: string;      // ISO timestamp
 };
 
 function esc(s: string): string {
@@ -54,39 +59,38 @@ function fmtDateBR(iso: string): string {
 // ----------------------------------------------------------------
 
 export function renderInvestorReply(d: LeadData) {
-  const firstName = d.nome.split(' ')[0];
-  const subject = 'Plina · Aplicação recebida';
+  const firstName = d.name.split(' ')[0];
+  const subject = 'Plina · Interesse registrado';
 
   const text = `${firstName},
 
-Recebemos sua aplicação institucional via plina.finance. Nossa equipe de Relações com Investidores entrará em contato em até 2 dias úteis com o Prospecto, regulamento do FIDC e cronograma de Due Diligence.
+Recebemos seu interesse no PLINA-RF via plina.finance. Nossa equipe entrará em contato em até 48 horas com apresentação detalhada do instrumento e documentação do FIDC.
 
 Próximos passos:
 
-  01 · Em até 2 dias úteis · Envio de Prospecto, regulamento do FIDC e cronograma de Due Diligence.
-  02 · Roadshow institucional · Agendamento com o time fundador, com slots em São Paulo, Miami, Cingapura e Londres.
+  01 · Em até 48 horas · Nossa equipe de RI entrará em contato com apresentação do instrumento e documentação do FIDC.
+  02 · Roadshow institucional · Agendamento com o time fundador. Slots em Miami, São Paulo, Cingapura e Londres.
   03 · Onboarding formal · Habilitação institucional sob estrutura CVM 175, com prestadores registrados e auditoria Big Four.
 
-Resumo da aplicação:
+Resumo da sua manifestação:
 
-  Razão Social: ${d.razao}
-  CNPJ: ${d.cnpj}
-  Tipo de Instituição: ${d.tipo}
-  Ativos sob Gestão: ${d.aum}
+  Organização: ${d.org}
+  Perfil: ${d.profile}
+  Tíquete indicativo: ${d.ticket}${d.jurisdiction ? `\n  Jurisdição: ${d.jurisdiction}` : ''}
 
 Em caso de dúvidas, basta responder este e-mail ou escrever para contato@plina.finance.
 
 —
 Plina Finance
-Tokenizadora institucional de direito creditório
-Oferta restrita · Investidor qualificado · Lei 11.795/2008 · CVM 175
+Pool tokenizado de cotas de consórcio contempladas · FIDC · CVM 175 · Stellar
+Oferta restrita · Investidor qualificado
 `;
 
   const passos: Array<[string, string, string]> = [
     [
       '01',
-      'Em até 2 dias úteis',
-      'Nossa equipe de Relações com Investidores envia Prospecto, regulamento do FIDC e cronograma de Due Diligence.',
+      'Em até 48 horas',
+      'Nossa equipe de Relações com Investidores envia apresentação detalhada do instrumento e documentação do FIDC.',
     ],
     [
       '02',
@@ -101,10 +105,10 @@ Oferta restrita · Investidor qualificado · Lei 11.795/2008 · CVM 175
   ];
 
   const resumo: Array<[string, string]> = [
-    ['Razão Social', d.razao],
-    ['CNPJ', d.cnpj],
-    ['Tipo de Instituição', d.tipo],
-    ['Ativos sob Gestão', d.aum],
+    ['Organização', d.org],
+    ['Perfil', d.profile],
+    ['Tíquete', d.ticket],
+    ...(d.jurisdiction ? [['Jurisdição', d.jurisdiction] as [string, string]] : []),
   ];
 
   const passosHtml = passos
@@ -155,7 +159,7 @@ Oferta restrita · Investidor qualificado · Lei 11.795/2008 · CVM 175
 </head>
 <body style="margin:0;padding:0;background:${COLORS.pageGrey};font-family:${SANS};color:${COLORS.petrol};-webkit-font-smoothing:antialiased;">
   <span style="display:none !important;visibility:hidden;mso-hide:all;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
-    Recebemos sua aplicação institucional. Nossa equipe entrará em contato em até 2 dias úteis.
+    Recebemos seu interesse no PLINA-RF. Nossa equipe entrará em contato em até 48 horas.
   </span>
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${COLORS.pageGrey};">
     <tr>
@@ -171,7 +175,7 @@ Oferta restrita · Investidor qualificado · Lei 11.795/2008 · CVM 175
                     Plina<span style="color:${COLORS.cyan};">.</span>
                   </td>
                   <td align="right" style="padding:22px 40px;font-family:${MONO};font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:#A0A8A8;">
-                    Aplicação recebida
+                    Interesse registrado
                   </td>
                 </tr>
               </table>
@@ -185,7 +189,7 @@ Oferta restrita · Investidor qualificado · Lei 11.795/2008 · CVM 175
                 ${esc(firstName)},
               </h1>
               <p style="margin:0;font-family:${SANS};font-size:16px;line-height:1.6;color:${COLORS.petrol70};font-weight:400;">
-                Recebemos sua aplicação institucional via plina.finance. Nossa equipe de Relações com Investidores entrará em contato em até 2 dias úteis com o Prospecto, regulamento do FIDC e cronograma de Due Diligence.
+                Recebemos seu interesse no PLINA-RF via plina.finance. Nossa equipe entrará em contato em até 48 horas com apresentação detalhada do instrumento e documentação do FIDC.
               </p>
             </td>
           </tr>
@@ -214,7 +218,7 @@ Oferta restrita · Investidor qualificado · Lei 11.795/2008 · CVM 175
           <tr>
             <td style="padding:32px 40px 0 40px;">
               <p style="margin:0 0 20px 0;font-family:${MONO};font-size:10px;letter-spacing:0.24em;text-transform:uppercase;color:${COLORS.cyanDeep};font-weight:700;">
-                Resumo da aplicação
+                Resumo do interesse
               </p>
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${COLORS.grey};border:1px solid ${COLORS.hairline};">
                 ${resumoRows}
@@ -239,10 +243,10 @@ Oferta restrita · Investidor qualificado · Lei 11.795/2008 · CVM 175
                 Plina<span style="color:${COLORS.cyan};">.</span>
               </p>
               <p style="margin:0 0 16px 0;font-family:${SANS};font-size:13px;color:#A0A8A8;font-weight:400;">
-                Tokenizadora institucional de direito creditório
+                Pool tokenizado de cotas de consórcio contempladas
               </p>
               <p style="margin:0;font-family:${MONO};font-size:9px;letter-spacing:0.24em;text-transform:uppercase;color:#7A8484;">
-                Oferta restrita · Investidor qualificado · Lei 11.795/2008 · CVM 175
+                Oferta restrita · Investidor qualificado · CVM 175 · Stellar
               </p>
             </td>
           </tr>
@@ -272,27 +276,38 @@ Oferta restrita · Investidor qualificado · Lei 11.795/2008 · CVM 175
 // ----------------------------------------------------------------
 
 export function renderInternalNotification(d: LeadData) {
-  const subject = `[Plina · Lead] ${d.razao}`;
+  const subject = `[Plina · EOI] ${d.org}`;
 
-  const text = `Nova aplicação institucional recebida via plina.finance
-
-Responsável Corporativo: ${d.nome}
-E-mail: ${d.email}
-Razão Social: ${d.razao}
-CNPJ: ${d.cnpj}
-Tipo de Instituição: ${d.tipo}
-Ativos sob Gestão: ${d.aum}
-
-Recebido: ${d.recebido}
-`;
+  const lines = [
+    `Nova manifestação de interesse (EOI) recebida via plina.finance`,
+    ``,
+    `Nome: ${d.name}`,
+    `E-mail: ${d.email}`,
+    `Organização: ${d.org}`,
+    `Perfil: ${d.profile}`,
+    `Tíquete: ${d.ticket}`,
+    ...(d.phone ? [`Telefone: ${d.phone}`] : []),
+    ...(d.jurisdiction ? [`Jurisdição: ${d.jurisdiction}`] : []),
+    ...(d.currency ? [`Moeda de preferência: ${d.currency}`] : []),
+    ...(d.classe ? [`Classe de interesse: ${d.classe}`] : []),
+    ...(d.timeline ? [`Prazo de decisão: ${d.timeline}`] : []),
+    ...(d.notes ? [``, `Observações:`, d.notes] : []),
+    ``,
+    `Recebido: ${d.recebido}`,
+  ];
+  const text = lines.join('\n');
 
   const dataRows: Array<[string, string, boolean]> = [
-    ['Responsável', d.nome, false],
+    ['Nome', d.name, false],
     ['E-mail', d.email, true],
-    ['Razão Social', d.razao, false],
-    ['CNPJ', d.cnpj, false],
-    ['Tipo', d.tipo, false],
-    ['AUM', d.aum, false],
+    ['Organização', d.org, false],
+    ['Perfil', d.profile, false],
+    ['Tíquete', d.ticket, false],
+    ...(d.phone ? [['Telefone', d.phone, false] as [string, string, boolean]] : []),
+    ...(d.jurisdiction ? [['Jurisdição', d.jurisdiction, false] as [string, string, boolean]] : []),
+    ...(d.currency ? [['Moeda', d.currency, false] as [string, string, boolean]] : []),
+    ...(d.classe ? [['Classe', d.classe, false] as [string, string, boolean]] : []),
+    ...(d.timeline ? [['Prazo', d.timeline, false] as [string, string, boolean]] : []),
   ];
 
   const rowsHtml = dataRows
@@ -300,12 +315,12 @@ Recebido: ${d.recebido}
       ([k, v, isMail], i) => `
         <tr>
           <td style="padding:13px 20px;font-family:${MONO};font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:${COLORS.petrol55};font-weight:700;${
-            i === dataRows.length - 1 ? '' : `border-bottom:1px solid ${COLORS.hairline};`
+            i === dataRows.length - 1 && !d.notes ? '' : `border-bottom:1px solid ${COLORS.hairline};`
           }width:36%;vertical-align:top;">
             ${esc(k)}
           </td>
           <td style="padding:13px 20px;font-family:${MONO};font-size:13px;color:${COLORS.petrol};font-weight:500;${
-            i === dataRows.length - 1 ? '' : `border-bottom:1px solid ${COLORS.hairline};`
+            i === dataRows.length - 1 && !d.notes ? '' : `border-bottom:1px solid ${COLORS.hairline};`
           }">
             ${
               isMail
@@ -317,6 +332,16 @@ Recebido: ${d.recebido}
     )
     .join('');
 
+  const notesHtml = d.notes
+    ? `
+          <tr>
+            <td colspan="2" style="padding:13px 20px;font-family:${SANS};font-size:13px;color:${COLORS.petrol70};line-height:1.6;white-space:pre-wrap;">
+              <span style="font-family:${MONO};font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:${COLORS.petrol55};font-weight:700;display:block;margin-bottom:6px;">Observações</span>
+              ${esc(d.notes)}
+            </td>
+          </tr>`
+    : '';
+
   const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="pt-BR">
 <head>
@@ -326,7 +351,7 @@ Recebido: ${d.recebido}
 </head>
 <body style="margin:0;padding:0;background:${COLORS.pageGrey};font-family:${SANS};color:${COLORS.petrol};-webkit-font-smoothing:antialiased;">
   <span style="display:none !important;visibility:hidden;mso-hide:all;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
-    Nova aplicação de ${esc(d.razao)} (${esc(d.tipo)}, ${esc(d.aum)}).
+    Nova EOI de ${esc(d.org)} (${esc(d.profile)}, ${esc(d.ticket)}).
   </span>
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${COLORS.pageGrey};">
     <tr>
@@ -339,7 +364,7 @@ Recebido: ${d.recebido}
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                 <tr>
                   <td style="padding:18px 32px;font-family:${MONO};font-size:10px;letter-spacing:0.24em;text-transform:uppercase;color:${COLORS.cyan};font-weight:700;">
-                    [lead] · Nova aplicação
+                    [eoi] · Nova manifestação
                   </td>
                   <td align="right" style="padding:18px 32px;font-family:${MONO};font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:#A0A8A8;">
                     ${esc(fmtDateBR(d.recebido))}
@@ -349,14 +374,14 @@ Recebido: ${d.recebido}
             </td>
           </tr>
 
-          <!-- Razão Social como hero -->
+          <!-- Organização como hero -->
           <tr>
             <td style="padding:36px 32px 8px 32px;">
               <p style="margin:0 0 8px 0;font-family:${MONO};font-size:10px;letter-spacing:0.24em;text-transform:uppercase;color:${COLORS.cyanDeep};font-weight:700;">
-                Instituição
+                Organização
               </p>
               <h1 style="margin:0;font-family:${SANS};font-size:26px;line-height:1.2;font-weight:600;letter-spacing:-0.02em;color:${COLORS.petrol};">
-                ${esc(d.razao)}
+                ${esc(d.org)}
               </h1>
             </td>
           </tr>
@@ -366,6 +391,7 @@ Recebido: ${d.recebido}
             <td style="padding:24px 32px 8px 32px;">
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${COLORS.grey};border:1px solid ${COLORS.hairline};">
                 ${rowsHtml}
+                ${notesHtml}
               </table>
             </td>
           </tr>
@@ -385,7 +411,7 @@ Recebido: ${d.recebido}
           <tr>
             <td style="background:${COLORS.grey};padding:14px 32px;border-top:1px solid ${COLORS.hairline};">
               <p style="margin:0;font-family:${MONO};font-size:9px;letter-spacing:0.22em;text-transform:uppercase;color:${COLORS.petrol55};">
-                plina.finance · captação institucional · lead capture v1
+                plina.finance · eoi · expression of interest v2
               </p>
             </td>
           </tr>
