@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { BotIdClient } from "botid/client";
 import { PrivyAppProvider } from "@/components/PrivyAppProvider";
 import { PessoaProvider } from "@/components/PessoaProvider";
 import { AppShell } from "@/components/AppShell";
@@ -65,6 +66,15 @@ export default async function RootLayout({
         />
       </head>
       <body className="font-text antialiased min-h-screen flex flex-col relative">
+        {/* F-M0-5: sem isso, o servidor nunca recebe prova de "humano" e
+            checkBotId() classifica toda requisição como bot (403 sempre,
+            em qualquer navegador — descoberto 2026-07-01). */}
+        <BotIdClient
+          protect={[
+            { path: "/api/vender/lead", method: "POST" },
+            { path: "/api/comprar/lead", method: "POST" },
+          ]}
+        />
         <a href="#main" className="skip-link">Pular para conteúdo</a>
         <PrivyAppProvider>
           <PessoaProvider>

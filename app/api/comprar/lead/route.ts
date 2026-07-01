@@ -37,7 +37,15 @@ const Schema = z
 
 export async function POST(req: Request) {
   // F-M0-5: bloqueia bots antes de qualquer trabalho. No-op em dev/local.
-  if ((await checkBotId()).isBot) {
+  // extraAllowedHosts cobre o alias www (2026-07-01 — ver BotIdClient em
+  // app/layout.tsx, sem ele o servidor nunca recebia prova de humano).
+  if (
+    (
+      await checkBotId({
+        advancedOptions: { extraAllowedHosts: ['www.plina.finance'] },
+      })
+    ).isBot
+  ) {
     return NextResponse.json({ error: 'acesso negado' }, { status: 403 });
   }
   if (!(await leadLimiter.consume(clientIp(req)))) {
