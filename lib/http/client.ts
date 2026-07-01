@@ -22,6 +22,22 @@
  * Reutilizável pelos pollers raw-fetch (sacar/lab) que não passam por
  * `postJson`/`getJson`.
  */
+/**
+ * Corre `promise` contra um timeout. Diferente de `AbortController`+`signal`,
+ * não depende de cancelar a operação subjacente — só para de esperar e segue
+ * em frente. Necessário quando o `fetch` pode ficar pendurado por trás dos
+ * panos sem nunca respeitar um `AbortSignal` (ex.: BotID/Kasada intercepta
+ * `window.fetch` globalmente e trava dentro do próprio desafio *antes* de
+ * chamar o fetch real — abortar o signal não tem efeito nesse caso;
+ * descoberto 2026-07-01, travamento eterno em "Enviando…" no /vender).
+ */
+export function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ]);
+}
+
 export async function unwrapEnvelope<T>(res: Response): Promise<T> {
   const text = await res.text();
   let body: unknown;
