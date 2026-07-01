@@ -24,6 +24,7 @@ import {
   useAppLoginWithEmail,
   useAppLoginWithOAuth,
 } from '@/lib/hooks/privy';
+import { withTimeout } from '@/lib/http/client';
 
 type TipoBem = 'IMOVEL' | 'VEICULO' | 'EQUIPAMENTO' | 'SERVICO';
 
@@ -139,15 +140,28 @@ function WizardInner() {
     setEnviando(true);
     setErro(null);
     try {
-      const token = await getAccessToken();
-      const res = await fetch('/api/vender/lead', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ consentimentoLgpd: true, origem: 'wizard-vender' }),
-      });
+      // getAccessToken() do Privy pode nunca resolver (mesma classe de bug
+      // do "Verificando acesso" travado — ver PessoaProvider.refresh()).
+      const token = await withTimeout(
+        getAccessToken(),
+        8000,
+        'Sessão demorou pra responder. Tente novamente.',
+      );
+      // withTimeout (não AbortController): o fetch pode ficar pendurado
+      // dentro do desafio do BotID (window.fetch patcheado) sem nunca
+      // chegar a respeitar um AbortSignal — ver lib/http/client.ts.
+      const res = await withTimeout(
+        fetch('/api/vender/lead', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ consentimentoLgpd: true, origem: 'wizard-vender' }),
+        }),
+        10000,
+        'A requisição demorou demais. Tente novamente.',
+      );
       if (!res.ok) throw new Error((await res.json()).error ?? 'erro');
       const { leadId } = (await res.json()) as { leadId: string };
       router.push(`/vender/acompanhar/${leadId}`);

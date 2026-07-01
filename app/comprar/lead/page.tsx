@@ -6,6 +6,7 @@
 
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { withTimeout } from '@/lib/http/client';
 
 function explorerTx(hash: string) {
   return `https://stellar.expert/explorer/testnet/tx/${hash}`;
@@ -42,22 +43,29 @@ function LeadInner() {
     setLoading(true);
     setErro(null);
     try {
-      const res = await fetch('/api/comprar/lead', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nome,
-          email,
-          telefone,
-          documento,
-          tipo,
-          intencaoBem,
-          faixaCapital,
-          prazoDecisao,
-          consentimentoLgpd: consentimento,
-          origem: 'comprar-lead',
+      // withTimeout (não AbortController): o fetch pode ficar pendurado
+      // dentro do desafio do BotID (window.fetch patcheado) sem nunca
+      // chegar a respeitar um AbortSignal — ver lib/http/client.ts.
+      const res = await withTimeout(
+        fetch('/api/comprar/lead', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nome,
+            email,
+            telefone,
+            documento,
+            tipo,
+            intencaoBem,
+            faixaCapital,
+            prazoDecisao,
+            consentimentoLgpd: consentimento,
+            origem: 'comprar-lead',
+          }),
         }),
-      });
+        10000,
+        'A requisição demorou demais. Tente novamente.',
+      );
       if (!res.ok) throw new Error((await res.json()).error ?? 'erro');
       setResult(await res.json());
     } catch (err) {

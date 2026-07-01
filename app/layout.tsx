@@ -68,13 +68,21 @@ export default async function RootLayout({
       <body className="font-text antialiased min-h-screen flex flex-col relative">
         {/* F-M0-5: sem isso, o servidor nunca recebe prova de "humano" e
             checkBotId() classifica toda requisição como bot (403 sempre,
-            em qualquer navegador — descoberto 2026-07-01). */}
-        <BotIdClient
-          protect={[
-            { path: "/api/vender/lead", method: "POST" },
-            { path: "/api/comprar/lead", method: "POST" },
-          ]}
-        />
+            em qualquer navegador — descoberto 2026-07-01).
+            Só em produção: o script de desafio (Kasada) depende de
+            infraestrutura de edge da Vercel que não existe em `next dev` —
+            lá, getChallenge() nunca resolve e o fetch protegido trava pra
+            sempre (descoberto 2026-07-01, travamento eterno em "Enviando…"
+            no /vender). checkBotId() já tem esse bypass server-side; aqui
+            replicamos pro client. */}
+        {process.env.NODE_ENV === "production" && (
+          <BotIdClient
+            protect={[
+              { path: "/api/vender/lead", method: "POST" },
+              { path: "/api/comprar/lead", method: "POST" },
+            ]}
+          />
+        )}
         <a href="#main" className="skip-link">Pular para conteúdo</a>
         <PrivyAppProvider>
           <PessoaProvider>

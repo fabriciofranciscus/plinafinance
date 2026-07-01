@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 import { withBotId } from "botid/next/config";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  devIndicators: false,
 };
 
 // F-M0-5: BotID (Vercel) — instala os rewrites de challenge/proxy. A verificação
