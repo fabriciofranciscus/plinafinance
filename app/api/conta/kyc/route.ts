@@ -26,6 +26,17 @@ const Schema = z
     nome: z.string().min(1).max(200).optional(),
     cpf: z.string().max(40).optional(),
     papel: z.enum(['CEDENTE', 'INVESTIDOR']).default('CEDENTE'),
+    telefone: z.string().min(8).max(20).optional(),
+    occupation: z.string().min(1).max(100).optional(),
+    dataNascimento: z.string().max(20).optional(),
+    endereco: z
+      .object({
+        rua: z.string().min(1).max(200),
+        cidade: z.string().min(1).max(100),
+        estado: z.string().min(1).max(50),
+        cep: z.string().min(1).max(20),
+      })
+      .optional(),
     bankAccount: z
       .object({
         pixKey: z.string().min(1).max(200),
@@ -54,6 +65,10 @@ export const POST = withPessoaAuth(async (req, { user }) => {
       cpf: body.cpf,
       papel: body.papel === 'INVESTIDOR' ? Papel.INVESTIDOR : Papel.CEDENTE,
       bankAccount: body.bankAccount,
+      telefone: body.telefone,
+      occupation: body.occupation,
+      dataNascimento: body.dataNascimento,
+      endereco: body.endereco,
     });
     return NextResponse.json({
       pessoaId: result.pessoaId,

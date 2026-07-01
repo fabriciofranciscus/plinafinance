@@ -402,13 +402,31 @@ function KycPanel({
 }) {
   const [nome, setNome] = useState(nomePadrao ?? '');
   const [cpf, setCpf] = useState('');
+  const [telefone, setTelefone] = useState('');
+  const [occupation, setOccupation] = useState('');
+  const [dataNascimento, setDataNascimento] = useState('');
+  const [rua, setRua] = useState('');
+  const [cidade, setCidade] = useState('');
+  const [estado, setEstado] = useState('');
+  const [cep, setCep] = useState('');
   const [pixKeyType, setPixKeyType] = useState<'cpf' | 'email' | 'phone' | 'random'>('cpf');
   const [pixKey, setPixKey] = useState('');
   const [consentimento, setConsentimento] = useState(false);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const valido = nome.trim() && cpf.trim() && pixKey.trim() && consentimento;
+  const valido =
+    nome.trim() &&
+    cpf.trim() &&
+    telefone.trim() &&
+    occupation.trim() &&
+    dataNascimento.trim() &&
+    rua.trim() &&
+    cidade.trim() &&
+    estado.trim() &&
+    cep.trim() &&
+    pixKey.trim() &&
+    consentimento;
 
   async function submit() {
     setLoading(true);
@@ -427,6 +445,15 @@ function KycPanel({
           nome: nome.trim(),
           cpf: cpfDigits,
           papel: 'CEDENTE',
+          telefone: telefone.trim(),
+          occupation: occupation.trim(),
+          dataNascimento: dataNascimento.trim(),
+          endereco: {
+            rua: rua.trim(),
+            cidade: cidade.trim(),
+            estado: estado.trim(),
+            cep: cep.trim(),
+          },
           bankAccount: {
             pixKey: pixKey.trim(),
             pixKeyType,
@@ -474,6 +501,87 @@ function KycPanel({
             className={inputClass + ' font-mono'}
           />
         </Field>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Field label="Telefone" required>
+          <input
+            type="tel"
+            required
+            value={telefone}
+            onChange={(e) => setTelefone(e.target.value)}
+            placeholder="+55 11 99999-9999"
+            className={inputClass + ' font-mono'}
+          />
+        </Field>
+        <Field label="Ocupação" required>
+          <input
+            type="text"
+            required
+            value={occupation}
+            onChange={(e) => setOccupation(e.target.value)}
+            placeholder="Ex: Engenheiro(a)"
+            className={inputClass}
+          />
+        </Field>
+        <Field label="Data de nascimento" required>
+          <input
+            type="date"
+            required
+            value={dataNascimento}
+            onChange={(e) => setDataNascimento(e.target.value)}
+            className={inputClass + ' font-mono'}
+          />
+        </Field>
+      </div>
+
+      <div className="mt-6">
+        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+          Endereço residencial
+        </p>
+        <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Rua e número" required>
+            <input
+              type="text"
+              required
+              value={rua}
+              onChange={(e) => setRua(e.target.value)}
+              placeholder="Av. Faria Lima, 1000"
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Cidade" required>
+            <input
+              type="text"
+              required
+              value={cidade}
+              onChange={(e) => setCidade(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+        </div>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-[1fr_160px] gap-4">
+          <Field label="Estado" required>
+            <input
+              type="text"
+              required
+              value={estado}
+              onChange={(e) => setEstado(e.target.value)}
+              placeholder="SP"
+              className={inputClass}
+            />
+          </Field>
+          <Field label="CEP" required>
+            <input
+              type="text"
+              required
+              value={cep}
+              onChange={(e) => setCep(e.target.value)}
+              placeholder="00000-000"
+              className={inputClass + ' font-mono'}
+            />
+          </Field>
+        </div>
       </div>
 
       <div className="mt-6">

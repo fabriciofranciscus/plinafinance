@@ -46,6 +46,14 @@ export interface PixBankAccountInput {
   cpf: string;
 }
 
+/** Endereço residencial — identidade Etherfuse (BR). */
+export interface EnderecoInput {
+  rua: string;
+  cidade: string;
+  estado: string;
+  cep: string;
+}
+
 export interface EnsureKycInput {
   privyId: string;
   email: string;
@@ -53,6 +61,13 @@ export interface EnsureKycInput {
   cpf?: string;
   papel: Papel;
   bankAccount?: PixBankAccountInput;
+  /** E.164 (ex: +5511999999999). Exigido pelo customer-agreement Etherfuse. */
+  telefone?: string;
+  /** Ocupação/cargo declarado. Exigido pelo customer-agreement Etherfuse. */
+  occupation?: string;
+  /** ISO 8601 (ex: 1990-05-15). */
+  dataNascimento?: string;
+  endereco?: EnderecoInput;
   /**
    * Emite EventoAudit (CEDENTE/INVESTIDOR_ONBOARDED) com `privyId`. Default
    * true. `onboardInvestidor` passa false pra emitir o seu próprio log com
@@ -222,15 +237,22 @@ export async function ensureKycForPessoa(
         givenName: input.nome?.split(' ')[0] ?? 'Cliente',
         familyName: input.nome?.split(' ').slice(1).join(' ').trim() || 'Plina',
       },
-      dateOfBirth: '1985-01-15',
+      // email/phoneNumber/occupation passaram a ser exigidos pelo
+      // customer-agreement do Etherfuse (descoberto 2026-07-01, junto com
+      // a remoção de idNumbers para BR). Fallback placeholder pros fluxos
+      // (comprar/investir) que ainda não coletam esses campos no onboarding.
+      dateOfBirth: input.dataNascimento ?? '1985-01-15',
+      email: input.email,
+      phoneNumber: input.telefone ?? '+5511999999999',
+      occupation: input.occupation ?? 'Professional',
       address: {
-        street: 'Av. Faria Lima, 1000',
-        city: 'São Paulo',
-        region: 'SP',
-        postalCode: '01310-100',
+        street: input.endereco?.rua ?? 'Av. Faria Lima, 1000',
+        city: input.endereco?.cidade ?? 'São Paulo',
+        region: input.endereco?.estado ?? 'SP',
+        postalCode: input.endereco?.cep ?? '01310-100',
         country: 'BR',
       },
-      idNumbers: [{ value: cpfNormalizado, type: 'CPF' }],
+      // idNumbers (CPF) removido: Etherfuse só aceita esse campo para MX.
     },
   });
   // Docs são best-effort: no sandbox a identidade já auto-aprova, e customers
