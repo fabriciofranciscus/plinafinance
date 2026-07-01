@@ -73,3 +73,50 @@ describe('gerarOferta · taxa de anuência (F-M1-4)', () => {
     expect(data.valorLiquidoVendedor).toBe('82000.00');
   });
 });
+
+describe('gerarOferta · componente de prazo (curva de yield provisória, §3.4)', () => {
+  it('soma o componente de prazo (linear, 15% a.a.) ao deságio', async () => {
+    await gerarOferta({
+      leadVendedorId: 'l_1',
+      tipoBem: 'VEICULO',
+      valorCarta: '100000',
+      administradora: 'Embracon Consórcios', // 150 bps
+      desagioAquisicao: '0.18',
+      operador: 'op',
+      prazoRestanteMeses: 12, // 125 bps/mês × 12 = 1500 bps = 0.15
+    });
+    const data = ofertaCreate.mock.calls[0][0].data;
+    // 0.18 + 0.015 (anuência) + 0.15 (prazo) = 0.3450
+    expect(data.desagioAquisicao).toBe('0.3450');
+    expect(data.valorLiquidoVendedor).toBe('65500.00');
+    expect(data.prazoRestanteMeses).toBe(12);
+  });
+
+  it('sem prazo informado, componente de prazo é zero (compatibilidade)', async () => {
+    await gerarOferta({
+      leadVendedorId: 'l_1',
+      tipoBem: 'VEICULO',
+      valorCarta: '100000',
+      administradora: 'Embracon Consórcios',
+      desagioAquisicao: '0.18',
+      operador: 'op',
+    });
+    const data = ofertaCreate.mock.calls[0][0].data;
+    expect(data.desagioAquisicao).toBe('0.1950');
+  });
+
+  it('grava taxaPrazoBps e prazoRestanteMeses no payload de auditoria', async () => {
+    await gerarOferta({
+      leadVendedorId: 'l_1',
+      tipoBem: 'VEICULO',
+      valorCarta: '100000',
+      administradora: 'Embracon Consórcios',
+      desagioAquisicao: '0.18',
+      operador: 'op',
+      prazoRestanteMeses: 12,
+    });
+    const auditPayload = auditCreate.mock.calls[0][0].data.payloadJson;
+    expect(auditPayload.taxaPrazoBps).toBe(1500);
+    expect(auditPayload.prazoRestanteMeses).toBe(12);
+  });
+});
