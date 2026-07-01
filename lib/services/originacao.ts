@@ -24,6 +24,7 @@ import {
 import { incorporarCota } from './tokenizacao';
 import { tokensParaEmitir } from './pool';
 import { taxaAnuenciaBpsFor } from '../config/administradoras';
+import { taxaPrazoBpsFor } from '../config/curva-yield';
 import { notifyCedente } from '../email/notify-cedente';
 import { buildComprovantePdf } from '../comprovante/pdf';
 import { uploadComprovante } from '../comprovante/store';
@@ -161,8 +162,10 @@ export function calcularFaixaIndicativa(
   // F-M1-4: a estimativa pública já reflete a taxa de anuência do fallback
   // (cartório digital) — caminho default até a API da administradora existir.
   const anuencia = taxaAnuenciaBpsFor(input.administradora) / 10000;
-  const min = r.min + anuencia;
-  const max = r.max + anuencia;
+  // §3.4: componente de prazo (curva de yield do pool, provisório).
+  const prazo = taxaPrazoBpsFor(input.prazoRestanteMeses) / 10000;
+  const min = r.min + anuencia + prazo;
+  const max = r.max + anuencia + prazo;
   return {
     desagioMinimo: min,
     desagioMaximo: max,
@@ -198,9 +201,12 @@ export async function gerarOferta(input: GerarOfertaInput) {
     caminho === CaminhoCessao.CARTORIO_DIGITAL
       ? taxaAnuenciaBpsFor(input.administradora)
       : 0;
+  // §3.4: componente de prazo (curva de yield do pool, provisório).
+  const taxaPrazoBps = taxaPrazoBpsFor(input.prazoRestanteMeses);
   const desagioBase = new Prisma.Decimal(input.desagioAquisicao);
   const desagioTotal = desagioBase
     .plus(new Prisma.Decimal(taxaAnuenciaBps).div(10000))
+    .plus(new Prisma.Decimal(taxaPrazoBps).div(10000))
     .toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_EVEN);
   if (desagioTotal.greaterThan(1)) {
     throw new Error('deságio total (base + anuência) excede 100%');
@@ -246,6 +252,8 @@ export async function gerarOferta(input: GerarOfertaInput) {
           // F-M1-4: breakdown do deságio pra transparência/auditoria.
           desagioBase: desagioBase.toFixed(4),
           taxaAnuenciaBps,
+          taxaPrazoBps,
+          prazoRestanteMeses: input.prazoRestanteMeses ?? null,
           caminhoCessao: caminho,
           desagioAquisicao: desagioTotal.toFixed(4),
           valorLiquido: valorLiquido.toFixed(2),

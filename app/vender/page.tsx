@@ -71,6 +71,9 @@ function WizardInner() {
   const [administradora, setAdministradora] = useState(
     params.get('administradora') || '',
   );
+  const [prazoRestanteMeses, setPrazoRestanteMeses] = useState(
+    params.get('prazoRestanteMeses') || '',
+  );
   const [faixa, setFaixa] = useState<Faixa | null>(null);
   const [simulando, setSimulando] = useState(false);
 
@@ -112,10 +115,16 @@ function WizardInner() {
     setSimulando(true);
     setErro(null);
     try {
+      const prazo = Number(prazoRestanteMeses);
       const res = await fetch('/api/vender/simular', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipoBem, valorCarta, administradora }),
+        body: JSON.stringify({
+          tipoBem,
+          valorCarta,
+          administradora,
+          prazoRestanteMeses: prazo > 0 ? prazo : undefined,
+        }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? 'erro');
       setFaixa(await res.json());
@@ -199,6 +208,8 @@ function WizardInner() {
                 setValorCarta={setValorCarta}
                 administradora={administradora}
                 setAdministradora={setAdministradora}
+                prazoRestanteMeses={prazoRestanteMeses}
+                setPrazoRestanteMeses={setPrazoRestanteMeses}
                 faixa={faixa}
                 simulando={simulando}
                 simular={simular}
@@ -589,6 +600,8 @@ function PassoEnvioCota(props: {
   setValorCarta: (v: string) => void;
   administradora: string;
   setAdministradora: (v: string) => void;
+  prazoRestanteMeses: string;
+  setPrazoRestanteMeses: (v: string) => void;
   faixa: Faixa | null;
   simulando: boolean;
   simular: () => void;
@@ -643,6 +656,21 @@ function PassoEnvioCota(props: {
             onChange={(e) => props.setAdministradora(e.target.value)}
             placeholder="Ex: Caixa, Itaú, Porto"
             className={inputClass}
+          />
+        </Field>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Field label="Prazo restante (meses, opcional)">
+          <input
+            type="number"
+            min="1"
+            max="600"
+            step="1"
+            value={props.prazoRestanteMeses}
+            onChange={(e) => props.setPrazoRestanteMeses(e.target.value)}
+            placeholder="Ex: 24"
+            className={inputClass + ' font-mono'}
           />
         </Field>
       </div>
