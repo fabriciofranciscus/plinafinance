@@ -157,8 +157,13 @@ export interface EtherfuseKycIdentityRequest {
             /** ISO 3166-1 alpha-2 country code (e.g. `"MX"`). */
             country: string;
         };
-        /** National identity numbers (e.g. CURP). */
-        idNumbers: Array<{
+        /**
+         * National identity numbers (e.g. CURP). Etherfuse only accepts this
+         * field when `address.country === 'MX'` — sending it for BR (CPF)
+         * now 400s with "idNumbers may only be provided when address.country
+         * is MX" (descoberto 2026-07-01). Omitir para BR.
+         */
+        idNumbers?: Array<{
             /** ID number value. */
             value: string;
             /** ID type (e.g. `"CURP"`). */

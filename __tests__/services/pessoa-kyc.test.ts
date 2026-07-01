@@ -187,6 +187,15 @@ describe('ensureKycForPessoa — KYC uma vez entre papéis', () => {
     expect(createCustomer).toHaveBeenCalledOnce();
     expect(getKycStatus).toHaveBeenCalledOnce();
     expect(result.kycAprovado).toBe(true);
+
+    // Etherfuse (2026-07-01): email/phoneNumber/occupation viraram
+    // obrigatórios no customer-agreement, e idNumbers só é aceito para MX
+    // (CPF em address.country=BR agora 400a). Trava o payload correto.
+    const identityArg = submitKycIdentity.mock.calls[0][1];
+    expect(identityArg.identity.email).toBe('novo@x.com');
+    expect(identityArg.identity.phoneNumber).toBeTruthy();
+    expect(identityArg.identity.occupation).toBeTruthy();
+    expect(identityArg.identity.idNumbers).toBeUndefined();
     expect(result.pessoaId).toBe('pes_new');
     expect(result.publicKey).toBe('GNEW');
   });
