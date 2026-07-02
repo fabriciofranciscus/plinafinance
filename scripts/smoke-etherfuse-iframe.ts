@@ -156,7 +156,6 @@ async function main() {
   await anchor.submitKycIdentity(customer.id, {
     pubkey: state.investor.pubkey,
     identity: {
-      id: state.investor.pubkey,
       name: { givenName: 'Plina', familyName: 'SmokeIframe' },
       dateOfBirth: '1990-01-15',
       address: {

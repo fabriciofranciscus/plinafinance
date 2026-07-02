@@ -155,6 +155,8 @@ enum AcaoAudit {
   TICKET_MINIMO_REJEITADO
   // M3 — onboarding institucional (entidade: razão social / CNPJ / jurisdição)
   ENTIDADE_PREENCHIDA
+  // KYC completo (sandbox/produção) — upload real de documento/selfie
+  KYC_DOCUMENTOS_ENVIADOS
 }
 
 // Funil vendedor
@@ -311,6 +313,10 @@ model Pessoa {
   isSyntheticCpf         Boolean   @default(false)
   /// Papéis acumulados pela pessoa (gating de UI).
   papeis                 Papel[]   @default([])
+  /// Timestamp do último envio bem-sucedido de documento+selfie à Etherfuse.
+  /// Setado só depois de `submitKycDocuments` ter sucesso — usado pra não
+  /// forçar reenvio de foto real a cada retry enquanto KYC ainda não aprovou.
+  kycDocumentosEnviadosEm DateTime?
   criadoEm               DateTime  @default(now())
   atualizadoEm           DateTime  @updatedAt
 

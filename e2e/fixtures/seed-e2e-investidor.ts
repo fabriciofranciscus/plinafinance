@@ -115,7 +115,6 @@ export async function seedE2eInvestidor(): Promise<E2eInvestidorSeed> {
   await anchor.submitKycIdentity(customer.id, {
     pubkey,
     identity: {
-      id: pubkey,
       name: { givenName: 'E2E', familyName: 'Plina' },
       dateOfBirth: '1990-01-15',
       address: {

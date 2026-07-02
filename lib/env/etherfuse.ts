@@ -28,6 +28,15 @@ export function sandboxMockAllowed(): boolean {
 }
 
 /**
+ * Único ponto de decisão sandbox vs. produção pro payload de KYC (campos
+ * opcionais de identidade + exigência de documentos reais). Não reimplementar
+ * esse check solto em `pessoa.ts` — mesmo motivo do header deste arquivo.
+ */
+export function etherfuseIsProduction(): boolean {
+  return etherfuseEnv() === 'production';
+}
+
+/**
  * Consistência das envs no boot. Lança se a combinação é insegura/inválida,
  * pra estourar o deploy em vez de cair no mock silenciosamente.
  */
