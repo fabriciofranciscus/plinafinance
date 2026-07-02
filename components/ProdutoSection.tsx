@@ -1,34 +1,12 @@
 import SectionMarker from './SectionMarker';
+import type { Dictionary } from '@/lib/i18n/types';
 
-const especificacoes = [
-  {
-    label: 'Lastro',
-    value: '1 PLINA-RF = R$ 1,00',
-    detail: 'Lastro em direito creditório com valor ajustado diariamente.',
-  },
-  {
-    label: 'Veículo',
-    value: 'FIDC · CVM 175',
-    detail: 'Classes sênior e subordinada, prestadores registrados, auditoria Big Four.',
-  },
-  {
-    label: 'Custódia',
-    value: 'Custodiante regulado',
-    detail: 'Registro digital auditável com bloqueio, autorização e reversibilidade institucional.',
-  },
-  {
-    label: 'Aporte',
-    value: 'USD · EUR · BRL',
-    detail: 'Investidores internacionais e domésticos, com liquidação em USDC, EURC e moeda local.',
-  },
-];
-
-export default function ProdutoSection() {
+export default function ProdutoSection({ dict }: { dict: Dictionary['produto'] }) {
   return (
     <section id="produto" className="py-32 bg-white relative z-20">
       <div className="max-w-[1400px] mx-auto px-6">
         <div className="flex items-start justify-between mb-16">
-          <SectionMarker num="01" label="Produto" />
+          <SectionMarker num={dict.numMarker} label={dict.marker} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-8 gap-y-12 items-end mb-24 reveal">
@@ -40,16 +18,17 @@ export default function ProdutoSection() {
               letterSpacing: '-0.045em',
             }}
           >
-            PLINA<span className="text-primary-deep">-RF</span>
-            <span className="text-primary-deep">.</span>
+            {dict.titulo[0]}
+            <span className="text-primary-deep">{dict.titulo[1]}</span>
+            <span className="text-primary-deep">{dict.titulo[2]}</span>
           </h2>
           <p className="lg:col-span-4 font-text text-base/70 text-lg font-light leading-relaxed">
-            Cota de FIDC representada por um instrumento digital regulado, emitido sob a CVM 175. Não é uma corretora. Não é um fundo aberto de varejo. É o próprio instrumento financeiro tokenizado, com originação, custódia regulada e controles de conformidade integrados.
+            {dict.intro}
           </p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-light-hairline border-y border-light-hairline reveal delay-100">
-          {especificacoes.map((spec) => (
+          {dict.especificacoes.map((spec) => (
             <div key={spec.label} className="bg-white p-8">
               <h3 className="font-mono text-[10px] text-base/60 font-bold uppercase tracking-widest mb-4">
                 {spec.label}

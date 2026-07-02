@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef } from 'react';
 import { Check } from 'lucide-react';
 import SectionMarker from './SectionMarker';
 import { submitLead, type LeadState } from '@/app/actions/submit-lead';
+import type { Dictionary } from '@/lib/i18n/types';
 
 const initialState: LeadState = { status: 'idle' };
 
@@ -13,7 +14,9 @@ const inputBaseClass =
 const labelBaseClass =
   'font-details text-[11px] uppercase font-bold text-base/60 ml-4 block';
 
-export default function LeadCaptureSection() {
+type Props = { dict: Dictionary['leadCapture'] };
+
+export default function LeadCaptureSection({ dict }: Props) {
   const [state, formAction, pending] = useActionState(submitLead, initialState);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
@@ -30,7 +33,7 @@ export default function LeadCaptureSection() {
     <section id="lead-capture" className="py-32 bg-white">
       <div ref={wrapperRef} className="max-w-[1400px] mx-auto px-6 reveal">
         <div className="flex items-start justify-between mb-16">
-          <SectionMarker num="06" label="Onboarding" />
+          <SectionMarker num={dict.numMarker} label={dict.marker} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-8 gap-y-12 items-end mb-16">
@@ -42,25 +45,22 @@ export default function LeadCaptureSection() {
               letterSpacing: '-0.04em',
             }}
           >
-            {state.status === 'success' ? (
-              <>
-                Interesse<br />registrado.
-              </>
-            ) : (
-              <>
-                Registre seu<br />interesse.
-              </>
+            {(state.status === 'success' ? dict.headingSuccess : dict.headingIdle).map(
+              (linha, i) => (
+                <span key={i}>
+                  {linha}
+                  {i === 0 && <br />}
+                </span>
+              )
             )}
           </h2>
           <p className="lg:col-span-4 font-text text-base/70 text-lg font-light leading-relaxed">
-            {state.status === 'success'
-              ? 'Nossa equipe entrará em contato em até 48 horas com apresentação detalhada do instrumento e documentação do FIDC.'
-              : 'Preencha os campos abaixo para manifestar interesse no PLINA-RF. Nossa equipe entrará em contato em até 48 horas para apresentação detalhada do instrumento.'}
+            {state.status === 'success' ? dict.subSuccess : dict.subIdle}
           </p>
         </div>
 
         {state.status === 'success' ? (
-          <SuccessPanel />
+          <SuccessPanel dict={dict.successPanel} />
         ) : (
           <form
             action={formAction}
@@ -88,18 +88,18 @@ export default function LeadCaptureSection() {
               disabled={pending}
               className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6 mb-6 border-0 p-0"
             >
-              <legend className="sr-only">Identificação</legend>
+              <legend className="sr-only">{dict.fields.nome}</legend>
 
               <div className="space-y-1.5">
                 <label htmlFor="lc-name" className={labelBaseClass}>
-                  Nome completo *
+                  {dict.fields.nome}
                 </label>
                 <input
                   id="lc-name"
                   name="name"
                   type="text"
                   autoComplete="name"
-                  placeholder="Nome e sobrenome"
+                  placeholder={dict.fields.nomePlaceholder}
                   required
                   className={inputBaseClass}
                 />
@@ -107,14 +107,14 @@ export default function LeadCaptureSection() {
 
               <div className="space-y-1.5">
                 <label htmlFor="lc-org" className={labelBaseClass}>
-                  Organização *
+                  {dict.fields.org}
                 </label>
                 <input
                   id="lc-org"
                   name="org"
                   type="text"
                   autoComplete="organization"
-                  placeholder="Family office, gestora, fundo..."
+                  placeholder={dict.fields.orgPlaceholder}
                   required
                   className={inputBaseClass}
                 />
@@ -126,18 +126,18 @@ export default function LeadCaptureSection() {
               disabled={pending}
               className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6 mb-6 border-0 p-0"
             >
-              <legend className="sr-only">Contato</legend>
+              <legend className="sr-only">{dict.fields.email}</legend>
 
               <div className="space-y-1.5">
                 <label htmlFor="lc-email" className={labelBaseClass}>
-                  E-mail corporativo *
+                  {dict.fields.email}
                 </label>
                 <input
                   id="lc-email"
                   name="email"
                   type="email"
                   autoComplete="email"
-                  placeholder="nome@organização.com"
+                  placeholder={dict.fields.emailPlaceholder}
                   required
                   className={inputBaseClass}
                 />
@@ -145,14 +145,14 @@ export default function LeadCaptureSection() {
 
               <div className="space-y-1.5">
                 <label htmlFor="lc-phone" className={labelBaseClass}>
-                  Telefone / WhatsApp
+                  {dict.fields.telefone}
                 </label>
                 <input
                   id="lc-phone"
                   name="phone"
                   type="tel"
                   autoComplete="tel"
-                  placeholder="+55 11 99999-9999"
+                  placeholder={dict.fields.telefonePlaceholder}
                   className={inputBaseClass}
                 />
               </div>
@@ -163,31 +163,28 @@ export default function LeadCaptureSection() {
               disabled={pending}
               className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6 mb-6 border-0 p-0"
             >
-              <legend className="sr-only">Perfil</legend>
+              <legend className="sr-only">{dict.fields.perfil}</legend>
 
               <div className="space-y-1.5">
                 <label htmlFor="lc-profile" className={labelBaseClass}>
-                  Perfil do investidor *
+                  {dict.fields.perfil}
                 </label>
-                <SelectField id="lc-profile" name="profile" required>
-                  <option value="family-office-br">Family office brasileiro</option>
-                  <option value="family-office-int">Family office internacional</option>
-                  <option value="gestora-br">Gestora de fundos (BR)</option>
-                  <option value="gestora-int">Gestora multi-mercado (Internacional)</option>
-                  <option value="fintech-latam">Fintech de investimento LATAM</option>
-                  <option value="outro">Outro — descrever nas observações</option>
+                <SelectField id="lc-profile" name="profile" required selectLabel={dict.fields.selecione}>
+                  {Object.entries(dict.selectOptions.profile).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
                 </SelectField>
               </div>
 
               <div className="space-y-1.5">
                 <label htmlFor="lc-jurisdiction" className={labelBaseClass}>
-                  Jurisdição principal
+                  {dict.fields.jurisdicao}
                 </label>
                 <input
                   id="lc-jurisdiction"
                   name="jurisdiction"
                   type="text"
-                  placeholder="Brasil, EUA, Cingapura..."
+                  placeholder={dict.fields.jurisdicaoPlaceholder}
                   className={inputBaseClass}
                 />
               </div>
@@ -198,34 +195,27 @@ export default function LeadCaptureSection() {
               disabled={pending}
               className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6 mb-6 border-0 p-0"
             >
-              <legend className="sr-only">Investimento</legend>
+              <legend className="sr-only">{dict.fields.ticket}</legend>
 
               <div className="space-y-1.5">
                 <label htmlFor="lc-ticket" className={labelBaseClass}>
-                  Tíquete indicativo *
+                  {dict.fields.ticket}
                 </label>
-                <SelectField id="lc-ticket" name="ticket" required>
-                  <option value="100k-500k">US$ 100k – 500k</option>
-                  <option value="500k-1m">US$ 500k – 1M</option>
-                  <option value="1m-5m">US$ 1M – 5M</option>
-                  <option value="5m+">US$ 5M+</option>
-                  <option value="500k-2m-brl">R$ 500k – 2M</option>
-                  <option value="2m-10m-brl">R$ 2M – 10M</option>
-                  <option value="10m+brl">R$ 10M+</option>
+                <SelectField id="lc-ticket" name="ticket" required selectLabel={dict.fields.selecione}>
+                  {Object.entries(dict.selectOptions.ticket).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
                 </SelectField>
               </div>
 
               <div className="space-y-1.5">
                 <label htmlFor="lc-currency" className={labelBaseClass}>
-                  Moeda de preferência
+                  {dict.fields.moeda}
                 </label>
-                <SelectField id="lc-currency" name="currency" required={false}>
-                  <option value="">Selecione (opcional)</option>
-                  <option value="USDC">USDC</option>
-                  <option value="EURC">EURC</option>
-                  <option value="BRL stablecoin (BRZ / BRLA)">BRL stablecoin (BRZ / BRLA)</option>
-                  <option value="BRL fiat">BRL fiat</option>
-                  <option value="Ainda indefinido">Ainda indefinido</option>
+                <SelectField id="lc-currency" name="currency" required={false} selectLabel={dict.fields.selecioneOpcional}>
+                  {Object.entries(dict.selectOptions.currency).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
                 </SelectField>
               </div>
             </fieldset>
@@ -235,32 +225,27 @@ export default function LeadCaptureSection() {
               disabled={pending}
               className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6 mb-6 border-0 p-0"
             >
-              <legend className="sr-only">Estrutura</legend>
+              <legend className="sr-only">{dict.fields.classe}</legend>
 
               <div className="space-y-1.5">
                 <label htmlFor="lc-classe" className={labelBaseClass}>
-                  Classe de interesse
+                  {dict.fields.classe}
                 </label>
-                <SelectField id="lc-classe" name="classe" required={false}>
-                  <option value="">Selecione (opcional)</option>
-                  <option value="Sênior">Sênior (menor risco, retorno prioritário)</option>
-                  <option value="Subordinada">Subordinada (primeiras perdas, maior retorno potencial)</option>
-                  <option value="Ambas">Ambas — sujeito a modelagem</option>
-                  <option value="Indefinido">Indefinido</option>
+                <SelectField id="lc-classe" name="classe" required={false} selectLabel={dict.fields.selecioneOpcional}>
+                  {Object.entries(dict.selectOptions.classe).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
                 </SelectField>
               </div>
 
               <div className="space-y-1.5">
                 <label htmlFor="lc-timeline" className={labelBaseClass}>
-                  Prazo de decisão
+                  {dict.fields.prazo}
                 </label>
-                <SelectField id="lc-timeline" name="timeline" required={false}>
-                  <option value="">Selecione (opcional)</option>
-                  <option value="Até 30 dias">Até 30 dias</option>
-                  <option value="1 a 3 meses">1 a 3 meses</option>
-                  <option value="3 a 6 meses">3 a 6 meses</option>
-                  <option value="Mais de 6 meses">Mais de 6 meses</option>
-                  <option value="Fase exploratória">Fase exploratória</option>
+                <SelectField id="lc-timeline" name="timeline" required={false} selectLabel={dict.fields.selecioneOpcional}>
+                  {Object.entries(dict.selectOptions.timeline).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
                 </SelectField>
               </div>
             </fieldset>
@@ -270,16 +255,16 @@ export default function LeadCaptureSection() {
               disabled={pending}
               className="mb-6 border-0 p-0"
             >
-              <legend className="sr-only">Observações</legend>
+              <legend className="sr-only">{dict.fields.observacoes}</legend>
               <div className="space-y-1.5">
                 <label htmlFor="lc-notes" className={labelBaseClass}>
-                  Observações / perguntas
+                  {dict.fields.observacoes}
                 </label>
                 <textarea
                   id="lc-notes"
                   name="notes"
                   rows={4}
-                  placeholder="Restrições de compliance, exigências específicas de estrutura, perguntas iniciais..."
+                  placeholder={dict.fields.observacoesPlaceholder}
                   className={
                     inputBaseClass.replace('rounded-full', 'rounded-2xl') +
                     ' resize-none'
@@ -298,7 +283,7 @@ export default function LeadCaptureSection() {
                 className="mt-1 w-4 h-4 accent-primary-deep flex-shrink-0 cursor-pointer"
               />
               <label htmlFor="lc-lgpd" className="font-text text-sm text-base/60 leading-relaxed cursor-pointer">
-                Autorizo o uso dos dados fornecidos para contato sobre o PLINA-RF. As informações são tratadas com confidencialidade, em conformidade com a LGPD, e não são compartilhadas com terceiros sem consentimento.
+                {dict.lgpdNotice}
               </label>
             </div>
 
@@ -316,13 +301,13 @@ export default function LeadCaptureSection() {
               disabled={pending}
               className="w-full bg-base text-white py-5 font-details text-xs uppercase tracking-[0.2em] font-bold rounded-full hover:bg-primary focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary transition-[background-color,box-shadow,opacity] duration-300 ease-out shadow-xl hover:shadow-primary/20 disabled:opacity-60 disabled:cursor-wait"
             >
-              {pending ? 'Enviando…' : 'Registrar interesse'}
+              {pending ? dict.submitPending : dict.submitIdle}
             </button>
           </form>
         )}
 
         <p className="font-details text-[10px] uppercase tracking-widest text-base/60 mt-8">
-          Processo confidencial · Não caracteriza oferta pública · Oferta restrita · Investidor qualificado · CVM 175
+          {dict.footerNote}
         </p>
       </div>
     </section>
@@ -333,11 +318,13 @@ function SelectField({
   id,
   name,
   required = true,
+  selectLabel,
   children,
 }: {
   id: string;
   name: string;
   required?: boolean;
+  selectLabel: string;
   children: React.ReactNode;
 }) {
   return (
@@ -349,7 +336,7 @@ function SelectField({
         defaultValue=""
         className={inputBaseClass + ' appearance-none pr-12'}
       >
-        {required && <option value="" disabled>Selecione</option>}
+        {required && <option value="" disabled>{selectLabel}</option>}
         {children}
       </select>
       <svg
@@ -368,13 +355,7 @@ function SelectField({
   );
 }
 
-function SuccessPanel() {
-  const passos = [
-    { ordem: '01', titulo: 'Confirmação imediata', detalhe: 'Recebemos seu interesse no PLINA-RF e o registro foi gerado.' },
-    { ordem: '02', titulo: 'Em até 48 horas', detalhe: 'Nossa equipe de RI envia apresentação detalhada do instrumento e documentação do FIDC.' },
-    { ordem: '03', titulo: 'Roadshow institucional', detalhe: 'Agendamento com o time fundador. Slots em Miami, São Paulo, Cingapura e Londres.' },
-  ];
-
+function SuccessPanel({ dict }: { dict: Dictionary['leadCapture']['successPanel'] }) {
   return (
     <div role="status" aria-live="polite" className="text-left max-w-3xl mx-auto">
       <div className="flex items-center gap-4 justify-center mb-12">
@@ -382,12 +363,12 @@ function SuccessPanel() {
           <Check className="w-6 h-6 text-primary-deep" aria-hidden />
         </span>
         <span className="font-mono text-xs text-primary-deep uppercase tracking-widest">
-          Protocolo · {new Date().toISOString().slice(0, 10).replace(/-/g, '')}
+          {dict.protocolo} · {new Date().toISOString().slice(0, 10).replace(/-/g, '')}
         </span>
       </div>
 
       <div className="border-t border-light-hairline">
-        {passos.map((p) => (
+        {dict.passos.map((p) => (
           <div
             key={p.ordem}
             className="border-b border-light-hairline py-8 flex flex-col sm:flex-row gap-4 sm:gap-12 items-start"
@@ -402,7 +383,7 @@ function SuccessPanel() {
       </div>
 
       <p className="font-details text-[11px] uppercase tracking-widest text-base/60 mt-10 text-center">
-        Dúvidas? <a href="mailto:contato@plina.finance" className="text-primary-deep underline-offset-4 hover:underline">contato@plina.finance</a>
+        {dict.duvidas} <a href="mailto:contato@plina.finance" className="text-primary-deep underline-offset-4 hover:underline">contato@plina.finance</a>
       </p>
     </div>
   );

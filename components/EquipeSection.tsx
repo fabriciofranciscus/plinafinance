@@ -1,35 +1,19 @@
 import SectionMarker from './SectionMarker';
+import type { Dictionary } from '@/lib/i18n/types';
 
-const membros = [
-  {
-    operatorId: '01',
-    nome: 'Fabrício Santos',
-    cargo: 'CEO & Founder',
-    bio: 'Sócio fundador da Citrino, assessoria financeira de planejamento e gestão patrimonial. Atuou em estratégias de receita, custo e experiência do cliente na plataforma digital de crédito Simplic, e liderou na TOTVS a implementação do sistema corporativo de KPIs para a Diretoria e o Conselho Administrativo.',
-    delay: '',
-  },
-  {
-    operatorId: '02',
-    nome: 'Thais Reis',
-    cargo: 'CTO & Protocol Lead',
-    bio: 'Engenheira full-stack com cinco anos em infraestrutura blockchain — engenharia de dados, backend, contratos automatizados em Rust e interfaces em React/TypeScript. Fundadora e Lead Engineer do Karn Ecosystem, plataforma de governança de código aberto. Premiada em competições nacionais e internacionais de tecnologia descentralizada e inteligência artificial.',
-    delay: 'delay-100',
-  },
-];
-
-export default function EquipeSection() {
+export default function EquipeSection({ dict }: { dict: Dictionary['equipe'] }) {
   return (
     <section id="equipe" className="py-32 bg-lightBg">
       <div className="max-w-[1400px] mx-auto px-6">
         <div className="flex items-start justify-between mb-16">
-          <SectionMarker num="05" label="Equipe Fundadora" />
+          <SectionMarker num={dict.numMarker} label={dict.marker} />
         </div>
 
         <div className="space-y-24 lg:space-y-32">
-          {membros.map((m) => (
+          {dict.membros.map((m, i) => (
             <article
               key={m.nome}
-              className={`relative grid grid-cols-1 lg:grid-cols-12 gap-x-8 gap-y-8 items-end reveal ${m.delay}`}
+              className={`relative grid grid-cols-1 lg:grid-cols-12 gap-x-8 gap-y-8 items-end reveal ${i === 1 ? 'delay-100' : ''}`}
             >
               {/* Vertical operator label — desktop only */}
               <span

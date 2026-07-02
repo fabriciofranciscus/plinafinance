@@ -1,6 +1,7 @@
 /* Ícone LinkedIn inline — removido do lucide-react a partir da v0.500+ */
+import type { Dictionary } from '@/lib/i18n/types';
 
-export default function Footer() {
+export default function Footer({ dict }: { dict: Dictionary['footer'] }) {
   return (
     <footer className="bg-lightBg border-t border-light-hairline py-20 px-6">
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between gap-16 reveal">
@@ -9,42 +10,42 @@ export default function Footer() {
             Plina<span className="text-primary">.</span>
           </span>
           <p className="font-text text-base/70 leading-relaxed font-light">
-            Conectando o crédito brasileiro ao capital global por meio de infraestrutura digital regulada.
+            {dict.tagline}
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-16 lg:gap-32">
           <div>
             <h4 className="font-details text-xs font-bold uppercase tracking-widest text-base/60 mb-8">
-              Navegação
+              {dict.navegacao}
             </h4>
             <ul className="font-text text-lg font-light space-y-4 text-base/70">
-              <li><a href="#produto" className="hover:text-primary transition-colors">Produto</a></li>
-              <li><a href="#tese" className="hover:text-primary transition-colors">Tese</a></li>
-              <li><a href="#compliance" className="hover:text-primary transition-colors">Compliance</a></li>
-              <li><a href="#equipe" className="hover:text-primary transition-colors">Equipe</a></li>
-              <li><a href="#lead-capture" className="hover:text-primary transition-colors">Registrar interesse</a></li>
+              <li><a href="#produto" className="hover:text-primary transition-colors">{dict.navLinks.produto}</a></li>
+              <li><a href="#tese" className="hover:text-primary transition-colors">{dict.navLinks.tese}</a></li>
+              <li><a href="#compliance" className="hover:text-primary transition-colors">{dict.navLinks.compliance}</a></li>
+              <li><a href="#equipe" className="hover:text-primary transition-colors">{dict.navLinks.equipe}</a></li>
+              <li><a href="#lead-capture" className="hover:text-primary transition-colors">{dict.navLinks.registrarInteresse}</a></li>
             </ul>
           </div>
           <div>
             <h4 className="font-details text-xs font-bold uppercase tracking-widest text-base/60 mb-8">
-              Contato
+              {dict.contato}
             </h4>
             <a href="mailto:contato@plina.finance" className="font-mono text-sm text-base/70 hover:text-primary transition-colors block mb-6">
               contato@plina.finance
             </a>
             <p className="font-text text-xs text-base/60 max-w-[300px] leading-relaxed">
-              A Plina Finance não é uma corretora. Atua como estruturadora de ativos digitais regulados sob o framework da CVM 175.
+              {dict.disclaimer}
             </p>
           </div>
         </div>
       </div>
       <div className="max-w-7xl mx-auto pt-16 mt-16 border-t border-light-hairline flex flex-col md:flex-row justify-between items-center gap-8 opacity-40">
         <p className="font-details text-[10px] font-bold uppercase tracking-[0.2em]">
-          &copy; 2026 Plina Finance. Todos os direitos reservados.
+          {dict.copyright}
         </p>
         <div className="flex gap-6">
           <a
-            href="https://www.linkedin.com/in/thaisfreis/"
+            href="https://www.linkedin.com/company/plina-finance/posts/?feedView=all"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="LinkedIn"
