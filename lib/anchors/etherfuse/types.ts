@@ -116,14 +116,18 @@ export interface EtherfuseKycIdentityRequest {
     pubkey: string;
     /** Identity data. */
     identity: {
-        /** Identity identifier (typically the pubkey). */
-        id: string;
         /** Customer name. */
         name: {
             /** First name. */
             givenName: string;
             /** Last name. */
             familyName: string;
+            /** Middle name. Optional, production-only field (see above). */
+            middleName?: string;
+            /** Mother's maiden name. Optional, production-only field. */
+            motherMaidenName?: string;
+            /** Preferred/display name. Optional, production-only field. */
+            preferredName?: string;
         };
         /** ISO 8601 date string (e.g. `"1990-05-15"`). */
         dateOfBirth: string;
@@ -156,6 +160,8 @@ export interface EtherfuseKycIdentityRequest {
             postalCode: string;
             /** ISO 3166-1 alpha-2 country code (e.g. `"MX"`). */
             country: string;
+            /** Address line 2 (complement). Optional, production-only field. */
+            street2?: string;
         };
         /**
          * National identity numbers (e.g. CURP). Etherfuse only accepts this
@@ -169,6 +175,11 @@ export interface EtherfuseKycIdentityRequest {
             /** ID type (e.g. `"CURP"`). */
             type: string;
         }>;
+        /**
+         * Whether the customer consents to marketing emails. Optional,
+         * production-only field — omit entirely in sandbox (PLINA-MOD-KYC-01).
+         */
+        useEmailForMarketing?: boolean;
     };
 }
 
