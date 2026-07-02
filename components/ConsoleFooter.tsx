@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { Dictionary } from '@/lib/i18n/types';
 
 function fmtStamp(d: Date) {
   const Y = d.getUTCFullYear();
@@ -12,16 +13,7 @@ function fmtStamp(d: Date) {
   return `${Y}.${M}.${D} ${h}:${m}:${s}`;
 }
 
-const FLAGS = [
-  'Plina-RF v1',
-  'FIDC CVM 175',
-  'Lei 11.795/2008',
-  'Auditoria Big Four',
-  'Custódia Regulada',
-  'Reversibilidade Institucional',
-];
-
-export default function ConsoleFooter() {
+export default function ConsoleFooter({ dict }: { dict: Dictionary['consoleFooter'] }) {
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -40,7 +32,7 @@ export default function ConsoleFooter() {
     >
       <div className="max-w-[1400px] mx-auto px-6 py-3 flex items-center gap-x-4 whitespace-nowrap">
         <span className="tabular-nums shrink-0 text-white/35">{stamp} UTC</span>
-        {FLAGS.map((flag) => (
+        {dict.flags.map((flag) => (
           <span key={flag} className="flex items-center gap-x-4 shrink-0">
             <span className="text-white/25" aria-hidden>·</span>
             <span>{flag}</span>

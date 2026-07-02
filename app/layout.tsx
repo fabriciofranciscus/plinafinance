@@ -8,53 +8,46 @@ import { PessoaProvider } from "@/components/PessoaProvider";
 import { AppShell } from "@/components/AppShell";
 import { isAdminAuthenticated } from "@/lib/auth/admin";
 import { db } from "@/lib/db";
+import { getDictionary } from "@/lib/i18n/get-locale";
 
-export const metadata: Metadata = {
-  metadataBase: new URL("https://plina.finance"),
-  title: "Plina",
-  description:
-    "Conectando capital global ao direito creditório brasileiro. PLINA-RF: token institucional lastreado em FIDC sob CVM 175, distribuído via Stellar.",
-  keywords: [
-    "tokenização institucional",
-    "direito creditório",
-    "FIDC",
-    "CVM 175",
-    "Stellar",
-    "RWA",
-    "consórcio contemplado",
-    "PLINA-RF",
-  ],
-  openGraph: {
-    title: "Plina",
-    description:
-      "Conectando capital global ao direito creditório brasileiro. PLINA-RF: token institucional lastreado em FIDC sob CVM 175, distribuído via Stellar.",
-    url: "https://plina.finance",
-    siteName: "Plina",
-    locale: "pt_BR",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Plina",
-    description:
-      "Conectando capital global ao direito creditório brasileiro via Stellar. FIDC sob CVM 175.",
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { locale, dict } = await getDictionary();
+  return {
+    metadataBase: new URL("https://plina.finance"),
+    title: dict.meta.title,
+    description: dict.meta.description,
+    keywords: dict.meta.keywords,
+    openGraph: {
+      title: dict.meta.title,
+      description: dict.meta.description,
+      url: "https://plina.finance",
+      siteName: "Plina",
+      locale: locale === "pt-BR" ? "pt_BR" : "en_US",
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: dict.meta.title,
+      description: dict.meta.twitterDescription,
+    },
+  };
+}
 
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const [isAdmin, params] = await Promise.all([
+  const [isAdmin, params, { locale, dict }] = await Promise.all([
     isAdminAuthenticated(),
     db.parametrosPool
       .findUnique({ where: { id: "singleton" } })
       .catch(() => null),
+    getDictionary(),
   ]);
   const issuerPubkey =
     params?.issuerPubkey ?? process.env.STELLAR_ISSUER_PUBLIC ?? "";
 
   return (
-    <html lang="pt-BR" className="scroll-smooth">
+    <html lang={locale} className="scroll-smooth">
       <head>
         <link
           href="https://api.fontshare.com/v2/css?f[]=chillax@400,500,600,700&f[]=satoshi@400,500,700&display=swap"

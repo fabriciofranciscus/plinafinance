@@ -1,26 +1,45 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Menu } from 'lucide-react';
 import ConsoleStrip from './ConsoleStrip';
 import { usePessoa } from './PessoaProvider';
 import { useAppLogout } from '@/lib/hooks/privy';
+import { setLocale } from '@/app/actions/set-locale';
+import type { Dictionary, Locale } from '@/lib/i18n/types';
+
+type Props = {
+  dict: Dictionary['siteHeader'];
+  consoleStrip: Dictionary['consoleStrip'];
+  locale: Locale;
+};
 
 // Header da landing (/) navega pelas seções da própria página; os botões de
 // login/painel (abaixo) é que levam pras superfícies do app.
-const navLinks = [
-  { label: 'Produto', href: '#produto', route: false },
-  { label: 'Tese', href: '#tese', route: false },
-  { label: 'Compliance', href: '#compliance', route: false },
-  { label: 'Equipe', href: '#equipe', route: false },
-] as const;
-
-export default function SiteHeader() {
+export default function SiteHeader({ dict, consoleStrip, locale }: Props) {
   const [pastHero, setPastHero] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const pessoa = usePessoa();
   const { logout } = useAppLogout();
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+
+  const navLinks = [
+    { label: dict.nav.produto, href: '#produto' },
+    { label: dict.nav.tese, href: '#tese' },
+    { label: dict.nav.compliance, href: '#compliance' },
+    { label: dict.nav.equipe, href: '#equipe' },
+  ] as const;
+
+  function switchLocale(next: Locale) {
+    if (next === locale) return;
+    startTransition(async () => {
+      await setLocale(next);
+      router.refresh();
+    });
+  }
 
   useEffect(() => {
     let ticking = false;
@@ -43,7 +62,7 @@ export default function SiteHeader() {
           pastHero ? 'max-h-0 opacity-0' : 'max-h-12 opacity-100'
         }`}
       >
-        <ConsoleStrip />
+        <ConsoleStrip dict={consoleStrip} />
       </div>
 
       <nav
@@ -65,41 +84,54 @@ export default function SiteHeader() {
           </div>
 
           <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 items-center gap-7 font-details text-[11px] text-white/80 uppercase tracking-widest">
-            {navLinks.map((l) =>
-              l.route ? (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  className="hover:text-white transition-colors whitespace-nowrap"
-                >
-                  {l.label}
-                </Link>
-              ) : (
-                <a
-                  key={l.href}
-                  href={l.href}
-                  className="hover:text-white transition-colors whitespace-nowrap"
-                >
-                  {l.label}
-                </a>
-              )
-            )}
+            {navLinks.map((l) => (
+              <a
+                key={l.href}
+                href={l.href}
+                className="hover:text-white transition-colors whitespace-nowrap"
+              >
+                {l.label}
+              </a>
+            ))}
           </div>
 
           <div className="hidden md:flex items-center gap-5">
+            <div className="flex items-center gap-2 font-details text-[10px] uppercase tracking-widest whitespace-nowrap">
+              <button
+                type="button"
+                onClick={() => switchLocale('pt-BR')}
+                aria-current={locale === 'pt-BR'}
+                className={`transition-colors ${
+                  locale === 'pt-BR' ? 'text-white' : 'text-white/55 hover:text-white'
+                }`}
+              >
+                {dict.languageSwitcher.pt}
+              </button>
+              <span className="text-white/30" aria-hidden>/</span>
+              <button
+                type="button"
+                onClick={() => switchLocale('en')}
+                aria-current={locale === 'en'}
+                className={`transition-colors ${
+                  locale === 'en' ? 'text-white' : 'text-white/55 hover:text-white'
+                }`}
+              >
+                {dict.languageSwitcher.en}
+              </button>
+            </div>
             {pessoa.authenticated ? (
               <>
                 <Link
                   href="/painel"
                   className="font-details text-[10px] uppercase tracking-widest text-white/85 hover:text-white transition-colors whitespace-nowrap"
                 >
-                  Painel
+                  {dict.painel}
                 </Link>
                 <button
                   onClick={() => logout()}
                   className="font-details text-[10px] uppercase tracking-widest text-white/55 hover:text-white transition-colors whitespace-nowrap"
                 >
-                  Sair
+                  {dict.sair}
                 </button>
               </>
             ) : null}
@@ -109,14 +141,14 @@ export default function SiteHeader() {
                 pastHero ? 'opacity-100 translate-y-0' : 'opacity-0 pointer-events-none -translate-y-1'
               } transition-[opacity,transform] duration-300 ease-out`}
             >
-              Registrar interesse
+              {dict.registrarInteresse}
             </a>
           </div>
 
           <button
             onClick={() => setMenuOpen(!menuOpen)}
             className="lg:hidden text-white p-3 -mr-3 min-w-[44px] min-h-[44px] flex items-center justify-center"
-            aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'}
+            aria-label={menuOpen ? dict.menuFechar : dict.menuAbrir}
             aria-expanded={menuOpen}
           >
             <Menu className="w-6 h-6" />
@@ -125,29 +157,38 @@ export default function SiteHeader() {
 
         {menuOpen && (
           <div className="lg:hidden bg-base border-t border-white/10 px-6 py-6 flex flex-col gap-6 font-details text-sm text-white/80 uppercase tracking-widest">
-            {navLinks.map((l) =>
-              l.route ? (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  onClick={() => setMenuOpen(false)}
-                >
-                  {l.label}
-                </Link>
-              ) : (
-                <a
-                  key={l.href}
-                  href={l.href}
-                  onClick={() => setMenuOpen(false)}
-                >
-                  {l.label}
-                </a>
-              )
-            )}
+            {navLinks.map((l) => (
+              <a
+                key={l.href}
+                href={l.href}
+                onClick={() => setMenuOpen(false)}
+              >
+                {l.label}
+              </a>
+            ))}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => switchLocale('pt-BR')}
+                aria-current={locale === 'pt-BR'}
+                className={locale === 'pt-BR' ? 'text-white' : 'text-white/55'}
+              >
+                {dict.languageSwitcher.pt}
+              </button>
+              <span className="text-white/30" aria-hidden>/</span>
+              <button
+                type="button"
+                onClick={() => switchLocale('en')}
+                aria-current={locale === 'en'}
+                className={locale === 'en' ? 'text-white' : 'text-white/55'}
+              >
+                {dict.languageSwitcher.en}
+              </button>
+            </div>
             {pessoa.authenticated ? (
               <>
                 <Link href="/painel" onClick={() => setMenuOpen(false)}>
-                  Painel
+                  {dict.painel}
                 </Link>
                 <button
                   onClick={() => {
@@ -156,7 +197,7 @@ export default function SiteHeader() {
                   }}
                   className="text-left text-white/60"
                 >
-                  Sair
+                  {dict.sair}
                 </button>
               </>
             ) : null}
@@ -165,7 +206,7 @@ export default function SiteHeader() {
               onClick={() => setMenuOpen(false)}
               className="text-primary font-bold"
             >
-              Registrar interesse
+              {dict.registrarInteresse}
             </a>
           </div>
         )}

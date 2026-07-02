@@ -1,36 +1,12 @@
 import SectionMarker from './SectionMarker';
+import type { Dictionary } from '@/lib/i18n/types';
 
-const principios = [
-  {
-    num: '01',
-    titulo: 'Auditável',
-    tag: 'Verificável publicamente · Registro imutável',
-    detalhe:
-      'Cada cota incorporada ao pool tem registro digital verificável publicamente, com lastro jurídico formal e imutável.',
-  },
-  {
-    num: '02',
-    titulo: 'Regulada',
-    tag: 'CVM 175 · Lei 11.795/2008',
-    detalhe:
-      'CVM 175 e Lei 11.795/2008 desde a origem. FIDC formal, prestadores registrados, auditoria Big Four.',
-  },
-  {
-    num: '03',
-    titulo: 'Reversível',
-    tag: 'Clawback · Autorização · Revogabilidade',
-    detalhe:
-      'Política de clawback pública, restrita a quatro hipóteses jurídicas explícitas. Reversibilidade institucional como diferencial competitivo, não como limitação técnica.',
-  },
-];
-
-
-export default function ComplianceSection() {
+export default function ComplianceSection({ dict }: { dict: Dictionary['compliance'] }) {
   return (
     <section id="compliance" className="py-32 bg-white relative z-20">
       <div className="max-w-[1400px] mx-auto px-6">
         <div className="flex items-start justify-between mb-16">
-          <SectionMarker num="04" label="Compliance" />
+          <SectionMarker num={dict.numMarker} label={dict.marker} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-8 gap-y-12 items-end mb-32 reveal">
@@ -42,18 +18,21 @@ export default function ComplianceSection() {
               letterSpacing: '-0.04em',
             }}
           >
-            Compliance
-            <br />
-            nativo.
+            {dict.titulo.map((linha, i) => (
+              <span key={i}>
+                {linha}
+                {i < dict.titulo.length - 1 && <br />}
+              </span>
+            ))}
           </h2>
           <p className="lg:col-span-4 font-text text-base/70 text-lg font-light leading-relaxed">
-            Para mesa de risco institucional, reversibilidade não é limitação. É requisito. Family offices e gestoras reguladas não alocam em ativo digital sem mecanismo formal de bloqueio e recuperação. Sem isso, o produto não passa em compliance.
+            {dict.intro}
           </p>
         </div>
 
         {/* Asymmetric editorial principles */}
         <div className="mb-32">
-          {principios.map((p, i) => {
+          {dict.principios.map((p, i) => {
             const isMirrored = i === 1;
             return (
               <article

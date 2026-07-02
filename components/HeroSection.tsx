@@ -1,4 +1,6 @@
-export default function HeroSection() {
+import type { Dictionary } from '@/lib/i18n/types';
+
+export default function HeroSection({ dict }: { dict: Dictionary['hero'] }) {
   return (
     <header
       className="relative w-full h-[100vh] min-h-[600px] flex items-center overflow-hidden"
@@ -20,19 +22,19 @@ export default function HeroSection() {
             letterSpacing: '-0.04em',
           }}
         >
-          Liquidez para o cotista.
+          {dict.linha1}
           <br />
-          Desconto para o comprador.
+          {dict.linha2}
           <br />
           <span style={{ color: 'var(--color-auditable-cyan)' }}>
-            Yield institucional
+            {dict.yieldDestaque}
           </span>{' '}
-          para o mundo.
+          {dict.linha3Fim}
         </h1>
         <p className="font-details text-base sm:text-lg leading-relaxed text-white/70 mt-10 whitespace-normal lg:whitespace-nowrap">
-          Pool tokenizado de cotas de consórcio contempladas, estruturado como
-          FIDC sob CVM 175 e emitido na Stellar como{' '}
-          <span className="font-mono text-white">PLINA-RF</span>.
+          {dict.subPrefix}{' '}
+          <span className="font-mono text-white">PLINA-RF</span>
+          {dict.subSuffix}
         </p>
       </div>
 

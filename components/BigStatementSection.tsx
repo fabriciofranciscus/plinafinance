@@ -1,12 +1,7 @@
 import SectionMarker from './SectionMarker';
+import type { Dictionary } from '@/lib/i18n/types';
 
-const milestones = [
-  { year: '2008', label: 'Lei 11.795 regulamenta consórcios brasileiros' },
-  { year: '2023', label: 'CVM 175 estrutura tokenização institucional' },
-  { year: '2026', label: 'Plina · primeira tokenizadora de direito creditório de consórcio' },
-];
-
-export default function BigStatementSection() {
+export default function BigStatementSection({ dict }: { dict: Dictionary['bigStatement'] }) {
   return (
     <section
       id="marco-regulatorio"
@@ -15,7 +10,7 @@ export default function BigStatementSection() {
     >
       <div className="max-w-[1400px] mx-auto px-6">
         <div className="flex items-start justify-between mb-16">
-          <SectionMarker num="03" label="Marco Regulatório" tone="dark" />
+          <SectionMarker num={dict.numMarker} label={dict.marker} tone="dark" />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-8 gap-y-12 items-end reveal">
@@ -34,16 +29,16 @@ export default function BigStatementSection() {
 
           <div className="lg:col-span-4">
             <p className="font-text text-white/70 text-lg font-light leading-relaxed mb-8">
-              A Lei 11.795 regulamentou o mercado brasileiro de consórcios em 2008. Há quase duas décadas o direito creditório de cotas contempladas é juridicamente constituído, mas nunca chegou ao capital institucional global.
+              {dict.p1}
             </p>
             <p className="font-text text-white text-lg font-medium leading-relaxed">
-              A Plina é a primeira tokenizadora institucional sob CVM 175 desde a origem.
+              {dict.p2}
             </p>
           </div>
         </div>
 
         <ol className="mt-24 grid grid-cols-1 sm:grid-cols-3 gap-px bg-white/10 border-y border-white/10 reveal delay-100">
-          {milestones.map((m, i) => (
+          {dict.milestones.map((m, i) => (
             <li
               key={m.year}
               className="bg-base px-6 py-8 flex flex-col gap-4 relative"
