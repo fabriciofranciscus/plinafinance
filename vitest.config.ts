@@ -16,5 +16,11 @@ export default defineConfig({
     ],
     clearMocks: true,
     restoreMocks: true,
+    // Os testes de Stellar (build/hash/assinatura de XDR) fazem cripto pesada.
+    // Isolados rodam em ~2s, mas disputando CPU com os outros workers passavam
+    // dos 5s do default e falhavam de forma intermitente — não era bug de
+    // código, era o timeout.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
 });

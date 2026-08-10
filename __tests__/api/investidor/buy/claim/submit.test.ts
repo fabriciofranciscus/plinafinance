@@ -1,13 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockFindUnique, mockUpdate, mockEventoAuditCreate, mockDbTransaction, mockSubmitWithPrivySignature } =
-  vi.hoisted(() => ({
-    mockFindUnique: vi.fn(),
-    mockUpdate: vi.fn(),
-    mockEventoAuditCreate: vi.fn(),
-    mockDbTransaction: vi.fn(),
-    mockSubmitWithPrivySignature: vi.fn(),
-  }));
+const {
+  mockFindUnique,
+  mockUpdate,
+  mockEventoAuditCreate,
+  mockDbTransaction,
+  mockSubmitWithPrivySignature,
+  mockTxHashFromXdr,
+  mockFetchTransactionByHash,
+} = vi.hoisted(() => ({
+  mockFindUnique: vi.fn(),
+  mockUpdate: vi.fn(),
+  mockEventoAuditCreate: vi.fn(),
+  mockDbTransaction: vi.fn(),
+  mockSubmitWithPrivySignature: vi.fn(),
+  mockTxHashFromXdr: vi.fn(),
+  mockFetchTransactionByHash: vi.fn(),
+}));
 
 vi.mock('@/lib/wallet/auth-guard', () => ({
   withAuth: (
@@ -36,12 +45,14 @@ vi.mock('@/lib/db', () => ({
   },
 }));
 
-vi.mock('@/lib/stellar/transactions', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/stellar/transactions')>(
-    '@/lib/stellar/transactions',
-  );
-  return { ...actual, submitWithPrivySignature: mockSubmitWithPrivySignature };
-});
+// Mock completo (sem importActual): a rota chama txHashFromXdr — que sobre o
+// XDR fake do fixture estoura "XDR Read Error" — e fetchTransactionByHash, que
+// no real bate no Horizon. Ambos precisam ser stub pro teste ficar hermético.
+vi.mock('@/lib/stellar/transactions', () => ({
+  submitWithPrivySignature: mockSubmitWithPrivySignature,
+  txHashFromXdr: mockTxHashFromXdr,
+  fetchTransactionByHash: mockFetchTransactionByHash,
+}));
 
 import { POST } from '@/app/api/investidor/buy/claim/submit/route';
 
@@ -66,6 +77,8 @@ beforeEach(() => {
     }),
   );
   mockSubmitWithPrivySignature.mockReset().mockResolvedValue({ hash: 'tx_claim_xyz' });
+  mockTxHashFromXdr.mockReset().mockReturnValue('tx_claim_xyz');
+  mockFetchTransactionByHash.mockReset().mockResolvedValue(null);
 });
 
 describe('POST /api/investidor/buy/claim/submit (PLINA-MOD-007)', () => {
@@ -118,6 +131,28 @@ describe('POST /api/investidor/buy/claim/submit (PLINA-MOD-007)', () => {
     expect(json.claimTxHash).toBe('tx_existente');
     expect(json.idempotent).toBe(true);
     expect(mockSubmitWithPrivySignature).not.toHaveBeenCalled();
+  });
+
+  it('reconcilia: CB já resgatada on-chain → persiste sem re-submeter', async () => {
+    mockFindUnique.mockResolvedValueOnce({
+      id: 'order-x',
+      investidorId: 'inv_1',
+      claimTxHash: null,
+    });
+    mockFetchTransactionByHash.mockResolvedValueOnce({
+      hash: 'tx_ja_onchain',
+      successful: true,
+    });
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(200);
+    expect((await r.json()).claimTxHash).toBe('tx_ja_onchain');
+    // Re-submeter a mesma tx daria tx_bad_seq — o ponto do reconcile.
+    expect(mockSubmitWithPrivySignature).not.toHaveBeenCalled();
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ claimTxHash: 'tx_ja_onchain' }),
+      }),
+    );
   });
 
   it('200 happy: submete, persiste claimTxHash, audita CLAIMABLE_BALANCE_RESGATADA', async () => {
