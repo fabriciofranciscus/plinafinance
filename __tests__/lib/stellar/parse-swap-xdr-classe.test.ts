@@ -26,7 +26,7 @@ function buildSwapXdr(plinarfCode: string, amount = '100.0000000'): string {
     accountId: () => INV.publicKey(),
     sequenceNumber: () => '1',
     incrementSequenceNumber: () => {},
-  } as unknown as Parameters<typeof TransactionBuilder>[0];
+  } as unknown as ConstructorParameters<typeof TransactionBuilder>[0];
 
   const tx = new TransactionBuilder(sourceAccount, {
     fee: '100',

@@ -13,6 +13,8 @@ const {
   eventoAuditCreate,
   holdingUpsert,
   submitWithPrivySignature,
+  txHashFromXdr,
+  fetchTransactionByHash,
   assertElegivelParaTrustline,
   assertSwapXdrMatchesQuote,
   resolveTesouroAsset,
@@ -23,6 +25,8 @@ const {
   eventoAuditCreate: vi.fn(),
   holdingUpsert: vi.fn(),
   submitWithPrivySignature: vi.fn(),
+  txHashFromXdr: vi.fn(),
+  fetchTransactionByHash: vi.fn(),
   assertElegivelParaTrustline: vi.fn(),
   assertSwapXdrMatchesQuote: vi.fn(),
   resolveTesouroAsset: vi.fn(),
@@ -67,7 +71,14 @@ vi.mock('@/lib/db', () => ({
   },
 }));
 
-vi.mock('@/lib/stellar/transactions', () => ({ submitWithPrivySignature }));
+// A rota usa txHashFromXdr + fetchTransactionByHash no submit-or-reconcile.
+// Mock explícito (nada de importActual) pra manter o teste hermético: o real
+// `fetchTransactionByHash` bate no Horizon.
+vi.mock('@/lib/stellar/transactions', () => ({
+  submitWithPrivySignature,
+  txHashFromXdr,
+  fetchTransactionByHash,
+}));
 vi.mock('@/lib/services/investidor', () => ({ assertElegivelParaTrustline }));
 vi.mock('@/lib/stellar/parse-swap-xdr', () => ({ assertSwapXdrMatchesQuote }));
 vi.mock('@/lib/anchors/etherfuse/tesouro', () => ({ resolveTesouroAsset }));
@@ -93,6 +104,10 @@ const FULL_BODY = {
   distributorSigBase64: 'sig==',
   distributorPubkey: DIST_PK,
 };
+
+/** sha256(FULL_BODY.xdr) — é o que a rota usa como chave de reserva (C-04). */
+const XDR_HASH =
+  '63c1dd951ffedf6f7fd968ad4efa39b8ed584f162f46e715114ee184f8de9201';
 
 function baseQuote(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -120,6 +135,8 @@ beforeEach(() => {
   submitWithPrivySignature
     .mockReset()
     .mockResolvedValue({ hash: 'tx_real_hash' });
+  txHashFromXdr.mockReset().mockReturnValue('tx_real_hash');
+  fetchTransactionByHash.mockReset().mockResolvedValue(null);
   assertElegivelParaTrustline.mockReset().mockResolvedValue(undefined);
   assertSwapXdrMatchesQuote.mockReset();
   resolveTesouroAsset
@@ -170,7 +187,7 @@ describe('POST /api/investidor/buy/swap/submit', () => {
       baseQuote({
         consumedAt: new Date(),
         consumedTxHash: 'tx_prev',
-        submitXdrHash: '63c1dd951ffedf6f7fd968ad4efa39b8ed584f162f46e715114ee184f8de9201', // sha256("AAAA")
+        submitXdrHash: XDR_HASH,
       }),
     );
     const r = await POST(req(FULL_BODY));
@@ -203,6 +220,49 @@ describe('POST /api/investidor/buy/swap/submit', () => {
     expect(r.status).toBe(400);
     const json = await r.json();
     expect(json.error).toMatch(/xdr divergente/);
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+  });
+
+  it('reserva órfã + tx já on-chain → reconcilia sem re-submeter', async () => {
+    quoteFindUnique
+      // 1ª leitura: quote ainda não consumido, mas já reservado por esta XDR.
+      .mockResolvedValueOnce(baseQuote({ submitXdrHash: XDR_HASH }))
+      // 2ª leitura (`fresh`, após a reserva falhar): mesma XDR, sem consumedAt.
+      .mockResolvedValueOnce({
+        submitXdrHash: XDR_HASH,
+        consumedTxHash: null,
+        consumedAt: null,
+      });
+    quoteUpdateMany.mockResolvedValueOnce({ count: 0 }); // reserva já existe
+    fetchTransactionByHash.mockResolvedValueOnce({
+      hash: 'tx_ja_onchain',
+      successful: true,
+    });
+
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(200);
+    expect((await r.json()).swapTxHash).toBe('tx_ja_onchain');
+    // O ponto do reconcile: os tokens já foram mintados, só falta escriturar.
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+    expect(eventoAuditCreate).toHaveBeenCalledOnce();
+  });
+
+  it('reserva órfã + tx falhou on-chain → 409 (pede rebuild)', async () => {
+    quoteFindUnique
+      .mockResolvedValueOnce(baseQuote({ submitXdrHash: XDR_HASH }))
+      .mockResolvedValueOnce({
+        submitXdrHash: XDR_HASH,
+        consumedTxHash: null,
+        consumedAt: null,
+      });
+    quoteUpdateMany.mockResolvedValueOnce({ count: 0 });
+    fetchTransactionByHash.mockResolvedValueOnce({
+      hash: 'tx_falha',
+      successful: false,
+    });
+
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(409);
     expect(submitWithPrivySignature).not.toHaveBeenCalled();
   });
 
