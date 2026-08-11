@@ -1,4 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "DIRECT_URL=\"$DATABASE_URL_UNPOOLED\" npx prisma migrate deploy && pnpm build"
+  "buildCommand": "DIRECT_URL=\"$DATABASE_URL_UNPOOLED\" npx prisma migrate deploy && pnpm build",
+  "//regions": "gru1 (São Paulo) co-loca as functions com o Postgres, que roda em sa-east-1. Antes disso o projeto usava o default iad1 (Virgínia): cada query do Prisma cruzava o continente, e o CPF/KYC do investidor era processado nos EUA — relevante pro FIDC. Plano Hobby aceita uma única região; array com 2+ falha o build antes do build step.",
+  "regions": ["gru1"]
 }
