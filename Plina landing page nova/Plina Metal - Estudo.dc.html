@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=chillax@400,500,600&f[]=satoshi@300,400,500&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@300;400&display=swap" />
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#ffffff;color:#132728;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+:focus-visible{outline:2px solid #046C88;outline-offset:4px}
+
+/* Etiqueta da folha de comparacao. Nao faz parte do desenho. */
+.rotulo{font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.16em;text-transform:uppercase;color:#046C88;padding:0.875rem clamp(20px,6vw,80px);border-top:1px solid rgba(19,39,40,0.12);border-bottom:1px solid rgba(19,39,40,0.12);background:#e4e4e4}
+.rotulo b{color:rgba(19,39,40,0.7);font-weight:400;text-transform:none;letter-spacing:0.04em}
+.rotulo i{font-style:normal;color:#132728;font-weight:400}
+
+.tela{padding:clamp(3.5rem,7vw,6rem) clamp(20px,6vw,80px);background:#0C1719;color:#EDF3F2}
+.tela.claro{background:#ffffff;color:#132728}
+.centro{max-width:1320px;margin:0 auto}
+.eyebrow{font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.22em;text-transform:uppercase;color:rgba(237,243,242,0.7);margin:0 0 1.75rem}
+.tela.claro .eyebrow{color:rgba(19,39,40,0.65)}
+.h{font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(2.5rem,5.5vw,4.5rem);line-height:1.06;letter-spacing:-0.024em;margin:0;max-width:15ch;text-wrap:balance}
+.sub{font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(1.125rem,2vw,1.625rem);line-height:1.45;letter-spacing:-0.014em;margin:1.75rem 0 0;max-width:34ch;color:#EDF3F2}
+.medida{font-family:'Geist Mono',monospace;font-size:0.75rem;line-height:1.9;color:rgba(237,243,242,0.7);margin:2.5rem 0 0;padding-top:1.25rem;border-top:1px solid rgba(237,243,242,0.15);max-width:70ch}
+.tela.claro .medida{color:rgba(19,39,40,0.75);border-top-color:rgba(19,39,40,0.2)}
+
+/* ══ O METAL ═══════════════════════════════════════════════════════════════
+   A tecnica e sempre a mesma: um linear-gradient de varios stops, recortado na
+   forma do texto com background-clip:text, e a tinta em transparent.
+
+   A REGRA QUE GOVERNA TUDO: um gradiente em texto so passa em AA se o PIOR
+   stop passar. Nao adianta a media. Por isso os stops abaixo sao so os que
+   medi contra o proprio fundo:
+     sobre #0C1719 -> ink 16.23 · glacier 10.91 · sinal 6.40 · azul 6.19
+     sobre #ffffff -> petrol 15.57 · #046C88 5.99 · #057A99 4.94
+   O ciano #0EA7C7 e o glacier REPROVAM no claro (2.85 e 1.67), e e por isso
+   que o metal da Plina e efeito de superficie escura. No claro sobra so uma
+   familia de azuis escuros, e a variacao fica fraca demais para ler como metal
+   -- a prancheta 6 mostra isso.
+
+   O FALLBACK NAO E OPCIONAL. Com color:transparent e sem suporte a
+   background-clip, o texto some. Toda regra de metal mora dentro de @supports,
+   e a cor cheia fica do lado de fora. */
+.metal{color:#EDF3F2}
+.metal-num{color:#EDF3F2}
+
+@supports ((-webkit-background-clip:text) or (background-clip:text)){
+  /* 1 · SUTIL. Dois tons de claro e um respiro de glacier. Le como papel
+     acetinado, nao como cromo. Pior stop: glacier, 10.91. */
+  .metal.sutil{
+    background:linear-gradient(168deg,#EDF3F2 0%,#EDF3F2 42%,#A0CFE7 72%,#EDF3F2 100%);
+    -webkit-background-clip:text;background-clip:text;
+    -webkit-text-fill-color:transparent;color:transparent;
+  }
+  /* 2 · PLENO. Os quatro stops, com o azul no ponto de sombra. E o que mais se
+     parece com o efeito da Ethena. Pior stop: azul #4A9ED4, 6.19. */
+  .metal.pleno{
+    background:linear-gradient(166deg,#EDF3F2 0%,#EDF3F2 28%,#A0CFE7 48%,#4A9ED4 66%,#A0CFE7 82%,#EDF3F2 100%);
+    -webkit-background-clip:text;background-clip:text;
+    -webkit-text-fill-color:transparent;color:transparent;
+  }
+  /* 3 · SINAL. Troca o azul-aco pelo ciano da marca no ponto baixo. Mais Plina
+     e menos cromo generico. Pior stop: sinal #0EA7C7, 6.40. */
+  .metal.sinal{
+    background:linear-gradient(166deg,#EDF3F2 0%,#EDF3F2 30%,#A0CFE7 52%,#0EA7C7 70%,#A0CFE7 84%,#EDF3F2 100%);
+    -webkit-background-clip:text;background-clip:text;
+    -webkit-text-fill-color:transparent;color:transparent;
+  }
+  /* 6 · NO CLARO. Unica combinacao que passa: petrol e os dois azuis escuros.
+     Pior stop: #057A99, 4.94. */
+  .metal.claro{
+    background:linear-gradient(166deg,#132728 0%,#132728 38%,#046C88 62%,#057A99 78%,#132728 100%);
+    -webkit-background-clip:text;background-clip:text;
+    -webkit-text-fill-color:transparent;color:transparent;
+  }
+  .metal-num.pleno{
+    background:linear-gradient(160deg,#EDF3F2 0%,#EDF3F2 34%,#A0CFE7 56%,#4A9ED4 74%,#EDF3F2 100%);
+    -webkit-background-clip:text;background-clip:text;
+    -webkit-text-fill-color:transparent;color:transparent;
+  }
+}
+
+/* ══ O CARD ════════════════════════════════════════════════════════════════
+   A borda em gradiente e um pseudo-elemento de 1px com duas mascaras que se
+   subtraem: uma cobre a caixa inteira, a outra so o miolo, e o que sobra e a
+   moldura. E o unico jeito de ter borda em degrade sem border-image, que nao
+   respeita border-radius.
+
+   A LUZ VEM DE CIMA E A ESQUERDA, sempre. Um metal so le como metal se a fonte
+   de luz for consistente entre as pecas: se um card brilha no topo e o outro na
+   base, viram dois materiais. 135deg em todos. */
+.cartao{position:relative;border-radius:24px;background:#122224;padding:clamp(28px,3vw,40px);display:flex;flex-direction:column;gap:1rem}
+.cartao > *{position:relative;z-index:1}
+.cartao::before{
+  content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;
+  background:linear-gradient(135deg,rgba(237,243,242,0.55) 0%,rgba(160,207,231,0.18) 34%,rgba(237,243,242,0.04) 55%,rgba(14,167,199,0.42) 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;
+}
+/* O verniz: uma faixa de luz atravessando o campo. 0.05 e o teto -- acima disso
+   o campo deixa de ser superficie e vira decoracao, e a tinta perde o chao. */
+.cartao.verniz{background:linear-gradient(118deg,#122224 0%,#16292B 40%,#122224 72%),#122224}
+.cartao h3{font-family:Chillax,sans-serif;font-weight:500;font-size:1.5rem;letter-spacing:-0.018em;margin:0}
+.cartao p{margin:0;font-weight:300;line-height:1.7;color:rgba(237,243,242,0.72);max-width:40ch}
+.cartao .n{font-family:'Geist Mono',monospace;font-weight:300;font-size:clamp(2.25rem,4vw,3.25rem);line-height:1;letter-spacing:-0.02em}
+.grade{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:clamp(1.25rem,2.5vw,2rem)}
+
+/* Sem metal, para comparar. Mesma caixa, hairline chapado. */
+.cartao.liso::before{background:rgba(237,243,242,0.12)}
+.cartao.liso{background:#122224}
+
+/* O brilho que anda. Fica atras da tinta, nao sobre ela, entao nao muda razao
+   de contraste nenhuma -- por isso e o unico movimento que este estudo aceita.
+   Desligado sob reduced-motion, e o texto continua legivel parado. */
+@keyframes varre{from{background-position:-140% 0}to{background-position:240% 0}}
+@supports ((-webkit-background-clip:text) or (background-clip:text)){
+  .metal.anda{
+    background:linear-gradient(100deg,#EDF3F2 0%,#EDF3F2 38%,#A0CFE7 47%,#FFFFFF 52%,#A0CFE7 57%,#EDF3F2 66%,#EDF3F2 100%);
+    background-size:240% 100%;
+    -webkit-background-clip:text;background-clip:text;
+    -webkit-text-fill-color:transparent;color:transparent;
+    animation:varre 7s cubic-bezier(0.16,1,0.3,1) infinite;
+  }
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none !important;transition-duration:0.01ms !important}
+  .metal.anda{background-position:0 0}
+}
+</style>
+</helmet>
+<div style="font-family:Satoshi,system-ui,sans-serif;font-weight:300;font-size:1.125rem;line-height:1.65">
+
+<!--
+  ESTUDO — o metal da Ethena, nas cores da Plina.
+
+  NAO CONSEGUI EXTRAIR O CSS DA ETHENA. A folha de estilo dela e externa e o que
+  se busca da pagina traz so o HTML. O que esta aqui e a tecnica reconstruida
+  (multi-stop + background-clip:text; borda por pseudo-elemento com
+  mask-composite), com os valores escolhidos e MEDIDOS para a paleta da Plina --
+  nao os valores dela.
+
+  O CONFLITO, dito uma vez: "gradient text" e "gradient border" sao os dois
+  primeiros itens do HARD NO do design-system/PROMPT.md. Este estudo existe
+  porque o pedido foi explicito e porque o hero da v11 agora e escuro, que e a
+  unica superficie onde o efeito passa em AA. Se algo daqui entrar na v11, entra
+  como excecao declarada -- e o lugar de declarar e a secao 11 do design system,
+  onde as divergencias ja moram.
+
+  O QUE MEDI, e o que decide tudo: um gradiente em texto so passa se o PIOR stop
+  passar. Sobre #0C1719 os quatro tons claros da Plina passam (16.23 / 10.91 /
+  6.40 / 6.19). Sobre branco, o ciano e o glacier REPROVAM (2.85 e 1.67). Por
+  isso o metal da Plina e efeito de superficie escura, e a prancheta 6 mostra o
+  que sobra quando se tenta no claro.
+-->
+
+<!-- ═══════════════════════════ 1 ═══════════════════════════ -->
+<div class="rotulo">1 · referência, sem metal &nbsp;<b>a manchete como está na v11 hoje, em tinta cheia sobre o hero escuro. É contra esta que as outras têm de justificar o custo.</b></div>
+<section data-screen-label="Metal 1 · Referência" class="tela">
+  <div class="centro">
+    <p class="eyebrow">Sem efeito</p>
+    <h2 class="h">O crédito já foi contemplado.</h2>
+    <p class="sub">O que faltava era liquidez. É o que resolvemos.</p>
+    <p class="medida">#EDF3F2 chapado · 16.23:1 sobre #0C1719 · nenhum risco, nenhum custo, nenhuma exceção ao sistema.</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 2 ═══════════════════════════ -->
+<div class="rotulo">2 · metal sutil &nbsp;<b>dois brancos e um respiro de glacier. Lê como papel acetinado, não como cromo. É o que eu levaria para uma página institucional: o efeito aparece, mas ninguém consegue apontar onde.</b></div>
+<section data-screen-label="Metal 2 · Sutil" class="tela">
+  <div class="centro">
+    <p class="eyebrow">Metal sutil</p>
+    <h2 class="h metal sutil">O crédito já foi contemplado.</h2>
+    <p class="sub">O que faltava era liquidez. É o que resolvemos.</p>
+    <p class="medida">#EDF3F2 → #A0CFE7 → #EDF3F2 a 168° · pior stop 10.91:1 · passa com folga de 2,4×.</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 3 ═══════════════════════════ -->
+<div class="rotulo">3 · metal pleno &nbsp;<b>quatro stops, com o azul-aço no ponto de sombra. É o que mais se parece com o efeito da Ethena. Também é o mais fácil de datar: cromo é uma moda, e moda envelhece em página institucional.</b></div>
+<section data-screen-label="Metal 3 · Pleno" class="tela">
+  <div class="centro">
+    <p class="eyebrow">Metal pleno</p>
+    <h2 class="h metal pleno">O crédito já foi contemplado.</h2>
+    <p class="sub">O que faltava era liquidez. É o que resolvemos.</p>
+    <p class="medida">#EDF3F2 → #A0CFE7 → #4A9ED4 → #EDF3F2 a 166° · pior stop 6.19:1 · passa.</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 4 ═══════════════════════════ -->
+<div class="rotulo">4 · metal no sinal &nbsp;<b>troca o azul-aço pelo ciano da marca no ponto baixo. Mesma força do 3, mas o brilho passa a ser da Plina em vez de cromo genérico. <i>É a minha recomendação.</i></b></div>
+<section data-screen-label="Metal 4 · Sinal" class="tela">
+  <div class="centro">
+    <p class="eyebrow">Metal no sinal</p>
+    <h2 class="h metal sinal">O crédito já foi contemplado.</h2>
+    <p class="sub">O que faltava era liquidez. É o que resolvemos.</p>
+    <p class="medida">#EDF3F2 → #A0CFE7 → #0EA7C7 → #EDF3F2 a 166° · pior stop 6.40:1 · passa. O ciano entra como sombra, não como preenchimento — continua valendo a regra de ≤3 pontos de ciano.</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 5 ═══════════════════════════ -->
+<div class="rotulo">5 · os cards &nbsp;<b>borda de 1px em gradiente por pseudo-elemento, verniz diagonal no campo, e o número em metal. À esquerda o card liso da v11, para comparação lado a lado.</b></div>
+<section data-screen-label="Metal 5 · Cards" class="tela">
+  <div class="centro">
+    <p class="eyebrow">Cards</p>
+    <div class="grade">
+      <article class="cartao liso">
+        <span class="n">R$ 232,9 bi</span>
+        <h3>Liso</h3>
+        <p>Hairline chapado a 12%, campo sólido. É o card da v11 hoje.</p>
+      </article>
+      <article class="cartao">
+        <span class="n">R$ 232,9 bi</span>
+        <h3>Borda em metal</h3>
+        <p>A moldura recebe o gradiente; o campo continua sólido. A luz vem de cima e da esquerda, a 135°.</p>
+      </article>
+      <article class="cartao verniz">
+        <span class="n metal-num pleno">R$ 232,9 bi</span>
+        <h3>Borda, verniz e número</h3>
+        <p>Os três juntos. O verniz é uma variação de 4% no campo — acima disso ele deixa de ser superfície e vira decoração.</p>
+      </article>
+    </div>
+    <p class="medida">Borda: mask-composite de duas camadas, o único jeito de ter degradê em moldura respeitando o border-radius. O verniz varia #122224 → #16292B, e a tinta do corpo fica em 8.9:1 sobre o ponto mais claro dele.</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 6 ═══════════════════════════ -->
+<div class="rotulo">6 · a tentativa no claro &nbsp;<b>por que o metal não desce para o resto da página. Sobre branco só passam o petrol e dois azuis escuros — a variação fica tão curta que lê como falha de renderização, não como material.</b></div>
+<section data-screen-label="Metal 6 · No claro" class="tela claro">
+  <div class="centro">
+    <p class="eyebrow">No claro</p>
+    <h2 class="h metal claro">O crédito já foi contemplado.</h2>
+    <p class="sub" style="color:rgba(19,39,40,0.7)">O que faltava era liquidez. É o que resolvemos.</p>
+    <p class="medida">#132728 → #046C88 → #057A99 · pior stop 4.94:1 · passa por 0,44 de margem. O ciano #0EA7C7 daria 2.85 e o glacier 1.67: ambos reprovam, e são justamente os tons que fariam o efeito parecer metal. O que sobra é um degradê azul discreto, e ele custa uma exceção ao sistema para entregar quase nada.</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 7 ═══════════════════════════ -->
+<div class="rotulo">7 · o brilho que anda &nbsp;<b>varredura de 7s atrás da tinta. Some sob prefers-reduced-motion. É bonito uma vez e cansa na terceira — em página que alguém vai reler, eu não usaria.</b></div>
+<section data-screen-label="Metal 7 · Animado" class="tela">
+  <div class="centro">
+    <p class="eyebrow">Com movimento</p>
+    <h2 class="h metal anda">O crédito já foi contemplado.</h2>
+    <p class="sub">O que faltava era liquidez. É o que resolvemos.</p>
+    <p class="medida">O brilho fica atrás da tinta, não sobre ela, então não altera razão de contraste nenhuma. Ainda assim: movimento perpétuo compete com a leitura, e o hero é onde o leitor decide se fica.</p>
+  </div>
+</section>
+
+</div>
+</x-dc>
+</body>
+</html>

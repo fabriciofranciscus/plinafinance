@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=chillax@400,500,600&f[]=satoshi@300,400,500&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@300;400&display=swap" />
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#ffffff;color:#132728;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+:focus-visible{outline:2px solid #046C88;outline-offset:4px}
+
+/* Etiqueta da folha de comparação. Não faz parte do desenho. */
+.rotulo{font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.16em;text-transform:uppercase;color:#046C88;padding:0.875rem clamp(20px,6vw,80px);border-top:1px solid rgba(19,39,40,0.12);border-bottom:1px solid rgba(19,39,40,0.12);background:#e4e4e4}
+.rotulo b{color:rgba(19,39,40,0.7);font-weight:400;text-transform:none;letter-spacing:0.04em}
+
+/* Sem barra: a decisão anterior tirou a navbar do hero, então a tela inteira é
+   da composição. É também o que torna a marca aqui obrigatória, e não enfeite. */
+.tela{height:clamp(600px,84vh,860px);display:grid;grid-template-rows:1fr auto;gap:clamp(2rem,4vw,3.5rem);padding:clamp(2.5rem,5vw,4rem) clamp(20px,6vw,80px) clamp(2rem,4vw,3rem)}
+.centro{max-width:1320px;width:100%;margin:0 auto}
+
+/* ── A MARCA COMO SUJEITO ───────────────────────────────────────────────────
+   "É o que resolvemos" em primeira pessoa muda a natureza da composição: a
+   marca da esquerda deixa de ser um elemento gráfico e passa a ser o sujeito
+   da frase da direita. O hero inteiro vira uma sentença só, atravessando a
+   página. É por isso que as duas colunas alinham pela base: elas são a mesma
+   linha de leitura, não dois blocos.
+
+   O ponto cresce junto com o nome. Peso 500, não 600: em corpo grande o 600
+   engorda o desenho da Chillax. */
+.marca{font-family:Chillax,sans-serif;font-weight:500;letter-spacing:-0.03em;line-height:0.9;color:#132728;margin:0;display:block;text-align:center}
+.marca span{color:#046C88}
+
+/* A estrofe: três linhas, uma respiração entre elas. */
+/* A MEDIDA VAI NA LINHA, NAO NO CONTEINER. `ch` e relativo ao corpo do proprio
+   elemento: posto no conteiner, ele valia 24 caracteres do corpo herdado (18px)
+   e espremia tambem a manchete de 54px, que quebrava em tres linhas e puxava o
+   bloco 24px para fora do eixo. Em cada linha, cada uma recebe a medida na sua
+   propria escala, e a centragem passa a ser por linha. */
+.estrofe{margin:0 auto;display:grid;gap:clamp(0.375rem,0.8vw,0.625rem);justify-items:center}
+.estrofe p,.estrofe h1{max-width:22ch;margin-inline:auto}
+/* h1 junto do p: a primeira linha da estrofe e o titulo do documento, e sem ela
+   a pagina fica sem topo de hierarquia. Alem do leitor de tela, o script de
+   revelacao da v10 mira "h1, main h2": sem h1 a animacao nao roda, e falha em
+   silencio. O logotipo continua <span>, porque logotipo nao e cabecalho. */
+.estrofe p,.estrofe h1{margin:0;font-family:Chillax,sans-serif;font-weight:400;letter-spacing:-0.018em;line-height:1.16;text-wrap:balance}
+.estrofe .forte{color:#132728}
+.estrofe .fraca{color:rgba(19,39,40,0.62)}
+
+.caixa{background:rgba(14,167,199,0.38);color:#132728;border-radius:24px;padding:clamp(30px,3.4vw,48px) clamp(28px,3vw,44px)}
+.caixa p{margin:0;max-width:52ch;line-height:1.75;font-weight:300}
+.caixa .ticker{font-family:'Geist Mono',monospace;font-size:0.75rem;line-height:1.9;color:rgba(19,39,40,0.85);margin:clamp(1rem,2vw,1.5rem) 0 0;padding-top:clamp(1rem,2vw,1.25rem);border-top:1px solid rgba(19,39,40,0.22);max-width:none}
+.faixa{display:grid;grid-template-columns:1.3fr 1fr;gap:clamp(2rem,4vw,4rem);align-items:start}
+.portas{list-style:none;margin:0;padding:0;display:grid;gap:1rem}
+.portas a{display:flex;align-items:center;justify-content:space-between;gap:1.5rem;min-height:60px;padding:0 0 1rem;border-bottom:1px solid rgba(19,39,40,0.24);font-family:Geist,sans-serif;font-weight:500;font-size:1.125rem;text-decoration:none;transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)}
+.portas a:hover{border-bottom-color:#132728}
+.portas i{font-family:'Geist Mono',monospace;font-style:normal;font-weight:300;font-size:0.875rem;color:rgba(19,39,40,0.55)}
+
+@media (max-width:900px){
+  .tela{height:auto}
+  /* Sem duas colunas nao ha ordem a inverter: a composicao centrada e a mesma
+     em qualquer largura, que e o unico ganho real de centralizar. */
+  .faixa{grid-template-columns:1fr;gap:1.75rem}
+}
+@media (prefers-reduced-motion:reduce){*{transition-duration:0.01ms !important}}
+</style>
+</helmet>
+<div style="font-family:Satoshi,system-ui,sans-serif;font-weight:300;font-size:1.125rem;line-height:1.65">
+
+<!--
+  Hero v17 — a marca como sujeito. Quatro leituras do mesmo arranjo.
+
+  O ARRANJO É O PEDIDO: marca à esquerda, três linhas à direita, faixa embaixo.
+
+  O QUE MUDOU NO TEXTO, e é a melhor coisa que apareceu em todas as rodadas:
+  "É o que resolve a Plina" virou "É o que resolvemos". Em primeira pessoa, a
+  frase perde o sujeito, e quem o devolve é a marca do outro lado da composição.
+  O hero deixa de ser "um logo e um texto" e passa a ser UMA SENTENÇA SÓ:
+
+      Plina.   O crédito já foi contemplado.
+               O que faltava era liquidez.
+               É o que resolvemos.
+
+  DECISAO DE 21/08: a composicao foi CENTRALIZADA. A marca sobe, a estrofe desce
+  embaixo dela, e tudo alinha pelo eixo do meio. O que se perde: a leitura em uma
+  linha so, atravessando a pagina, que era o argumento da versao em duas colunas.
+  O que se ganha: a mesma composicao em qualquer largura, sem o vazio de 147px
+  que a coluna da direita deixava por ser mais larga que o texto dentro dela.
+
+  A VARIÁVEL EM ABERTO é a hierarquia entre as três linhas, que não dá para
+  inferir do pedido. Cada prancheta responde isso de um jeito.
+
+  A VOZ. Com "resolvemos" no hero, a faixa acompanhou: "A Plina compra esse
+  direito e paga por PIX" virou "Compramos esse direito e pagamos por PIX". Duas
+  razões. A primeira é que a página passa a falar numa voz só, em vez de trocar
+  de pessoa em blocos vizinhos. A segunda é que "A Plina" aparecia três linhas
+  abaixo de um logotipo de 120px, e repetição em vizinhança imediata lê como
+  falta de edição.
+
+  As duas primeiras frases da faixa continuam em terceira pessoa de propósito:
+  elas descrevem o mundo (o titular, quem prefere o dinheiro), não a Plina. Só a
+  última fala da operação, e é ela que muda.
+
+  E repare no diálogo que se forma: a marca fala em primeira pessoa do plural
+  ("resolvemos", "compramos") e as portas falam em primeira pessoa do singular,
+  na voz de quem chega ("tenho uma cota", "quero entender"). Duas vozes se
+  respondendo dentro do mesmo campo.
+-->
+
+<!-- ═══════════════════════════ 1 ═══════════════════════════ -->
+<div class="rotulo">1 · estrofe em escala única &nbsp;<b>as três linhas no mesmo corpo e no mesmo peso, como uma estrofe. A marca é o maior elemento da tela e nada compete com ela. É a leitura mais fiel ao pedido e a que mais destaca a Plina.</b></div>
+<header data-screen-label="v17 1 · Estrofe única" class="tela">
+  <div class="centro" style="margin:auto 0">
+    <div data-duo="true" style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:clamp(1.5rem,3.5vw,2.75rem)">
+      <span class="marca" style="font-size:clamp(3.5rem,8.5vw,7.5rem)">Plina<span>.</span></span>
+      <div class="estrofe">
+        <h1 class="forte" style="font-size:clamp(1.5rem,2.6vw,2.25rem)">O crédito já foi contemplado.</h1>
+        <p class="forte" style="font-size:clamp(1.5rem,2.6vw,2.25rem)">O que faltava era liquidez.</p>
+        <p class="forte" style="font-size:clamp(1.5rem,2.6vw,2.25rem)">É o que resolvemos.</p>
+      </div>
+    </div>
+  </div>
+  <div class="centro">
+    <div class="caixa faixa">
+      <div>
+        <p>O titular de uma cota contemplada já ganhou a carta de crédito. Quem prefere o dinheiro ao bem não tem para quem vender. Compramos esse direito com deságio e pagamos por PIX em até 48 horas.</p>
+        <p class="ticker">Estrutura de destino · FIDC sob a Resolução CVM 175</p>
+      </div>
+      <ul class="portas">
+        <li><a href="/vender">Tenho uma cota contemplada<i aria-hidden="true">&#8594;</i></a></li>
+        <li><a href="#gap">Quero entender a operação<i aria-hidden="true">&#8594;</i></a></li>
+      </ul>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════ 2 ═══════════════════════════ -->
+<div class="rotulo">2 · a primeira linha carrega &nbsp;<b>o insight em corpo de manchete e as duas linhas seguintes menores, como desdobramento. Preserva a hierarquia que a página tinha: o crédito contemplado continua sendo a coisa mais importante dita.</b></div>
+<header data-screen-label="v17 2 · Primeira linha carrega" class="tela">
+  <div class="centro" style="margin:auto 0">
+    <div data-duo="true" style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:clamp(1.5rem,3.5vw,2.75rem)">
+      <span class="marca" style="font-size:clamp(3rem,7vw,6rem)">Plina<span>.</span></span>
+      <div class="estrofe">
+        <h1 class="forte" style="font-size:clamp(2rem,3.8vw,3.25rem);line-height:1.08">O crédito já foi contemplado.</h1>
+        <p class="fraca" style="font-size:clamp(1.125rem,1.8vw,1.5rem);margin-top:clamp(0.75rem,1.6vw,1.25rem)">O que faltava era liquidez.</p>
+        <p class="fraca" style="font-size:clamp(1.125rem,1.8vw,1.5rem)">É o que resolvemos.</p>
+      </div>
+    </div>
+  </div>
+  <div class="centro">
+    <div class="caixa faixa">
+      <div>
+        <p>O titular de uma cota contemplada já ganhou a carta de crédito. Quem prefere o dinheiro ao bem não tem para quem vender. Compramos esse direito com deságio e pagamos por PIX em até 48 horas.</p>
+        <p class="ticker">Estrutura de destino · FIDC sob a Resolução CVM 175</p>
+      </div>
+      <ul class="portas">
+        <li><a href="/vender">Tenho uma cota contemplada<i aria-hidden="true">&#8594;</i></a></li>
+        <li><a href="#gap">Quero entender a operação<i aria-hidden="true">&#8594;</i></a></li>
+      </ul>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════ 3 ═══════════════════════════ -->
+<div class="rotulo">3 · a última linha vira o desfecho &nbsp;<b>as duas primeiras em tinta apagada, e "É o que resolvemos" em tinta cheia. A frase constrói tensão e resolve na promessa, que é onde a marca da esquerda entra. A mais retórica das quatro.</b></div>
+<header data-screen-label="v17 3 · Desfecho" class="tela">
+  <div class="centro" style="margin:auto 0">
+    <div data-duo="true" style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:clamp(1.5rem,3.5vw,2.75rem)">
+      <span class="marca" style="font-size:clamp(3.25rem,7.5vw,6.5rem)">Plina<span>.</span></span>
+      <div class="estrofe">
+        <h1 class="fraca" style="font-size:clamp(1.375rem,2.4vw,2rem)">O crédito já foi contemplado.</h1>
+        <p class="fraca" style="font-size:clamp(1.375rem,2.4vw,2rem)">O que faltava era liquidez.</p>
+        <p class="forte" style="font-size:clamp(1.75rem,3.1vw,2.625rem);margin-top:clamp(0.5rem,1.2vw,0.875rem)">É o que resolvemos.</p>
+      </div>
+    </div>
+  </div>
+  <div class="centro">
+    <div class="caixa faixa">
+      <div>
+        <p>O titular de uma cota contemplada já ganhou a carta de crédito. Quem prefere o dinheiro ao bem não tem para quem vender. Compramos esse direito com deságio e pagamos por PIX em até 48 horas.</p>
+        <p class="ticker">Estrutura de destino · FIDC sob a Resolução CVM 175</p>
+      </div>
+      <ul class="portas">
+        <li><a href="/vender">Tenho uma cota contemplada<i aria-hidden="true">&#8594;</i></a></li>
+        <li><a href="#gap">Quero entender a operação<i aria-hidden="true">&#8594;</i></a></li>
+      </ul>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════ 4 ═══════════════════════════ -->
+<div class="rotulo">4 · a marca ocupa a coluna &nbsp;<b>a Plina sobe até a altura da coluna inteira e a estrofe alinha pela base dela. O nome deixa de ser uma palavra na página e vira a estrutura da página. A mais afirmativa, e a que mais depende de o nome já significar algo.</b></div>
+<header data-screen-label="v17 4 · Marca ocupa a coluna" class="tela">
+  <div class="centro" style="margin:auto 0">
+    <div data-duo="true" style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:clamp(1.5rem,3.5vw,2.75rem)">
+      <span class="marca" style="font-size:clamp(4.5rem,11.5vw,10rem);letter-spacing:-0.038em">Plina<span>.</span></span>
+      <div class="estrofe">
+        <h1 class="forte" style="font-size:clamp(1.375rem,2.3vw,1.875rem)">O crédito já foi contemplado.</h1>
+        <p class="forte" style="font-size:clamp(1.375rem,2.3vw,1.875rem)">O que faltava era liquidez.</p>
+        <p class="forte" style="font-size:clamp(1.375rem,2.3vw,1.875rem)">É o que resolvemos.</p>
+      </div>
+    </div>
+  </div>
+  <div class="centro">
+    <div class="caixa faixa">
+      <div>
+        <p>O titular de uma cota contemplada já ganhou a carta de crédito. Quem prefere o dinheiro ao bem não tem para quem vender. Compramos esse direito com deságio e pagamos por PIX em até 48 horas.</p>
+        <p class="ticker">Estrutura de destino · FIDC sob a Resolução CVM 175</p>
+      </div>
+      <ul class="portas">
+        <li><a href="/vender">Tenho uma cota contemplada<i aria-hidden="true">&#8594;</i></a></li>
+        <li><a href="#gap">Quero entender a operação<i aria-hidden="true">&#8594;</i></a></li>
+      </ul>
+    </div>
+  </div>
+</header>
+
+</div>
+</x-dc>
+</body>
+</html>

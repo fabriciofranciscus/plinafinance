@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plina Finance · Pitch Deck</title>
+
+<!-- Typography: Chillax (display) · Satoshi (body) · Geist (labels) · Geist Mono (data) -->
+<link href="https://api.fontshare.com/v2/css?f[]=chillax@500,600,700&f[]=satoshi@300,400,500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { petrol:'#132728', grey:'#e4e4e4', sheet:'#ffffff', cyan:'#0EA7C7', cyanDeep:'#057A99', glacier:'#A0CFE7', mute:'#5A6B76' },
+    fontFamily: { title:['Chillax','sans-serif'], text:['Satoshi','sans-serif'], label:['Geist','sans-serif'], mono:['Geist Mono','monospace'] }
+  }}}
+</script>
+
+<style>
+  @page { size: 1280px 720px; margin: 0; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  body { background:#132728; color:#fff; font-family:'Satoshi',sans-serif; font-weight:300; overflow:hidden; margin:0; }
+
+  /* ---- Deck mechanics: fixed 1280x720 canvas, scaled to fit ---- */
+  .viewport { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .stage { position:relative; width:1280px; height:720px; transform-origin:center center; }
+  .slide {
+    position:absolute; inset:0; width:1280px; height:720px; overflow:hidden;
+    opacity:0; visibility:hidden; transition:opacity .55s cubic-bezier(0.16,1,0.3,1);
+  }
+  .slide.active { opacity:1; visibility:visible; }
+  .surf-petrol { background:#132728; color:#e4e4e4; }
+  .surf-grey   { background:#e4e4e4; color:#132728; }
+  .surf-sheet  { background:#ffffff; color:#132728; }
+
+  /* ---- Structural hairline mesh: the single tolerated décor on dark surfaces ---- */
+  .mesh::before {
+    content:""; position:absolute; inset:0; z-index:0; pointer-events:none;
+    background-image:linear-gradient(rgba(160,207,231,.05) 1px,transparent 1px),
+                     linear-gradient(90deg,rgba(160,207,231,.05) 1px,transparent 1px);
+    background-size:64px 64px;
+    -webkit-mask-image:radial-gradient(120% 100% at 100% 0,#000 0%,transparent 72%);
+            mask-image:radial-gradient(120% 100% at 100% 0,#000 0%,transparent 72%);
+  }
+
+  /* ---- Document frame: persistent ruled header/footer (mono), inherited from the deck family ---- */
+  .frame-h, .frame-f { position:absolute; left:0; right:0; padding:0 64px; display:flex; align-items:center; justify-content:space-between;
+    font-family:'Geist Mono',monospace; font-size:10px; letter-spacing:.2em; text-transform:uppercase; z-index:5; }
+  .frame-h { top:0; height:56px; border-bottom:1px solid; }
+  .frame-f { bottom:0; height:48px; border-top:1px solid; }
+  .dark .frame-h, .dark .frame-f { border-color:rgba(255,255,255,.10); color:#8aa0a1; }
+  .on-light .frame-h, .on-light .frame-f { border-color:rgba(19,39,40,.14); color:#5A6B76; }
+  .frame-brand { font-family:'Chillax',sans-serif; font-weight:600; font-size:16px; letter-spacing:0; text-transform:none; }
+  .dark .frame-brand { color:#fff; } .on-light .frame-brand { color:#132728; }
+  .period { color:#0EA7C7; } .on-light .period { color:#057A99; }
+
+  .slide-body { position:absolute; top:56px; bottom:48px; left:0; right:0; padding:46px 80px; display:flex; flex-direction:column; justify-content:center; z-index:1; }
+
+  /* ---- Heading triad: kicker (mono cyan) + Chillax + 48x2 rule-accent (the static per-slide cyan signal) ---- */
+  .kicker { font-family:'Geist Mono',monospace; font-size:11px; letter-spacing:.3em; text-transform:uppercase; color:#0EA7C7; font-weight:500; }
+  .on-light .kicker { color:#057A99; }
+  .h-sec { font-family:'Chillax',sans-serif; font-weight:600; letter-spacing:-0.015em; line-height:1.04; }
+  .rule-accent { width:48px; height:2px; background:#0EA7C7; }
+  .on-light .rule-accent { background:#057A99; }
+  .data { font-family:'Geist Mono',monospace; font-weight:500; letter-spacing:.03em; }
+
+  /* ---- Hairlines: the only structural separator ---- */
+  .hair      { border-color:rgba(19,39,40,.12); }
+  .hair-dark { border-color:rgba(255,255,255,.10); }
+
+  /* ---- Numbered list item. Numerals readable at rest (AA) so they carry in PDF; cyan bar/numeral on hover is reinforcement. ---- */
+  .nrow { position:relative; }
+  .nbar { position:absolute; left:0; top:0; width:1px; height:100%; background:#0EA7C7; transform:scaleY(0); transform-origin:top; transition:transform .7s cubic-bezier(0.16,1,0.3,1); }
+  .on-light .nbar { background:#057A99; }
+  .nnum { color:#8aa0a1; transition:color .3s cubic-bezier(0.16,1,0.3,1); }   /* 5.1:1 on petrol */
+  .on-light .nnum { color:#4a5a5b; }                                          /* 5.4-7:1 on light */
+  .group:hover .nbar { transform:scaleY(1); }
+  .group:hover .nnum { color:#0EA7C7; }
+  .on-light .group:hover .nnum { color:#057A99; }
+
+  /* ---- Presenter chrome (hidden in print; footer already paginates) ---- */
+  .chrome { position:fixed; z-index:60; }
+  .progress { top:0; left:0; height:2px; background:#0EA7C7; transition:width .45s cubic-bezier(0.16,1,0.3,1); }
+  .nav { bottom:18px; left:50%; transform:translateX(-50%); display:flex; gap:10px; }
+  .nav button { width:32px; height:32px; border-radius:9999px; border:1px solid rgba(160,207,231,.25); background:rgba(19,39,40,.7); color:#e4e4e4; cursor:pointer; font-size:15px; backdrop-filter:blur(6px); transition:.25s cubic-bezier(0.16,1,0.3,1); }
+  .nav button:hover { border-color:#0EA7C7; color:#0EA7C7; }
+  .nav button:focus-visible { outline:2px solid #0EA7C7; outline-offset:2px; }
+  .hint { top:16px; right:24px; font-family:'Geist Mono',monospace; font-size:10px; letter-spacing:.1em; color:rgba(160,207,231,.35); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slide,.nbar,.nnum,.progress,.nav button { transition:none !important; }
+  }
+
+  @media print {
+    body { background:#fff; overflow:visible; }
+    .viewport { position:static; display:block; overflow:visible; }
+    .stage { position:static; width:1280px; height:auto; transform:none !important; }
+    .slide { position:relative; opacity:1 !important; visibility:visible !important; height:720px !important; width:1280px !important; break-after:page; page-break-after:always; }
+    .slide:last-child { break-after:auto; page-break-after:auto; }
+    .chrome { display:none !important; }
+  }
+</style>
+</head>
+<body class="font-text">
+
+<div class="viewport">
+  <div class="stage" id="stage">
+
+    <!-- 01 · COVER -->
+    <section class="slide active surf-petrol dark mesh">
+      <div class="frame-h"><span class="frame-brand">Plina Finance<span class="period">.</span></span><span>Investor Deck · Confidential</span></div>
+      <div class="frame-f"><span>Seed Round · 2026</span><span>01 / 10</span></div>
+      <div class="slide-body">
+        <div class="grid grid-cols-12 gap-10 items-center">
+          <div class="col-span-8">
+            <div class="kicker mb-7">5-Minute Pitch · Seed Round 2026</div>
+            <h1 class="h-sec text-[92px] leading-none text-white">Plina<span class="period">.</span></h1>
+            <div class="rule-accent mt-8 mb-8"></div>
+            <p class="h-sec text-[30px] font-medium text-white leading-tight max-w-2xl">Brazilian credit, <span class="text-glacier">global capital.</span></p>
+            <p class="data text-[13px] uppercase tracking-[0.16em] mt-5 text-grey/70">Institutional tokenization of consortium credit rights · Stellar</p>
+          </div>
+          <div class="col-span-4 border-l hair-dark pl-10 space-y-6">
+            <div><div class="data text-[10px] uppercase tracking-[0.25em] text-grey/45 mb-1.5">Founders</div><p class="text-sm font-medium text-white">Fabrício Santos · Thais Reis</p></div>
+            <div><div class="data text-[10px] uppercase tracking-[0.25em] text-grey/45 mb-1.5">Raise</div><p class="text-sm font-medium text-white data">USD 500K</p></div>
+            <div><div class="data text-[10px] uppercase tracking-[0.25em] text-grey/45 mb-1.5">Vehicle</div><p class="text-sm font-medium text-white">FIDC · <span class="data">CVM 175</span></p></div>
+            <div><div class="data text-[10px] uppercase tracking-[0.25em] text-grey/45 mb-1.5">Contact</div><p class="text-sm font-medium text-white data">contato@plina.finance</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 · WHAT WE DO -->
+    <section class="slide surf-sheet on-light">
+      <div class="frame-h"><span class="frame-brand">Plina Finance<span class="period">.</span></span><span>02 · What We Do</span></div>
+      <div class="frame-f"><span>Investor Deck · Confidential</span><span>02 / 10</span></div>
+      <div class="slide-body">
+        <div class="kicker mb-3">What We Do</div>
+        <h2 class="h-sec text-[44px] text-petrol">Global capital, plugged into Brazil<span class="period">.</span></h2>
+        <div class="rule-accent mt-5 mb-9"></div>
+        <div class="grid grid-cols-12 gap-12">
+          <p class="col-span-5 text-petrol/70 text-xl font-light leading-relaxed max-w-[42ch]">
+            Plina connects worldwide institutional investors to Brazil's consortium credit rights through <span class="text-petrol font-normal">regulated, on-chain tokenization</span> on Stellar.
+          </p>
+          <div class="col-span-7 border-l hair pl-12 space-y-7">
+            <div>
+              <span class="data text-[10px] font-bold uppercase tracking-[0.22em]" style="color:#057A99;">Product · PLINA-RF</span>
+              <p class="text-petrol text-lg font-light mt-2 leading-snug max-w-[56ch]">A tokenized pool of awarded consortium quotas, structured as a regulated fund under <span class="data text-base">CVM 175</span>.</p>
+            </div>
+            <div class="border-t hair pt-7">
+              <span class="data text-[10px] font-bold uppercase tracking-[0.22em]" style="color:#057A99;">Distribution</span>
+              <p class="text-petrol text-lg font-light mt-2 leading-snug max-w-[56ch]">Issued to institutional investors worldwide, settled in <span class="data text-base">USDC</span> and <span class="data text-base">EURC</span>.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 03 · THE PROBLEM -->
+    <section class="slide surf-grey on-light">
+      <div class="frame-h"><span class="frame-brand">Plina Finance<span class="period">.</span></span><span>03 · The Problem</span></div>
+      <div class="frame-f"><span>Investor Deck · Confidential</span><span>03 / 10</span></div>
+      <div class="slide-body">
+        <div class="kicker mb-3">The Problem</div>
+        <h2 class="h-sec text-[50px] text-petrol">Two sides that cannot reach each other<span class="period">.</span></h2>
+        <div class="rule-accent mt-5 mb-9"></div>
+        <div class="border-b hair">
+          <div class="group nrow border-t hair py-8 pl-10"><span class="nbar"></span>
+            <div class="grid grid-cols-[3rem_1fr] gap-8 items-start">
+              <span class="nnum data text-xl pt-1">01</span>
+              <div><h3 class="h-sec text-2xl text-petrol">Sellers wait weeks</h3>
+                <p class="text-petrol/65 text-lg font-light mt-2 leading-relaxed max-w-[66ch]">Every month thousands of Brazilians win a consortium award worth <span class="data text-base">R$ 50k-500k</span> and need cash now. The secondary market is slow, opaque, run by informal middlemen.</p></div>
+            </div>
+          </div>
+          <div class="group nrow border-t hair py-8 pl-10"><span class="nbar"></span>
+            <div class="grid grid-cols-[3rem_1fr] gap-8 items-start">
+              <span class="nnum data text-xl pt-1">02</span>
+              <div><h3 class="h-sec text-2xl text-petrol">Investors cannot get in</h3>
+                <p class="text-petrol/65 text-lg font-light mt-2 leading-relaxed max-w-[66ch]">International institutions have never accessed Brazilian credit rights: no structure, no compliance controls, no entry point.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 04 · THE SOLUTION -->
+    <section class="slide surf-petrol dark mesh">
+      <div class="frame-h"><span class="frame-brand">Plina Finance<span class="period">.</span></span><span>04 · The Solution</span></div>
+      <div class="frame-f"><span>Investor Deck · Confidential</span><span>04 / 10</span></div>
+      <div class="slide-body">
+        <div class="kicker mb-3">The Solution</div>
+        <h2 class="h-sec text-[50px] text-white">Buy. Pool. Tokenize. Distribute<span class="period">.</span></h2>
+        <div class="rule-accent mt-5 mb-8"></div>
+        <div class="grid grid-cols-12 gap-14 items-center">
+          <div class="col-span-7 border-b hair-dark">
+            <div class="group nrow border-t hair-dark py-4 pl-10"><span class="nbar"></span><div class="grid grid-cols-[2.5rem_1fr] gap-6 items-baseline"><span class="nnum data">01</span><p class="text-[17px] font-light text-grey leading-relaxed">Buy awarded quotas, pay sellers via <span class="text-white font-normal">Pix in <span class="data text-base">48h</span></span>.</p></div></div>
+            <div class="group nrow border-t hair-dark py-4 pl-10"><span class="nbar"></span><div class="grid grid-cols-[2.5rem_1fr] gap-6 items-baseline"><span class="nnum data">02</span><p class="text-[17px] font-light text-grey leading-relaxed">Pool the credit rights into a <span class="text-white font-normal">formally regulated fund</span>.</p></div></div>
+            <div class="group nrow border-t hair-dark py-4 pl-10"><span class="nbar"></span><div class="grid grid-cols-[2.5rem_1fr] gap-6 items-baseline"><span class="nnum data">03</span><p class="text-[17px] font-light text-grey leading-relaxed">Issue <span class="text-white font-normal">PLINA-RF on Stellar</span>: <span class="data text-base">clawback</span>, KYC, compliance flags.</p></div></div>
+            <div class="group nrow border-t hair-dark py-4 pl-10"><span class="nbar"></span><div class="grid grid-cols-[2.5rem_1fr] gap-6 items-baseline"><span class="nnum data">04</span><p class="text-[17px] font-light text-grey leading-relaxed">Investors deposit <span class="data text-base text-white">USDC</span>, gain <span class="text-white font-normal">Brazilian credit yield</span>.</p></div></div>
+          </div>
+          <div class="col-span-5 border-l hair-dark pl-12">
+            <p class="text-[17px] font-light text-grey leading-relaxed max-w-[38ch]">A European family office gains Brazilian credit yield with no local bank account and no local KYC.</p>
+            <p class="h-sec text-[34px] text-white mt-8 leading-tight">No one else offers this<span class="period">.</span></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 05 · MARKET -->
+    <section class="slide surf-sheet on-light">
+      <div class="frame-h"><span class="frame-brand">Plina Finance<span class="period">.</span></span><span>05 · Market</span></div>
+      <div class="frame-f"><span>Investor Deck · Confidential</span><span>05 / 10</span></div>
+      <div class="slide-body">
+        <div class="kicker mb-3">Market</div>
+        <h2 class="h-sec text-[44px] text-petrol">The largest consortium market on Earth<span class="period">.</span></h2>
+        <div class="rule-accent mt-5 mb-8"></div>
+        <div class="border-b hair">
+          <div class="group nrow border-t hair flex items-baseline justify-between py-6 pl-10"><span class="nbar"></span>
+            <div class="data text-[64px] leading-none text-petrol">R$ 1.2<span class="text-3xl text-petrol/45"> tri</span></div>
+            <div class="text-right text-petrol/60 text-lg font-light max-w-[34ch]">Total consortium market. World's largest, no equivalent anywhere.</div>
+          </div>
+          <div class="group nrow border-t hair flex items-baseline justify-between py-5 pl-10"><span class="nbar"></span>
+            <div class="data text-[40px] leading-none text-petrol">R$ 180<span class="text-2xl text-petrol/45"> bi</span></div>
+            <div class="text-right text-petrol/60 text-base font-light max-w-[34ch]">Awarded quotas in circulation right now.</div>
+          </div>
+          <div class="group nrow border-t hair flex items-baseline justify-between py-5 pl-10"><span class="nbar"></span>
+            <div class="data text-[40px] leading-none text-petrol">R$ 2<span class="text-2xl text-petrol/45"> bi</span></div>
+            <div class="text-right text-petrol/60 text-base font-light max-w-[34ch]">Our target pool, first three years.</div>
+          </div>
+        </div>
+        <p class="text-lg font-light text-petrol/70 mt-7 max-w-[70ch]">The barrier to entry is regulatory and structural. <span class="text-petrol font-normal">This market cannot be replicated outside Brazil.</span></p>
+      </div>
+    </section>
+
+    <!-- 06 · WHY NOW -->
+    <section class="slide surf-petrol dark mesh">
+      <div class="frame-h"><span class="frame-brand">Plina Finance<span class="period">.</span></span><span>06 · Why Now</span></div>
+      <div class="frame-f"><span>Investor Deck · Confidential</span><span>06 / 10</span></div>
+      <div class="slide-body">
+        <div class="kicker mb-3">Why Now</div>
+        <h2 class="h-sec text-[44px] text-white">The regulatory window just opened<span class="period">.</span></h2>
+        <div class="rule-accent mt-5 mb-9"></div>
+        <div class="grid grid-cols-12 gap-14">
+          <p class="col-span-7 text-[22px] font-light text-grey leading-relaxed max-w-[52ch]">
+            In <span class="data text-xl text-white">March 2025</span>, Brazil's CVM suspended a competitor's consortium tokens for operating without proper structure. The suspension was later overturned on procedural grounds, but the message was clear: <span class="text-white font-normal">the regulator wants formal structure.</span>
+          </p>
+          <div class="col-span-5 border-l hair-dark pl-12 flex flex-col justify-center">
+            <span class="data text-[10px] font-bold uppercase tracking-[0.22em] text-cyan">The Framework</span>
+            <p class="text-xl font-light text-white mt-3 leading-snug"><span class="data text-lg text-cyan">CVM Resolution 175</span> gives us the exact legal framework we build on.</p>
+            <p class="text-cyan font-medium text-base mt-7">First mover with institutional setup. Open today.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 07 · BUSINESS MODEL -->
+    <section class="slide surf-grey on-light">
+      <div class="frame-h"><span class="frame-brand">Plina Finance<span class="period">.</span></span><span>07 · Business Model</span></div>
+      <div class="frame-f"><span>Investor Deck · Confidential</span><span>07 / 10</span></div>
+      <div class="slide-body">
+        <div class="kicker mb-3">Business Model</div>
+        <h2 class="h-sec text-[44px] text-petrol">Three aligned revenue streams<span class="period">.</span></h2>
+        <div class="rule-accent mt-5 mb-8"></div>
+        <div class="border-b hair">
+          <div class="group nrow border-t hair flex items-baseline justify-between py-5 pl-10"><span class="nbar"></span>
+            <div class="grid grid-cols-[2.5rem_1fr] gap-6 items-baseline"><span class="nnum data text-lg">01</span><div><h3 class="h-sec text-2xl text-petrol">Origination spread</h3><p class="text-petrol/60 font-light mt-1">Earned on every quota we buy.</p></div></div>
+            <div class="data text-2xl text-petrol shrink-0 pl-8">per quota</div>
+          </div>
+          <div class="group nrow border-t hair flex items-baseline justify-between py-5 pl-10"><span class="nbar"></span>
+            <div class="grid grid-cols-[2.5rem_1fr] gap-6 items-baseline"><span class="nnum data text-lg">02</span><div><h3 class="h-sec text-2xl text-petrol">Management fee</h3><p class="text-petrol/60 font-light mt-1">On assets under management.</p></div></div>
+            <div class="data text-2xl text-petrol shrink-0 pl-8">2% / yr</div>
+          </div>
+          <div class="group nrow border-t hair flex items-baseline justify-between py-5 pl-10"><span class="nbar"></span>
+            <div class="grid grid-cols-[2.5rem_1fr] gap-6 items-baseline"><span class="nnum data text-lg">03</span><div><h3 class="h-sec text-2xl text-petrol">Performance fee</h3><p class="text-petrol/60 font-light mt-1">Charged above benchmark.</p></div></div>
+            <div class="data text-2xl text-petrol shrink-0 pl-8">20%</div>
+          </div>
+        </div>
+        <p class="text-lg font-light text-petrol/70 mt-7 max-w-[72ch]">Revenue scales directly with pool size. <span class="text-petrol font-normal">The more quotas we originate, the better the yield for investors, and the more we earn.</span></p>
+      </div>
+    </section>
+
+    <!-- 08 · TEAM -->
+    <section class="slide surf-sheet on-light">
+      <div class="frame-h"><span class="frame-brand">Plina Finance<span class="period">.</span></span><span>08 · Team</span></div>
+      <div class="frame-f"><span>Investor Deck · Confidential</span><span>08 / 10</span></div>
+      <div class="slide-body">
+        <div class="kicker mb-3">Team</div>
+        <h2 class="h-sec text-[44px] text-petrol">Institutional access meets Stellar depth<span class="period">.</span></h2>
+        <div class="rule-accent mt-5 mb-8"></div>
+        <div class="border-b hair">
+          <div class="group nrow border-t hair py-8 pl-10"><span class="nbar"></span>
+            <div class="grid grid-cols-[3rem_1fr] gap-8 items-start">
+              <span class="nnum data text-xl pt-1">01</span>
+              <div class="grid grid-cols-[1fr_2fr] gap-10 items-baseline">
+                <div><h3 class="h-sec text-3xl text-petrol">Fabrício Santos</h3><span class="data text-sm" style="color:#057A99;">CEO</span></div>
+                <p class="text-petrol/65 text-lg font-light leading-relaxed">Founded <span class="text-petrol font-normal">Citrino</span>, a Brazilian financial advisory firm. Previously at Simplic and TOTVS. Brings the institutional relationships to close our first investors.</p>
+              </div>
+            </div>
+          </div>
+          <div class="group nrow border-t hair py-8 pl-10"><span class="nbar"></span>
+            <div class="grid grid-cols-[3rem_1fr] gap-8 items-start">
+              <span class="nnum data text-xl pt-1">02</span>
+              <div class="grid grid-cols-[1fr_2fr] gap-10 items-baseline">
+                <div><h3 class="h-sec text-3xl text-petrol">Thais Reis</h3><span class="data text-sm" style="color:#057A99;">CTO</span></div>
+                <p class="text-petrol/65 text-lg font-light leading-relaxed">Five years building decentralized infrastructure on <span class="text-petrol font-normal">Stellar</span>, including her own protocol in <span class="data text-base">Rust / Soroban</span>, shipped in production. Knows this stack better than anyone in LATAM.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 09 · THE ASK -->
+    <section class="slide surf-grey on-light">
+      <div class="frame-h"><span class="frame-brand">Plina Finance<span class="period">.</span></span><span>09 · The Ask</span></div>
+      <div class="frame-f"><span>Investor Deck · Confidential</span><span>09 / 10</span></div>
+      <div class="slide-body">
+        <div class="kicker mb-3">The Ask</div>
+        <h2 class="h-sec text-[48px] text-petrol">Raising <span class="data text-[42px]" style="color:#057A99;">USD 500K</span> seed<span class="period">.</span></h2>
+        <div class="rule-accent mt-5 mb-9"></div>
+        <div class="grid grid-cols-12 gap-14">
+          <div class="col-span-6 border-b hair">
+            <div class="flex items-baseline justify-between border-t hair py-4"><span class="text-lg text-petrol">Legal &amp; fund setup</span><span class="data text-2xl text-petrol">40%</span></div>
+            <div class="flex items-baseline justify-between border-t hair py-4"><span class="text-lg text-petrol">Origination capital</span><span class="data text-2xl text-petrol">30%</span></div>
+            <div class="flex items-baseline justify-between border-t hair py-4"><span class="text-lg text-petrol">Product</span><span class="data text-2xl text-petrol">20%</span></div>
+            <div class="flex items-baseline justify-between border-t hair py-4"><span class="text-lg text-petrol">Institutional go-to-market</span><span class="data text-2xl text-petrol">10%</span></div>
+          </div>
+          <div class="col-span-6 border-l hair pl-12 flex flex-col justify-center">
+            <span class="data text-[10px] font-bold uppercase tracking-[0.22em]" style="color:#057A99;">Beyond Capital</span>
+            <div class="mt-5 border-b hair">
+              <p class="border-t hair py-4 text-lg font-light text-petrol/80">Institutional network across LATAM</p>
+              <p class="border-t hair py-4 text-lg font-light text-petrol/80">Connections to international family offices</p>
+              <p class="border-t hair py-4 text-lg font-light text-petrol/80">Credibility to close a roadshow in <span class="text-petrol font-normal">Miami, Singapore, London</span></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 10 · CLOSING -->
+    <section class="slide surf-petrol dark mesh">
+      <div class="frame-h"><span class="frame-brand">Plina Finance<span class="period">.</span></span><span>10 · Close</span></div>
+      <div class="frame-f"><span>Investor Deck · Confidential</span><span>10 / 10</span></div>
+      <div class="slide-body items-center text-center">
+        <h2 class="h-sec text-[38px] font-medium leading-snug text-white max-w-[42ch]">“Brazil's consortium market has existed for decades. The infrastructure to connect it to global capital just became available<span class="period">.”</span></h2>
+        <div class="rule-accent mt-12 mb-12 mx-auto"></div>
+        <h3 class="h-sec text-[64px] font-bold text-white leading-none">Plina<span class="period">.</span></h3>
+        <p class="data text-xs tracking-[0.2em] mt-5 text-cyan">contato@plina.finance · plina.finance</p>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<!-- Presenter chrome -->
+<div class="chrome progress" id="progress"></div>
+<div class="chrome hint">← → / SPACE · PRINT FOR PDF</div>
+<div class="chrome nav">
+  <button id="prev" aria-label="Previous slide">‹</button>
+  <button id="next" aria-label="Next slide">›</button>
+</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  const stage=document.getElementById('stage');
+  const prog=document.getElementById('progress');
+  let i=0;
+  function fit(){ const s=Math.min(window.innerWidth/1280, window.innerHeight/720); stage.style.transform=`scale(${s})`; }
+  function show(n){
+    i=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    prog.style.width=((i+1)/slides.length*100)+'%';
+  }
+  const next=()=>show(i+1), prev=()=>show(i-1);
+  document.getElementById('next').onclick=next;
+  document.getElementById('prev').onclick=prev;
+  addEventListener('keydown',e=>{
+    if(['ArrowRight','ArrowDown',' ','PageDown'].includes(e.key)){e.preventDefault();next();}
+    else if(['ArrowLeft','ArrowUp','PageUp'].includes(e.key)){e.preventDefault();prev();}
+    else if(e.key==='Home')show(0); else if(e.key==='End')show(slides.length-1);
+  });
+  let sx=0;
+  addEventListener('touchstart',e=>sx=e.touches[0].clientX,{passive:true});
+  addEventListener('touchend',e=>{const d=e.changedTouches[0].clientX-sx;if(Math.abs(d)>50)d<0?next():prev();},{passive:true});
+  addEventListener('resize',fit);
+  fit(); show(0);
+</script>
+</body>
+</html>

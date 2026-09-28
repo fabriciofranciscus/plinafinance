@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=chillax@400,500,600&f[]=satoshi@300,400,500&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@300;400&display=swap" />
+<script src="./image-slot.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#ffffff;color:#132728;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit}
+:focus-visible{outline:2px solid #046C88;outline-offset:4px}
+[data-dark] :focus-visible{outline-color:#0EA7C7}
+
+/* Etiqueta da folha de comparação. Não faz parte do desenho. */
+.rotulo{font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.16em;text-transform:uppercase;color:#046C88;padding:0.875rem clamp(20px,6vw,80px);border-top:1px solid rgba(19,39,40,0.12);border-bottom:1px solid rgba(19,39,40,0.12);background:#e4e4e4}
+.rotulo b{color:rgba(19,39,40,0.7);font-weight:400;text-transform:none;letter-spacing:0.04em}
+
+/* Cada prancheta é uma tela, para que o sangramento tenha altura de verdade. */
+.tela{height:clamp(620px,86vh,880px);position:relative;overflow:hidden}
+
+/* ── Fotografia que preenche, sem inflar a grade ────────────────────────────
+   image-slot tem largura intrínseca. Numa grade, a faixa `1fr` não encolhe
+   abaixo do min-content do filho, então a foto empurrava a coluna para 1161px
+   numa janela de 1440, e para 480px numa de 375. Duas travas: min-width:0 nos
+   filhos da grade, e a foto em posição absoluta, que não entra no cálculo de
+   min-content. Sem isso o estouro fica escondido pelo overflow-x do body, que
+   é justamente o problema de usar overflow como rede. */
+[data-partido] > *{min-width:0}
+[data-foto]{position:relative;min-width:0;overflow:hidden}
+[data-foto] image-slot{position:absolute;inset:0;width:100%;height:100%}
+.gutter{padding:clamp(2.5rem,5vw,4.5rem) clamp(20px,6vw,80px)}
+
+.h1{font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(2.5rem,4.6vw,4.25rem);line-height:1.06;letter-spacing:-0.018em;margin:0;max-width:13ch;text-wrap:balance}
+.sub{font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(1.125rem,1.6vw,1.5rem);line-height:1.5;letter-spacing:-0.008em;color:rgba(19,39,40,0.7);margin:clamp(1.25rem,2.5vw,1.75rem) 0 0;max-width:30ch;text-wrap:balance}
+.marca{font-weight:600;color:#132728}
+.marca span{color:#046C88}
+.ticker{font-family:'Geist Mono',monospace;font-size:0.75rem;line-height:1.9;color:rgba(19,39,40,0.75);margin:0}
+
+/* ── As duas portas, sem contêiner ──────────────────────────────────────────
+   Filete e tipografia bastam para agrupar. Uma lista de duas linhas com alvo
+   generoso lê como escolha; um card lê como bloco de marketing. */
+.portas{list-style:none;margin:clamp(2rem,4vw,3rem) 0 0;padding:0;display:grid;gap:0;max-width:46ch}
+.portas li{border-top:1px solid rgba(19,39,40,0.2)}
+.portas li:last-child{border-bottom:1px solid rgba(19,39,40,0.2)}
+.portas a{display:flex;align-items:center;justify-content:space-between;gap:2rem;min-height:72px;padding:0.5rem 0;text-decoration:none;font-family:Geist,sans-serif;font-weight:600;font-size:1.125rem;transition:color 500ms cubic-bezier(0.16,1,0.3,1)}
+.portas a:hover{color:#046C88}
+.portas i{font-family:'Geist Mono',monospace;font-style:normal;font-weight:400;font-size:1rem;color:#046C88}
+
+/* Variante sobre imagem: tinta clara e filetes claros. */
+.portas.claro li{border-color:rgba(255,255,255,0.28)}
+.portas.claro a{color:#e4e4e4}
+.portas.claro a:hover{color:#ffffff}
+.portas.claro i{color:#0EA7C7}
+
+/* ── Véu da direção 2 ───────────────────────────────────────────────────────
+   Chapado, não gradiente: o sistema proíbe gradiente em qualquer superfície.
+   Em 0.72 a fotografia ainda competia com a manchete: o trânsito aparecia por
+   dentro do texto e a seta ciano quase sumia. Em 0.82 a foto vira atmosfera em
+   vez de assunto, que é o papel dela aqui.
+   A conta do pior caso: 0.82 de petróleo sobre o ponto mais claro possível de
+   qualquer foto (branco puro) dá #384042, e #e4e4e4 sobre isso dá 8.1. A razão
+   AA se sustenta qualquer que seja a fotografia, não só esta. */
+.veu{position:absolute;inset:0;background:rgba(12,23,25,0.82);z-index:1}
+
+/* Caixa da direção 3, herdada. Sem arestas, conforme o motivo visual da marca. */
+.caixa{background:rgba(14,167,199,0.5);color:#132728;border-radius:24px;padding:clamp(24px,2.6vw,36px) clamp(24px,2.6vw,36px)}
+.caixa p{margin:0;max-width:52ch;line-height:1.65;font-weight:500}
+.caixa .ticker{margin:clamp(0.875rem,1.8vw,1.25rem) 0 0;padding-top:clamp(0.875rem,1.8vw,1.25rem);border-top:1px solid rgba(19,39,40,0.3);color:rgba(19,39,40,0.85)}
+.faixa{display:grid;grid-template-columns:1.35fr 1fr;gap:clamp(2rem,4vw,3.5rem);align-items:center}
+.faixa .duplas{list-style:none;margin:0;padding:0;display:grid;gap:0.75rem}
+.faixa .duplas a{display:flex;align-items:center;justify-content:space-between;gap:1.5rem;min-height:52px;padding:0 0 0.75rem;border-bottom:1px solid rgba(19,39,40,0.35);font-family:Geist,sans-serif;font-weight:600;font-size:1.0625rem;text-decoration:none;transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)}
+.faixa .duplas a:hover{border-bottom-color:#132728}
+.faixa .duplas i{font-family:'Geist Mono',monospace;font-style:normal;font-weight:400;font-size:1rem}
+
+@media (max-width:900px){
+  .tela{height:auto}
+  [data-partido]{grid-template-columns:1fr !important;grid-template-rows:auto auto !important}
+  [data-foto]{height:clamp(320px,55vw,460px) !important}
+  .faixa{grid-template-columns:1fr;gap:1.75rem}
+}
+@media (prefers-reduced-motion:reduce){*{transition-duration:0.01ms !important}}
+</style>
+</helmet>
+<div style="font-family:Satoshi,system-ui,sans-serif;font-weight:300;font-size:1.125rem;line-height:1.65">
+
+<!--
+  Hero v12 — redesign. Três direções, mesma tese.
+
+  O DIAGNÓSTICO que motiva as três: o hero atual não tem imagem nenhuma, e o
+  sistema de rebrand da própria Plina manda o contrário — "real collateral is
+  photographed: the person, the asset and the market, because the whole thesis
+  is that the backing is real". Sem fotografia, a página cai na pista
+  editorial-tipográfica (display + rótulos mono + filetes + monocromia), que é a
+  família estética mais saturada de 2026. A fotografia documental é o que tira
+  a Plina de lá, e é o que o sistema já pedia.
+
+  A FOTO é v5-cedente: uma pessoa de costas olhando a avenida no fim da tarde.
+  É a persona, não o prédio. Quem está decidindo entre o bem e o dinheiro.
+
+  O QUE NÃO MUDA nas três: o texto da v8 que a Thais escolheu, as duas portas
+  com o mesmo peso, postura neutra sobre o tempo, zero número da Plina.
+-->
+
+<!-- ═══════════════════════════════ 1 ═══════════════════════════════ -->
+<div class="rotulo">1 · o lastro em imagem &nbsp;<b>tipografia à esquerda, fotografia sangrando à direita de topo a base. Sem card: filete e espaço agrupam as portas. O ciano volta para dentro da regra do sistema — três pontos, nenhum preenchimento grande.</b></div>
+<header data-screen-label="v12 1 · Lastro em imagem" class="tela" data-partido="true" style="display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,0.95fr)">
+  <div class="gutter" style="display:flex;flex-direction:column;justify-content:center">
+    <h1 class="h1">O crédito já foi contemplado.</h1>
+    <p class="sub">O que faltava era liquidez. É o que resolve a <span class="marca">Plina<span>.</span></span></p>
+    <ul class="portas">
+      <li><a href="/vender">Tenho uma cota contemplada<i aria-hidden="true">&#8594;</i></a></li>
+      <li><a href="#gap">Quero entender a operação<i aria-hidden="true">&#8594;</i></a></li>
+    </ul>
+    <p class="ticker" style="margin-top:clamp(2rem,4vw,3rem)">Estrutura de destino · FIDC sob a Resolução CVM 175</p>
+  </div>
+  <div data-foto="true" style="position:relative;height:100%">
+    <image-slot id="v12-a" src="./uploads/v5-cedente.webp" shape="rect" fit="cover" placeholder="Documental: alguém de costas, olhando a cidade. Quem decide entre o bem e o dinheiro."></image-slot>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════ 2 ═══════════════════════════════ -->
+<div class="rotulo">2 · a fotografia é a superfície &nbsp;<b>a imagem toma a tela inteira sob um véu chapado de petróleo. O tipo fica claro por cima e as portas viram filetes claros. É a direção mais memorável e a que mais depende da foto certa.</b></div>
+<header data-screen-label="v12 2 · Fotografia é a superfície" class="tela" data-dark="true" style="background:#0C1719">
+  <div style="position:absolute;inset:0">
+    <image-slot id="v12-b" src="./uploads/v5-cedente.webp" shape="rect" fit="cover" placeholder="Documental: alguém de costas, olhando a cidade."></image-slot>
+  </div>
+  <div class="veu"></div>
+  <div class="gutter" style="position:relative;z-index:2;height:100%;display:flex;flex-direction:column;justify-content:flex-end;max-width:1320px;margin:0 auto">
+    <h1 class="h1" style="color:#ffffff;max-width:15ch">O crédito já foi contemplado.</h1>
+    <p class="sub" style="color:#A0CFE7">O que faltava era liquidez. É o que resolve a <span class="marca" style="color:#ffffff">Plina<span style="color:#0EA7C7">.</span></span></p>
+    <ul class="portas claro" style="max-width:52ch">
+      <li><a href="/vender">Tenho uma cota contemplada<i aria-hidden="true">&#8594;</i></a></li>
+      <li><a href="#gap">Quero entender a operação<i aria-hidden="true">&#8594;</i></a></li>
+    </ul>
+    <p class="ticker" style="color:#A0CFE7;margin-top:clamp(1.5rem,3vw,2.25rem)">Estrutura de destino · FIDC sob a Resolução CVM 175</p>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════ 3 ═══════════════════════════════ -->
+<div class="rotulo">3 · a D com a foto que faltava &nbsp;<b>mantém a faixa ciano que você escolheu e devolve a imagem ao hero: o título ocupa a esquerda, a fotografia sobe pela direita até a faixa. A menor mudança das três, e a única que não pede que você reabra a escolha da D.</b></div>
+<header data-screen-label="v12 3 · D com fotografia" class="tela" style="display:grid;grid-template-rows:1fr auto;padding:clamp(2rem,4vw,3.5rem) clamp(20px,6vw,80px) clamp(1.75rem,3.5vw,3rem)">
+  <div data-partido="true" style="display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:clamp(2rem,5vw,5rem);align-items:end;max-width:1320px;width:100%;margin:0 auto;min-height:0">
+    <div style="padding-bottom:clamp(0.5rem,1.5vw,1.5rem)">
+      <h1 class="h1">O crédito já foi contemplado.</h1>
+      <p class="sub">O que faltava era liquidez. É o que resolve a <span class="marca">Plina<span>.</span></span></p>
+    </div>
+    <div data-foto="true" style="position:relative;height:100%;min-height:0">
+      <image-slot id="v12-c" src="./uploads/v5-cedente.webp" shape="rect" fit="cover" placeholder="Documental: alguém de costas, olhando a cidade."></image-slot>
+    </div>
+  </div>
+
+  <div class="caixa faixa" style="max-width:1320px;width:100%;margin:clamp(1.75rem,3.5vw,2.75rem) auto 0">
+    <div>
+      <p>O titular de uma cota contemplada já ganhou a carta de crédito. Quem prefere o dinheiro ao bem não tem para quem vender. A Plina compra esse direito com deságio e paga por PIX em até 48 horas.</p>
+      <p class="ticker">Estrutura de destino · FIDC sob a Resolução CVM 175</p>
+    </div>
+    <ul class="duplas">
+      <li><a href="/vender">Tenho uma cota contemplada<i aria-hidden="true">&#8594;</i></a></li>
+      <li><a href="#gap">Quero entender a operação<i aria-hidden="true">&#8594;</i></a></li>
+    </ul>
+  </div>
+</header>
+
+</div>
+</x-dc>
+</body>
+</html>

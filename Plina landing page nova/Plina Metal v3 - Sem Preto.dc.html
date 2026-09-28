@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=chillax@400,500,600&f[]=satoshi@300,400,500&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@300;400&display=swap" />
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#ffffff;color:#132728;-webkit-font-smoothing:antialiased}
+:focus-visible{outline:2px solid #0EA7C7;outline-offset:4px}
+.rotulo{font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.16em;text-transform:uppercase;color:#046C88;padding:0.875rem clamp(20px,6vw,80px);border-top:1px solid rgba(19,39,40,0.12);border-bottom:1px solid rgba(19,39,40,0.12);background:#e4e4e4}
+.rotulo b{color:rgba(19,39,40,0.7);font-weight:400;text-transform:none;letter-spacing:0.04em}
+.rotulo i{font-style:normal;color:#132728;font-weight:400}
+.tela{padding:clamp(3rem,6vw,5rem) clamp(20px,6vw,80px);background:#0C1719;color:#EDF3F2}
+.centro{max-width:1320px;margin:0 auto}
+.par{display:grid;grid-template-columns:1fr 1fr;gap:clamp(1.5rem,3vw,2.5rem);align-items:start}
+@media (max-width:900px){.par{grid-template-columns:1fr}}
+.eyebrow{font-family:'Geist Mono',monospace;font-size:0.6875rem;letter-spacing:0.2em;text-transform:uppercase;color:rgba(237,243,242,0.6);margin:0 0 1rem}
+.h{font-family:Chillax,sans-serif;font-weight:500;font-size:clamp(2rem,4.2vw,3.25rem);line-height:1.05;letter-spacing:-0.026em;margin:0;color:#EDF3F2}
+.num{font-family:'Geist Mono',monospace;font-weight:300;font-size:clamp(1.75rem,3.6vw,2.75rem);line-height:1;margin:1.25rem 0 0;color:#EDF3F2}
+.medida{font-family:'Geist Mono',monospace;font-size:0.6875rem;line-height:1.85;color:rgba(237,243,242,0.68);margin:1.25rem 0 0;padding-top:0.875rem;border-top:1px solid rgba(237,243,242,0.15)}
+.campo{border-radius:24px;padding:clamp(24px,2.6vw,36px);min-height:200px;display:flex;flex-direction:column;justify-content:space-between;gap:1rem;position:relative;overflow:hidden}
+.campo > *{position:relative;z-index:2}
+.moldura::before{content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;z-index:3;
+  background:linear-gradient(135deg,rgba(237,243,242,0.5) 0%,rgba(160,207,231,0.18) 34%,rgba(237,243,242,0.05) 56%,rgba(14,167,199,0.4) 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   METAL SEM PRETO — o que a pesquisa devolveu, e o que os numeros confirmaram.
+
+   O metal classico varia VALOR: do quase preto ao quase branco, 70x de
+   luminancia. Numa paleta acessivel isso e proibido, porque o stop escuro
+   reprova contra o campo escuro. Era o beco em que a v2 parou.
+
+   A SAIDA E VARIAR MATIZ EM VEZ DE VALOR. A literatura de iridescencia
+   (openreplay, effect-labs) usa OKLCH com L travado entre 0.7 e 0.8 e faz o
+   H girar: e assim que foil holografico, alumínio anodizado e madreperola
+   brilham sem nunca escurecer. O que muda com o angulo de visao nesses
+   materiais e a COR, nao a luz.
+
+   E aqui a propriedade que decide tudo: com L travado, O CONTRASTE NAO VARIA.
+   Medido, numa escala de 5 tons girando 64 graus de matiz:
+
+       por VALOR  (#FFFFFF -> #0EA7C7) ... contraste varia 9.83
+       por MATIZ  (L=0.86, H 186->250) ... contraste varia  0.18
+
+   Ou seja: o metal por matiz e acessivel POR CONSTRUCAO. Nao ha stop pior a
+   vigiar, porque todos valem o mesmo. Some o unico motivo pelo qual o metal da
+   v11 precisava ser fraco.
+
+   A FAIXA DE MATIZ e 186..250, centrada no ciano da marca (H=218) com +-32.
+   Alem disso vira verde de um lado e roxo do outro, e a peca deixa de ser
+   Plina. Trinta e dois graus e o quanto se pode girar sem trocar de marca.
+
+   Os outros dois ingredientes que a pesquisa trouxe:
+   · TEXTURA de alta frequencia -- tres repeating-gradients de comprimentos
+     PRIMOS entre si (2/3/5px). Como nao coincidem, o padrao so se repete a cada
+     30px e le como aleatorio, que e o que separa metal escovado de listra.
+   · CONIC-GRADIENT -- a variacao radial que o linear nao da. E o que faz a luz
+     parecer girar em torno de um ponto em vez de atravessar em rampa.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* 1 · POR VALOR — o classico. Precisa de escuro, e o contraste despenca. */
+.t-valor{background:linear-gradient(135deg,#FFFFFF 0%,#FFFFFF 12%,#A0CFE7 30%,#FFFFFF 48%,#0EA7C7 66%,#D4E4EA 84%,#FFFFFF 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+/* 2 · POR MATIZ — L travado em 0.86. Cinco tons, 64 graus de giro. */
+.t-matiz{background:linear-gradient(135deg,#A0DFD7 0%,#9EDEE3 22%,#A1DCEE 46%,#A7D9F6 72%,#B1D5FB 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+/* 3 · POR MATIZ, EM BANDAS — os mesmos cinco tons com transicoes comprimidas.
+   A alternancia volta a existir sem que nenhum tom escureca: em vez de ir do
+   claro ao escuro, o gradiente vai do ciano ao azul e volta. */
+.t-bandas{background:linear-gradient(135deg,#A0DFD7 0%,#FFFFFF 9%,#FFFFFF 13%,#9EDEE3 24%,#A1DCEE 34%,#FFFFFF 45%,#FFFFFF 50%,#A7D9F6 62%,#B1D5FB 72%,#FFFFFF 86%,#A1DCEE 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+/* 4 · O CAMPO POR MATIZ. Mesma logica, L=0.42: a escala #245751..#354F6A gira
+   de ciano-esverdeado a azul-ardosia sem nunca virar preto. */
+.c-matiz{background:linear-gradient(135deg,#245751 0%,#22565A 22%,#255461 46%,#2C5267 72%,#354F6A 100%)}
+
+/* 5 · TEXTURA ESCOVADA. Tres repeating de 2, 3 e 5px -- primos entre si, entao
+   o conjunto so se repete a cada 30px. E a irregularidade que le como escovado.
+   Luz e sombra a 2%: acima disso viram listras visiveis, nao textura. */
+.c-textura{background:
+  repeating-linear-gradient(135deg,transparent 0 2px,rgba(255,255,255,0.022) 2px 3px),
+  repeating-linear-gradient(135deg,transparent 0 3px,rgba(12,23,25,0.026) 3px 4px),
+  repeating-linear-gradient(135deg,transparent 0 5px,rgba(255,255,255,0.018) 5px 6px),
+  linear-gradient(135deg,#245751 0%,#22565A 22%,#255461 46%,#2C5267 72%,#354F6A 100%)}
+
+/* 6 · CONIC. A variacao radial, que o linear nao produz. Fica por baixo do
+   conteudo e por cima do campo, em soft-light: ele modula sem clarear nem
+   escurecer o conjunto, entao a razao de contraste da tinta nao se move. */
+.c-conic::after{content:'';position:absolute;inset:-40%;z-index:1;pointer-events:none;
+  background:conic-gradient(from 210deg,#A0DFD7,#255461,#B1D5FB,#22565A,#A1DCEE,#2C5267,#A0DFD7);
+  mix-blend-mode:soft-light;opacity:0.5}
+
+/* 7 · o brilho especular, o unico ponto de luz pontual */
+.brilho::before{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:linear-gradient(118deg,transparent 36%,rgba(255,255,255,0.06) 47%,rgba(255,255,255,0.1) 50%,rgba(255,255,255,0.04) 54%,transparent 64%)}
+</style>
+</helmet>
+<div style="font-family:Satoshi,system-ui,sans-serif;font-weight:300;font-size:1.0625rem;line-height:1.6">
+
+<!--
+  METAL SEM PRETO — pesquisa de 28/08/2026.
+
+  FONTES:
+    blog.openreplay.com/creating-holographic-effects-css   (OKLCH, L 0.7-0.8, blend modes)
+    effect-labs.com/en/pages/blog/effet-holographique-css.html
+    simurai.com/lab/2011/08/21/brushed-metal                (3 repeating de comprimentos diferentes)
+    css-tricks.com/brushed-metal-with-css-gradients
+    ibelick.com/blog/creating-metallic-effect-with-css
+
+  A DESCOBERTA: a literatura de iridescencia nao usa preto. Ela trava a
+  luminancia em OKLCH (L entre 0.7 e 0.8) e gira o MATIZ. Foil holografico,
+  aluminio anodizado e madreperola funcionam assim -- o que muda com o angulo e
+  a cor, nao a luz.
+
+  E como o contraste depende de L, travar L significa que O CONTRASTE NAO VARIA
+  AO LONGO DO GRADIENTE. Medido: 0.18 de variacao contra 9.83 do metal por
+  valor. O metal por matiz e acessivel por construcao.
+-->
+
+<div class="rotulo">0 · a descoberta &nbsp;<b>a literatura de iridescência trava a luminância em OKLCH e gira o matiz. Como o contraste depende de L, travar L faz o contraste <i>parar de variar</i>: 0,18 contra 9,83.</b></div>
+
+<div class="rotulo">1 · por valor &nbsp;<b>o metal clássico. Precisa de tons escuros, e o contraste despenca de 15,15 no branco para 5,32 no ciano.</b></div>
+<section data-screen-label="v3 · 1 Por valor" class="tela">
+  <div class="centro par">
+    <div>
+      <p class="eyebrow">Texto</p>
+      <h2 class="h t-valor">O crédito já foi contemplado.</h2>
+      <p class="num t-valor">R$ 232,9 bi</p>
+      <p class="medida">#FFFFFF → #A0CFE7 → #0EA7C7 → #FFFFFF · variação de contraste 9,83 · pior stop 5,32</p>
+    </div>
+    <div class="campo moldura" style="background:linear-gradient(135deg,#0A1A1C 0%,#16292B 16%,#0D1F21 32%,#203C40 50%,#0F2325 68%,#1B3336 86%,#0A1A1C 100%)">
+      <p class="eyebrow" style="margin:0">Campo por valor</p>
+      <p class="num" style="margin:0">R$ 232,9 bi</p>
+      <p class="medida" style="margin:0;border:0;padding:0">#0A1A1C ↔ #203C40 · escurece até quase preto</p>
+    </div>
+  </div>
+</section>
+
+<div class="rotulo">2 · por matiz &nbsp;<b>L travado em 0,86, cinco tons girando 64° de matiz. Nenhum tom escurece — e o contraste fica praticamente constante em toda a extensão.</b></div>
+<section data-screen-label="v3 · 2 Por matiz" class="tela">
+  <div class="centro par">
+    <div>
+      <p class="eyebrow">Texto</p>
+      <h2 class="h t-matiz">O crédito já foi contemplado.</h2>
+      <p class="num t-matiz">R$ 232,9 bi</p>
+      <p class="medida">#A0DFD7 → #A1DCEE → #B1D5FB · H 186→250 · contraste 9,94 a 10,12 · <b style="color:#A1DCEE">variação 0,18</b></p>
+    </div>
+    <div class="campo moldura c-matiz">
+      <p class="eyebrow" style="margin:0">Campo por matiz</p>
+      <p class="num" style="margin:0">R$ 232,9 bi</p>
+      <p class="medida" style="margin:0;border:0;padding:0">#245751 ↔ #354F6A · L=0,42 travado · tinta 7,31 a 7,55</p>
+    </div>
+  </div>
+</section>
+
+<div class="rotulo">3 · + bandas &nbsp;<b>os mesmos tons com transições comprimidas, e o branco entrando como pico. A alternância volta a existir sem que nada escureça: em vez de ir do claro ao escuro, vai do ciano ao azul e volta.</b></div>
+<section data-screen-label="v3 · 3 Bandas de matiz" class="tela">
+  <div class="centro par">
+    <div>
+      <p class="eyebrow">Texto</p>
+      <h2 class="h t-bandas">O crédito já foi contemplado.</h2>
+      <p class="num t-bandas">R$ 232,9 bi</p>
+      <p class="medida">11 stops pareados · o branco é o único pico de valor · pior stop 9,94</p>
+    </div>
+    <div class="campo moldura c-textura">
+      <p class="eyebrow" style="margin:0">Campo + textura escovada</p>
+      <p class="num" style="margin:0">R$ 232,9 bi</p>
+      <p class="medida" style="margin:0;border:0;padding:0">3 repeating de 2/3/5px — primos, então só repetem a cada 30px</p>
+    </div>
+  </div>
+</section>
+
+<div class="rotulo">4 · + cônico em soft-light &nbsp;<b>a variação radial que o linear não dá. Em <i>soft-light</i> ele modula sem clarear nem escurecer, então a razão de contraste da tinta não se move.</b></div>
+<section data-screen-label="v3 · 4 Cônico" class="tela">
+  <div class="centro par">
+    <div class="campo moldura c-textura">
+      <p class="eyebrow" style="margin:0">Sem cônico</p>
+      <p class="num" style="margin:0">R$ 232,9 bi</p>
+      <p class="medida" style="margin:0;border:0;padding:0">só linear + textura</p>
+    </div>
+    <div class="campo moldura c-conic c-textura">
+      <p class="eyebrow" style="margin:0">Com cônico</p>
+      <p class="num" style="margin:0">R$ 232,9 bi</p>
+      <p class="medida" style="margin:0;border:0;padding:0">conic-gradient from 210° · soft-light · 50%</p>
+    </div>
+  </div>
+</section>
+
+<div class="rotulo">5 · a proposta &nbsp;<b>campo por matiz com textura, cônico e brilho; texto por matiz em bandas. <i>Nenhum preto em lugar nenhum, e nenhum stop abaixo de 7,3.</i></b></div>
+<section data-screen-label="v3 · 5 Proposta" class="tela">
+  <div class="centro">
+    <div class="campo moldura c-conic brilho c-textura" style="min-height:auto;padding:clamp(30px,3.4vw,48px)">
+      <p class="eyebrow" style="margin:0">O mercado</p>
+      <h2 class="h t-bandas" style="font-size:clamp(2.5rem,6vw,4.5rem);margin:0.5rem 0 0">R$ 232,9 bi</h2>
+      <p style="margin:1rem 0 0;max-width:46ch;color:#EDF3F2">Em créditos comercializados pelo sistema de consórcio em cinco meses.</p>
+      <p class="medida">ABAC · janeiro a maio de 2026 &nbsp;·&nbsp; campo L=0,42 travado · texto L=0,86 travado · variação de contraste 0,18 · pior stop 7,31</p>
+    </div>
+  </div>
+</section>
+
+</div>
+</x-dc>
+</body>
+</html>

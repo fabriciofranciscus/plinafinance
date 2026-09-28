@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plina | Identity & Visual Guidelines v1.0</title>
+    
+    <!-- Importação de Tipografia -->
+    <link href="https://api.fontshare.com/v2/css?f[]=chillax@400,500,600,700&f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS para Estilização Rápida -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Ícones Lucide -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        base: '#132728',          /* Fundo Profundo */
+                        primary: '#0EA7C7',       /* Ciano de Ação */
+                        secondary: '#4A9ED4',     /* Azul de Suporte */
+                        secondaryLight: '#A0CFE7',/* Azul de Detalhe */
+                        offWhite: '#e4e4e4'       /* Contraste Claro */
+                    },
+                    fontFamily: {
+                        title: ['Chillax', 'sans-serif'],
+                        text: ['Satoshi', 'sans-serif'],
+                        mono: ['Geist Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Configuração para Impressão em PDF */
+        @page {
+            size: 1280px 720px;
+            margin: 0;
+        }
+        * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        @media print {
+            html, body {
+                background: white !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                gap: 0 !important;
+                display: block !important;
+                width: 1280px !important;
+                height: auto !important;
+            }
+            .slide {
+                break-after: page;
+                page-break-after: always;
+                break-inside: avoid;
+                page-break-inside: avoid;
+                height: 720px !important;
+                width: 1280px !important;
+                box-shadow: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border-radius: 0 !important;
+                border: none !important;
+                display: flex !important;
+                flex-direction: column !important;
+                overflow: hidden !important;
+                background-size: cover !important;
+                background-position: center !important;
+                background-repeat: no-repeat !important;
+            }
+            .slide:last-child {
+                break-after: auto !important;
+                page-break-after: auto !important;
+            }
+        }
+
+        body {
+            background-color: #0c1819;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 40px;
+            padding: 40px 0;
+        }
+
+        .slide {
+            width: 1280px;
+            height: 720px;
+            background-color: #132728;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(160, 207, 231, 0.1);
+        }
+
+        /* Fractal Glass Effect Utility */
+        .fractal-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 5;
+            pointer-events: none;
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            background-image: repeating-linear-gradient(
+                90deg,
+                rgba(0, 0, 0, 0.3) 0px,
+                rgba(255, 255, 255, 0.02) 1px,
+                rgba(255, 255, 255, 0.005) 12px,
+                rgba(0, 0, 0, 0.3) 13px
+            );
+            mix-blend-mode: overlay;
+        }
+
+        .glow-orb {
+            position: absolute;
+            border-radius: 100%;
+            filter: blur(100px);
+            opacity: 0.15;
+            z-index: 1;
+        }
+
+        .page-number {
+            position: absolute;
+            bottom: 40px;
+            right: 60px;
+            font-family: 'Geist Mono', monospace;
+            font-size: 12px;
+            letter-spacing: 0.2em;
+            color: rgba(160, 207, 231, 0.4);
+            z-index: 20;
+        }
+
+        .brand-tag {
+            position: absolute;
+            top: 40px;
+            left: 60px;
+            font-family: 'Chillax', sans-serif;
+            font-weight: 600;
+            font-size: 18px;
+            z-index: 20;
+        }
+
+    </style>
+</head>
+<body class="font-text">
+
+    <!-- Slide 1: Capa -->
+    <div class="slide" style="background-image: url('/home/dalekthai/Documentos/Workspace/Plina/actal_bg.png'); background-size: cover; background-position: center; background-color: #080f10;">
+        <div class="glow-orb bg-primary w-[600px] h-[600px] -top-20 -left-20"></div>
+        
+        <div class="flex-1 flex flex-col justify-center px-[120px] relative z-10">
+            <div class="font-mono text-primary text-xs uppercase tracking-[0.4em] mb-6">Brand Guidelines</div>
+            <h1 class="font-title text-[120px] leading-none font-bold tracking-tighter mb-4">
+                Plina<span class="text-primary">.</span>
+            </h1>
+            <div class="h-px w-[200px] bg-white/20 my-10"></div>
+            <p class="text-secondaryLight text-2xl font-light max-w-2xl leading-relaxed">
+                Manual de Identidade e Diretrizes de Comunicação v1.0 <br>
+                <span class="opacity-50 font-mono text-sm tracking-widest uppercase mt-4 block italic">Tokenização institucional de direito creditório · Stellar</span>
+            </p>
+        </div>
+        <div class="page-number">01 // COVER</div>
+    </div>
+
+    <!-- Slide 2: Missão & Propósito -->
+    <div class="slide bg-white text-base">
+        <div class="brand-tag text-base">Plina<span class="text-primary">.</span></div>
+        <div class="flex-1 flex items-center px-[120px]">
+            <div class="grid grid-cols-12 gap-10 w-full">
+                <div class="col-span-5">
+                    <h2 class="font-title text-6xl font-bold tracking-tight mb-8">O Propósito<span class="text-primary">.</span></h2>
+                    <p class="text-base/60 text-xl font-light leading-relaxed">
+                        A Plina é uma <strong class="font-medium text-base">tokenizadora institucional de direito creditório</strong>. Não somos wallet, nem marketplace peer-to-peer — somos o instrumento financeiro tokenizado em si, estruturado como FIDC sob CVM 175 e representado on-chain como ativo Stellar.
+                    </p>
+                </div>
+                <div class="col-span-7 border-l border-base/10 pl-16 space-y-12">
+                    <div>
+                        <span class="font-mono text-xs font-bold uppercase tracking-widest text-primary">Missão</span>
+                        <p class="text-2xl font-medium mt-4">Conectar capital institucional global ao mercado brasileiro de direito creditório, via infraestrutura Stellar regulada.</p>
+                    </div>
+                    <div>
+                        <span class="font-mono text-xs font-bold uppercase tracking-widest text-primary">Visão</span>
+                        <p class="text-2xl font-medium mt-4">Estabelecer o PLINA-RF como o padrão institucional para tokenização de cotas de consórcio contempladas em FIDC.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="page-number text-base/40">02 // MISSION</div>
+    </div>
+
+    <!-- Slide 3: Posicionamento de Produto -->
+    <div class="slide bg-base">
+        <div class="glow-orb bg-primary w-[500px] h-[500px] -top-40 -right-40"></div>
+        <div class="brand-tag relative z-20">Plina<span class="text-primary">.</span></div>
+
+        <div class="flex-1 flex flex-col justify-between px-[120px] pt-24 pb-20 relative z-10">
+            <div>
+                <div class="font-mono text-primary text-xs uppercase tracking-[0.4em] mb-4">Product Positioning</div>
+                <h2 class="font-title text-[44px] font-bold mb-0 text-offWhite leading-tight">PLINA-RF<span class="text-primary">.</span></h2>
+            </div>
+
+            <div class="grid grid-cols-12 gap-10 mb-0">
+                <div class="col-span-7">
+                    <p class="text-xl font-light text-secondaryLight leading-relaxed">
+                        Pool tokenizado de <strong class="font-medium text-offWhite">cotas de consórcio contempladas</strong>, estruturado como FIDC sob CVM 175 e emitido na Stellar como representação de cota — reconhecido pelo framework de DLT da CVM 175.
+                    </p>
+                    <p class="mt-6 text-base text-secondaryLight/70 leading-relaxed">
+                        Lastro: 1 PLINA-RF = R$ 1,00 em direito creditório, ajustado diariamente pelo NAV. Classes sênior e subordinada absorvendo perdas em ordem.
+                    </p>
+                </div>
+                <div class="col-span-5 border-l border-white/10 pl-10 space-y-5">
+                    <div>
+                        <span class="font-mono text-[10px] font-bold uppercase tracking-widest text-primary">Veículo</span>
+                        <p class="text-offWhite font-medium mt-1">FIDC sob CVM 175</p>
+                    </div>
+                    <div>
+                        <span class="font-mono text-[10px] font-bold uppercase tracking-widest text-primary">Rede</span>
+                        <p class="text-offWhite font-medium mt-1">Stellar (native-first, Soroban quando exige)</p>
+                    </div>
+                    <div>
+                        <span class="font-mono text-[10px] font-bold uppercase tracking-widest text-primary">Stablecoins</span>
+                        <p class="text-offWhite font-medium mt-1">USDC · EURC · BRZ · BRLA</p>
+                    </div>
+                    <div>
+                        <span class="font-mono text-[10px] font-bold uppercase tracking-widest text-primary">Compliance on-chain</span>
+                        <p class="text-offWhite font-medium mt-1">Clawback · AUTH_REQUIRED · AUTH_REVOCABLE</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Personas -->
+            <div class="border-t border-white/10 pt-6">
+                <span class="font-mono text-[10px] font-bold uppercase tracking-widest text-primary mb-3 block">Personas</span>
+                <div class="grid grid-cols-4 gap-6">
+                    <div>
+                        <p class="font-title font-bold text-offWhite text-sm">Vendedor</p>
+                        <p class="text-secondaryLight/60 text-xs mt-1">Contemplado que precisa de liquidez · Pix em 48h</p>
+                    </div>
+                    <div>
+                        <p class="font-title font-bold text-offWhite text-sm">Comprador-usuário do bem</p>
+                        <p class="text-secondaryLight/60 text-xs mt-1">Adquire cota revendida com desconto · imóvel, veículo, equipamento</p>
+                    </div>
+                    <div>
+                        <p class="font-title font-bold text-offWhite text-sm">Investidor institucional BR</p>
+                        <p class="text-secondaryLight/60 text-xs mt-1">Gestora, family office · R$ 500k–10M em sênior/subordinada</p>
+                    </div>
+                    <div>
+                        <p class="font-title font-bold text-offWhite text-sm">Investidor internacional</p>
+                        <p class="text-secondaryLight/60 text-xs mt-1">Family office, fintech LATAM · US$ 100k–5M via USDC/EURC</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="page-number">03 // PRODUCT</div>
+    </div>
+
+    <!-- Slide 4: Uso do Logótipo -->
+    <div class="slide">
+        <div class="brand-tag">Plina<span class="text-primary">.</span></div>
+        <div class="flex-1 flex flex-col justify-center px-[120px]">
+            <h2 class="font-title text-4xl font-bold mb-16">Logótipo & Assinatura</h2>
+            <div class="grid grid-cols-2 gap-10">
+                <!-- Card 1: Fundo Escuro -->
+                <div class="bg-base border border-white/10 p-20 flex items-center justify-center rounded-3xl">
+                    <span class="font-title text-7xl font-semibold">Plina<span class="text-primary">.</span></span>
+                </div>
+                <!-- Card 2: Fundo Claro (Aumentado significativamente) -->
+                <div class="bg-offWhite p-20 flex items-center justify-center rounded-3xl">
+                    <span class="font-title text-[10rem] font-semibold text-base leading-none">Plina<span class="text-primary">.</span></span>
+                </div>
+            </div>
+            <div class="mt-10 grid grid-cols-2 gap-10 px-6">
+                <p class="text-sm text-secondaryLight/60 leading-relaxed">
+                    <strong>Marca Primária:</strong> Utilização da tipografia Chillax. O ponto final é o destaque visual, simbolizando o fim da burocracia.
+                </p>
+                <p class="text-sm text-base/60 leading-relaxed">
+                    <strong>Contraste:</strong> Em fundos claros, o corpo da fonte assume a cor Base (#132728).
+                </p>
+            </div>
+        </div>
+        <div class="page-number">04 // LOGOTYPE</div>
+    </div>
+
+    <!-- Slide 4: Paleta de Cores -->
+    <div class="slide bg-offWhite text-base">
+        <div class="brand-tag text-base">Plina<span class="text-primary">.</span></div>
+        <div class="flex-1 flex flex-col justify-center px-[120px]">
+            <h2 class="font-title text-4xl font-bold mb-16">Universo Cromático</h2>
+            <div class="grid grid-cols-4 h-64 gap-px bg-base/10 border border-base/10 overflow-hidden rounded-3xl shadow-sm">
+                <div class="bg-[#132728] p-8 flex flex-col justify-end text-white">
+                    <span class="font-mono text-xs mb-2 opacity-60">#132728</span>
+                    <span class="font-bold uppercase tracking-widest text-[10px]">Base Plina</span>
+                </div>
+                <div class="bg-[#0EA7C7] p-8 flex flex-col justify-end text-base">
+                    <span class="font-mono text-xs mb-2 opacity-60">#0EA7C7</span>
+                    <span class="font-bold uppercase tracking-widest text-[10px]">Action Cyan</span>
+                </div>
+                <div class="bg-[#4A9ED4] p-8 flex flex-col justify-end text-white">
+                    <span class="font-mono text-xs mb-2 opacity-60">#4A9ED4</span>
+                    <span class="font-bold uppercase tracking-widest text-[10px]">Support Blue</span>
+                </div>
+                <div class="bg-[#A0CFE7] p-8 flex flex-col justify-end text-base">
+                    <span class="font-mono text-xs mb-2 opacity-60">#A0CFE7</span>
+                    <span class="font-bold uppercase tracking-widest text-[10px]">Detail Mist</span>
+                </div>
+            </div>
+            <div class="mt-12">
+                <p class="text-xl font-light text-base/70 max-w-3xl">
+                    Uma paleta fria e profunda que comunica estabilidade institucional, pontuada pelo ciano vibrante para indicar oportunidades e execução tecnológica.
+                </p>
+            </div>
+        </div>
+        <div class="page-number text-base/40">05 // COLORS</div>
+    </div>
+
+    <!-- Slide 5: Tipografia -->
+    <div class="slide">
+        <div class="brand-tag">Plina<span class="text-primary">.</span></div>
+        <div class="flex-1 flex flex-col justify-center px-[120px]">
+            <h2 class="font-title text-4xl font-bold mb-16 text-offWhite">Sistema Tipográfico</h2>
+            
+            <div class="space-y-16">
+                <div class="flex items-baseline gap-12 border-b border-white/10 pb-8">
+                    <span class="font-mono text-primary text-xs uppercase w-32">Headers</span>
+                    <div class="flex-1">
+                        <span class="font-title text-6xl font-bold">Chillax Bold</span>
+                        <p class="text-secondaryLight/50 mt-4 font-mono text-xs tracking-widest">A-Z 0-9 / IMPACT STATEMENTS</p>
+                    </div>
+                </div>
+                <div class="flex items-baseline gap-12 border-b border-white/10 pb-8">
+                    <span class="font-mono text-primary text-xs uppercase w-32">Copy</span>
+                    <div class="flex-1">
+                        <span class="font-text text-4xl">Satoshi Regular</span>
+                        <p class="text-secondaryLight/50 mt-4 text-xl">Utilizada para o corpo de texto institucional e legibilidade editorial.</p>
+                    </div>
+                </div>
+                <div class="flex items-baseline gap-12">
+                    <span class="font-mono text-primary text-xs uppercase w-32">Metadata</span>
+                    <div class="flex-1">
+                        <span class="font-mono text-3xl text-secondaryLight">Geist Mono</span>
+                        <p class="text-secondaryLight/50 mt-4 uppercase text-[10px] tracking-widest">Detalhes técnicos, Smart Contracts e Meta-dados de rede.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="page-number">06 // TYPOGRAPHY</div>
+    </div>
+
+    <!-- Slide 6: Visual Motifs -->
+    <div class="slide" style="background-color:#080f10;">
+        <!-- Blobs de luz ambiente — demonstração do motivo -->
+        <div style="position:absolute;width:480px;height:480px;top:-80px;left:-60px;background:radial-gradient(ellipse at center,rgba(14,167,199,0.22) 0%,rgba(14,167,199,0.06) 45%,transparent 70%);filter:blur(40px);border-radius:50%;z-index:1;"></div>
+        <div style="position:absolute;width:320px;height:520px;top:160px;left:120px;background:radial-gradient(ellipse at center,rgba(14,167,199,0.13) 0%,transparent 65%);filter:blur(50px);border-radius:50%;z-index:1;"></div>
+        <div style="position:absolute;width:200px;height:380px;bottom:-40px;left:280px;background:radial-gradient(ellipse at center,rgba(74,158,212,0.1) 0%,transparent 60%);filter:blur(45px);border-radius:50%;z-index:1;"></div>
+        <div style="position:absolute;width:160px;height:300px;top:80px;right:280px;background:radial-gradient(ellipse at center,rgba(14,167,199,0.07) 0%,transparent 60%);filter:blur(55px);border-radius:50%;z-index:1;"></div>
+
+        <div class="brand-tag relative z-20">Plina<span class="text-primary">.</span></div>
+
+        <div class="flex-1 flex items-center justify-between px-[120px] relative z-10 gap-20">
+            <!-- Texto -->
+            <div class="max-w-xl">
+                <div class="font-mono text-primary text-xs uppercase tracking-[0.4em] mb-6">Visual Motif</div>
+                <h2 class="font-title text-6xl font-bold mb-8 text-offWhite leading-tight">Blobs de<br>Luz Ambiente</h2>
+                <p class="text-xl font-light text-secondaryLight leading-relaxed">
+                    Formas orgânicas e difusas de luminosidade ciana emergindo da escuridão — sem arestas, sem rigidez.
+                    A metáfora visual da liquidez e do capital em movimento contínuo.
+                </p>
+                <p class="mt-6 text-primary font-medium text-lg">
+                    Orgânico. Difuso. Sempre em fluxo.
+                </p>
+                <div class="mt-12 flex gap-4">
+                    <div class="w-24 h-0.5 bg-white/20"></div>
+                    <div class="w-24 h-0.5 bg-primary"></div>
+                    <div class="w-24 h-0.5 bg-white/20"></div>
+                </div>
+            </div>
+
+            <!-- Amostra isolada do motivo -->
+            <div class="relative shrink-0" style="width:280px;height:400px;">
+                <div style="position:absolute;width:220px;height:220px;top:20px;left:30px;background:radial-gradient(ellipse at 40% 40%,rgba(14,167,199,0.35) 0%,rgba(14,167,199,0.08) 50%,transparent 70%);filter:blur(28px);border-radius:50%;"></div>
+                <div style="position:absolute;width:140px;height:280px;top:100px;left:80px;background:radial-gradient(ellipse at 50% 30%,rgba(74,158,212,0.22) 0%,transparent 60%);filter:blur(32px);border-radius:50%;"></div>
+                <div style="position:absolute;width:100px;height:180px;bottom:30px;left:40px;background:radial-gradient(ellipse at center,rgba(14,167,199,0.18) 0%,transparent 65%);filter:blur(24px);border-radius:50%;"></div>
+                <!-- border de referência -->
+                <div style="position:absolute;inset:0;border:1px solid rgba(14,167,199,0.12);border-radius:4px;"></div>
+                <div style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.2em;color:rgba(160,207,231,0.4);">MOTIF SAMPLE</div>
+            </div>
+        </div>
+        <div class="page-number">07 // VISUAL MOTIF</div>
+    </div>
+
+    <!-- Slide 7: Comunicação -->
+    <div class="slide bg-white text-base">
+        <div class="brand-tag text-base">Plina<span class="text-primary">.</span></div>
+        <div class="flex-1 flex flex-col justify-center px-[120px]">
+            <h2 class="font-title text-4xl font-bold mb-16">Tom de Voz & Narrativa</h2>
+            <div class="grid grid-cols-3 gap-12">
+                <div class="space-y-4">
+                    <h4 class="font-title text-xl font-bold border-b-2 border-primary pb-2 inline-block">Autoridade Técnica</h4>
+                    <p class="text-base/60 leading-relaxed text-sm">Vocabulário institucional completo: FIDC, CVM 175, classes sênior/subordinada, NAV, duration, yield. Sem simplificação para o investidor — institucional exige profundidade.</p>
+                </div>
+                <div class="space-y-4">
+                    <h4 class="font-title text-xl font-bold border-b-2 border-primary pb-2 inline-block">Precisão Regulatória</h4>
+                    <p class="text-base/60 leading-relaxed text-sm">Citação explícita de enquadramento: CVM 175, Lei 11.795/2008, BACEN, AML/KYC, LGPD. Clawback, AUTH_REQUIRED e SEPs como diferenciais — não jargão.</p>
+                </div>
+                <div class="space-y-4">
+                    <h4 class="font-title text-xl font-bold border-b-2 border-primary pb-2 inline-block">Auditabilidade</h4>
+                    <p class="text-base/60 leading-relaxed text-sm">Tudo verificável: prestadores registrados, auditoria big four, hash on-chain via Stellar Expert. Transparência substitui marketing.</p>
+                </div>
+            </div>
+            <div class="mt-20 p-12 bg-base text-white rounded-[2rem] italic font-light text-2xl relative overflow-hidden">
+                <div class="absolute inset-0 bg-primary/5"></div>
+                "Conectando o capital global ao mercado brasileiro de direito creditório."
+            </div>
+        </div>
+        <div class="page-number text-base/40">08 // COMMUNICATION</div>
+    </div>
+
+    <!-- Slide 8: Fecho -->
+    <div class="slide bg-base">
+        <div class="glow-orb bg-secondary w-[800px] h-[800px] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-10"></div>
+        <div class="flex-1 flex flex-col items-center justify-center relative z-10 text-center">
+            <div class="inline-block">
+                <h2 class="font-title text-[200px] font-bold text-offWhite leading-none tracking-tighter">Plina<span class="text-primary">.</span></h2>
+                <div class="font-mono text-primary text-[13px] uppercase tracking-[0.18em] mt-2 text-center whitespace-nowrap">Conectando capital global ao direito creditório brasileiro</div>
+            </div>
+            <div class="h-px w-32 bg-white/20 mt-16 mb-12"></div>
+            <p class="text-secondaryLight/50 text-xs tracking-widest uppercase text-center">Brand Identity Guidelines v1.0 <br> 2026 © Todos os direitos reservados</p>
+            <a class="mt-6 font-mono text-primary/60 text-xs tracking-widest hover:text-primary transition-colors">plina.finance</a>
+        </div>
+        <div class="page-number">09 // END</div>
+    </div>
+
+    <script>
+        // Inicialização de Ícones
+        lucide.createIcons();
+    </script>
+</body>
+</html>

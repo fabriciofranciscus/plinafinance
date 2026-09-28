@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=chillax@400,500,600&f[]=satoshi@300,400,500&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@300;400&display=swap" />
+<script src="./image-slot.js"></script>
+<style>
+html{scroll-behavior:smooth}
+body{margin:0;background:#ffffff;color:#132728;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit}
+section[id],header[id]{scroll-margin-top:6.5rem}
+p{text-wrap:pretty}
+::selection{background:#0EA7C7;color:#132728}
+:focus-visible{outline:2px solid #046C88;outline-offset:4px}
+input::placeholder,textarea::placeholder{color:rgba(19,39,40,0.65)}
+nav a,footer a,#lead-form a,[data-skip]{display:inline-flex;align-items:center;min-height:44px}
+/* Na barra o alvo passa a ser a altura dela (72px), e nao um min-height que a
+   empurraria para alem de --barra. O drawer, sendo absolute, nao conta. */
+nav[data-principal] [data-barra-interna] > a,nav[data-principal] [data-secoes] a,nav[data-principal] [data-acoes] a{min-height:0;height:100%}
+[data-skip]{position:absolute;left:-9999px;top:0;z-index:100}
+[data-skip]:focus{left:clamp(20px,6vw,80px);top:12px;background:#132728;color:#ffffff;padding:10px 18px;font-family:Geist,sans-serif;font-weight:600;font-size:1.125rem;text-decoration:none}
+@media (max-width:820px){[data-split]{grid-template-columns:1fr !important;gap:2rem !important}}
+
+/* ── A BARRA DE ANUNCIO ──────────────────────────────────────────────────────
+   Ondo e Maple abrem com ela, e as duas usam para a mesma coisa: a noticia mais
+   recente, com um link. E o unico lugar da pagina onde cabe algo datado sem
+   envelhecer o resto, porque o leitor entende a faixa do topo como efemera.
+
+   Preenchimento ciano, tinta #132728. Branco sobre ciano da 2.85 e e proibido no
+   sistema -- foi justamente o bug que a auditoria do design system pegou na
+   TopBar das guidelines. */
+.anuncio{background:#0EA7C7;color:#132728}
+/* Altura inteira, e nao a que o conteudo produzir: com 0.75rem de corpo e
+   line-height 1.6 a faixa media 39.2px, e a fracao sobrava como 1px de body
+   branco entre o anuncio e o hero -- o hero sobe um numero inteiro de pixels, a
+   faixa nao terminava num. 2.75rem e o mesmo valor que o hero desconta do svh. */
+.anuncio > div{max-width:1320px;margin:0 auto;padding:0.5rem clamp(20px,6vw,80px);min-height:2.75rem;display:flex;align-items:center;justify-content:center;gap:1rem;flex-wrap:wrap;text-align:center}
+.anuncio p{margin:0;font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.06em;line-height:1.6}
+/* O filete a 0.7 (3.29 sobre o ciano cheio). Na faixa o link divide a cor e a
+   linha de base com o texto ao lado, entao e o sublinhado que o distingue, e
+   ele cai sob o minimo de 3:1 da SC 1.4.11. A 0.45 dava 2.08. */
+.anuncio a{font-family:Geist,sans-serif;font-weight:600;font-size:0.75rem;letter-spacing:0.02em;text-decoration:none;border-bottom:1px solid rgba(19,39,40,0.7);padding-bottom:2px;white-space:nowrap;transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)}
+.anuncio a:hover{border-bottom-color:#132728}
+
+/* ── A BARRA ─────────────────────────────────────────────────────────────────
+   Herdada da v10, com uma diferenca: --barra agora soma a faixa de anuncio, que
+   rola junto e por isso nao entra no calculo do topo fixo. A barra e fixa, o
+   anuncio nao: quem rolou ja leu o anuncio, e mante-lo preso rouba 40px de
+   leitura pelo resto da pagina. */
+:root{--barra:4.5rem}
+/* DOIS ESTADOS, e o gatilho e a posicao. Sobre o hero a barra nao existe como
+   superficie: so a marca e os rotulos, em tinta clara, flutuando sobre a peca.
+   Passado o hero, a pagina fica branca e uma barra transparente com tinta clara
+   sumiria -- entao ela ganha corpo: fundo, filete e tinta escura.
+
+   A barra SOBREPOE o hero (margin-top negativo la embaixo), senao "transparente"
+   mostraria o branco do body, e nao a imagem. */
+nav[data-principal]{position:sticky;top:0;z-index:50;background:transparent;box-shadow:inset 0 -1px 0 transparent;transition:background-color 400ms cubic-bezier(0.16,1,0.3,1),box-shadow 400ms cubic-bezier(0.16,1,0.3,1)}
+nav[data-principal][data-solida]{background:rgba(255,255,255,0.92);backdrop-filter:blur(10px);box-shadow:inset 0 -1px 0 rgba(19,39,40,0.12)}
+/* Sobre o hero: tinta clara, e o ponto do logotipo no ciano de superficie
+   escura -- o #046C88 do estado claro daria 3.03 aqui e reprovaria. */
+nav[data-principal]:not([data-solida]) [data-barra-interna] > a{color:#EDF3F2}
+nav[data-principal]:not([data-solida]) [data-barra-interna] > a span{color:#0EA7C7}
+nav[data-principal]:not([data-solida]) [data-secoes] a,
+nav[data-principal]:not([data-solida]) [data-acoes] a{color:rgba(237,243,242,0.8)}
+nav[data-principal]:not([data-solida]) [data-secoes] a:hover,
+nav[data-principal]:not([data-solida]) [data-acoes] a:hover{color:#EDF3F2}
+nav[data-principal]:not([data-solida]) a[aria-current]{color:#EDF3F2;border-bottom-color:#0EA7C7}
+nav[data-principal]:not([data-solida]) [data-entrar]{color:#EDF3F2;border-bottom-color:rgba(237,243,242,0.45)}
+nav[data-principal]:not([data-solida]) [data-entrar]:hover{border-bottom-color:#0EA7C7}
+nav[data-principal]:not([data-solida]) [data-entrar] i{color:rgba(237,243,242,0.7)}
+nav[data-principal]:not([data-solida]) [data-hamburguer],
+nav[data-principal]:not([data-solida]) [data-hamburguer]::before,
+nav[data-principal]:not([data-solida]) [data-hamburguer]::after{background:#EDF3F2}
+nav[data-principal]:not([data-solida]) :focus-visible{outline-color:#0EA7C7}
+nav[data-principal] [data-barra-interna]{max-width:1320px;margin:0 auto;padding:0 clamp(20px,6vw,80px);display:flex;align-items:center;gap:clamp(1.5rem,4vw,3rem);height:var(--barra)}
+nav[data-principal] [data-painel]{flex:1;display:flex;align-items:center;gap:clamp(1.5rem,4vw,3rem)}
+nav[data-principal] [data-secoes]{display:flex;gap:clamp(1rem,2.4vw,1.75rem);list-style:none;margin:0;padding:0}
+nav[data-principal] [data-acoes]{margin-left:auto;display:flex;align-items:center;gap:clamp(1.25rem,3vw,2rem)}
+nav[data-principal] [data-secoes] a,nav[data-principal] [data-acoes] a{font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.06em;color:rgba(19,39,40,0.7);text-decoration:none;white-space:nowrap;border-bottom:1px solid transparent;transition:color 500ms cubic-bezier(0.16,1,0.3,1),border-color 500ms cubic-bezier(0.16,1,0.3,1)}
+nav[data-principal] [data-secoes] a:hover,nav[data-principal] [data-acoes] a:hover{color:#132728}
+nav[data-principal] a[aria-current]{color:#132728;border-bottom-color:#046C88}
+nav[data-principal] [data-entrar]{font-family:Geist,sans-serif;font-weight:600;letter-spacing:0.02em;color:#132728;border-bottom-color:rgba(19,39,40,0.3)}
+nav[data-principal] [data-entrar]:hover{border-bottom-color:#046C88}
+nav[data-principal] [data-entrar] i{font-family:'Geist Mono',monospace;font-style:normal;font-weight:300;color:rgba(19,39,40,0.55);margin-left:0.5rem}
+[data-menu]{display:none;margin-left:auto;width:44px;height:44px;align-items:center;justify-content:center;background:transparent;border:0;cursor:pointer;flex:none}
+[data-hamburguer]{position:relative;display:block;width:20px;height:1px;background:#132728;transition:background-color 300ms cubic-bezier(0.16,1,0.3,1)}
+[data-hamburguer]::before,[data-hamburguer]::after{content:'';position:absolute;left:0;width:20px;height:1px;background:#132728;transition:transform 300ms cubic-bezier(0.16,1,0.3,1)}
+[data-hamburguer]::before{top:-6px}
+[data-hamburguer]::after{top:6px}
+nav[data-aberto] [data-hamburguer]{background:transparent}
+nav[data-aberto] [data-hamburguer]::before{transform:translateY(6px) rotate(45deg)}
+nav[data-aberto] [data-hamburguer]::after{transform:translateY(-6px) rotate(-45deg)}
+@media (max-width:1080px){
+  [data-menu]{display:inline-flex}
+  nav[data-principal] [data-painel]{position:absolute;top:100%;left:0;right:0;flex-direction:column;align-items:stretch;gap:0;background:#ffffff;border-bottom:1px solid rgba(19,39,40,0.12);padding:0.25rem clamp(20px,6vw,80px) 1.25rem;opacity:0;visibility:hidden;transform:translateY(-8px);transition:opacity 300ms cubic-bezier(0.16,1,0.3,1),transform 300ms cubic-bezier(0.16,1,0.3,1),visibility 0s linear 300ms}
+  nav[data-principal][data-aberto] [data-painel]{opacity:1;visibility:visible;transform:translateY(0);transition:opacity 300ms cubic-bezier(0.16,1,0.3,1),transform 300ms cubic-bezier(0.16,1,0.3,1),visibility 0s linear 0s}
+  nav[data-principal] [data-secoes]{flex-direction:column;gap:0}
+  nav[data-principal] [data-acoes]{margin-left:0;flex-direction:column;align-items:stretch;gap:0;margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid rgba(19,39,40,0.12)}
+  nav[data-principal] [data-secoes] a,nav[data-principal] [data-acoes] a{display:flex;align-items:center;width:100%;min-height:52px;border-bottom:0;border-left:1px solid transparent;padding-left:0.875rem;margin-left:-0.875rem}
+  /* Aberto sobre o hero, o painel nao pode ser branco: a tinta dele e clara.
+     Ele herda o petrol e os filetes claros enquanto a barra estiver transparente. */
+  nav[data-principal]:not([data-solida]) [data-painel]{background:#0C1719;border-bottom-color:rgba(237,243,242,0.15)}
+  nav[data-principal]:not([data-solida]) [data-acoes]{border-top-color:rgba(237,243,242,0.15)}
+  nav[data-principal] a[aria-current]{border-left-color:#046C88}
+  nav[data-principal] [data-entrar]{border-bottom:0;border-left-color:rgba(19,39,40,0.3)}
+}
+
+/* ── O HERO NOTURNO ──────────────────────────────────────────────────────────
+   O fractal e uma peca ESCURA: o preto dela nao e transparencia, e o fundo. Por
+   isso o hero inverte a superficie em vez de tentar encaixa-la no branco. Nao e
+   contorno da regra, e o cumprimento dela: o sistema proibe degrade em fundo
+   claro e permite luminosidade ciano difusa em canvas escuro, que e exatamente
+   o que esta peca e. O resto da pagina continua claro, e a inversao acontece
+   uma vez so -- e o hero, e nada mais.
+
+   O VEU E A POSICAO SAO MEDIDA, NAO GOSTO. Sem veu o pior ponto do fundo deixa
+   a tinta clara em 1.25:1, ilegivel.
+
+   E quando a manchete virou metal, o veu deixou de bastar sozinho: o stop mais
+   escuro do gradiente e o ciano, e sobre a imagem espalhada em `cover` ele
+   caia para 3.21. Levar o veu ao ponto de salvar o ciano custava 0.88, e a essa
+   altura a imagem ja tinha virado textura.
+
+   O ARQUIVO E O RENDER DO SVG, e nao os PNGs de dentro dele. O .svg de 5,8 MB
+   guardava quatro bitmaps que sao CAMADAS: duas de cor e duas de mascara, que o
+   proprio SVG rotaciona, escala e recorta em dois grupos antes de compor. Ler o
+   bitmap direto do arquivo devolve uma camada solta -- uma forma cortada nas
+   bordas, muito mais clara e saturada que a peca real. A composicao verdadeira
+   so aparece rasterizando o SVG inteiro.
+
+   E a peca real e outra coisa: 16:9, escura, com a luz difusa a esquerda. E o
+   Ambient Light Blob que o design system descreve, nao um degrade chapado.
+
+   ISSO SIMPLIFICOU TUDO. Sendo escura de origem, ela dispensa o veu pesado: sem
+   veu nenhum o ciano da manchete ja fica em 4.65. Os 0.15 que sobraram sao
+   margem contra o que a compressao e o corte de `cover` mudam entre um viewport
+   e outro, nao necessidade.
+
+   E sendo 16:9 como o hero, `cover` praticamente nao corta -- que era o problema
+   que sobrava. O arquivo tambem caiu para 8 KB: uma imagem suave comprime quase
+   a nada.
+
+   Se a imagem for trocada, REMEDIR o veu: e a imagem que o define.
+
+   Medido no pior ponto (percentil 99.5, nao a media -- media esconde o brilho),
+   na faixa vertical que o texto ocupa. Se a imagem, a posicao ou os stops do
+   metal mudarem, REMEDIR os tres juntos: eles se sustentam mutuamente.
+
+   A imagem esta espelhada em relacao ao arquivo original, porque a forma nasce
+   no canto esquerdo e a esquerda e onde mora a manchete. Espelhada, o nucleo
+   claro sangra pela direita e o texto fica sobre a parte funda.
+   O arquivo tambem deixou de ser o .svg de 5,8 MB: aquilo era um PNG de
+   4000x3866 dentro de um involucro <svg>, sem nenhuma vantagem vetorial. Em
+   webp sao 246 KB, e o desenho e o mesmo. */
+/* margin-top negativo: e o que poe a barra SOBRE a peca em vez de acima dela.
+   O padding de cima do hero ja reservava var(--barra), entao o texto nao se
+   mexe -- so o fundo sobe. */
+header#topo{margin-top:calc(-1 * var(--barra));background-color:#0C1719;background-image:linear-gradient(to bottom,rgba(12,23,25,0.7) 0,rgba(12,23,25,0) 150px),linear-gradient(rgba(12,23,25,0.15),rgba(12,23,25,0.15)),url('./uploads/hero-fractal.webp');background-size:auto,cover,cover;background-position:top,center,center;background-repeat:no-repeat}
+/* Em retrato uma peca 16:9 corta muito, e nao ha o que fazer quanto a isso --
+   mas ha o que escolher sobre O QUE fica. Centralizado, o telefone mostra o
+   miolo, que e a parte mais escura e sem assunto. Ancorado a esquerda, mostra a
+   luz. O ciano cai de 6.37 para 4.78 e continua passando, e a luz media da tela
+   triplica. */
+@media (max-width:820px){header#topo{background-position:center,left center}}
+header#topo h1{color:#EDF3F2}
+/* Tinta cheia tambem no subtitulo. No claro ele vinha a 0.7, mas sobre esta
+   imagem NENHUMA tinta secundaria passa: 0.80 da 3.75, o glacier da 3.85, e o
+   minimo e 4.5. Entao a hierarquia entre manchete e subtitulo deixa de ser de
+   tinta e passa a ser so de escala -- que ja era de 5.25rem contra 1.75rem, e
+   sozinha da conta. */
+header#topo [data-split="hero"] p{color:#EDF3F2}
+/* Com a linha inteira virando um gradiente unico, a diferenca do fecho nao pode
+   mais ser de tinta: dentro de um texto recortado, mudar a cor de um trecho
+   quebraria o degrade em dois. Sobra o peso, que ja era o que distinguia. */
+header#topo [data-split="hero"] p .destaque{font-weight:500}
+
+/* A faixa do hero e OPACA, e nao o ciano a 38% do resto da pagina: sobre uma
+   imagem, um campo translucido deixaria o fractal atravessar o texto e o
+   contraste passaria a depender do pixel que calhasse atras de cada palavra.
+   #0D4E5B e exatamente a cor que aquele ciano a 38% produz sobre o petrol --
+   mesma cor, agora previsivel. A tinta clara fica em 8.31 sobre ela. */
+.caixa.noite{background:#0D4E5B;color:#EDF3F2}
+.caixa.noite p{color:#EDF3F2}
+.caixa.noite .ticker{color:rgba(237,243,242,0.85);border-top-color:rgba(237,243,242,0.28)}
+.caixa.noite .portas a{color:#EDF3F2;border-bottom-color:rgba(237,243,242,0.5)}
+.caixa.noite .portas a:hover{border-bottom-color:#EDF3F2}
+.caixa.noite .portas a:active{color:#A0CFE7;border-bottom-color:#A0CFE7}
+.caixa.noite .portas i{color:rgba(237,243,242,0.7)}
+/* Sobre o hero escuro o anel tem de ser o ciano de superficie escura. */
+header#topo :focus-visible{outline-color:#0EA7C7}
+
+/* ── O METAL ─────────────────────────────────────────────────────────────────
+   EXCECAO DECLARADA. "gradient text" e o primeiro item do HARD NO em
+   design-system/PROMPT.md. Ela existe por pedido explicito, vale SO no hero, e
+   precisa ser registrada na secao 11 do design system, junto das outras
+   divergencias -- uma excecao que nao esta escrita em lugar nenhum vira, na
+   revisao seguinte, um bug.
+
+   POR QUE SO AQUI. Um gradiente em texto so passa em AA se o PIOR stop passar,
+   e os tons que fazem o efeito parecer metal reprovam sobre branco: glacier da
+   1.67 e o ciano da 2.85. Sobre o #0C1719 do hero todos passam. O metal e, na
+   Plina, um efeito de superficie escura -- e o hero e a unica que existe.
+
+   DOIS METAIS, DOIS PAPEIS. O do sinal carrega o ciano da marca no ponto de
+   sombra e aparece UMA VEZ, na manchete. O sutil nao tem cor de marca nenhuma,
+   so ink e glacier, e serve ao que nao deve chamar atencao. Se os dois
+   estivessem no mesmo peso, nenhum seria efeito: seriam textura.
+
+   TAMANHO MINIMO. Nada abaixo de ~1.5rem recebe metal. Num corpo pequeno os
+   stops caem dentro da mesma letra e o degrade le como falha de renderizacao.
+   Por isso as portas da faixa, em 1.125rem, ficam em tinta cheia.
+
+   O FALLBACK NAO E OPCIONAL: com color:transparent e sem background-clip o
+   texto SOME. A tinta cheia fica fora do @supports, e e ela que prevalece. */
+@supports ((-webkit-background-clip:text) or (background-clip:text)){
+  header#topo h1{
+    background:linear-gradient(166deg,#EDF3F2 0%,#EDF3F2 30%,#A0CFE7 52%,#0EA7C7 70%,#A0CFE7 84%,#EDF3F2 100%);
+    -webkit-background-clip:text;background-clip:text;
+    -webkit-text-fill-color:transparent;
+  }
+  header#topo [data-split="hero"] p{
+    background:linear-gradient(168deg,#EDF3F2 0%,#EDF3F2 42%,#A0CFE7 72%,#EDF3F2 100%);
+    -webkit-background-clip:text;background-clip:text;
+    -webkit-text-fill-color:transparent;
+  }
+}
+
+/* ── A FAIXA ─────────────────────────────────────────────────────────────────
+   O modulo herdado da v10, e a regra semantica de cor continua sendo a lei:
+     CIANO E PORTA ..... onde se escolhe um publico. Duas por pagina, so.
+     CINZA E DADO ...... onde ha evidencia.
+     BRANCO E ARGUMENTO  o chao onde titulo e prosa moram.
+   A v11 tem tres vezes mais secoes que a v10, e e essa regra que impede a
+   pagina de virar pilha de cartoes iguais. Ao crescer, a tentacao e dar um
+   campo colorido a cada bloco novo. Nao. Duas portas, e o resto e cinza. */
+.caixa{position:relative;z-index:1;background:rgba(14,167,199,0.38);color:#132728;border-radius:24px;padding:clamp(34px,3.8vw,54px) clamp(30px,3.2vw,48px)}
+.caixa.cinza{background:#e4e4e4}
+.caixa p{margin:0;max-width:52ch;line-height:1.75;font-weight:300}
+.caixa .ticker{font-family:'Geist Mono',monospace;font-size:0.75rem;line-height:1.9;color:rgba(19,39,40,0.85);margin:clamp(1rem,2vw,1.5rem) 0 0;padding-top:clamp(1rem,2vw,1.25rem);border-top:1px solid rgba(19,39,40,0.22);max-width:none;font-weight:400}
+.faixa{display:grid;grid-template-columns:1.3fr 1fr;gap:clamp(2.5rem,5vw,4.5rem);align-items:start}
+.faixa .portas{list-style:none;margin:0;padding:0;display:grid;gap:1.25rem}
+.faixa .portas a{display:flex;align-items:center;justify-content:space-between;gap:1.5rem;min-height:60px;padding:0 0 1rem;border-bottom:1px solid rgba(19,39,40,0.24);font-family:Geist,sans-serif;font-weight:500;font-size:1.125rem;letter-spacing:0.002em;text-decoration:none;transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)}
+.faixa .portas a:hover{border-bottom-color:#132728}
+.faixa .portas a:active{color:#046C88;border-bottom-color:#046C88}
+.faixa .portas i{font-family:'Geist Mono',monospace;font-style:normal;font-weight:300;font-size:0.875rem;color:rgba(19,39,40,0.55)}
+.faixa .itens{list-style:none;margin:0;padding:0;display:grid;gap:1.25rem}
+.faixa .itens li{display:flex;align-items:baseline;justify-content:space-between;gap:1.5rem;min-height:60px;padding:0 0 1rem;border-bottom:1px solid rgba(19,39,40,0.2)}
+.faixa .itens h3{font-family:Geist,sans-serif;font-weight:500;font-size:1.125rem;line-height:1.35;letter-spacing:0.002em;margin:0;max-width:24ch}
+.faixa .itens b{font-family:'Geist Mono',monospace;font-weight:300;font-size:0.875rem;color:rgba(19,39,40,0.7)}
+@media (max-width:820px){.faixa{grid-template-columns:1fr;gap:2rem}}
+
+/* ── O CARD DO MERCADO ───────────────────────────────────────────────────────
+   O unico card escuro da pagina, e ha um motivo que nao e decorativo: ele
+   carrega O numero, a prova de que existe mercado. Dar a ele a materia do hero
+   faz a pagina rimar -- a tese abre no escuro, a prova volta no escuro, e todo o
+   resto e argumento no branco.
+
+   O metal sutil so existe aqui porque so aqui ha fundo escuro no meio da pagina.
+   No cinza ele seria impossivel: os dois stops do sutil (#EDF3F2 e #A0CFE7) sao
+   claros, e sobre #e4e4e4 dao 1.13 e 1.31.
+
+   AS OUTRAS CAIXAS DE DADO CONTINUAM CINZAS. A regra "cinza e dado" nao caiu --
+   este e o dado marcado, e marcar tudo seria nao marcar nada. */
+.caixa.metal,.ponta.metal{position:relative;background:linear-gradient(118deg,#122224 0%,#16292B 42%,#122224 74%),#122224;color:#EDF3F2}
+.caixa.metal > *,.ponta.metal > *{position:relative;z-index:1}
+/* A moldura em degrade: 1px desenhado por duas mascaras que se subtraem, o
+   unico jeito de ter borda em gradiente respeitando o border-radius. A luz vem
+   de cima e da esquerda, a 135, igual em toda peca metalica do sistema. */
+.caixa.metal::before,.ponta.metal::before{
+  content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;z-index:0;
+  background:linear-gradient(135deg,rgba(237,243,242,0.5) 0%,rgba(160,207,231,0.16) 34%,rgba(237,243,242,0.04) 56%,rgba(14,167,199,0.4) 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;
+}
+.caixa.metal .numerao .valor,.caixa.metal .secundarios .valor{color:#EDF3F2}
+.caixa.metal .numerao .oque,.caixa.metal .secundarios .oque{color:#EDF3F2}
+.caixa.metal .numerao .fonte,.caixa.metal .secundarios .fonte{color:rgba(237,243,242,0.7)}
+.caixa.metal .secundarios{border-top-color:rgba(237,243,242,0.2)}
+.caixa.metal .nota{color:rgba(237,243,242,0.75);border-top-color:rgba(237,243,242,0.2)}
+/* Os cards das duas pontas em metal. Tres coisas nao sobrevivem a inversao, e
+   todas pelo mesmo motivo: foram escolhidas para superficie clara.
+
+   1 · #046C88 da 2.53 aqui e reprova. Etiqueta e link vao para #0EA7C7 (5.32),
+       que e o passo do ciano para superficie escura.
+   2 · A ETIQUETA E UM CONTORNO, sem preenchimento -- a borda nao decora, ela E
+       o componente, entao vale o minimo de 3:1. A 0.45 dava 2.17; a 0.70 da
+       3.34. A neutra fecha com 0.40 (3.39).
+   3 · O sublinhado do link idem: 0.70.
+
+   Os filetes entre as linhas do dl continuam decorativos, como no resto da
+   pagina: separam pares de dados, nao identificam componente. */
+.ponta.metal h3,.ponta.metal dd{color:#EDF3F2}
+.ponta.metal p{color:#EDF3F2}
+.ponta.metal dt{color:rgba(237,243,242,0.7)}
+.ponta.metal dl{border-top-color:rgba(237,243,242,0.2)}
+.ponta.metal dl > div{border-bottom-color:rgba(237,243,242,0.2)}
+.metal .etiqueta{color:#0EA7C7;border-color:rgba(14,167,199,0.7)}
+.metal .etiqueta.neutra{color:rgba(237,243,242,0.7);border-color:rgba(237,243,242,0.4)}
+.metal .verificar{color:#0EA7C7;border-bottom-color:rgba(14,167,199,0.7)}
+.metal .verificar:hover{border-bottom-color:#0EA7C7}
+.metal .verificar:active{color:#A0CFE7;border-bottom-color:#A0CFE7}
+.metal :focus-visible{outline-color:#0EA7C7}
+/* O registro: mono alinhado como tabela, agora em tinta clara. Os rotulos ficam
+   em .70 (7.33) e os valores em tinta cheia -- e o valor que se confere. */
+.caixa.metal .registro{border-top-color:rgba(237,243,242,0.2)}
+.caixa.metal .registro > div{border-bottom-color:rgba(237,243,242,0.2)}
+.caixa.metal .registro dt,.caixa.metal .registro .rotulo{color:rgba(237,243,242,0.7)}
+.caixa.metal .registro dd,.caixa.metal .registro .valor{color:#EDF3F2}
+
+/* A FAIXA DE PORTA — CIANO METALICO. Ela e a unica peca metalica que nao carrega
+   dado: carrega escolha. Nos cards de evidencia o metal e petrol e o ciano so
+   aparece na moldura; aqui INVERTE -- o campo e ciano e a moldura e de luz. E o
+   mesmo material, na cor da marca.
+
+   #0D4E5B E O TETO DO VERNIZ, e nao um tom escolhido a olho: e a cor que o ciano
+   a 38% produz sobre o petrol, a mesma que a faixa do hero ja usa, e o ultimo
+   passo em que a tinta clara ainda passa. Um degrau acima (#105C6C) o filete cai
+   para 2.92 e reprova; dois acima o glacier tambem cai. Por isso o verniz varia
+   PARA BAIXO a partir dela, ao contrario dos cards de dado, onde ele varia para
+   cima a partir do #122224.
+
+   O efeito colateral e o que se queria: as duas faixas de porta da pagina, a do
+   hero e esta, passam a ser da mesma familia de cor.
+
+   O rotulo fica em tinta cheia, nao em ciano: sobre um campo ciano, tinta ciano
+   nao e sinal, e camuflagem. */
+/* ── METAL POR MATIZ ─────────────────────────────────────────────────────────
+   O metal dos outros cards varia VALOR: do escuro ao claro. Este varia MATIZ,
+   com a luminancia travada. E a tecnica da iridescencia -- foil holografico,
+   aluminio anodizado, madreperola -- onde o que muda com o angulo e a cor, nao
+   a luz.
+
+   E ISSO RESOLVE O PROBLEMA DE ACESSIBILIDADE, nao o contorna. Contraste depende
+   de luminancia; com a luminancia travada, o contraste PARA DE VARIAR ao longo
+   do gradiente. Medido em OKLCH numa escala de 5 tons girando 64 graus:
+       por valor (#FFFFFF -> #0EA7C7) ... o contraste varia 9.83
+       por matiz (L=0.42, H 186->250) ... o contraste varia  0.23
+   Nao ha "pior stop" a vigiar aqui, porque todos valem o mesmo.
+
+   A FAIXA E 186..250, centrada no ciano da marca (H=218) com +-32 graus. Alem
+   disso vira verde de um lado e roxo do outro, e a peca deixa de ser Plina.
+
+   O L DO CAMPO E 0.32, E NAO OS 0.42 QUE A CONTA PREVIA. As camadas de luz --
+   brilho especular e conico -- SOMAM luminancia ao campo, e a previsao feita
+   sobre o gradiente puro nao enxerga isso: medido no render, o pico subia a
+   0.194 e a tinta cheia caia para 4.06, reprovando. Escurecida a base e contidos
+   o brilho e o conico, o pico volta ao lugar. A licao vale para qualquer peca
+   com camada de luz: MEDIR NO RENDER, nunca so na formula.
+
+   QUATRO CAMADAS, de cima para baixo:
+     1 · brilho especular, a unica fonte de luz pontual
+     2 · textura escovada: tres repeating de 2, 3 e 5px. Sao PRIMOS entre si,
+         entao o conjunto so se repete a cada 30px e le como aleatorio -- e o que
+         separa metal escovado de listra.
+     3 · o campo por matiz
+     4 · (no ::after) o conico em soft-light, que da a variacao radial que o
+         linear nao produz. soft-light modula sem clarear nem escurecer, entao a
+         razao de contraste da tinta nao se move. */
+.caixa.ciano{position:relative;overflow:hidden;color:#EDF3F2;
+  background:
+    linear-gradient(118deg,transparent 38%,rgba(255,255,255,0.04) 47%,rgba(255,255,255,0.065) 50%,rgba(255,255,255,0.03) 54%,transparent 62%),
+    repeating-linear-gradient(135deg,transparent 0 2px,rgba(255,255,255,0.02) 2px 3px),
+    repeating-linear-gradient(135deg,transparent 0 3px,rgba(6,14,16,0.03) 3px 4px),
+    repeating-linear-gradient(135deg,transparent 0 5px,rgba(255,255,255,0.016) 5px 6px),
+    linear-gradient(135deg,#0B3B37 0%,#083A3E 22%,#0D3944 46%,#153748 72%,#1E354B 100%)}
+.caixa.ciano > *{position:relative;z-index:2}
+.caixa.ciano::after{content:'';position:absolute;inset:-40%;z-index:1;pointer-events:none;
+  background:conic-gradient(from 210deg,#A0DFD7,#0D3944,#B1D5FB,#083A3E,#A1DCEE,#153748,#A0DFD7);
+  mix-blend-mode:soft-light;opacity:0.38}
+.caixa.ciano::before{
+  content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;z-index:3;
+  background:linear-gradient(135deg,rgba(237,243,242,0.55) 0%,rgba(160,207,231,0.2) 36%,rgba(237,243,242,0.05) 58%,rgba(160,207,231,0.45) 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;
+}
+@media (prefers-reduced-motion:reduce){.caixa.ciano::after{opacity:0.35}}
+.caixa.ciano p{color:#EDF3F2}
+.caixa.ciano .ticker{color:rgba(237,243,242,0.85);border-top-color:rgba(237,243,242,0.4)}
+.caixa.ciano .portas a{color:#EDF3F2;border-bottom-color:rgba(237,243,242,0.65)}
+.caixa.ciano .portas a:hover{border-bottom-color:#EDF3F2}
+.caixa.ciano .portas a:active{color:#A0CFE7;border-bottom-color:#A0CFE7}
+.caixa.ciano .portas i{color:rgba(237,243,242,0.85)}
+.caixa.ciano :focus-visible{outline-color:#EDF3F2}
+
+/* A faixa, quando o campo dela e metal: os mesmos elementos, a tinta invertida.
+   O A/B/C sobe para ink .70 (7.33) pelo mesmo motivo que subira para 0.70 no
+   cinza -- ele e o unico rotulo das tres saidas, entao e texto, nao ornamento. */
+.caixa.metal .ticker{color:rgba(237,243,242,0.85);border-top-color:rgba(237,243,242,0.28)}
+.caixa.metal .itens li{border-bottom-color:rgba(237,243,242,0.2)}
+.caixa.metal .itens b{color:rgba(237,243,242,0.7)}
+@supports ((-webkit-background-clip:text) or (background-clip:text)){
+  /* Metal sutil, o mesmo do subtitulo do hero: so ink e glacier, sem cor de
+     marca. Pior stop 9.82 sobre este campo. Vai SO no numero grande -- os dois
+     secundarios ficam em tinta cheia, senao o gesto deixa de distinguir nada. */
+  .caixa.metal .numerao .valor{
+    background:linear-gradient(168deg,#EDF3F2 0%,#EDF3F2 42%,#A0CFE7 72%,#EDF3F2 100%);
+    -webkit-background-clip:text;background-clip:text;
+    -webkit-text-fill-color:transparent;
+  }
+}
+
+/* ── CABECA DE SECAO ─────────────────────────────────────────────────────────
+   Sobrancelha em mono e titulo em Chillax, sempre nessa ordem e sempre no
+   branco. Repetida oito vezes na pagina, e a repeticao e o ponto: e ela que
+   diz ao leitor que uma secao nova comecou, sem precisar de regua nem cor. */
+.cabeca{display:grid;gap:1.5rem}
+.cabeca .sobrancelha{font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.22em;color:rgba(19,39,40,0.65);margin:0;text-transform:uppercase}
+.cabeca h2{font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(2.25rem,4.5vw,3.5rem);line-height:1.1;letter-spacing:-0.022em;margin:0;max-width:16ch;text-wrap:balance}
+.secao{padding:clamp(6rem,12vw,10rem) clamp(20px,6vw,80px)}
+.centro{max-width:1320px;margin:0 auto}
+
+/* ── O NUMERO GRANDE ─────────────────────────────────────────────────────────
+   O gesto que Maple, Ondo, Morpho e Ethena fazem igual: o dado em corpo display
+   ocupa o lugar que seria da ilustracao. Os quatro podem porque o numero e
+   deles. O da Plina e do sistema de consorcio, e a pagina inteira depende de
+   essa diferenca ficar visivel -- por isso a fonte vem colada, no mesmo bloco,
+   e nao em nota de rodape.
+
+   Geist Mono, nao Chillax: numero que carrega sentido e mono, e essa e a
+   assinatura do sistema. Peso 300 em corpo grande, porque o 400 da Geist Mono
+   nesse tamanho fecha as contraformas. */
+.numeros{display:grid;gap:clamp(2.5rem,5vw,4rem)}
+.numerao .valor{display:block;font-family:'Geist Mono',monospace;font-weight:300;font-size:clamp(3rem,8.5vw,6.5rem);line-height:0.95;letter-spacing:-0.03em;color:#132728}
+.numerao .oque{display:block;margin-top:clamp(1rem,2vw,1.5rem);font-size:clamp(1.125rem,1.8vw,1.5rem);line-height:1.4;max-width:30ch;color:#132728}
+.numerao .fonte{display:block;margin-top:0.875rem;font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.06em;color:rgba(19,39,40,0.7)}
+/* Os dois menores dividem a linha: eles confirmam o grande, nao competem com
+   ele. A hierarquia entre os tres e o argumento -- um mercado enorme, e dentro
+   dele a fatia que nao tem para quem vender. */
+.secundarios{display:grid;grid-template-columns:1fr 1fr;gap:clamp(2rem,4vw,3.5rem);padding-top:clamp(2rem,4vw,3rem);border-top:1px solid rgba(19,39,40,0.2)}
+.secundarios .valor{display:block;font-family:'Geist Mono',monospace;font-weight:300;font-size:clamp(1.75rem,3.6vw,2.75rem);line-height:1.05;letter-spacing:-0.02em;color:#132728}
+.secundarios .oque{display:block;margin-top:0.875rem;max-width:26ch;line-height:1.6}
+.secundarios .fonte{display:block;margin-top:0.75rem;font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.06em;color:rgba(19,39,40,0.7)}
+@media (max-width:680px){.secundarios{grid-template-columns:1fr;gap:2rem}}
+
+/* ── ETIQUETA DE RESTRICAO ───────────────────────────────────────────────────
+   O emprestimo mais barato e mais util da Ondo: "Not Available in US" fica no
+   proprio card do produto, na vitrine, e nao num disclaimer de rodape. A
+   restricao de publico vira caracteristica do produto.
+   Contorno, nao preenchimento: preenchida ela viraria mais um ponto de cor
+   disputando com as duas portas. */
+.etiqueta{display:inline-flex;align-items:center;gap:0.5rem;font-family:'Geist Mono',monospace;font-size:0.6875rem;letter-spacing:0.14em;text-transform:uppercase;color:#046C88;border:1px solid rgba(4,108,136,0.4);border-radius:9999px;padding:0.4rem 0.875rem;white-space:nowrap}
+.etiqueta.neutra{color:rgba(19,39,40,0.7);border-color:rgba(19,39,40,0.28)}
+
+/* ── AS DUAS PONTAS ──────────────────────────────────────────────────────────
+   Cedente e investidor lado a lado, com a mesma tipografia e o mesmo peso. A
+   simetria e a mensagem: a Plina nao e uma plataforma de venda com um anexo
+   para investidor, e os dois lados sao a mesma operacao vista de pontas
+   opostas. Cartao nunca dentro de cartao -- estes sao irmaos, nao aninhados. */
+.pontas{display:grid;grid-template-columns:1fr 1fr;gap:clamp(1.5rem,3vw,2.5rem)}
+.ponta{background:#e4e4e4;border-radius:24px;padding:clamp(30px,3.4vw,44px);display:flex;flex-direction:column;gap:1.5rem}
+.ponta .topo{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.ponta h3{font-family:Chillax,sans-serif;font-weight:500;font-size:clamp(1.5rem,2.4vw,2rem);line-height:1.15;letter-spacing:-0.02em;margin:0}
+.ponta p{margin:0;max-width:44ch;line-height:1.7;font-weight:300}
+.ponta dl{margin:0;display:grid;gap:0;border-top:1px solid rgba(19,39,40,0.2)}
+.ponta dl > div{display:flex;align-items:baseline;justify-content:space-between;gap:1.5rem;padding:0.875rem 0;border-bottom:1px solid rgba(19,39,40,0.2)}
+.ponta dt{font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.06em;color:rgba(19,39,40,0.7)}
+.ponta dd{margin:0;font-family:'Geist Mono',monospace;font-size:0.875rem;color:#132728;text-align:right}
+.ponta .saida{margin-top:auto;padding-top:0.5rem}
+@media (max-width:820px){.pontas{grid-template-columns:1fr}}
+
+/* ── A CADEIA ────────────────────────────────────────────────────────────────
+   O acordeao numerado "Institutional Grade In All We Do" da Ondo, traduzido
+   para a cadeia fiduciaria de um FIDC. O elemento details nativo: teclado, leitor de
+   tela e busca do navegador funcionam de graca, e nenhum script precisa
+   existir para o conteudo ser alcancavel.
+
+   O primeiro vem aberto, para que a forma do conteudo se explique sozinha. */
+.cadeia{display:grid;margin-top:clamp(3rem,6vw,4.5rem);border-top:1px solid rgba(19,39,40,0.2)}
+.cadeia details{border-bottom:1px solid rgba(19,39,40,0.2)}
+.cadeia summary{display:grid;grid-template-columns:3.25rem 1fr 2rem;align-items:center;gap:1rem;padding:clamp(1.5rem,3vw,2rem) 0;cursor:pointer;list-style:none;min-height:44px}
+.cadeia summary::-webkit-details-marker{display:none}
+/* 0.70, e nao o 0.2 que o sistema reserva a numeral decorativo: aqui 01..05
+   nomeiam a ordem das funcoes da cadeia, entao sao conteudo e passam em AA.
+   A 0.5 dariam 3.15 e reprovariam. */
+.cadeia summary .n{font-family:'Geist Mono',monospace;font-weight:300;font-size:0.875rem;color:rgba(19,39,40,0.7)}
+.cadeia summary h3{font-family:Geist,sans-serif;font-weight:500;font-size:clamp(1.125rem,1.9vw,1.375rem);line-height:1.3;margin:0}
+/* O sinal gira 45 graus e vira X. Duas linhas de 1px, como o hamburguer: a
+   pagina separa por filete, e nenhum componente inventa outra espessura. */
+.cadeia summary .mais{position:relative;justify-self:end;width:14px;height:14px;transition:transform 300ms cubic-bezier(0.16,1,0.3,1)}
+.cadeia summary .mais::before,.cadeia summary .mais::after{content:'';position:absolute;background:#132728;left:0;top:6.5px;width:14px;height:1px}
+.cadeia summary .mais::after{transform:rotate(90deg)}
+.cadeia details[open] summary .mais{transform:rotate(45deg)}
+.cadeia .corpo{padding:0 2rem clamp(1.75rem,3.5vw,2.5rem) 4.25rem}
+.cadeia .corpo p{margin:0;max-width:60ch;line-height:1.75;font-weight:300;color:rgba(19,39,40,0.85)}
+.cadeia .corpo .base{margin-top:1.25rem;font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.04em;line-height:1.9;color:rgba(19,39,40,0.7)}
+@media (max-width:680px){
+  .cadeia summary{grid-template-columns:2.5rem 1fr 1.5rem;gap:0.75rem}
+  .cadeia .corpo{padding:0 0 1.75rem 3.25rem}
+}
+
+/* ── O REGISTRO ──────────────────────────────────────────────────────────────
+   O que a Morpho faz exibindo Solidity na home: o mecanismo inspecionavel posto
+   em forma. Aqui o equivalente e o registro em Stellar. Tudo em mono, alinhado
+   como tabela, porque o que se quer comunicar e que sao valores conferiveis --
+   nao um grafico de confianca.
+   Estrutura, entao raio 0: a regra do sistema reserva o 24 para painel cheio e
+   deixa tabela, filete e linha em canto reto. */
+.registro{display:grid;gap:0;border-top:1px solid rgba(19,39,40,0.2);margin-top:clamp(2rem,4vw,3rem)}
+.registro > div{display:grid;grid-template-columns:14rem 1fr auto;gap:1.5rem;align-items:baseline;padding:1rem 0;border-bottom:1px solid rgba(19,39,40,0.2)}
+.registro dt,.registro .rotulo{font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.14em;text-transform:uppercase;color:rgba(19,39,40,0.7);margin:0}
+.registro dd,.registro .valor{font-family:'Geist Mono',monospace;font-size:0.9375rem;color:#132728;margin:0;word-break:break-all}
+@media (max-width:680px){.registro > div{grid-template-columns:1fr;gap:0.5rem}}
+
+/* ── LINK DE VERIFICACAO ─────────────────────────────────────────────────── */
+.verificar{font-family:'Geist Mono',monospace;font-size:1rem;color:#046C88;text-decoration:none;border-bottom:1px solid rgba(4,108,136,0.35);padding-bottom:2px;transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)}
+.verificar:hover{border-bottom-color:#046C88}
+.verificar:active{color:#132728;border-bottom-color:#132728}
+.verificar.bloco{display:inline-flex;align-items:center;min-height:44px}
+
+
+/* ── NOTA NO FLUXO ───────────────────────────────────────────────────────────
+   A licao da Ethena: a qualificacao mora no mesmo quadro da afirmacao que ela
+   qualifica, nao no rodape. Se um numero tem ressalva, a ressalva se le sem
+   rolar. */
+.nota{margin:clamp(1.5rem,3vw,2rem) 0 0;padding-top:clamp(1.25rem,2.5vw,1.75rem);border-top:1px solid rgba(19,39,40,0.2);font-family:'Geist Mono',monospace;font-size:0.75rem;line-height:1.9;color:rgba(19,39,40,0.75);max-width:78ch}
+
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:0.01ms !important;animation:none !important}html{scroll-behavior:auto}}
+</style>
+</helmet>
+<div style="font-family:Satoshi,system-ui,sans-serif;font-weight:300;font-size:1.125rem;line-height:1.65">
+<a href="#topo" data-skip="true">Pular para o conteúdo</a>
+<!--
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  v11 — A VERSAO FINAL                                                    ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+
+  Esta e a pagina da Plina OPERANDO. Nao e a pagina de hoje: a v10 continua
+  sendo a landing publicavel da fase atual, e ela e deliberadamente despida de
+  tudo que a v11 tem. Quando a operacao existir, esta pagina substitui aquela.
+
+  ┌─ PLACEHOLDERS ──────────────────────────────────────────────────────────┐
+  │ Todo numero da Plina e todo nome de prestador aqui sao FICTICIOS e estao │
+  │ marcados. Antes de publicar:                                            │
+  │                                                                          │
+  │     grep -n 'data-placeholder' "Plina Landing v11 - Final.dc.html"       │
+  │                                                                          │
+  │ Nenhum deles pode ir ao ar sem o dado real. Os nomes de prestadores e as │
+  │ pessoas do time estao como "[ a preencher ]" DE PROPOSITO: inventar o    │
+  │ nome de um administrador fiduciario seria fabricar um registro sobre uma │
+  │ empresa real, e inventar uma pessoa e pior ainda. A regra vem da v8 e    │
+  │ continua valendo.                                                        │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  ─── O QUE ESTA PAGINA APRENDEU DE MAPLE, ONDO, MORPHO E ETHENA ────────────
+
+  O estudo completo esta em uploads/analise-design-quatro-referencias.md. O que
+  desceu para ca:
+
+  1. O NUMERO NO LUGAR DA ILUSTRACAO. Os quatro sites poem o dado em corpo
+     display perto do topo, e nenhum deles usa desenho abstrato. A Plina faz o
+     mesmo gesto com os numeros da ABAC -- e a diferenca fica visivel, porque a
+     fonte vem colada no mesmo bloco. O numero e grande e e verdadeiro; so nao e
+     da Plina, e a pagina diz isso em voz alta na secao 2.
+
+  2. COMPLIANCE COMO ARGUMENTO. A etiqueta de restricao de publico fica no card
+     do produto (Ondo), a cadeia fiduciaria e um acordeao numerado (Ondo), e
+     toda ressalva mora no mesmo quadro da afirmacao (Ethena). Nada disso e
+     rodape.
+
+  3. O MECANISMO INSPECIONAVEL. A Morpho poe Solidity na home. Aqui o
+     equivalente e o registro em Stellar, em mono, alinhado como tabela.
+
+     A quarta licao da Maple -- o time como prova, que para uma casa nova e a
+     mais forte que existe, porque curriculo e anterior a operacao -- NAO esta
+     nesta pagina. Foi desenhada e retirada. Se um dia entrar, entra entre a
+     verificacao e as portas, que e onde a leitura pede um rosto depois de duas
+     secoes de norma e de codigo.
+
+  4. FUNDO CLARO. Tres dos quatro sao escuros -- e os tres sao infraestrutura
+     cripto falando com cripto. A Maple e credito institucional falando com
+     gente de credito, e a Maple e clara. A companhia da Plina e a Maple.
+
+  ─── A VOZ ────────────────────────────────────────────────────────────────
+
+  "E o que resolvemos", da rodada de heros v17, entra aqui. Em primeira pessoa a
+  frase perde o sujeito, e quem o devolve e o logotipo -- que nesta versao esta
+  na tela desde o primeiro quadro, porque a barra agora e permanente. O achado
+  da v17 fica mais barato de sustentar aqui do que la.
+
+  ─── MANUTENCAO ──────────────────────────────────────────────────────────────
+
+  Os numeros de mercado sao da ABAC, coletados em 21/08/2026, com fonte e
+  periodo na propria pagina. Os dois periodos publicados se validam entre si:
+  309,19 mil contemplacoes e R$ 21,52 bi em jan-fev, contra 753,58 mil e
+  R$ 53,83 bi em jan-mai, dao a mesma media mensal. A ABAC publica mensalmente;
+  em 21/08 o mais recente era maio, divulgado em 30/06. E o unico conteudo NAO
+  placeholder da pagina que envelhece. Fontes:
+    blog.abac.org.br/drops-de-mercado/sistema-de-consorcios-em-maio-2026-dados-economicos
+    blog.abac.org.br/drops-de-mercado/consorcio-se-aproxima-dos-13-milhoes-de-participantes
+-->
+
+<!-- ═══ BARRA DE ANUNCIO ═════════════════════════════════════════════════════
+     Ondo e Maple abrem com ela. O texto abaixo e placeholder: quando houver
+     noticia, ela entra aqui; quando nao houver, a faixa inteira sai. Uma barra
+     de anuncio sem anuncio le como template. -->
+<div class="anuncio" data-placeholder="true">
+  <div>
+    <p>A Plina conclui a estruturação do FIDC sob a Resolução CVM 175</p>
+    <a href="/insights">Ler o comunicado</a>
+  </div>
+</div>
+
+<!-- ═══ A BARRA ══════════════════════════════════════════════════════════════
+     sticky, e nao fixed: a faixa de anuncio rola junto e some, e a barra gruda
+     no topo quando alcanca. Com fixed ela cobriria o anuncio desde o primeiro
+     quadro. -->
+<nav aria-label="Principal" data-principal="true">
+  <div data-barra-interna="true">
+    <a href="#topo" style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.3125rem;letter-spacing:-0.012em;text-decoration:none;flex:none">Plina<span style="color:#046C88">.</span></a>
+    <button type="button" data-menu="true" aria-expanded="false" aria-controls="menu-principal" aria-label="Abrir menu">
+      <span data-hamburguer="true" aria-hidden="true"></span>
+    </button>
+    <div id="menu-principal" data-painel="true">
+      <ul data-secoes="true">
+        <li><a href="#mercado">O mercado</a></li>
+        <li><a href="#operacao">A operação</a></li>
+        <li><a href="#pontas">As duas pontas</a></li>
+        <li><a href="#estrutura">A estrutura</a></li>
+        <li><a href="#registro">Verificação</a></li>
+      </ul>
+      <div data-acoes="true">
+        <a href="/vender">Tenho uma cota contemplada</a>
+        <a href="/entrar" data-entrar="true">Entrar<i aria-hidden="true">&#8594;</i></a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══ 1 · HERO ═════════════════════════════════════════════════════════════
+     A tese, nao o catalogo. Os quatro sites estudados fazem igual: nenhum hero
+     descreve o que a empresa faz operacionalmente, todos declaram uma posicao
+     sobre o mundo. "O credito ja foi contemplado" e uma posicao.
+
+     A altura desconta a barra e o anuncio, porque os dois rolam acima dele. -->
+<header id="topo" data-screen-label="v11 · 1 Hero" style="box-sizing:border-box;min-height:calc(100svh - 2.75rem);display:grid;grid-template-rows:1fr auto;gap:clamp(3rem,6vw,4.5rem);padding:calc(var(--barra) + clamp(1rem,3vw,2.5rem)) clamp(20px,6vw,80px) clamp(2.5rem,5vw,4rem)">
+  <div class="centro" style="width:100%;margin:auto">
+    <div data-split="hero" style="display:grid;grid-template-columns:1.5fr 1fr;gap:clamp(3rem,8vw,8rem);align-items:end">
+      <h1 style="font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(2.75rem,6vw,5.25rem);line-height:1.06;letter-spacing:-0.022em;margin:0;max-width:13ch;text-wrap:balance">O crédito já foi contemplado.</h1>
+      <p style="font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(1.25rem,2.1vw,1.75rem);line-height:1.45;letter-spacing:-0.014em;margin:0;max-width:25ch;text-wrap:balance">O que faltava era liquidez. <span class="destaque">É o que resolvemos.</span></p>
+    </div>
+  </div>
+  <div class="centro" style="width:100%">
+    <div class="caixa noite faixa">
+      <div>
+        <p>O titular de uma cota contemplada já ganhou a carta de crédito. Quem prefere o dinheiro ao bem não tem para quem vender. Compramos esse direito com deságio e pagamos por PIX em até 48 horas.</p>
+        <p class="ticker">FIDC sob a Resolução CVM 175 · Cotas registradas em Stellar</p>
+      </div>
+      <ul class="portas">
+        <li><a href="/vender">Tenho uma cota contemplada<i aria-hidden="true">&#8594;</i></a></li>
+        <li><a href="#mercado">Quero entender a operação<i aria-hidden="true">&#8594;</i></a></li>
+      </ul>
+    </div>
+  </div>
+</header>
+
+<main>
+<!-- ═══ 2 · O MERCADO ════════════════════════════════════════════════════════
+     O EIXO DA PAGINA. Aqui a Plina faz o gesto que Maple, Ondo, Morpho e Ethena
+     fazem com o proprio numero, usando um numero que nao e dela -- e dizendo
+     isso. A honestidade nao enfraquece o argumento: o tamanho do mercado e
+     exatamente o argumento, porque a tese e que falta um comprador nele. -->
+<section id="mercado" data-screen-label="v11 · 2 O mercado" class="secao">
+  <div class="centro">
+    <div data-split="true" style="display:grid;grid-template-columns:1fr 1fr;gap:5rem;align-items:end">
+      <div class="cabeca">
+        <p class="sobrancelha">O mercado</p>
+        <h2 style="max-width:14ch">O crédito existe. O mercado para ele, não.</h2>
+      </div>
+      <div>
+        <p style="margin:0;max-width:52ch">O consórcio forma crédito sem banco, supervisionado pelo Banco Central desde 2008. A cada mês alguém é contemplado e ganha uma carta de crédito de valor de face definido.</p>
+        <p style="margin:1.5rem 0 0;max-width:52ch">A maioria usa a carta e compra o bem. Quem prefere o dinheiro descobre que não há bolsa, não há balcão e não há preço público. É o único ponto da cadeia em que um direito garantido não tem comprador.</p>
+      </div>
+    </div>
+
+    <div class="caixa metal" style="margin-top:clamp(3.5rem,7vw,5.5rem)">
+      <div class="numeros">
+        <div class="numerao">
+          <span class="valor">R$ 232,9 bi</span>
+          <span class="oque">Em créditos comercializados pelo sistema de consórcio em cinco meses</span>
+          <span class="fonte">ABAC · janeiro a maio de 2026</span>
+        </div>
+        <div class="secundarios">
+          <div>
+            <span class="valor">753,58 mil</span>
+            <span class="oque">Contemplações no mesmo período, somando R$ 53,8 bi em cartas de crédito entregues</span>
+            <span class="fonte">ABAC · janeiro a maio de 2026</span>
+          </div>
+          <div>
+            <span class="valor">12,94 mi</span>
+            <span class="oque">Consorciados ativos no Brasil, recorde do Sistema</span>
+            <span class="fonte">ABAC · abril de 2026</span>
+          </div>
+        </div>
+      </div>
+      <p class="nota">Os números acima são do sistema de consórcio brasileiro, não da Plina. São 753,58 mil contemplações em cinco meses, e nenhum mercado onde revendê-las. É esse vão que a operação ocupa.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 3 · A OPERACAO ═══════════════════════════════════════════════════════ -->
+<section id="operacao" data-screen-label="v11 · 3 A operação" class="secao" style="padding-top:0">
+  <div class="centro">
+    <div data-split="true" style="display:grid;grid-template-columns:1.15fr 1fr;gap:clamp(3rem,6vw,5rem);align-items:stretch">
+      <div>
+        <div class="cabeca">
+          <p class="sobrancelha">A operação</p>
+          <h2>Compra o direito, paga por PIX, carrega até a saída.</h2>
+        </div>
+        <p style="margin:clamp(2rem,4vw,2.75rem) 0 0;max-width:52ch">A Plina avalia a cota, apresenta uma proposta com o valor líquido antes de qualquer assinatura, e paga por PIX. O direito é carregado até uma das três saídas.</p>
+        <p style="margin:1.5rem 0 0;max-width:52ch">O cedente não precisa de carteira digital, não precisa entender de tecnologia e não fica exposto ao que acontece depois. Ele recebe e sai.</p>
+        <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.04em;line-height:1.9;color:rgba(19,39,40,0.8);margin:clamp(2rem,4vw,2.75rem) 0 0;max-width:52ch">O direito cedido compõe a carteira de um FIDC sob a Resolução CVM 175, com as cotas emitidas em registro digital auditável.</p>
+      </div>
+      <figure style="margin:0;display:flex;flex-direction:column">
+        <div style="position:relative;flex:1;min-height:clamp(320px,32vw,460px)">
+          <image-slot id="v11-obra" src="./uploads/v5-obra.webp" shape="rect" fit="cover" placeholder="Fotografia: o bem em construção ou em operação. Documental."></image-slot>
+        </div>
+        <figcaption style="font-family:'Geist Mono',monospace;font-size:0.75rem;color:rgba(19,39,40,0.7);margin-top:1rem">O bem. O que a carta de crédito compra à vista.</figcaption>
+      </figure>
+    </div>
+
+    <div class="caixa metal faixa" style="margin-top:clamp(4rem,8vw,6rem)">
+      <div>
+        <p>Três saídas para o mesmo lastro, e é trabalhar as três em conjunto que sustenta o deságio e encurta o prazo médio.</p>
+        <p class="ticker">O direito é carregado até a primeira que se realizar</p>
+      </div>
+      <ul class="itens">
+        <li><h3>Revenda ao comprador-usuário</h3><b>A</b></li>
+        <li><h3>Liquidação pela administradora</h3><b>B</b></li>
+        <li><h3>Prazo de grupo</h3><b>C</b></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 4 · AS DUAS PONTAS ═══════════════════════════════════════════════════
+     Todos os quatro sites separam publico explicitamente -- Maple no subtitulo,
+     Morpho no menu, Ethena por abas, Ondo por produto. A v10 ja separava pelas
+     portas; aqui a separacao ganha corpo, com as condicoes de cada lado lado a
+     lado e na mesma tipografia.
+
+     A ETIQUETA DE RESTRICAO e o emprestimo direto da Ondo: ela fica no card, na
+     vitrine, e nao num aviso de rodape. -->
+<section id="pontas" data-screen-label="v11 · 4 As duas pontas" class="secao" style="padding-top:0">
+  <div class="centro">
+    <div class="cabeca" style="max-width:52ch">
+      <p class="sobrancelha">As duas pontas</p>
+      <h2 style="max-width:20ch">A mesma operação, vista dos dois lados.</h2>
+    </div>
+
+    <div class="pontas" style="margin-top:clamp(3rem,6vw,4.5rem)">
+      <article class="ponta metal">
+        <div class="topo">
+          <h3>Quem cede</h3>
+          <span class="etiqueta neutra">Pessoa física ou jurídica</span>
+        </div>
+        <p>O titular de uma cota já contemplada que prefere o dinheiro ao bem. Recebe uma proposta com o valor líquido antes de assinar, e o PIX cai em até 48 horas.</p>
+        <dl>
+          <div><dt>Pagamento</dt><dd>PIX em até 48h</dd></div>
+          <div><dt>Custo de cadastro</dt><dd>Nenhum</dd></div>
+          <div><dt>Carteira digital</dt><dd>Não é necessária</dd></div>
+          <div><dt>Exposição após a cessão</dt><dd>Nenhuma</dd></div>
+        </dl>
+        <div class="saida">
+          <a href="/vender" class="verificar bloco">Simular a minha cota&nbsp;&#8594;</a>
+        </div>
+      </article>
+
+      <article class="ponta metal">
+        <div class="topo">
+          <h3>Quem investe</h3>
+          <span class="etiqueta">Investidor qualificado</span>
+        </div>
+        <p>Cotas de um FIDC lastreado em direitos creditórios já contemplados, com registro digital auditável e a cadeia de prestadores exigida pela Resolução CVM 175.</p>
+        <dl data-placeholder="true">
+          <div><dt>Veículo</dt><dd>FIDC · CVM 175</dd></div>
+          <div><dt>Registro das cotas</dt><dd>Stellar</dd></div>
+          <div><dt>Aplicação mínima</dt><dd>[ a preencher ]</dd></div>
+          <div><dt>Prazo médio da carteira</dt><dd>[ a preencher ]</dd></div>
+        </dl>
+        <div class="saida">
+          <a href="/investir" class="verificar bloco">Solicitar o prospecto&nbsp;&#8594;</a>
+        </div>
+      </article>
+    </div>
+
+    <p class="nota">A oferta de cotas é restrita a investidores qualificados, nos termos da regulamentação da CVM. Esta página é informativa, não constitui oferta de valores mobiliários e não promete rentabilidade. Condições, prazos e custos constam do regulamento e do prospecto do fundo.</p>
+  </div>
+</section>
+
+<!-- ═══ 5 · A ESTRUTURA ══════════════════════════════════════════════════════
+     O acordeao "Institutional Grade In All We Do" da Ondo, traduzido.
+
+     ATENCAO AO QUE ESTA ESCRITO AQUI: cada item descreve uma EXIGENCIA da
+     CVM 175, nao um fornecedor contratado. Os nomes estao como "[ a preencher ]"
+     porque inventar o nome de um administrador fiduciario seria fabricar um
+     registro sobre uma empresa real. Quando houver contratacao, o nome entra no
+     lugar do marcador e o texto da exigencia continua valendo. -->
+<section id="estrutura" data-screen-label="v11 · 5 A estrutura" class="secao" style="padding-top:0">
+  <div class="centro">
+    <div data-split="true" style="display:grid;grid-template-columns:1fr 1fr;gap:5rem;align-items:end">
+      <div class="cabeca">
+        <p class="sobrancelha">A estrutura</p>
+        <h2 style="max-width:15ch">O que a regra exige, e quem responde por cada parte.</h2>
+      </div>
+      <div>
+        <p style="margin:0;max-width:52ch">Um FIDC não é uma promessa da gestora. É um condomínio com funções separadas por norma, cada uma exercida por uma instituição autorizada e fiscalizável.</p>
+        <p style="margin:1.5rem 0 0;max-width:52ch">A separação é o produto. Ela existe para que nenhuma das partes possa, sozinha, dispor do patrimônio do fundo.</p>
+      </div>
+    </div>
+
+    <div class="cadeia" data-placeholder="true">
+      <details open="open">
+        <summary><span class="n">01</span><h3>Administrador fiduciário</h3><span class="mais" aria-hidden="true"></span></summary>
+        <div class="corpo">
+          <p>Responde pelo fundo perante a CVM e os cotistas. Constitui o fundo, mantém sua escrituração, calcula e divulga o valor da cota, e responde pelo cumprimento do regulamento. É instituição financeira autorizada pela CVM para o exercício da função.</p>
+          <p class="base">Instituição: [ a preencher ] · Resolução CVM 175, Anexo I</p>
+        </div>
+      </details>
+      <details>
+        <summary><span class="n">02</span><h3>Gestor de recursos</h3><span class="mais" aria-hidden="true"></span></summary>
+        <div class="corpo">
+          <p>Decide a aquisição dos direitos creditórios dentro da política de investimento escrita no regulamento. Não tem acesso ao caixa do fundo: ordena, e quem executa e custodia é outra instituição.</p>
+          <p class="base">Instituição: [ a preencher ] · Registro CVM na categoria de gestor de recursos</p>
+        </div>
+      </details>
+      <details>
+        <summary><span class="n">03</span><h3>Custodiante</h3><span class="mais" aria-hidden="true"></span></summary>
+        <div class="corpo">
+          <p>Guarda os ativos do fundo e verifica o lastro dos direitos creditórios adquiridos — isto é, confere que o crédito comprado existe e está documentado antes de o dinheiro sair. É o ponto da estrutura que separa uma carteira auditável de uma planilha.</p>
+          <p class="base">Instituição: [ a preencher ] · Resolução CVM 175</p>
+        </div>
+      </details>
+      <details>
+        <summary><span class="n">04</span><h3>Auditoria independente</h3><span class="mais" aria-hidden="true"></span></summary>
+        <div class="corpo">
+          <p>Audita as demonstrações financeiras do fundo anualmente, com parecer público. A auditoria é obrigatória e não é contratada pela gestora: responde ao administrador e à norma.</p>
+          <p class="base">Instituição: [ a preencher ] · Auditor registrado na CVM</p>
+        </div>
+      </details>
+      <details>
+        <summary><span class="n">05</span><h3>Registro das cotas em Stellar</h3><span class="mais" aria-hidden="true"></span></summary>
+        <div class="corpo">
+          <p>As cotas são espelhadas em registro digital com controle de titularidade na própria rede: só carteiras autorizadas recebem, a autorização é revogável, e a emissão é rastreável desde a origem. O registro não substitui a escrituração do administrador — ele a torna conferível por terceiros, a qualquer momento, sem pedir permissão a ninguém.</p>
+          <p class="base">Ativo: PLINA-RF · Controles: AUTH_REQUIRED, AUTH_REVOCABLE, AUTH_CLAWBACK_ENABLED</p>
+        </div>
+      </details>
+    </div>
+
+    <p class="nota">A estrutura descrita acima é a exigida pela Resolução CVM 175 para fundos de investimento em direitos creditórios. Os nomes das instituições contratadas constam do regulamento do fundo.</p>
+  </div>
+</section>
+
+<!-- ═══ 6 · VERIFICACAO ══════════════════════════════════════════════════════
+     O que a Morpho faz exibindo Solidity: o mecanismo posto em forma. Para uma
+     casa que ainda nao tem historico, esta e a promessa mais barata de manter e
+     a mais dificil de fingir -- nao se promete retorno, promete-se que o que
+     for dito podera ser conferido por quem quiser. -->
+<section id="registro" data-screen-label="v11 · 6 Verificação" class="secao" style="padding-top:0">
+  <div class="centro">
+    <div data-split="true" style="display:grid;grid-template-columns:1fr 1fr;gap:5rem;align-items:end">
+      <div class="cabeca">
+        <p class="sobrancelha">Verificação</p>
+        <h2 style="max-width:15ch">Não peça para acreditar. Confira.</h2>
+      </div>
+      <div>
+        <p style="margin:0;max-width:52ch">O registro das cotas é público. O emissor, os controles de autorização e cada emissão ficam legíveis em qualquer explorador da rede, sem cadastro e sem passar pela Plina.</p>
+      </div>
+    </div>
+
+    <div class="caixa metal" style="margin-top:clamp(3rem,6vw,4.5rem)">
+      <dl class="registro" data-placeholder="true" style="margin-top:0;border-top:0">
+        <div><dt>Ativo</dt><dd>PLINA-RF</dd><dd><span class="etiqueta neutra">Stellar</span></dd></div>
+        <div><dt>Emissor</dt><dd>[ a preencher ]</dd><dd><a href="#" class="verificar">stellar.expert&nbsp;&#8599;</a></dd></div>
+        <div><dt>Controle de titularidade</dt><dd>AUTH_REQUIRED</dd><dd></dd></div>
+        <div><dt>Autorização revogável</dt><dd>AUTH_REVOCABLE</dd><dd></dd></div>
+        <div><dt>Recuperação judicial</dt><dd>AUTH_CLAWBACK_ENABLED</dd><dd><a href="/politica-clawback" class="verificar">política&nbsp;&#8594;</a></dd></div>
+      </dl>
+      <p class="nota">Os controles acima existem por exigência regulatória: uma cota de FIDC só pode ser detida por investidor habilitado, e a titularidade precisa ser reversível por ordem judicial. Eles são a razão de o registro ser em rede autorizada, e não em ativo de livre circulação.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 7 · AS OUTRAS PORTAS ═════════════════════════════════════════════════
+     A segunda e ultima faixa de porta. O hero abre com duas, esta fecha com as
+     outras duas: a pagina comeca e termina perguntando quem chegou.
+
+     As duas sao de porta, mas nao sao da mesma cor. No hero o campo e opaco
+     (#0D4E5B, que e o proprio ciano a 38% ja resolvido sobre o petrol), porque
+     la existe uma imagem atras e um campo translucido deixaria o fractal
+     atravessar o texto. Aqui o chao e branco, e o ciano lavado a 38% e o que a
+     pagina usa em toda faixa de porta.
+
+     Ciano so aqui e la, que e a regra -- e numa pagina de oito secoes ela custa
+     mais disciplina do que custava numa de cinco. -->
+<section id="portas" aria-label="Ferramentas: simular a cota ou comparar as contas" data-screen-label="v11 · 7 Outras portas" class="secao" style="padding-top:0;padding-bottom:0">
+  <div class="centro">
+    <div class="caixa ciano faixa">
+      <div>
+        <p>Duas coisas que você resolve sozinho, sem falar com ninguém e sem cadastro: descobrir quanto vale a sua cota, ou comparar uma carta de crédito com um financiamento.</p>
+        <p class="ticker">Resultado na hora, na própria página</p>
+      </div>
+      <ul class="portas">
+        <li><a href="/vender">Simular a minha cota<i aria-hidden="true">&#8594;</i></a></li>
+        <li><a href="/comprar">Comparar as duas contas<i aria-hidden="true">&#8594;</i></a></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 9 · CONTATO ══════════════════════════════════════════════════════════ -->
+<section id="contato" data-screen-label="v11 · 8 Contato" class="secao">
+  <div class="centro">
+    <div data-split="true" style="display:grid;grid-template-columns:1fr 1fr;gap:5rem;align-items:start">
+      <div>
+        <div class="cabeca">
+          <p class="sobrancelha">Contato</p>
+          <h2 style="max-width:14ch">Falar com o time.</h2>
+        </div>
+        <p style="margin:2rem 0 0;max-width:44ch">Diga de que lado você chega e o time responde com o que faz sentido: uma proposta pela sua cota, ou o prospecto e uma conversa sobre a operação.</p>
+        <ul style="list-style:none;margin:2.5rem 0 0;padding:0;font-family:'Geist Mono',monospace;font-size:0.75rem;line-height:2.2;letter-spacing:0.04em;color:rgba(19,39,40,0.7)">
+          <li>Resposta em até 48 horas</li>
+          <li>A simulação não passa por aqui, e não pede cadastro</li>
+        </ul>
+      </div>
+      <div>
+        <form onSubmit="{{ submitLead }}" id="lead-form" style="display:flex;flex-direction:column;gap:2rem">
+          <div style="display:flex;flex-direction:column;gap:0.625rem">
+            <label for="f-nome" style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.2em;text-transform:uppercase;color:rgba(19,39,40,0.65)">Nome completo *</label>
+            <input id="f-nome" name="nome" type="text" required="required" autoComplete="name" style="font-family:Satoshi,sans-serif;font-weight:300;font-size:1.125rem;color:#132728;background:transparent;border:0;border-bottom:1px solid rgba(19,39,40,0.5);padding:0 0 12px;min-height:44px;transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)" style-focus="border-bottom:1px solid #046C88;outline:none" />
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.625rem">
+            <label for="f-email" style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.2em;text-transform:uppercase;color:rgba(19,39,40,0.65)">E-mail *</label>
+            <input id="f-email" name="email" type="email" required="required" autoComplete="email" aria-describedby="f-hint" style="font-family:Satoshi,sans-serif;font-weight:300;font-size:1.125rem;color:#132728;background:transparent;border:0;border-bottom:1px solid rgba(19,39,40,0.5);padding:0 0 12px;min-height:44px;transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)" style-focus="border-bottom:1px solid #046C88;outline:none" />
+            <span id="f-hint" style="font-family:'Geist Mono',monospace;font-size:0.75rem;color:rgba(19,39,40,0.65)">A resposta é enviada para este endereço.</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.625rem">
+            <label for="f-interesse" style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.2em;text-transform:uppercase;color:rgba(19,39,40,0.65)">De que lado você chega *</label>
+            <select id="f-interesse" name="interesse" required="required" style="font-family:Satoshi,sans-serif;font-weight:300;font-size:1.125rem;color:#132728;background:transparent;border:0;border-bottom:1px solid rgba(19,39,40,0.5);padding:0 0 12px;min-height:44px;appearance:none;-webkit-appearance:none;transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)" style-focus="border-bottom:1px solid #046C88;outline:none">
+              <option value="">Selecione</option>
+              <option>Tenho uma cota contemplada</option>
+              <option>Quero investir na operação</option>
+              <option>Administradora de consórcio</option>
+              <option>Parceria ou distribuição</option>
+              <option>Imprensa</option>
+              <option>Outro</option>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.625rem">
+            <label for="f-org" style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.2em;text-transform:uppercase;color:rgba(19,39,40,0.65)">Organização</label>
+            <input id="f-org" name="org" type="text" autoComplete="organization" aria-describedby="f-org-hint" style="font-family:Satoshi,sans-serif;font-weight:300;font-size:1.125rem;color:#132728;background:transparent;border:0;border-bottom:1px solid rgba(19,39,40,0.5);padding:0 0 12px;min-height:44px;transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)" style-focus="border-bottom:1px solid #046C88;outline:none" />
+            <span id="f-org-hint" style="font-family:'Geist Mono',monospace;font-size:0.75rem;color:rgba(19,39,40,0.7)">Opcional. Quem chega como cotista não precisa preencher.</span>
+          </div>
+          <div style="display:flex;gap:0.875rem;align-items:flex-start;margin-top:0.5rem">
+            <input id="f-lgpd" name="lgpd" type="checkbox" required="required" style="margin-top:10px;accent-color:#046C88;width:20px;height:20px;flex:none" />
+            <label for="f-lgpd" style="font-size:1.125rem;line-height:1.6;color:rgba(19,39,40,0.7)">Autorizo o uso dos dados para contato sobre a operação, tratados conforme a LGPD e não compartilhados com terceiros.</label>
+          </div>
+          <div id="f-erro" role="alert" style="display:none;border-top:1px solid #B3261E;padding-top:1rem">
+            <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;line-height:1.6;color:#B3261E;margin:0">Não foi possível enviar. As informações preenchidas foram preservadas. Tente novamente, ou escreva para contato@plina.finance.</p>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:1.5rem;align-items:center;justify-content:space-between;margin-top:1rem">
+            <button id="f-submit" type="submit" style="font-family:Geist,sans-serif;font-weight:600;font-size:1.125rem;letter-spacing:0.02em;background:#046C88;color:#ffffff;border:0;cursor:pointer;padding:18px 40px;border-radius:9999px;transition:background-color 500ms cubic-bezier(0.16,1,0.3,1),color 500ms cubic-bezier(0.16,1,0.3,1)" style-hover="background:#132728;color:#ffffff">Falar com o time</button>
+            <a href="mailto:contato@plina.finance" style="font-family:'Geist Mono',monospace;font-size:0.75rem;color:rgba(19,39,40,0.7);text-decoration:none;border-bottom:1px solid rgba(19,39,40,0.2);padding-bottom:2px">contato@plina.finance</a>
+          </div>
+        </form>
+        <div id="lead-ok" role="status" tabindex="-1" style="display:none;border-top:1px solid #046C88;padding-top:2rem">
+          <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.2em;color:#046C88;margin:0;text-transform:uppercase">Mensagem recebida</p>
+          <p style="margin:1.25rem 0 0;max-width:46ch">O time responde para <span id="f-echo" style="font-family:'Geist Mono',monospace;font-size:1.125rem;color:#132728">o endereço informado</span>. Se você tem uma cota contemplada, a simulação não precisa esperar por nós.</p>
+          <a href="/vender" class="verificar bloco" style="margin-top:0.5rem">Simular a minha cota&nbsp;&#8594;</a>
+          <button id="f-corrigir" type="button" style="font-family:Geist,sans-serif;font-weight:600;font-size:1.125rem;background:transparent;color:#046C88;border:0;border-bottom:1px solid rgba(4,108,136,0.4);padding:0 0 3px;margin-top:1.75rem;cursor:pointer;display:block">Corrigir os dados</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer style="padding:clamp(3rem,6vw,5rem) clamp(20px,6vw,80px);border-top:1px solid rgba(19,39,40,0.12)">
+  <div class="centro" style="display:flex;flex-wrap:wrap;gap:2rem 4rem;align-items:baseline;justify-content:space-between">
+    <span style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.3125rem;letter-spacing:-0.012em">Plina<span style="color:#046C88">.</span></span>
+    <p style="margin:0;max-width:60ch;font-size:0.75rem;line-height:1.7;color:rgba(19,39,40,0.7)">A Plina Finance não é corretora nem distribuidora de valores mobiliários. Esta página é informativa e não constitui oferta, recomendação ou promessa de rentabilidade. A oferta de cotas do fundo é restrita a investidores qualificados e se dá exclusivamente por meio dos documentos do fundo.</p>
+    <div style="display:flex;gap:2rem;align-items:baseline">
+      <a href="https://www.linkedin.com/company/plina-finance/" target="_blank" rel="noopener noreferrer" style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.1em;color:rgba(19,39,40,0.7);text-decoration:none;text-transform:uppercase">LinkedIn</a>
+      <span style="font-family:'Geist Mono',monospace;font-size:0.75rem;color:rgba(19,39,40,0.65);white-space:nowrap">© 2026</span>
+    </div>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  componentDidMount() {
+    this._ios = [];
+    this.montarMenu();
+    this.montarSecoes();
+    this.montarBarra();
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    // Uma gramatica so: o titulo se revela, a fotografia abre. Nada mais se mexe.
+    const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)';
+    // Quem e observado e o PAI, nunca o alvo. O Chromium desconta o clip-path do
+    // proprio elemento ao calcular a intersecao: observar o alvo ja escondido
+    // devolve ratio 0 para sempre e o titulo nao aparece nunca.
+    const alvos = [];
+    document.querySelectorAll('h1, main h2').forEach((el) => alvos.push({ el: el, pai: el.parentElement, tipo: 'unmask' }));
+    document.querySelectorAll('image-slot').forEach((el) => {
+      const caixa = el.parentElement;
+      if (caixa) alvos.push({ el: caixa, pai: caixa.parentElement, tipo: 'aperture' });
+    });
+    const vivos = alvos.filter((a) => a.el && a.pai);
+    vivos.forEach((a) => {
+      a.el.setAttribute('data-revelar', '');
+      a.el.style.clipPath = a.tipo === 'unmask' ? 'inset(0 0 100% 0)' : 'inset(6% 6% 6% 6%)';
+      a.el.style.transition = 'clip-path ' + (a.tipo === 'unmask' ? '1000ms ' : '1200ms ') + EASE;
+    });
+    const revelar = (a) => {
+      a.el.style.clipPath = a.tipo === 'unmask' ? 'inset(0 0 -25% 0)' : 'inset(0% 0% 0% 0%)';
+      a.el.removeAttribute('data-revelar');
+    };
+    const observador = (tipo, opcoes) => new IntersectionObserver((entradas, obs) => {
+      entradas.forEach((en) => {
+        if (!en.isIntersecting) return;
+        vivos.filter((a) => a.pai === en.target && a.tipo === tipo).forEach(revelar);
+        obs.unobserve(en.target);
+      });
+    }, opcoes);
+    const io = observador('unmask', { threshold: 0.15, rootMargin: '0px 0px -6% 0px' });
+    const ioFoto = observador('aperture', { threshold: [0, 0.4], rootMargin: '0px 0px -5% 0px' });
+    vivos.forEach((a) => (a.tipo === 'unmask' ? io : ioFoto).observe(a.pai));
+    this._ios.push(io, ioFoto);
+    // Rede de seguranca: se o observer nao revelar, o que esta na tela aparece
+    // assim mesmo. Titulo invisivel e falha de conteudo, nao de animacao.
+    const varrer = () => {
+      const presos = document.querySelectorAll('[data-revelar]');
+      if (!presos.length) { window.removeEventListener('scroll', agendar); return; }
+      Array.prototype.forEach.call(presos, (el) => {
+        const r = el.getBoundingClientRect();
+        if (r.top > window.innerHeight || r.bottom < 0) return;
+        el.style.transition = '';
+        el.style.clipPath = '';
+        el.removeAttribute('data-revelar');
+      });
+    };
+    let pendente = 0;
+    const agendar = () => {
+      if (pendente) return;
+      pendente = window.setTimeout(() => { pendente = 0; varrer(); }, 1200);
+    };
+    this._rede = window.setTimeout(varrer, 2600);
+    this._agendar = agendar;
+    window.addEventListener('scroll', agendar, { passive: true });
+  }
+  // O drawer. Fechar tem quatro caminhos porque sao quatro intencoes diferentes,
+  // e cada uma tem um destino de foco proprio.
+  montarMenu() {
+    const nav = document.querySelector('nav[data-principal]');
+    const botao = nav && nav.querySelector('[data-menu]');
+    if (!nav || !botao) return;
+    const fechar = (devolverFoco) => {
+      if (!nav.hasAttribute('data-aberto')) return;
+      nav.removeAttribute('data-aberto');
+      botao.setAttribute('aria-expanded', 'false');
+      botao.setAttribute('aria-label', 'Abrir menu');
+      // So no Escape. Nos outros tres o leitor ja esta olhando outro lugar, e
+      // puxar o foco de volta para o botao seria tira-lo de la.
+      if (devolverFoco) botao.focus();
+    };
+    const abrir = () => {
+      nav.setAttribute('data-aberto', '');
+      botao.setAttribute('aria-expanded', 'true');
+      botao.setAttribute('aria-label', 'Fechar menu');
+    };
+    botao.addEventListener('click', () => (nav.hasAttribute('data-aberto') ? fechar(false) : abrir()));
+    // Escolher um item fecha: o painel cobre o topo da pagina, e ficar aberto
+    // sobre o destino da ancora esconde justamente o que o leitor pediu.
+    Array.prototype.forEach.call(nav.querySelectorAll('[data-painel] a'), (a) => {
+      a.addEventListener('click', () => fechar(false));
+    });
+    this._aoTeclar = (e) => { if (e.key === 'Escape') fechar(true); };
+    document.addEventListener('keydown', this._aoTeclar);
+    this._aoClicarFora = (e) => { if (!nav.contains(e.target)) fechar(false); };
+    document.addEventListener('click', this._aoClicarFora);
+    // Voltar ao desktop com o painel aberto deixaria data-aberto pendurado, e o
+    // hamburguer voltaria em X na proxima vez que a janela encolhesse.
+    const mq = window.matchMedia('(min-width: 1081px)');
+    const aoTrocar = () => { if (mq.matches) fechar(false); };
+    mq.addEventListener('change', aoTrocar);
+    this._mq = { mq: mq, fn: aoTrocar };
+  }
+  // A barra troca de pele quando o hero acaba. Nao e mostrar e esconder: sao
+  // dois estados, e o gatilho e a posicao, nao a direcao da rolagem.
+  //
+  // QUEM E OBSERVADO E O HERO INTEIRO, e nao uma sentinela de 1px no fim dele.
+  // Uma sentinela fina nunca chega a intersectar quando o hero e mais alto que a
+  // janela: ela vai de "abaixo da dobra" direto para "acima dela" sem cruzar
+  // limiar nenhum, e o observer nao notifica. O hero, sendo alto, cruza sempre.
+  //
+  // rootMargin recua o topo em -var(--barra): a troca acontece quando o fim do
+  // hero encosta na BARRA, nao no topo da janela. Sem isso a barra ainda estaria
+  // clara sobre os ultimos pixels escuros do hero.
+  montarBarra() {
+    const barra = document.querySelector('nav[data-principal]');
+    const hero = document.getElementById('topo');
+    if (!barra || !hero) return;
+    const alt = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--barra')) || 4.5;
+    const px = Math.round(alt * parseFloat(getComputedStyle(document.documentElement).fontSize || 16));
+    const io = new IntersectionObserver((entradas) => {
+      entradas.forEach((en) => {
+        if (en.isIntersecting) barra.removeAttribute('data-solida');
+        else barra.setAttribute('data-solida', '');
+      });
+    }, { threshold: 0, rootMargin: (-px) + 'px 0px 0px 0px' });
+    io.observe(hero);
+    this._ios.push(io);
+  }
+  // A secao em leitura. A margem recorta uma faixa fina do terco superior da
+  // janela e a secao que ocupa essa faixa e a ativa: e a linha por onde o olho
+  // le, nao a que esta mais visivel. Sem isso, uma secao curta perto do rodape
+  // nunca ganharia o destaque.
+  //
+  // [data-secoes], e nao toda ancora da barra: o logotipo tambem aponta para
+  // #topo, e no hero ele ganharia o filete ciano do estado ativo, competindo com
+  // o ponto ciano que e a marca. Logotipo nao e item de menu.
+  //
+  // O Map guarda a ordem do documento, entao quando duas secoes dividem a faixa
+  // a de cima vence, que e a que o leitor acabou de deixar para tras.
+  montarSecoes() {
+    const links = Array.prototype.slice.call(document.querySelectorAll('nav[data-principal] [data-secoes] a[href^="#"]'));
+    const mapa = new Map();
+    links.forEach((a) => {
+      const alvo = document.getElementById(a.getAttribute('href').slice(1));
+      if (alvo) mapa.set(alvo, a);
+    });
+    if (!mapa.size) return;
+    const dentro = new Set();
+    const pintar = () => {
+      let ativo = null;
+      mapa.forEach((a, secao) => { if (!ativo && dentro.has(secao)) ativo = a; });
+      links.forEach((a) => {
+        // location, e nao page: a secao esta dentro desta pagina, nao e outra.
+        if (a === ativo) a.setAttribute('aria-current', 'location');
+        else a.removeAttribute('aria-current');
+      });
+    };
+    const io = new IntersectionObserver((entradas) => {
+      entradas.forEach((en) => {
+        if (en.isIntersecting) dentro.add(en.target);
+        else dentro.delete(en.target);
+      });
+      pintar();
+    }, { rootMargin: '-25% 0px -65% 0px', threshold: 0 });
+    mapa.forEach((a, secao) => io.observe(secao));
+    this._ios.push(io);
+  }
+  componentWillUnmount() {
+    (this._ios || []).forEach((io) => io.disconnect());
+    window.clearTimeout(this._rede);
+    if (this._agendar) window.removeEventListener('scroll', this._agendar);
+    if (this._aoTeclar) document.removeEventListener('keydown', this._aoTeclar);
+    if (this._aoClicarFora) document.removeEventListener('click', this._aoClicarFora);
+    if (this._mq) this._mq.mq.removeEventListener('change', this._mq.fn);
+  }
+  renderVals() {
+    return {
+      submitLead: (e) => {
+        e.preventDefault();
+        const form = document.getElementById('lead-form');
+        const ok = document.getElementById('lead-ok');
+        const erro = document.getElementById('f-erro');
+        const btn = document.getElementById('f-submit');
+        const echo = document.getElementById('f-echo');
+        const email = (document.getElementById('f-email') || {}).value;
+        if (erro) erro.style.display = 'none';
+        if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; btn.style.opacity = '0.6'; btn.style.cursor = 'wait'; }
+        // Substituir por POST real. O caminho de erro ja existe e preserva o preenchido.
+        window.setTimeout(() => {
+          if (btn) { btn.disabled = false; btn.textContent = 'Falar com o time'; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
+          if (echo && email) echo.textContent = email;
+          if (form) form.style.display = 'none';
+          if (ok) { ok.style.display = 'block'; ok.focus(); }
+        }, 900);
+      }
+    };
+  }
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest || !e.target.closest('#f-corrigir')) return;
+  const form = document.getElementById('lead-form');
+  const ok = document.getElementById('lead-ok');
+  if (ok) ok.style.display = 'none';
+  if (form) { form.style.display = 'flex'; const em = document.getElementById('f-email'); if (em) em.focus(); }
+});
+</script>
+</body>
+</html>

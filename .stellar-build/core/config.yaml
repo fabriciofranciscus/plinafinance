@@ -1,0 +1,12 @@
+# stellar-build / BMAD — core config (team-scoped, versionado)
+#
+# Lido por: party-mode e demais skills que carregam `core/config.yaml`.
+# Para sobrescrever só na sua máquina, crie `core/config.user.yaml` ao lado
+# deste arquivo — ele é ignorado pelo git.
+
+user_name: Thais
+communication_language: pt-BR
+project_name: Plina
+
+# Contexto persistente carregado pelas personas e pelo party-mode.
+project_knowledge: project-context.md

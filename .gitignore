@@ -66,3 +66,11 @@ test-results/
 
 # Docs de implementação locais (notas de trabalho, não versionadas)
 docs/M0-foundation-fase1.md
+
+# stellar-build / BMAD — camadas pessoais (o resto do .stellar-build é versionado)
+.stellar-build/**/*.user.toml
+.stellar-build/**/*.user.yaml
+.stellar-build/scripts/__pycache__/
+
+# fontes embutidas do dossiê (regeneráveis)
+scripts/dossie/fonts/

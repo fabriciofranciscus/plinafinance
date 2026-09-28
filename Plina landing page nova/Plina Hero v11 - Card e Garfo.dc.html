@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=chillax@400,500,600&f[]=satoshi@300,400,500&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@300;400&display=swap" />
+<style>
+body{margin:0;background:#ffffff;color:#132728;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit}
+:focus-visible{outline:2px solid #046C88;outline-offset:4px}
+
+/* Etiqueta da folha de comparação. Não faz parte do desenho. */
+.rotulo{font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.16em;text-transform:uppercase;color:#046C88;padding:0.875rem clamp(20px,6vw,80px);border-top:1px solid rgba(19,39,40,0.12);border-bottom:1px solid rgba(19,39,40,0.12);background:#e4e4e4}
+.rotulo b{color:rgba(19,39,40,0.7);font-weight:400;text-transform:none;letter-spacing:0.04em}
+
+/* ── Peças herdadas da v8 ───────────────────────────────────────────────────
+   Texto e card do hero da v8, sem a faixa de dados. O que muda é só o que a
+   fase atual permite afirmar: o parágrafo perde a oração sobre o FIDC e a
+   estrutura passa para o ticker, como destino e não como fato consumado. */
+.h1{font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(2.75rem,6vw,5.25rem);line-height:1.08;letter-spacing:-0.018em;margin:0;max-width:13ch;text-wrap:balance}
+.sub{font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(1.25rem,2.1vw,1.75rem);line-height:1.5;letter-spacing:-0.008em;color:rgba(19,39,40,0.7);margin:clamp(1.5rem,3vw,2.25rem) 0 0;max-width:25ch;text-wrap:balance}
+.marca{font-weight:600;color:#132728}
+.marca span{color:#046C88}
+
+/* Caixa. Sem arestas, conforme o motivo visual da marca. */
+.caixa{position:relative;z-index:1;background:rgba(14,167,199,0.5);color:#132728;border-radius:24px;padding:clamp(28px,3.2vw,44px) clamp(26px,2.8vw,40px)}
+/* Peso 500: sobre campo colorido, tinta fina perde nitidez mesmo com razão alta. */
+.caixa p{margin:0;max-width:44ch;line-height:1.7;font-weight:500}
+.caixa .ticker{font-family:'Geist Mono',monospace;font-size:0.75rem;line-height:1.9;color:rgba(19,39,40,0.85);margin:clamp(1rem,2vw,1.5rem) 0 0;padding-top:clamp(1rem,2vw,1.25rem);border-top:1px solid rgba(19,39,40,0.3);max-width:none;font-weight:400}
+
+/* Pílula, como o sistema define para botão. Sobre o campo ciano a tinta escura
+   é o que mantém a razão alta: branco sobre ciano é 2.85 e é proibido. */
+.pilula{display:inline-flex;align-items:center;gap:0.875rem;margin-top:clamp(1.25rem,2.5vw,1.75rem);padding:17px 36px;border-radius:9999px;background:#132728;color:#ffffff;font-family:Geist,sans-serif;font-weight:600;font-size:1.125rem;letter-spacing:0.01em;text-decoration:none;transition:background-color 500ms cubic-bezier(0.16,1,0.3,1),color 500ms cubic-bezier(0.16,1,0.3,1)}
+.pilula:hover{background:#046C88;color:#ffffff}
+.pilula:active{background:#0B1A1B;color:#ffffff}
+.pilula i{font-family:'Geist Mono',monospace;font-style:normal;font-weight:400;font-size:1rem}
+
+/* ── O garfo, herdado da v10 ────────────────────────────────────────────────
+   Duas audiências, mesma narrativa, ações diferentes. Onde o card já carrega
+   uma ação, o garfo tem de ceder peso, senão o hero pede três coisas de uma vez. */
+.fork{display:grid;grid-template-columns:1fr 1fr;gap:clamp(2rem,4vw,3.5rem);list-style:none;padding:0;margin:0}
+.fork > li{border-top:1px solid rgba(19,39,40,0.25);padding-top:clamp(1.5rem,3vw,2rem)}
+.fork h2{font-family:Chillax,sans-serif;font-weight:500;font-size:clamp(1.375rem,2.2vw,1.75rem);line-height:1.3;letter-spacing:-0.012em;margin:0;max-width:22ch;text-wrap:balance}
+.fork p{margin:0.75rem 0 0;max-width:36ch;color:rgba(19,39,40,0.7)}
+.fork a{display:inline-flex;align-items:center;min-height:44px;margin-top:1rem;font-family:'Geist Mono',monospace;font-size:1rem;color:#046C88;text-decoration:none;border-bottom:1px solid rgba(4,108,136,0.35);transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)}
+.fork a:hover{border-bottom-color:#046C88}
+.fork a:active{color:#132728;border-bottom-color:#132728}
+/* Variante enxuta: só o título e o link, sem a linha de apoio. */
+.fork.curto h2{font-size:clamp(1.125rem,1.6vw,1.3125rem);font-family:Geist,sans-serif;font-weight:600;letter-spacing:-0.005em}
+
+/* Porta dentro do card, para a variação C. Herda a tinta do campo ciano. */
+.porta-card{display:inline-flex;align-items:center;min-height:44px;margin-top:1.25rem;font-family:'Geist Mono',monospace;font-size:1rem;color:#132728;text-decoration:none;border-bottom:1px solid rgba(19,39,40,0.45);transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)}
+.porta-card:hover{border-bottom-color:#132728}
+
+/* Faixa da variação D: o card vira banda horizontal e guarda as duas portas. */
+.faixa{display:grid;grid-template-columns:1.3fr 1fr;gap:clamp(2.5rem,5vw,4.5rem);align-items:center}
+.faixa .portas{list-style:none;margin:0;padding:0;display:grid;gap:1.25rem}
+.faixa .portas a{display:flex;align-items:center;justify-content:space-between;gap:1.5rem;min-height:56px;padding:0 0 0.875rem;border-bottom:1px solid rgba(19,39,40,0.35);font-family:Geist,sans-serif;font-weight:600;font-size:1.125rem;text-decoration:none;transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)}
+.faixa .portas a:hover{border-bottom-color:#132728}
+.faixa .portas i{font-family:'Geist Mono',monospace;font-style:normal;font-weight:400;font-size:1rem}
+
+@media (max-width:1000px){[data-split="hero"]{grid-template-columns:1fr !important;gap:2.5rem !important}}
+@media (max-width:820px){
+  [data-split]{grid-template-columns:1fr !important;gap:2rem !important}
+  .fork{grid-template-columns:1fr;gap:1.75rem}
+  .faixa{grid-template-columns:1fr;gap:2rem}
+}
+@media (prefers-reduced-motion:reduce){*{transition-duration:0.01ms !important}}
+</style>
+</helmet>
+<div style="font-family:Satoshi,system-ui,sans-serif;font-weight:300;font-size:1.125rem;line-height:1.65">
+
+<!--
+  Hero v11 — o texto e o card da v8, sem a faixa de dados, dentro da lógica da
+  v10 (sem tração, sem histórico, duas audiências, neutro sobre o tempo).
+
+  O PONTO DE TENSÃO que as quatro variações testam: o card da v8 traz um CTA, e
+  a v10 precisa de duas portas. Somados sem critério, o hero pede três coisas ao
+  mesmo tempo e não pede nenhuma direito. Cada variação resolve isso de um jeito.
+
+  O QUE MUDOU NO TEXTO HERDADO, e por quê:
+  · o parágrafo do card perdeu "e o carrega num FIDC cujas cotas são emitidas em
+    registro digital auditável" — afirma um veículo que ainda não existe;
+  · o ticker deixou de ser "PLINA-RF · FIDC sob a Resolução CVM 175" e passou a
+    "Estrutura de destino", que descreve o desenho sem datar nem afirmar operação.
+  O H1 e o subtítulo vieram intactos: são o insight, e o insight não depende de
+  tração nenhuma para ser verdadeiro.
+-->
+
+<!-- ═══════════════════════════════ A ═══════════════════════════════ -->
+<div class="rotulo">A · card com CTA + garfo abaixo &nbsp;<b>a leitura mais literal do pedido. Três ações no mesmo viewport: o botão do card e as duas portas. Mais completa, e a que mais divide a atenção.</b></div>
+<header data-screen-label="v11 A · Card com CTA" style="padding:clamp(3.5rem,7vw,5.5rem) clamp(20px,6vw,80px) clamp(4rem,8vw,7rem)">
+  <div style="max-width:1320px;margin:0 auto">
+    <div data-split="hero" style="display:grid;grid-template-columns:1.5fr 1fr;gap:clamp(3rem,8vw,8rem);align-items:start">
+      <div>
+        <h1 class="h1">O crédito já foi contemplado.</h1>
+        <p class="sub">O que faltava era liquidez. É o que resolve a <span class="marca">Plina<span>.</span></span></p>
+      </div>
+      <div class="caixa">
+        <p>O titular de uma cota contemplada já ganhou a carta de crédito. Quem prefere o dinheiro ao bem não tem para quem vender. A Plina compra esse direito com deságio e paga por PIX em até 48 horas.</p>
+        <p class="ticker">Estrutura de destino · FIDC sob a Resolução CVM 175</p>
+        <a href="#" class="pilula">Falar com o time<i aria-hidden="true">&#8594;</i></a>
+      </div>
+    </div>
+
+    <ul class="fork" style="margin-top:clamp(3.5rem,7vw,5.5rem)">
+      <li>
+        <h2>Você tem uma cota contemplada.</h2>
+        <p>Receba uma proposta pelo seu direito, sem precisar esperar o bem.</p>
+        <a href="/vender">Simular a minha cota&nbsp;&#8594;</a>
+      </li>
+      <li>
+        <h2>Você quer entender a operação.</h2>
+        <p>De onde vem o crédito, como ele é comprado e o que dá para verificar.</p>
+        <a href="#gap">Ver como funciona&nbsp;&#8594;</a>
+      </li>
+    </ul>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════ B ═══════════════════════════════ -->
+<div class="rotulo">B · card sem botão, garfo como única ação &nbsp;<b>o card volta a ser o que ele é bom em ser: a síntese. Quem decide para onde ir é o garfo. Uma decisão por vez, e o card não compete com ele.</b></div>
+<header data-screen-label="v11 B · Card sem botão" style="padding:clamp(3.5rem,7vw,5.5rem) clamp(20px,6vw,80px) clamp(4rem,8vw,7rem)">
+  <div style="max-width:1320px;margin:0 auto">
+    <div data-split="hero" style="display:grid;grid-template-columns:1.5fr 1fr;gap:clamp(3rem,8vw,8rem);align-items:start">
+      <div>
+        <h1 class="h1">O crédito já foi contemplado.</h1>
+        <p class="sub">O que faltava era liquidez. É o que resolve a <span class="marca">Plina<span>.</span></span></p>
+      </div>
+      <div class="caixa">
+        <p>O titular de uma cota contemplada já ganhou a carta de crédito. Quem prefere o dinheiro ao bem não tem para quem vender. A Plina compra esse direito com deságio e paga por PIX em até 48 horas.</p>
+        <p class="ticker">Estrutura de destino · FIDC sob a Resolução CVM 175</p>
+      </div>
+    </div>
+
+    <ul class="fork" style="margin-top:clamp(3.5rem,7vw,5.5rem)">
+      <li>
+        <h2>Você tem uma cota contemplada.</h2>
+        <p>Receba uma proposta pelo seu direito, sem precisar esperar o bem.</p>
+        <a href="/vender">Simular a minha cota&nbsp;&#8594;</a>
+      </li>
+      <li>
+        <h2>Você quer entender a operação.</h2>
+        <p>De onde vem o crédito, como ele é comprado e o que dá para verificar.</p>
+        <a href="#gap">Ver como funciona&nbsp;&#8594;</a>
+      </li>
+    </ul>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════ C ═══════════════════════════════ -->
+<div class="rotulo">C · o card é a porta do investidor &nbsp;<b>a bifurcação vira composição em vez de fileira. O cedente entra pela esquerda, embaixo do título; o investidor entra pelo card. Duas ações, não três, e cada público tem endereço próprio.</b></div>
+<header data-screen-label="v11 C · Card é uma porta" style="padding:clamp(3.5rem,7vw,5.5rem) clamp(20px,6vw,80px) clamp(4rem,8vw,7rem)">
+  <div style="max-width:1320px;margin:0 auto">
+    <div data-split="hero" style="display:grid;grid-template-columns:1.5fr 1fr;gap:clamp(3rem,8vw,8rem);align-items:start">
+      <div>
+        <h1 class="h1">O crédito já foi contemplado.</h1>
+        <p class="sub">O que faltava era liquidez. É o que resolve a <span class="marca">Plina<span>.</span></span></p>
+        <div style="margin-top:clamp(2.5rem,5vw,3.5rem);border-top:1px solid rgba(19,39,40,0.25);padding-top:clamp(1.5rem,3vw,2rem);max-width:34ch">
+          <h2 style="font-family:Chillax,sans-serif;font-weight:500;font-size:clamp(1.375rem,2.2vw,1.75rem);line-height:1.3;letter-spacing:-0.012em;margin:0;text-wrap:balance">Você tem uma cota contemplada.</h2>
+          <p style="margin:0.75rem 0 0;color:rgba(19,39,40,0.7)">Receba uma proposta pelo seu direito, sem precisar esperar o bem.</p>
+          <a href="/vender" style="display:inline-flex;align-items:center;min-height:44px;margin-top:1rem;font-family:'Geist Mono',monospace;font-size:1rem;color:#046C88;text-decoration:none;border-bottom:1px solid rgba(4,108,136,0.35)" style-hover="border-bottom:1px solid #046C88">Simular a minha cota&nbsp;&#8594;</a>
+        </div>
+      </div>
+      <div class="caixa">
+        <p>O titular de uma cota contemplada já ganhou a carta de crédito. Quem prefere o dinheiro ao bem não tem para quem vender. A Plina compra esse direito com deságio e paga por PIX em até 48 horas.</p>
+        <p class="ticker">Estrutura de destino · FIDC sob a Resolução CVM 175</p>
+        <a href="#gap" class="porta-card">Ver como funciona&nbsp;&#8594;</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════ D ═══════════════════════════════ -->
+<div class="rotulo">D · o card vira faixa e guarda as duas portas &nbsp;<b>título em largura cheia, e um objeto só embaixo: síntese à esquerda, as duas portas à direita, ambas dentro do ciano. O hero fica mais curto e mais compacto, e o card ganha função em vez de só peso.</b></div>
+<header data-screen-label="v11 D · Faixa com as portas" style="padding:clamp(3.5rem,7vw,5.5rem) clamp(20px,6vw,80px) clamp(4rem,8vw,7rem)">
+  <div style="max-width:1320px;margin:0 auto">
+    <div data-split="hero" style="display:grid;grid-template-columns:1.5fr 1fr;gap:clamp(3rem,8vw,8rem);align-items:end">
+      <h1 class="h1">O crédito já foi contemplado.</h1>
+      <p class="sub" style="margin:0">O que faltava era liquidez. É o que resolve a <span class="marca">Plina<span>.</span></span></p>
+    </div>
+
+    <div class="caixa faixa" style="margin-top:clamp(3rem,6vw,4.5rem)">
+      <div>
+        <p>O titular de uma cota contemplada já ganhou a carta de crédito. Quem prefere o dinheiro ao bem não tem para quem vender. A Plina compra esse direito com deságio e paga por PIX em até 48 horas.</p>
+        <p class="ticker">Estrutura de destino · FIDC sob a Resolução CVM 175</p>
+      </div>
+      <ul class="portas">
+        <li><a href="/vender">Tenho uma cota contemplada<i aria-hidden="true">&#8594;</i></a></li>
+        <li><a href="#gap">Quero entender a operação<i aria-hidden="true">&#8594;</i></a></li>
+      </ul>
+    </div>
+  </div>
+</header>
+
+</div>
+</x-dc>
+</body>
+</html>

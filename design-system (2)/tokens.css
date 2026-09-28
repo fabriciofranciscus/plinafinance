@@ -1,0 +1,334 @@
+/* ============================================================================
+   Plina Finance Design System v1.1 — framework-agnostic CSS custom properties.
+   Generated from tokens.json. Drop into any project; no build step required.
+   Full doctrine: plina-design-system.md
+   ========================================================================= */
+
+/* Fonts — Chillax + Satoshi via Fontshare, Geist + Geist Mono via Google */
+@import url('https://api.fontshare.com/v2/css?f[]=chillax@400,500,600,700&f[]=satoshi@300,400,500,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@300;400;500&display=swap');
+
+:root {
+  /* ---- Surfaces: the three-surface sandwich. Never add a fourth. ---------- */
+  --plina-sheet-white: #ffffff;
+  --plina-document-grey: #e4e4e4;
+  --plina-deep-petrol: #132728;
+
+  /* ---- Backdrop: décor canvas for the blob motif. Not a content surface. -- */
+  --plina-abyss: #080f10;
+
+  /* ---- Signal: pick the step by surface. See the contrast table. --------- */
+  --plina-signal-500: #0EA7C7; /* dark surfaces + fills only */
+  --plina-signal-600: #057A99; /* AA on sheet-white only (4.94:1) */
+  --plina-signal-700: #046C88; /* AA on BOTH light surfaces — safe default */
+
+  /* ---- Support: dark surfaces only. ------------------------------------- */
+  --plina-stellar-mid: #4A9ED4;
+  --plina-glacier-tint: #A0CFE7;
+
+  /* ---- Ink ------------------------------------------------------------- */
+  --plina-ink-on-light: var(--plina-deep-petrol);
+  --plina-ink-on-light-muted: rgba(19, 39, 40, 0.7);
+  --plina-ink-on-light-faint: rgba(19, 39, 40, 0.2);
+  --plina-ink-on-dark: var(--plina-document-grey);
+  --plina-ink-on-dark-muted: var(--plina-glacier-tint);
+  --plina-ink-on-signal: var(--plina-deep-petrol); /* never white on cyan */
+
+  /* ---- Hairlines: the only structural separator. ------------------------ */
+  --plina-hairline: rgba(19, 39, 40, 0.12);
+  --plina-hairline-dark: rgba(255, 255, 255, 0.1);
+  --plina-hairline-dark-tinted: rgba(160, 207, 231, 0.1);
+
+  /* ---- State ----------------------------------------------------------- */
+  /* Focus rings are surface-aware too: signal-500 is only 2.85:1 / 2.24:1 on the
+     light surfaces and fails the 3:1 non-text minimum (WCAG 2.2 SC 1.4.11). */
+  --plina-focus-ring-on-light: var(--plina-signal-700);
+  --plina-focus-ring-on-dark: var(--plina-signal-500);
+  --plina-focus-ring: var(--plina-focus-ring-on-light);
+  --plina-danger: #B3261E;
+  --plina-danger-on-dark: #F2B8B5;
+
+  /* ---- Type families --------------------------------------------------- */
+  --plina-font-display: 'Chillax', 'Satoshi', sans-serif;
+  --plina-font-body: 'Satoshi', system-ui, sans-serif;
+  --plina-font-label: 'Geist', sans-serif;
+  --plina-font-mono: 'Geist Mono', monospace;
+
+  /* ---- Type scale ------------------------------------------------------ */
+  --plina-text-display: clamp(2rem, 5vw, 3.75rem);
+  --plina-text-headline: clamp(1.875rem, 3.5vw, 3rem);
+  --plina-text-title: 1.5rem;
+  --plina-text-body-lead: 1.25rem;
+  --plina-text-body: 1.125rem;
+  --plina-text-body-small: 0.875rem;
+  --plina-text-eyebrow: 0.625rem;
+  --plina-text-label: 0.6875rem;
+  --plina-text-data: 0.875rem;
+  --plina-text-data-micro: 0.75rem;
+
+  --plina-tracking-display: -0.02em;
+  --plina-tracking-headline: -0.015em;
+  --plina-tracking-label: 0.2em;
+  --plina-tracking-wide: 0.4em;
+  --plina-tracking-data: 0.05em;
+
+  /* ---- Radius: binary by doctrine. deck is presentation-only. ----------- */
+  --plina-radius-none: 0px;
+  --plina-radius-full: 9999px;
+  --plina-radius-deck: 24px;
+
+  /* ---- Space ----------------------------------------------------------- */
+  --plina-space-hairline: 1px;
+  --plina-space-xs: 8px;
+  --plina-space-sm: 16px;
+  --plina-space-md: 32px;
+  --plina-space-lg: 64px;
+  --plina-space-xl: 128px;
+  --plina-space-xxl: 160px;
+  --plina-gutter: clamp(24px, 8vw, 120px);
+  --plina-measure: 70ch;
+  --plina-content-max: 1280px;
+
+  /* ---- Motion: one easing for the whole system. ------------------------- */
+  --plina-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --plina-duration-instant: 150ms;
+  --plina-duration-fast: 300ms;
+  --plina-duration-base: 500ms;
+  --plina-duration-slow: 700ms;
+  --plina-duration-reveal: 900ms;
+
+  /* ---- Elevation: the system's only shadow. ----------------------------- */
+  --plina-shadow-cta: 0 20px 25px -5px rgba(14, 167, 199, 0.2);
+}
+
+/* ============================================================================
+   Type primitives
+   ========================================================================= */
+
+.plina-display {
+  font-family: var(--plina-font-display); font-weight: 600;
+  font-size: var(--plina-text-display); line-height: 1.05;
+  letter-spacing: var(--plina-tracking-display);
+}
+.plina-headline {
+  font-family: var(--plina-font-display); font-weight: 600;
+  font-size: var(--plina-text-headline); line-height: 1.1;
+  letter-spacing: var(--plina-tracking-headline);
+}
+.plina-title {
+  font-family: var(--plina-font-display); font-weight: 600;
+  font-size: var(--plina-text-title); line-height: 1.2; letter-spacing: -0.01em;
+}
+.plina-body {
+  font-family: var(--plina-font-body); font-weight: 300;
+  font-size: var(--plina-text-body); line-height: 1.6;
+  max-width: var(--plina-measure);
+}
+
+/* Eyebrow — opens every section, never a display heading alone.
+   Default is the light-surface-safe cyan; override on dark. */
+.plina-eyebrow {
+  font-family: var(--plina-font-label); font-weight: 700;
+  font-size: var(--plina-text-eyebrow); line-height: 1.4;
+  letter-spacing: var(--plina-tracking-label); text-transform: uppercase;
+  color: var(--plina-signal-700);
+}
+.plina-eyebrow--on-dark { color: var(--plina-signal-500); letter-spacing: var(--plina-tracking-wide); }
+
+.plina-label {
+  font-family: var(--plina-font-label); font-weight: 700;
+  font-size: var(--plina-text-label); letter-spacing: var(--plina-tracking-label);
+  text-transform: uppercase;
+}
+
+/* The Mono-For-Data Rule — every number that carries meaning. */
+.plina-data {
+  font-family: var(--plina-font-mono); font-weight: 500;
+  letter-spacing: var(--plina-tracking-data); font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================================
+   Structure
+   ========================================================================= */
+
+.plina-hairline { border-color: var(--plina-hairline); }
+.plina-hairline--dark { border-color: var(--plina-hairline-dark); }
+
+/* Hairline grid: cards separated by the mesh beneath, not by their own borders. */
+.plina-grid-hairline { display: grid; gap: 1px; background-color: var(--plina-hairline); }
+.plina-grid-hairline > * {
+  background-color: var(--plina-sheet-white);
+  padding: var(--plina-space-md);
+  border-radius: var(--plina-radius-none);
+  transition: background-color var(--plina-duration-base) var(--plina-ease);
+}
+
+.plina-section { padding-block: var(--plina-space-xl); padding-inline: var(--plina-gutter); }
+.plina-section--lead { padding-block: var(--plina-space-xxl); }
+
+/* ============================================================================
+   Components
+   ========================================================================= */
+
+.plina-btn {
+  font-family: var(--plina-font-label); font-weight: 700;
+  font-size: var(--plina-text-eyebrow); letter-spacing: var(--plina-tracking-label);
+  text-transform: uppercase; border-radius: var(--plina-radius-full);
+  border: 0; cursor: pointer; min-height: 44px;
+  transition: background-color var(--plina-duration-fast) var(--plina-ease),
+              color var(--plina-duration-fast) var(--plina-ease),
+              border-color var(--plina-duration-fast) var(--plina-ease);
+}
+.plina-btn:focus-visible {
+  outline: 2px solid var(--plina-focus-ring); outline-offset: 4px;
+}
+/* On a dark panel, opt the ring up to the vibrant step. */
+.plina-canvas .plina-btn:focus-visible,
+.plina-on-dark .plina-btn:focus-visible {
+  outline-color: var(--plina-focus-ring-on-dark);
+}
+.plina-btn--primary {
+  padding: 20px 40px;
+  background-color: var(--plina-deep-petrol); color: var(--plina-sheet-white);
+}
+/* Deep Petrol on cyan — 5.47:1. White on cyan would be 2.85:1 and is forbidden. */
+.plina-btn--primary:hover {
+  background-color: var(--plina-signal-500); color: var(--plina-ink-on-signal);
+}
+.plina-btn--ghost {
+  padding: 10px 20px;
+  background-color: var(--plina-sheet-white); color: var(--plina-deep-petrol);
+}
+.plina-btn--ghost:hover { background-color: var(--plina-document-grey); }
+.plina-btn--quiet {
+  padding: 10px 20px; background-color: transparent;
+  color: var(--plina-ink-on-dark); border: 1px solid var(--plina-hairline-dark);
+}
+.plina-btn--quiet:hover { color: var(--plina-signal-500); border-color: var(--plina-signal-500); }
+
+/* The one shadow in the system: the single lead-capture CTA, on hover only. */
+.plina-btn--lead-cta:hover { box-shadow: var(--plina-shadow-cta); }
+
+.plina-input {
+  font-family: var(--plina-font-body); font-weight: 400; font-size: 1rem;
+  padding: 16px 28px; border-radius: var(--plina-radius-full);
+  border: 1px solid var(--plina-hairline);
+  background-color: rgba(228, 228, 228, 0.2); color: var(--plina-deep-petrol);
+  transition: border-color var(--plina-duration-fast) var(--plina-ease);
+}
+.plina-input:focus { outline: none; border-color: var(--plina-signal-500); }
+.plina-input[aria-invalid='true'] { border-color: var(--plina-danger); }
+
+.plina-chip {
+  font-family: var(--plina-font-label); font-weight: 700;
+  font-size: var(--plina-text-eyebrow); letter-spacing: var(--plina-tracking-label);
+  text-transform: uppercase; padding: 8px 16px;
+  border-radius: var(--plina-radius-full); border: 1px solid var(--plina-hairline);
+  background-color: var(--plina-document-grey); color: var(--plina-ink-on-light-muted);
+}
+
+/* Sharp corners, no shadow. Depth is tonal. */
+.plina-card {
+  background-color: var(--plina-sheet-white); color: var(--plina-ink-on-light);
+  padding: var(--plina-space-md); border-radius: var(--plina-radius-none); box-shadow: none;
+  transition: background-color var(--plina-duration-base) var(--plina-ease);
+}
+
+/* Announcement bar — Deep Petrol on cyan, never white. */
+.plina-topbar {
+  background-color: var(--plina-signal-500); color: var(--plina-ink-on-signal);
+  font-family: var(--plina-font-label); font-weight: 700;
+  font-size: var(--plina-text-eyebrow); letter-spacing: var(--plina-tracking-label);
+  text-transform: uppercase; padding: 10px 24px;
+}
+
+/* ---- The signature pattern: numbered list item -------------------------- */
+.plina-item {
+  position: relative; padding-block: var(--plina-space-lg);
+  border-bottom: 1px solid var(--plina-hairline);
+}
+.plina-item__bar {
+  position: absolute; left: 0; top: 0; width: 1px; height: 100%;
+  background-color: var(--plina-signal-500);
+  transform: scaleY(0); transform-origin: top;
+  transition: transform var(--plina-duration-slow) var(--plina-ease);
+}
+.plina-item:hover .plina-item__bar { transform: scaleY(1); }
+.plina-item__numeral {
+  font-family: var(--plina-font-mono); font-weight: 300;
+  color: var(--plina-ink-on-light-faint);
+  transition: color var(--plina-duration-fast) var(--plina-ease);
+}
+.plina-item:hover .plina-item__numeral { color: var(--plina-signal-700); }
+
+/* ============================================================================
+   Motif — Ambient Light Blobs. Décor only: dark surfaces, behind content.
+   Never on a light surface, never behind or inside a content card.
+   ========================================================================= */
+
+.plina-canvas { position: relative; overflow: hidden; background-color: var(--plina-abyss); }
+.plina-blob { position: absolute; border-radius: 50%; pointer-events: none; z-index: 1; }
+.plina-blob--primary {
+  width: 480px; height: 480px; filter: blur(40px);
+  background: radial-gradient(ellipse at center,
+    rgba(14, 167, 199, 0.22) 0%, rgba(14, 167, 199, 0.06) 45%, transparent 70%);
+}
+.plina-blob--secondary {
+  width: 320px; height: 520px; filter: blur(50px);
+  background: radial-gradient(ellipse at center, rgba(14, 167, 199, 0.13) 0%, transparent 65%);
+}
+.plina-blob--support {
+  width: 200px; height: 380px; filter: blur(45px);
+  background: radial-gradient(ellipse at center, rgba(74, 158, 212, 0.1) 0%, transparent 60%);
+}
+.plina-blob--whisper {
+  width: 160px; height: 300px; filter: blur(55px);
+  background: radial-gradient(ellipse at center, rgba(14, 167, 199, 0.07) 0%, transparent 60%);
+}
+.plina-canvas > :not(.plina-blob) { position: relative; z-index: 10; }
+
+/* Cover art and full-bleed hero imagery only. Never over readable text. */
+.plina-fractal-overlay {
+  position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  background-image: repeating-linear-gradient(90deg,
+    rgba(0, 0, 0, 0.3) 0px, rgba(255, 255, 255, 0.02) 1px,
+    rgba(255, 255, 255, 0.005) 12px, rgba(0, 0, 0, 0.3) 13px);
+  mix-blend-mode: overlay;
+}
+
+/* ============================================================================
+   Motion
+   ========================================================================= */
+
+.plina-reveal {
+  opacity: 0; transform: translateY(20px);
+  transition: opacity var(--plina-duration-reveal) var(--plina-ease),
+              transform var(--plina-duration-reveal) var(--plina-ease);
+}
+.plina-reveal.is-active { opacity: 1; transform: none; }
+
+.plina-skip-link {
+  position: absolute; top: -100px; left: 16px; z-index: 100;
+  background: var(--plina-deep-petrol); color: var(--plina-sheet-white);
+  padding: 12px 24px; border-radius: var(--plina-radius-full);
+  font-family: var(--plina-font-label); font-weight: 700;
+  font-size: 0.75rem; text-transform: uppercase;
+  letter-spacing: var(--plina-tracking-label);
+  transition: top var(--plina-duration-instant) var(--plina-ease);
+}
+/* The skip link renders on a Deep Petrol pill, so it takes the dark-surface ring. */
+.plina-skip-link:focus { top: 16px; outline: 2px solid var(--plina-focus-ring-on-dark); outline-offset: 4px; }
+
+::selection { background-color: var(--plina-signal-500); color: var(--plina-deep-petrol); }
+
+@media (prefers-reduced-motion: reduce) {
+  .plina-reveal { opacity: 1; transform: none; transition: none; }
+  .plina-item__bar { transition: none; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

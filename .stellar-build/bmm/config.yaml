@@ -1,0 +1,25 @@
+# stellar-build / BMAD Method (bmm) — config do módulo (team-scoped, versionado)
+#
+# Lido por: prd, product-brief, prfaq, create-ux-design, create-architecture,
+# create-epics-and-stories, dev-story e as seis personas.
+# Para sobrescrever só na sua máquina, crie `bmm/config.user.yaml` ao lado
+# deste arquivo — ele é ignorado pelo git.
+
+user_name: Thais
+project_name: Plina
+
+# Idioma da conversa com o usuário e dos documentos gerados.
+communication_language: pt-BR
+document_output_language: pt-BR
+
+# Onde os workflows gravam e varrem artefatos de planejamento.
+# Aponta para a pasta de docs existente, para que a detecção de conclusão
+# enxergue o que já foi produzido (PRD-plina-v1.md, DOCUMENTACAO-TECNICA.md…).
+planning_artifacts: docs
+output_folder: docs
+
+# Contexto do projeto carregado como fato na ativação das personas.
+project_knowledge: project-context.md
+
+# Resolvido em tempo de execução pelo agente — não fixar.
+date: system-generated

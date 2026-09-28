@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=chillax@400,500,600&f[]=satoshi@300,400,500&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@300;400&display=swap" />
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#ffffff;color:#132728;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+:focus-visible{outline:2px solid #046C88;outline-offset:4px}
+
+/* Etiqueta da folha de comparação. Não faz parte do desenho. */
+.rotulo{font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.16em;text-transform:uppercase;color:#046C88;padding:0.875rem clamp(20px,6vw,80px);border-top:1px solid rgba(19,39,40,0.12);border-bottom:1px solid rgba(19,39,40,0.12);background:#e4e4e4}
+.rotulo b{color:rgba(19,39,40,0.7);font-weight:400;text-transform:none;letter-spacing:0.04em}
+
+/* Barra idêntica à da v10, 77px. */
+.barra{border-bottom:1px solid rgba(19,39,40,0.12)}
+.barra > div{max-width:1320px;margin:0 auto;padding:0.875rem clamp(20px,6vw,80px);display:flex;align-items:center;justify-content:space-between;gap:1.5rem}
+.logo{display:inline-flex;align-items:center;min-height:44px;font-family:Chillax,sans-serif;font-weight:600;font-size:1.3125rem;letter-spacing:-0.012em;text-decoration:none}
+.logo span{color:#046C88}
+.barra .links{display:flex;align-items:center;gap:2rem;font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.06em;color:rgba(19,39,40,0.62)}
+.barra .cta{font-family:Geist,sans-serif;font-weight:500;font-size:0.75rem;color:#132728;border-bottom:1px solid rgba(19,39,40,0.3);padding-bottom:3px}
+
+.tela{height:clamp(580px,80vh,820px)}
+.centro{max-width:1320px;width:100%;margin:0 auto}
+.gut{padding:clamp(2.5rem,5vw,4rem) clamp(20px,6vw,80px)}
+
+/* ── As peças, na versão elegante já aprovada ───────────────────────────────
+   O texto é o mesmo em todas as seis, palavra por palavra. A única variável é
+   COMO A MARCA APARECE, que é o buraco que a Thais apontou: hoje ela é sempre
+   subordinada, nunca protagonista. */
+.h1{font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(2.5rem,5.2vw,4.5rem);line-height:1.06;letter-spacing:-0.022em;margin:0;max-width:13ch;text-wrap:balance}
+.sub{font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(1.125rem,1.9vw,1.625rem);line-height:1.45;letter-spacing:-0.014em;color:rgba(19,39,40,0.7);margin:0;max-width:26ch;text-wrap:balance}
+
+/* A MARCA EM ESCALA. O ponto cresce junto: ele é a marca, e num corpo grande
+   é ele que assina. Peso 500, não 600: em display, 600 engorda o desenho. */
+.marca-display{font-family:Chillax,sans-serif;font-weight:500;letter-spacing:-0.03em;line-height:0.92;color:#132728;margin:0;display:block}
+.marca-display span{color:#046C88}
+/* Dentro de frase, a marca não esmaece nunca. */
+.marca{font-weight:600;color:#132728}
+.marca span{color:#046C88}
+
+.caixa{background:rgba(14,167,199,0.38);color:#132728;border-radius:24px;padding:clamp(30px,3.4vw,48px) clamp(28px,3vw,44px)}
+.caixa p{margin:0;max-width:52ch;line-height:1.75;font-weight:300}
+.caixa .ticker{font-family:'Geist Mono',monospace;font-size:0.75rem;line-height:1.9;color:rgba(19,39,40,0.85);margin:clamp(1rem,2vw,1.5rem) 0 0;padding-top:clamp(1rem,2vw,1.25rem);border-top:1px solid rgba(19,39,40,0.22);max-width:none}
+.faixa{display:grid;grid-template-columns:1.3fr 1fr;gap:clamp(2rem,4vw,4rem);align-items:start}
+.portas{list-style:none;margin:0;padding:0;display:grid;gap:1rem}
+.portas a{display:flex;align-items:center;justify-content:space-between;gap:1.5rem;min-height:60px;padding:0 0 1rem;border-bottom:1px solid rgba(19,39,40,0.24);font-family:Geist,sans-serif;font-weight:500;font-size:1.125rem;text-decoration:none;transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)}
+.portas a:hover{border-bottom-color:#132728}
+.portas i{font-family:'Geist Mono',monospace;font-style:normal;font-weight:300;font-size:0.875rem;color:rgba(19,39,40,0.55)}
+
+.eyebrow{font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.22em;text-transform:uppercase;color:rgba(19,39,40,0.62);margin:0}
+
+@media (max-width:900px){
+  .tela{height:auto}
+  [data-arranjo]{grid-template-columns:1fr !important;gap:2rem !important}
+  .faixa{grid-template-columns:1fr;gap:1.75rem}
+}
+@media (prefers-reduced-motion:reduce){*{transition-duration:0.01ms !important}}
+</style>
+</helmet>
+<div style="font-family:Satoshi,system-ui,sans-serif;font-weight:300;font-size:1.125rem;line-height:1.65">
+
+<!--
+  Hero v16 — a marca. Seis apresentações do mesmo texto.
+
+  O DIAGNÓSTICO. Hoje "Plina" aparece duas vezes no hero e nas duas é
+  subordinada: na barra a 21px, e dentro do subtítulo como complemento de uma
+  frase em tinta a 70%. A marca nunca tem um momento próprio, e é por isso que
+  ela some.
+
+  A PERGUNTA DE DESENHO não é "aumentar a fonte". É onde a marca ganha escala
+  SEM roubar o momento do insight, que é o ativo mais forte que a página tem.
+  Cada variação responde isso de um jeito, e o custo de cada uma é diferente.
+
+  O TEXTO É O MESMO NAS SEIS, palavra por palavra. Só muda a apresentação.
+
+  O PONTO CRESCE JUNTO em todas: ele é a marca, e num corpo grande é ele que
+  assina. Peso 500 e não 600 no display, porque em corpo grande o 600 engorda
+  o desenho da Chillax.
+-->
+
+<!-- ═══════════════════════════ A ═══════════════════════════ -->
+<div class="rotulo">A · atual, para comparação &nbsp;<b>a marca vive dentro do subtítulo, em tinta apagada. É o que a Thais apontou: some.</b></div>
+<div class="barra"><div><a href="#" class="logo">Plina<span>.</span></a><div class="links"><span>Tenho uma cota contemplada</span><span class="cta">Falar com o time</span></div></div></div>
+<header data-screen-label="v16 A · Atual" class="tela gut" style="display:flex;align-items:center">
+  <div class="centro">
+    <div data-arranjo="true" style="display:grid;grid-template-columns:1.5fr 1fr;gap:clamp(2rem,6vw,6rem);align-items:end">
+      <h1 class="h1">O crédito já foi contemplado.</h1>
+      <p class="sub">O que faltava era liquidez. É o que resolve a <span class="marca">Plina<span>.</span></span></p>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════ B ═══════════════════════════ -->
+<div class="rotulo">B · a assinatura cresce na frase &nbsp;<b>o texto continua idêntico, mas a frase quebra e "Plina." desce em corpo de display. A marca vira o desfecho da sentença, não um complemento dela. Custo zero de hierarquia: o insight continua sendo a manchete.</b></div>
+<div class="barra"><div><a href="#" class="logo">Plina<span>.</span></a><div class="links"><span>Tenho uma cota contemplada</span><span class="cta">Falar com o time</span></div></div></div>
+<header data-screen-label="v16 B · Assinatura na frase" class="tela gut" style="display:flex;align-items:center">
+  <div class="centro">
+    <div data-arranjo="true" style="display:grid;grid-template-columns:1.5fr 1fr;gap:clamp(2rem,6vw,6rem);align-items:end">
+      <h1 class="h1">O crédito já foi contemplado.</h1>
+      <div>
+        <p class="sub" style="max-width:24ch">O que faltava era liquidez. É o que resolve a</p>
+        <span class="marca-display" style="font-size:clamp(2.75rem,4.6vw,4rem);margin-top:clamp(0.5rem,1.2vw,1rem)">Plina<span>.</span></span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════ C ═══════════════════════════ -->
+<div class="rotulo">C · marca e insight no mesmo peso &nbsp;<b>duas colunas de igual escala: a afirmação à esquerda, a marca à direita, e o subtítulo em mono embaixo dela. Diz "isto é uma tese, e ela tem dono" sem que um domine o outro.</b></div>
+<div class="barra"><div><a href="#" class="logo">Plina<span>.</span></a><div class="links"><span>Tenho uma cota contemplada</span><span class="cta">Falar com o time</span></div></div></div>
+<header data-screen-label="v16 C · Mesmo peso" class="tela gut" style="display:flex;align-items:center">
+  <div class="centro">
+    <div data-arranjo="true" style="display:grid;grid-template-columns:1.4fr 1fr;gap:clamp(2rem,6vw,6rem);align-items:end">
+      <h1 class="h1">O crédito já foi contemplado.</h1>
+      <div>
+        <span class="marca-display" style="font-size:clamp(3rem,5.2vw,4.5rem)">Plina<span>.</span></span>
+        <p class="eyebrow" style="margin-top:clamp(1.25rem,2.5vw,1.75rem);line-height:2;letter-spacing:0.14em;max-width:34ch">O que faltava era liquidez.<br>É o que resolve.</p>
+        <!-- A linha perde as duas ultimas palavras de proposito: o display acima ja
+             e o sujeito da frase, e repetir "a Plina" logo abaixo dele e eco, nao
+             enfase. A sentenca se completa pela composicao, que e o argumento
+             desta variacao. E a unica das seis que mexe no texto. -->
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════ D ═══════════════════════════ -->
+<div class="rotulo">D · a marca abre &nbsp;<b>Plina primeiro, em corpo médio, e a afirmação embaixo. Ordem de leitura: quem somos, o que sabemos, o que fazemos. É a estrutura mais convencional das seis, e a mais fácil de entender.</b></div>
+<div class="barra"><div><a href="#" class="logo">Plina<span>.</span></a><div class="links"><span>Tenho uma cota contemplada</span><span class="cta">Falar com o time</span></div></div></div>
+<header data-screen-label="v16 D · A marca abre" class="tela gut" style="display:flex;align-items:center">
+  <div class="centro">
+    <span class="marca-display" style="font-size:clamp(2.25rem,3.4vw,3rem)">Plina<span>.</span></span>
+    <div data-arranjo="true" style="display:grid;grid-template-columns:1.5fr 1fr;gap:clamp(2rem,6vw,6rem);align-items:end;margin-top:clamp(2.5rem,5vw,4rem)">
+      <h1 class="h1">O crédito já foi contemplado.</h1>
+      <p class="sub">O que faltava era liquidez. É o que resolve a <span class="marca">Plina<span>.</span></span></p>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════ E ═══════════════════════════ -->
+<div class="rotulo">E · a marca assina a faixa &nbsp;<b>o hero fica intacto e a marca aparece em escala dentro do campo ciano, assinando a síntese. A faixa deixa de ser um bloco de texto e passa a ser uma declaração com autor.</b></div>
+<div class="barra"><div><a href="#" class="logo">Plina<span>.</span></a><div class="links"><span>Tenho uma cota contemplada</span><span class="cta">Falar com o time</span></div></div></div>
+<header data-screen-label="v16 E · Assina a faixa" class="tela" style="display:grid;grid-template-rows:1fr auto;gap:clamp(2rem,4vw,3.5rem);padding:clamp(2.5rem,5vw,4rem) clamp(20px,6vw,80px) clamp(2rem,4vw,3rem)">
+  <div class="centro" style="margin:auto">
+    <div data-arranjo="true" style="display:grid;grid-template-columns:1.5fr 1fr;gap:clamp(2rem,6vw,6rem);align-items:end">
+      <h1 class="h1">O crédito já foi contemplado.</h1>
+      <p class="sub">O que faltava era liquidez. É o que resolve a <span class="marca">Plina<span>.</span></span></p>
+    </div>
+  </div>
+  <div class="centro">
+    <div class="caixa faixa">
+      <div>
+        <span class="marca-display" style="font-size:clamp(2.25rem,3.2vw,2.875rem);margin-bottom:clamp(1.25rem,2.5vw,1.75rem)">Plina<span>.</span></span>
+        <p>O titular de uma cota contemplada já ganhou a carta de crédito. Quem prefere o dinheiro ao bem não tem para quem vender. A Plina compra esse direito com deságio e paga por PIX em até 48 horas.</p>
+        <p class="ticker">Estrutura de destino · FIDC sob a Resolução CVM 175</p>
+      </div>
+      <ul class="portas">
+        <li><a href="/vender">Tenho uma cota contemplada<i aria-hidden="true">&#8594;</i></a></li>
+        <li><a href="#gap">Quero entender a operação<i aria-hidden="true">&#8594;</i></a></li>
+      </ul>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════ F ═══════════════════════════ -->
+<div class="rotulo">F · a marca em escala máxima &nbsp;<b>Plina ocupa a largura do hero e a afirmação vira a linha de apoio. É a mais afirmativa e a mais arriscada: uma empresa sem tração gritando o próprio nome precisa que o nome já signifique algo.</b></div>
+<div class="barra"><div><a href="#" class="logo">Plina<span>.</span></a><div class="links"><span>Tenho uma cota contemplada</span><span class="cta">Falar com o time</span></div></div></div>
+<header data-screen-label="v16 F · Escala máxima" class="tela gut" style="display:flex;align-items:center">
+  <div class="centro">
+    <span class="marca-display" style="font-size:clamp(4.5rem,13vw,11rem);letter-spacing:-0.04em">Plina<span>.</span></span>
+    <div data-arranjo="true" style="display:grid;grid-template-columns:1.5fr 1fr;gap:clamp(2rem,6vw,6rem);align-items:end;margin-top:clamp(2rem,4vw,3rem);padding-top:clamp(2rem,4vw,3rem);border-top:1px solid rgba(19,39,40,0.16)">
+      <p class="h1" style="font-size:clamp(1.5rem,2.6vw,2.25rem);max-width:20ch">O crédito já foi contemplado.</p>
+      <p class="sub" style="font-size:clamp(1rem,1.4vw,1.25rem)">O que faltava era liquidez. É o que resolve a <span class="marca">Plina<span>.</span></span></p>
+    </div>
+  </div>
+</header>
+
+</div>
+</x-dc>
+</body>
+</html>
