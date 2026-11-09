@@ -37,6 +37,7 @@ import { distributorSigner } from '../stellar/signer';
 import { getDynamicFee } from '../stellar/fee';
 import { privySignatureToBase64 } from '../wallet/privy';
 import { parseStellarAmount } from '../format/parse-stellar-amount';
+import { fetchSupplyOnChainFromEnv } from '../stellar/supply';
 import { extractLiquidacaoAmount } from '../stellar/parse-liquidacao-xdr';
 import { classeFromAssetCode } from '../stellar/classes';
 import { decrementarHolding } from './holdings';
@@ -65,8 +66,13 @@ export interface CalcularLiquidacaoResult {
 }
 
 /**
- * Calcula BRL simulado equivalente a uma quantidade de PLINA-RF a NAV
- * atual. NAV/token = NAV total / tokens vivos.
+ * Calcula BRL simulado equivalente a uma quantidade de PLINA-RF a NAV atual.
+ *
+ * NAV/token = ativo atribuível / supply circulante **lido do ledger**. A
+ * leitura do Horizon falha fechada de propósito: precificar um resgate com o
+ * denominador antigo (estado da aplicação) era a dupla contagem que este
+ * cálculo passou a evitar, e recusar a cotação é melhor que entregar um
+ * número errado.
  */
 export async function calcularValorLiquidacao(
   input: CalcularLiquidacaoInput,
@@ -75,7 +81,7 @@ export async function calcularValorLiquidacao(
   if (!isFinite(amount) || amount <= 0) {
     throw new Error('amountPlinarf inválido');
   }
-  const [cotas, realizacoes] = await Promise.all([
+  const [cotas, realizacoes, supply] = await Promise.all([
     db.cota.findMany({
       where: { status: { in: ['DISPONIVEL', 'RESERVADA'] } },
       select: {
@@ -88,10 +94,19 @@ export async function calcularValorLiquidacao(
     db.realizacaoCaminho.findMany({
       select: { valorRealizado: true, spread: true },
     }),
+    fetchSupplyOnChainFromEnv(),
   ]);
   const navTotal = navTotalDoPool(cotas, realizacoes);
   const tokensVivos = tokensEmitidosVivos(cotas);
-  const unitDec = navPorTokenAsDecimal(cotas, realizacoes);
+  const unitDec = navPorTokenAsDecimal(cotas, realizacoes, supply);
+  // Fail-closed: NAV <= 0 significa que o ativo atribuível não cobre a
+  // tesouraria, ou que nada foi emitido a investidor. Nos dois casos não
+  // existe cotação honesta — e um BRL negativo chegaria na tela.
+  if (unitDec.lte(0)) {
+    throw new Error(
+      'NAV/token indisponível: ativo atribuível não positivo contra o supply do ledger — operador precisa reconciliar antes de liquidar',
+    );
+  }
   const brlEquivalenteDec = unitDec
     .mul(new Prisma.Decimal(input.amountPlinarf))
     .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_EVEN);
