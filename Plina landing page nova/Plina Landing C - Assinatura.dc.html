@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=chillax@400,500,600,700&f[]=satoshi@300,400,500&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700&family=Geist+Mono:wght@300;400;500&display=swap" />
+<style>
+html{scroll-behavior:smooth}
+body{margin:0;background:#132728;color:#e4e4e4;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit}
+a:hover{color:#0EA7C7}
+::selection{background:#0EA7C7;color:#132728}
+:focus-visible{outline:2px solid #0EA7C7;outline-offset:4px}
+input::placeholder,textarea::placeholder{color:rgba(228,228,228,0.35)}
+summary{list-style:none;cursor:pointer}
+summary::-webkit-details-marker{display:none}
+details[open] [data-plus]{transform:rotate(45deg)}
+[data-path]:hover{background:rgba(255,255,255,0.04)}
+@keyframes plina-marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@keyframes plina-pulse{0%,100%{opacity:0.5}50%{opacity:1}}
+@media (max-width:960px){[data-navlinks]{display:none !important}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:0.01ms !important;animation:none !important}html{scroll-behavior:auto}}
+</style>
+</helmet>
+<div style="font-family:Satoshi,system-ui,sans-serif;font-weight:300;font-size:1.125rem;line-height:1.6;color:#e4e4e4;background:#132728">
+<a href="#produto" style="position:absolute;top:-100px;left:16px;z-index:100;background:#0EA7C7;color:#132728;padding:12px 24px;border-radius:9999px;font-family:Geist,sans-serif;font-weight:700;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.2em;text-decoration:none" style-focus="top:16px">Pular para o conteúdo</a>
+
+<nav aria-label="Principal" style="position:fixed;top:0;left:0;right:0;z-index:50;background:rgba(19,39,40,0.9);backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,0.08)">
+  <div style="max-width:1360px;margin:0 auto;padding:0 clamp(24px,6vw,96px);height:5rem;display:flex;align-items:center;justify-content:space-between;gap:2rem">
+    <a href="#topo" style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.75rem;letter-spacing:-0.02em;color:#e4e4e4;text-decoration:none;line-height:1">Plina<span style="color:#0EA7C7">.</span></a>
+    <div data-navlinks="true" style="display:flex;gap:1.75rem">
+      <a href="#produto" style="font-family:Geist,sans-serif;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.2em;color:rgba(255,255,255,0.75);text-decoration:none;white-space:nowrap" style-hover="color:#0EA7C7">Produto</a>
+      <a href="#tese" style="font-family:Geist,sans-serif;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.2em;color:rgba(255,255,255,0.75);text-decoration:none;white-space:nowrap" style-hover="color:#0EA7C7">Tese</a>
+      <a href="#fluxo" style="font-family:Geist,sans-serif;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.2em;color:rgba(255,255,255,0.75);text-decoration:none;white-space:nowrap" style-hover="color:#0EA7C7">Como funciona</a>
+      <a href="#fundo" style="font-family:Geist,sans-serif;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.2em;color:rgba(255,255,255,0.75);text-decoration:none;white-space:nowrap" style-hover="color:#0EA7C7">O fundo</a>
+      <a href="#compliance" style="font-family:Geist,sans-serif;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.2em;color:rgba(255,255,255,0.75);text-decoration:none;white-space:nowrap" style-hover="color:#0EA7C7">Compliance</a>
+      <a href="#faq" style="font-family:Geist,sans-serif;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.2em;color:rgba(255,255,255,0.75);text-decoration:none;white-space:nowrap" style-hover="color:#0EA7C7">FAQ</a>
+    </div>
+    <a href="#registro" style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;background:#0EA7C7;color:#132728;padding:14px 26px;border-radius:9999px;text-decoration:none;white-space:nowrap;transition:background-color 300ms cubic-bezier(0.16,1,0.3,1)" style-hover="background:#e4e4e4">Solicitar prospecto</a>
+  </div>
+</nav>
+
+<header id="topo" data-screen-label="C · Hero" style="position:relative;overflow:hidden;background:#132728;min-height:100vh;display:flex;flex-direction:column;justify-content:flex-end;padding:11rem clamp(24px,6vw,96px) 0">
+  <div aria-hidden="true" style="position:absolute;inset:0;pointer-events:none">
+    <span style="position:absolute;top:-180px;left:50%;width:900px;height:600px;transform:translateX(-30%);border-radius:50%;filter:blur(60px);background:radial-gradient(ellipse at center,rgba(14,167,199,0.20) 0%,rgba(5,122,153,0.08) 45%,transparent 70%)"></span>
+    <span style="position:absolute;bottom:120px;left:-160px;width:420px;height:420px;border-radius:50%;filter:blur(70px);background:radial-gradient(ellipse at center,rgba(160,207,231,0.10) 0%,transparent 65%)"></span>
+  </div>
+  <div style="position:relative;z-index:10;max-width:1360px;margin:0 auto;width:100%">
+    <div style="display:flex;align-items:center;gap:0.875rem;margin-bottom:2.5rem">
+      <span style="width:8px;height:8px;border-radius:50%;background:#0EA7C7;animation:plina-pulse 2.4s ease-in-out infinite"></span>
+      <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.3em;color:#A0CFE7;margin:0;text-transform:uppercase">FIDC · CVM 175 · Rede Stellar</p>
+    </div>
+    <h1 style="font-family:Chillax,sans-serif;font-weight:600;font-size:clamp(2.75rem,8vw,7rem);line-height:0.98;letter-spacing:-0.03em;margin:0;color:#e4e4e4">Crédito real.<br />Liquidação<br /><span style="color:#0EA7C7">on-chain.</span></h1>
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:2.5rem;margin-top:3.5rem;padding-bottom:5rem">
+      <p style="font-weight:300;font-size:1.25rem;line-height:1.6;color:#A0CFE7;max-width:46ch;margin:0">R$ 40 bilhões por ano em cotas contempladas de consórcio, estruturados em um FIDC e emitidos na Stellar como <span style="font-family:'Geist Mono',monospace;font-size:1.0625rem;letter-spacing:0.05em;color:#e4e4e4">PLINA-RF</span>.</p>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:1.5rem">
+        <a href="#registro" style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;background:#0EA7C7;color:#132728;padding:20px 44px;border-radius:9999px;text-decoration:none;transition:background-color 300ms cubic-bezier(0.16,1,0.3,1),box-shadow 300ms cubic-bezier(0.16,1,0.3,1)" style-hover="background:#e4e4e4;box-shadow:0 20px 25px -5px rgba(14,167,199,0.25)">Solicitar prospecto</a>
+        <a href="#produto" style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:#e4e4e4;text-decoration:none;border-bottom:1px solid rgba(255,255,255,0.25);padding-bottom:4px;transition:border-color 300ms cubic-bezier(0.16,1,0.3,1)" style-hover="border-bottom:1px solid #0EA7C7">O instrumento ↓</a>
+      </div>
+    </div>
+  </div>
+  <div style="position:relative;z-index:10;border-top:1px solid rgba(255,255,255,0.1);overflow:hidden;margin:0 calc(-1 * clamp(24px,6vw,96px))">
+    <div style="display:flex;width:max-content;gap:0;animation:plina-marquee 36s linear infinite">
+      <div style="display:flex;gap:4rem;padding:1.25rem 2rem;white-space:nowrap">
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(228,228,228,0.6)">1 PLINA-RF = R$ 1,00</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(228,228,228,0.6)">NAV DIÁRIO ON-CHAIN</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(228,228,228,0.6)">DURATION 30–90 DIAS</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(228,228,228,0.6)">PIX · USDC · EURC</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(228,228,228,0.6)">CLASSES SÊNIOR · SUBORDINADA</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(228,228,228,0.6)">LEI 11.795/2008 · BACEN</span>
+      </div>
+      <div aria-hidden="true" style="display:flex;gap:4rem;padding:1.25rem 2rem;white-space:nowrap">
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(228,228,228,0.6)">1 PLINA-RF = R$ 1,00</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(228,228,228,0.6)">NAV DIÁRIO ON-CHAIN</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(228,228,228,0.6)">DURATION 30–90 DIAS</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(228,228,228,0.6)">PIX · USDC · EURC</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(228,228,228,0.6)">CLASSES SÊNIOR · SUBORDINADA</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(228,228,228,0.6)">LEI 11.795/2008 · BACEN</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+<section id="produto" data-screen-label="C · 01 Produto" style="background:#ffffff;color:#132728;padding:9rem clamp(24px,6vw,96px)">
+  <div style="max-width:1360px;margin:0 auto">
+    <div style="display:flex;flex-wrap:wrap;gap:3rem 5rem">
+      <div style="flex:1 1 380px">
+        <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.3em;color:#057A99;margin:0;text-transform:uppercase">01 — Produto</p>
+        <h2 style="font-family:Chillax,sans-serif;font-weight:600;font-size:clamp(2.25rem,4.6vw,4rem);line-height:1.02;letter-spacing:-0.025em;margin:1.5rem 0 0;color:#132728">Não é uma corretora. É o instrumento.</h2>
+        <p style="font-weight:300;font-size:1.1875rem;line-height:1.6;color:rgba(19,39,40,0.7);max-width:52ch;margin:2rem 0 0">Cota de FIDC representada por um ativo digital regulado, emitido sob a CVM 175. Originação, custódia regulada e controles de conformidade gravados no próprio ativo.</p>
+      </div>
+      <div style="flex:1 1 440px;min-width:0;background:#132728;color:#e4e4e4;border-radius:24px;padding:clamp(28px,4vw,48px);align-self:flex-start">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem;border-bottom:1px solid rgba(255,255,255,0.12);padding-bottom:1.25rem">
+          <span style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.5rem;letter-spacing:-0.01em">PLINA-RF</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.12em;color:#0EA7C7">STELLAR · PLINARF</span>
+        </div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:1.125rem 2rem;padding-top:1.5rem">
+          <span style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(255,255,255,0.5);padding-top:3px">Paridade</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:0.9375rem;letter-spacing:0.04em">1 PLINA-RF = R$ 1,00</span>
+          <span style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(255,255,255,0.5);padding-top:3px">Veículo</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:0.9375rem;letter-spacing:0.04em">FIDC · CVM 175</span>
+          <span style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(255,255,255,0.5);padding-top:3px">Classes</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:0.9375rem;letter-spacing:0.04em">Sênior · Subordinada</span>
+          <span style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(255,255,255,0.5);padding-top:3px">Lastro</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:0.9375rem;letter-spacing:0.04em">Cotas contempladas · Lei 11.795</span>
+          <span style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(255,255,255,0.5);padding-top:3px">Liquidação</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:0.9375rem;letter-spacing:0.04em">PIX · USDC · EURC</span>
+          <span style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(255,255,255,0.5);padding-top:3px">Custódia</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:0.9375rem;letter-spacing:0.04em">Qualificada + self-custody</span>
+          <span style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(255,255,255,0.5);padding-top:3px">Liquidez</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:0.9375rem;letter-spacing:0.04em">Janelas periódicas · NAV do dia</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tese" data-screen-label="C · 02 Tese" style="background:#e4e4e4;color:#132728;padding:9rem clamp(24px,6vw,96px)">
+  <div style="max-width:1360px;margin:0 auto">
+    <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.3em;color:#046C88;margin:0;text-transform:uppercase">02 — Tese</p>
+    <h2 style="font-family:Chillax,sans-serif;font-weight:600;font-size:clamp(2.25rem,4.6vw,4rem);line-height:1.02;letter-spacing:-0.025em;margin:1.5rem 0 0;max-width:16ch;color:#132728">Três caminhos. Um pool.</h2>
+    <p style="font-weight:300;font-size:1.1875rem;line-height:1.6;color:rgba(19,39,40,0.7);max-width:60ch;margin:2rem 0 0">Modelo híbrido de realização de valor, gerido ativamente pelo gestor do FIDC. Cada caminho alimenta o mesmo pool e cada evento crítico gera registro auditável on-chain.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.5rem;margin-top:4rem">
+      <div data-path="true" style="background:#ffffff;border-radius:24px;padding:clamp(28px,3.5vw,44px);transition:background-color 300ms cubic-bezier(0.16,1,0.3,1)">
+        <span style="font-family:'Geist Mono',monospace;font-weight:300;font-size:2.5rem;color:rgba(19,39,40,0.15)">01</span>
+        <h3 style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.5rem;letter-spacing:-0.01em;margin:1.5rem 0 0">Cedente</h3>
+        <p style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.1em;color:#046C88;margin:0.5rem 0 0;text-transform:uppercase">Liquidez em 48h · PIX</p>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);margin:1.25rem 0 0">Cede a cota contemplada com deságio, assina digitalmente e recebe via PIX em até 48 horas. KYC completo na origem.</p>
+      </div>
+      <div data-path="true" style="background:#ffffff;border-radius:24px;padding:clamp(28px,3.5vw,44px);transition:background-color 300ms cubic-bezier(0.16,1,0.3,1)">
+        <span style="font-family:'Geist Mono',monospace;font-weight:300;font-size:2.5rem;color:rgba(19,39,40,0.15)">02</span>
+        <h3 style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.5rem;letter-spacing:-0.01em;margin:1.5rem 0 0">Comprador</h3>
+        <p style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.1em;color:#046C88;margin:0.5rem 0 0;text-transform:uppercase">O bem, com desconto</p>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);margin:1.25rem 0 0">Adquire a carta de crédito abaixo do valor de face. Reserva garantida por 72 horas e transferência conduzida pela administradora.</p>
+      </div>
+      <div data-path="true" style="background:#132728;color:#e4e4e4;border-radius:24px;padding:clamp(28px,3.5vw,44px);transition:background-color 300ms cubic-bezier(0.16,1,0.3,1)">
+        <span style="font-family:'Geist Mono',monospace;font-weight:300;font-size:2.5rem;color:rgba(255,255,255,0.18)">03</span>
+        <h3 style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.5rem;letter-spacing:-0.01em;margin:1.5rem 0 0;color:#e4e4e4">Investidor</h3>
+        <p style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.1em;color:#0EA7C7;margin:0.5rem 0 0;text-transform:uppercase">Exposição estruturada</p>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:#A0CFE7;margin:1.25rem 0 0">Classes Sênior e Subordinada sobre o mesmo pool. A Subordinada, integralizada pela Plina, absorve as primeiras perdas.</p>
+      </div>
+    </div>
+    <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.12em;color:rgba(19,39,40,0.55);margin:2.5rem 0 0;text-transform:uppercase">Cascata: despesas operacionais → yield da classe Sênior → excedente à Subordinada</p>
+  </div>
+</section>
+
+<section id="fluxo" data-screen-label="C · 03 Como funciona" style="background:#ffffff;color:#132728;padding:9rem clamp(24px,6vw,96px)">
+  <div style="max-width:1360px;margin:0 auto">
+    <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.3em;color:#057A99;margin:0;text-transform:uppercase">03 — Como funciona</p>
+    <h2 style="font-family:Chillax,sans-serif;font-weight:600;font-size:clamp(2.25rem,4.6vw,4rem);line-height:1.02;letter-spacing:-0.025em;margin:1.5rem 0 0;max-width:18ch;color:#132728">Do KYC ao token, em seis etapas.</h2>
+    <p style="font-weight:300;font-size:1.1875rem;line-height:1.6;color:rgba(19,39,40,0.7);max-width:60ch;margin:2rem 0 0">O fluxo do investidor institucional. Cada etapa crítica gera um registro auditável na blockchain, por memo-hash.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:3rem 3.5rem;margin-top:4.5rem;counter-reset:etapa">
+      <div style="border-top:2px solid #132728;padding-top:1.5rem">
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(19,39,40,0.4)">01 · SEP-12</span>
+        <h3 style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.3125rem;letter-spacing:-0.01em;margin:0.75rem 0 0">Cadastro e KYC</h3>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);margin:0.625rem 0 0">Verificação institucional via anchor regulado, nas duas pontas da operação.</p>
+      </div>
+      <div style="border-top:2px solid #132728;padding-top:1.5rem">
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(19,39,40,0.4)">02</span>
+        <h3 style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.3125rem;letter-spacing:-0.01em;margin:0.75rem 0 0">Suitability e adesão</h3>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);margin:0.625rem 0 0">Questionário de suitability e termo de adesão ao FIDC, com assinatura digital.</p>
+      </div>
+      <div style="border-top:2px solid #132728;padding-top:1.5rem">
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(19,39,40,0.4)">03 · SEP-38</span>
+        <h3 style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.3125rem;letter-spacing:-0.01em;margin:0.75rem 0 0">Cotação</h3>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);margin:0.625rem 0 0">Preço firme contra o NAV do dia, via protocolo de cotação.</p>
+      </div>
+      <div style="border-top:2px solid #132728;padding-top:1.5rem">
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(19,39,40,0.4)">04 · SEP-24</span>
+        <h3 style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.3125rem;letter-spacing:-0.01em;margin:0.75rem 0 0">Liquidação</h3>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);margin:0.625rem 0 0">PIX no Brasil. USDC ou EURC no exterior, por anchors regulados.</p>
+      </div>
+      <div style="border-top:2px solid #132728;padding-top:1.5rem">
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(19,39,40,0.4)">05</span>
+        <h3 style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.3125rem;letter-spacing:-0.01em;margin:0.75rem 0 0">Emissão</h3>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);margin:0.625rem 0 0">O PLINA-RF é emitido diretamente na carteira do investidor, em self-custody.</p>
+      </div>
+      <div style="border-top:2px solid #132728;padding-top:1.5rem">
+        <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.12em;color:rgba(19,39,40,0.4)">06</span>
+        <h3 style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.3125rem;letter-spacing:-0.01em;margin:0.75rem 0 0">Posição</h3>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);margin:0.625rem 0 0">Saldo por classe e NAV lidos da própria blockchain, não de um banco de dados interno.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="fundo" data-screen-label="C · 04 O fundo" style="background:#132728;color:#e4e4e4;padding:9rem clamp(24px,6vw,96px)">
+  <div style="max-width:1360px;margin:0 auto">
+    <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.3em;color:#0EA7C7;margin:0;text-transform:uppercase">04 — O fundo</p>
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:2rem;margin-top:1.5rem">
+      <h2 style="font-family:Chillax,sans-serif;font-weight:600;font-size:clamp(2.25rem,4.6vw,4rem);line-height:1.02;letter-spacing:-0.025em;margin:0;max-width:16ch;color:#e4e4e4">Números que se verificam.</h2>
+      <a href="https://stellar.expert" target="_blank" rel="noopener noreferrer" style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.12em;color:#0EA7C7;text-decoration:none;border-bottom:1px solid rgba(14,167,199,0.35);padding-bottom:2px;white-space:nowrap;transition:border-color 300ms cubic-bezier(0.16,1,0.3,1)" style-hover="border-bottom:1px solid #0EA7C7">VERIFICAR ON-CHAIN → STELLAR.EXPERT</a>
+    </div>
+    <p style="font-weight:300;font-size:1.1875rem;line-height:1.6;color:#A0CFE7;max-width:60ch;margin:2rem 0 0">NAV publicado diariamente e registrado de forma permanente na Stellar. Qualquer parte audita a série pública, sem pedir permissão.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.5rem;margin-top:4rem">
+      <div style="border:1px solid rgba(255,255,255,0.12);border-radius:24px;padding:32px">
+        <span style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:#A0CFE7">Yield alvo · Sênior BR</span>
+        <sc-if value="{{ metricas }}" hint-placeholder-val="{{ true }}"><p style="font-family:'Geist Mono',monospace;font-weight:500;font-size:2.25rem;letter-spacing:0.01em;margin:1rem 0 0;color:#e4e4e4">CDI + 5%<span style="font-size:1.0625rem;color:rgba(228,228,228,0.5)"> a.a.</span></p></sc-if>
+        <sc-if value="{{ metricasOff }}" hint-placeholder-val="{{ false }}"><p style="font-family:'Geist Mono',monospace;font-weight:500;font-size:2.25rem;letter-spacing:0.01em;margin:1rem 0 0;color:#e4e4e4">Sob consulta</p></sc-if>
+        <p style="font-weight:300;font-size:0.875rem;color:rgba(228,228,228,0.55);margin:0.625rem 0 0">Meta indicativa para a classe Sênior em reais.</p>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,0.12);border-radius:24px;padding:32px">
+        <span style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:#A0CFE7">Yield alvo · Internacional</span>
+        <sc-if value="{{ metricas }}" hint-placeholder-val="{{ true }}"><p style="font-family:'Geist Mono',monospace;font-weight:500;font-size:2.25rem;letter-spacing:0.01em;margin:1rem 0 0;color:#e4e4e4">SOFR + 7%<span style="font-size:1.0625rem;color:rgba(228,228,228,0.5)"> a.a.</span></p></sc-if>
+        <sc-if value="{{ metricasOff }}" hint-placeholder-val="{{ false }}"><p style="font-family:'Geist Mono',monospace;font-weight:500;font-size:2.25rem;letter-spacing:0.01em;margin:1rem 0 0;color:#e4e4e4">Sob consulta</p></sc-if>
+        <p style="font-weight:300;font-size:0.875rem;color:rgba(228,228,228,0.55);margin:0.625rem 0 0">Meta indicativa em USDC / EURC.</p>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,0.12);border-radius:24px;padding:32px">
+        <span style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:#A0CFE7">Duration alvo</span>
+        <p style="font-family:'Geist Mono',monospace;font-weight:500;font-size:2.25rem;letter-spacing:0.01em;margin:1rem 0 0;color:#e4e4e4">30–90<span style="font-size:1.0625rem;color:rgba(228,228,228,0.5)"> dias</span></p>
+        <p style="font-weight:300;font-size:0.875rem;color:rgba(228,228,228,0.55);margin:0.625rem 0 0">Prazo médio ponderado da carteira.</p>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,0.12);border-radius:24px;padding:32px">
+        <span style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:#A0CFE7">Taxas</span>
+        <p style="font-family:'Geist Mono',monospace;font-weight:500;font-size:2.25rem;letter-spacing:0.01em;margin:1rem 0 0;color:#e4e4e4">2% <span style="font-size:1.0625rem;color:rgba(228,228,228,0.5)">adm</span> · 20% <span style="font-size:1.0625rem;color:rgba(228,228,228,0.5)">perf</span></p>
+        <p style="font-weight:300;font-size:0.875rem;color:rgba(228,228,228,0.55);margin:0.625rem 0 0">Adm provisionada no NAV; performance sobre o excedente do benchmark, com marca d&#39;água.</p>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,0.12);border-radius:24px;padding:32px">
+        <span style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:#A0CFE7">Tíquete mínimo</span>
+        <p style="font-family:'Geist Mono',monospace;font-weight:500;font-size:2.25rem;letter-spacing:0.01em;margin:1rem 0 0;color:#e4e4e4">R$ 500k<span style="font-size:1.0625rem;color:rgba(228,228,228,0.5)"> · US$ 100k</span></p>
+        <p style="font-weight:300;font-size:0.875rem;color:rgba(228,228,228,0.55);margin:0.625rem 0 0">Institucional BR · internacional profissional.</p>
+      </div>
+      <div style="border:1px solid rgba(14,167,199,0.4);border-radius:24px;padding:32px;background:rgba(14,167,199,0.06)">
+        <span style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:#0EA7C7">Mercado subjacente</span>
+        <p style="font-family:'Geist Mono',monospace;font-weight:500;font-size:2.25rem;letter-spacing:0.01em;margin:1rem 0 0;color:#e4e4e4">R$ 40bi<span style="font-size:1.0625rem;color:rgba(228,228,228,0.5)"> / ano</span></p>
+        <p style="font-weight:300;font-size:0.875rem;color:rgba(228,228,228,0.55);margin:0.625rem 0 0">Em cotas contempladas cedidas no mercado brasileiro.</p>
+      </div>
+    </div>
+    <p style="font-weight:300;font-size:0.8125rem;color:rgba(228,228,228,0.5);max-width:70ch;margin:1.5rem 0 0">Metas indicativas, sujeitas ao regulamento do fundo e à documentação da oferta. Não constituem promessa de rentabilidade.</p>
+  </div>
+</section>
+
+<section id="marco" data-screen-label="C · 05 Marco regulatório" style="background:#e4e4e4;color:#132728;padding:9rem clamp(24px,6vw,96px)">
+  <div style="max-width:1360px;margin:0 auto">
+    <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.3em;color:#046C88;margin:0;text-transform:uppercase">05 — Marco regulatório</p>
+    <h2 style="font-family:Chillax,sans-serif;font-weight:600;font-size:clamp(2.25rem,4.6vw,4rem);line-height:1.02;letter-spacing:-0.025em;margin:1.5rem 0 0;color:#132728"><span style="font-family:'Geist Mono',monospace;font-weight:400;letter-spacing:0">2008 → 2026</span></h2>
+    <p style="font-weight:300;font-size:1.1875rem;line-height:1.6;color:rgba(19,39,40,0.7);max-width:60ch;margin:2rem 0 0">O consórcio é um sistema regulado há décadas. A Plina o leva ao investidor institucional sob o marco mais recente do mercado de capitais brasileiro.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem;margin-top:4rem">
+      <div style="background:#ffffff;border-radius:24px;padding:clamp(28px,3.5vw,44px)">
+        <span style="font-family:'Geist Mono',monospace;font-weight:300;font-size:2.5rem;color:rgba(19,39,40,0.18)">2008</span>
+        <h3 style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.375rem;margin:1.25rem 0 0">Lei 11.795</h3>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);margin:0.625rem 0 0">O Sistema de Consórcios, supervisionado pelo Banco Central do Brasil.</p>
+      </div>
+      <div style="background:#ffffff;border-radius:24px;padding:clamp(28px,3.5vw,44px)">
+        <span style="font-family:'Geist Mono',monospace;font-weight:300;font-size:2.5rem;color:rgba(19,39,40,0.18)">2022</span>
+        <h3 style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.375rem;margin:1.25rem 0 0">Resolução CVM 175</h3>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);margin:0.625rem 0 0">O novo marco dos fundos de investimento, base do FIDC que emite o PLINA-RF.</p>
+      </div>
+      <div style="background:#132728;color:#e4e4e4;border-radius:24px;padding:clamp(28px,3.5vw,44px)">
+        <span style="font-family:'Geist Mono',monospace;font-weight:300;font-size:2.5rem;color:#0EA7C7">2026</span>
+        <h3 style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.375rem;margin:1.25rem 0 0;color:#e4e4e4">PLINA-RF</h3>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:#A0CFE7;margin:0.625rem 0 0">O direito creditório do consórcio, tokenizado dentro do FIDC e liquidado na Stellar.</p>
+      </div>
+    </div>
+    <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.14em;color:rgba(19,39,40,0.55);margin:3rem 0 0;text-transform:uppercase">BACEN · CVM · AML/COAF · LGPD</p>
+  </div>
+</section>
+
+<section id="compliance" data-screen-label="C · 06 Compliance" style="background:#132728;color:#e4e4e4;padding:9rem clamp(24px,6vw,96px)">
+  <div style="max-width:1360px;margin:0 auto;display:flex;flex-wrap:wrap;gap:3rem 5rem">
+    <div style="flex:1 1 360px;max-width:520px">
+      <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.3em;color:#0EA7C7;margin:0;text-transform:uppercase">06 — Compliance</p>
+      <h2 style="font-family:Chillax,sans-serif;font-weight:600;font-size:clamp(2.25rem,4.6vw,4rem);line-height:1.02;letter-spacing:-0.025em;margin:1.5rem 0 0;color:#e4e4e4">Compliance nativo.</h2>
+      <p style="font-weight:300;font-size:1.1875rem;line-height:1.6;color:#A0CFE7;max-width:48ch;margin:2rem 0 0">Para uma mesa de risco institucional, reversibilidade não é limitação. É requisito. Os controles não estão em um manual: estão gravados no próprio ativo.</p>
+    </div>
+    <div style="flex:1 1 460px;min-width:0;display:flex;flex-direction:column;gap:1.25rem">
+      <div style="border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:28px 32px">
+        <span style="font-family:'Geist Mono',monospace;font-size:0.875rem;letter-spacing:0.08em;color:#0EA7C7;font-weight:500">AUTH_REQUIRED</span>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:#A0CFE7;margin:0.75rem 0 0;max-width:58ch">Somente carteiras aprovadas em KYC recebem o token. A porta de entrada é a verificação, não o convite.</p>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:28px 32px">
+        <span style="font-family:'Geist Mono',monospace;font-size:0.875rem;letter-spacing:0.08em;color:#0EA7C7;font-weight:500">AUTH_REVOCABLE</span>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:#A0CFE7;margin:0.75rem 0 0;max-width:58ch">O emissor pode congelar o ativo em incidente ou por ordem regulatória. O freio existe antes do problema.</p>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:28px 32px">
+        <span style="font-family:'Geist Mono',monospace;font-size:0.875rem;letter-spacing:0.08em;color:#0EA7C7;font-weight:500">AUTH_CLAWBACK_ENABLED</span>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:#A0CFE7;margin:0.75rem 0 0;max-width:58ch">Recuperação de tokens restrita a 4 hipóteses formais publicadas. Dupla aprovação, solicitante e aprovador distintos, pedido expira em 72 horas. Os nomes ficam registrados on-chain.</p>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:28px 32px">
+        <span style="font-family:'Geist Mono',monospace;font-size:0.875rem;letter-spacing:0.08em;color:#0EA7C7;font-weight:500">LGPD_BY_DESIGN</span>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:#A0CFE7;margin:0.75rem 0 0;max-width:58ch">Dados pessoais permanecem fora da blockchain. On-chain, apenas hashes, endereços e timestamps.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="equipe" data-screen-label="C · 07 Equipe" style="background:#ffffff;color:#132728;padding:9rem clamp(24px,6vw,96px)">
+  <div style="max-width:1360px;margin:0 auto">
+    <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.3em;color:#057A99;margin:0;text-transform:uppercase">07 — Equipe fundadora</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1.5rem;margin-top:3rem">
+      <article style="background:#e4e4e4;border-radius:24px;padding:clamp(28px,3.5vw,44px)">
+        <h3 style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.625rem;letter-spacing:-0.01em;margin:0">Fabrício Santos</h3>
+        <p style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:#046C88;margin:0.625rem 0 0">CEO &amp; Founder</p>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);margin:1.5rem 0 0">Sócio fundador da Citrino, assessoria financeira de planejamento e gestão patrimonial. Atuou em estratégias de receita, custo e experiência do cliente na plataforma digital de crédito Simplic, e liderou na TOTVS a implementação do sistema corporativo de KPIs para a Diretoria e o Conselho Administrativo.</p>
+      </article>
+      <article style="background:#e4e4e4;border-radius:24px;padding:clamp(28px,3.5vw,44px)">
+        <h3 style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.625rem;letter-spacing:-0.01em;margin:0">Thais Reis</h3>
+        <p style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:#046C88;margin:0.625rem 0 0">CTO &amp; Protocol Lead</p>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);margin:1.5rem 0 0">Engenheira full-stack com cinco anos em infraestrutura blockchain — engenharia de dados, backend, contratos automatizados em Rust e interfaces em React/TypeScript. Fundadora e Lead Engineer do Karn Ecosystem, plataforma de governança de código aberto. Premiada em competições nacionais e internacionais de tecnologia descentralizada e inteligência artificial.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="faq" data-screen-label="C · 08 FAQ" style="background:#e4e4e4;color:#132728;padding:9rem clamp(24px,6vw,96px)">
+  <div style="max-width:1360px;margin:0 auto;display:flex;flex-wrap:wrap;gap:3rem 5rem">
+    <div style="flex:1 1 320px;max-width:440px">
+      <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.3em;color:#046C88;margin:0;text-transform:uppercase">08 — FAQ</p>
+      <h2 style="font-family:Chillax,sans-serif;font-weight:600;font-size:clamp(2rem,3.6vw,3rem);line-height:1.05;letter-spacing:-0.02em;margin:1.5rem 0 0">O que uma mesa de risco pergunta.</h2>
+    </div>
+    <div style="flex:1 1 480px;min-width:0;display:flex;flex-direction:column;gap:1rem">
+      <details style="background:#ffffff;border-radius:20px;padding:0 28px">
+        <summary style="display:flex;justify-content:space-between;align-items:baseline;gap:2rem;padding:1.5rem 0">
+          <span style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.1875rem;letter-spacing:-0.01em">O que é uma cota contemplada?</span>
+          <span data-plus="true" style="font-family:'Geist Mono',monospace;font-weight:300;font-size:1.25rem;color:rgba(19,39,40,0.4);transition:transform 300ms cubic-bezier(0.16,1,0.3,1);flex:none">+</span>
+        </summary>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);max-width:60ch;margin:0;padding:0 0 1.5rem">Cota de consórcio cujo direito à carta de crédito já foi definido, por sorteio ou lance. O titular pode usar a carta ou ceder a cota. A Plina adquire esse direito com deságio e o cede ao FIDC, que o carrega como lastro do PLINA-RF.</p>
+      </details>
+      <details style="background:#ffffff;border-radius:20px;padding:0 28px">
+        <summary style="display:flex;justify-content:space-between;align-items:baseline;gap:2rem;padding:1.5rem 0">
+          <span style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.1875rem;letter-spacing:-0.01em">Como o deságio é definido?</span>
+          <span data-plus="true" style="font-family:'Geist Mono',monospace;font-weight:300;font-size:1.25rem;color:rgba(19,39,40,0.4);transition:transform 300ms cubic-bezier(0.16,1,0.3,1);flex:none">+</span>
+        </summary>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);max-width:60ch;margin:0;padding:0 0 1.5rem">A partir do retorno-alvo da classe Sênior e dos custos da operação, cota a cota. O cedente simula a oferta antes de assinar e conhece o valor líquido antes da cessão.</p>
+      </details>
+      <details style="background:#ffffff;border-radius:20px;padding:0 28px">
+        <summary style="display:flex;justify-content:space-between;align-items:baseline;gap:2rem;padding:1.5rem 0">
+          <span style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.1875rem;letter-spacing:-0.01em">O que acontece em caso de inadimplência?</span>
+          <span data-plus="true" style="font-family:'Geist Mono',monospace;font-weight:300;font-size:1.25rem;color:rgba(19,39,40,0.4);transition:transform 300ms cubic-bezier(0.16,1,0.3,1);flex:none">+</span>
+        </summary>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);max-width:60ch;margin:0;padding:0 0 1.5rem">A estrutura é de subordinação: a classe Subordinada, integralizada pela Plina, absorve as primeiras perdas antes de a classe Sênior ser afetada. A cascata prioriza despesas, depois o yield da Sênior, e só então o excedente.</p>
+      </details>
+      <details style="background:#ffffff;border-radius:20px;padding:0 28px">
+        <summary style="display:flex;justify-content:space-between;align-items:baseline;gap:2rem;padding:1.5rem 0">
+          <span style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.1875rem;letter-spacing:-0.01em">Existe liquidez secundária?</span>
+          <span data-plus="true" style="font-family:'Geist Mono',monospace;font-weight:300;font-size:1.25rem;color:rgba(19,39,40,0.4);transition:transform 300ms cubic-bezier(0.16,1,0.3,1);flex:none">+</span>
+        </summary>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);max-width:60ch;margin:0;padding:0 0 1.5rem">Não há mercado secundário P2P. O resgate ocorre em janelas periódicas de liquidez, por resgate atômico contra o NAV do dia.</p>
+      </details>
+      <details style="background:#ffffff;border-radius:20px;padding:0 28px">
+        <summary style="display:flex;justify-content:space-between;align-items:baseline;gap:2rem;padding:1.5rem 0">
+          <span style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.1875rem;letter-spacing:-0.01em">Como verifico o lastro?</span>
+          <span data-plus="true" style="font-family:'Geist Mono',monospace;font-weight:300;font-size:1.25rem;color:rgba(19,39,40,0.4);transition:transform 300ms cubic-bezier(0.16,1,0.3,1);flex:none">+</span>
+        </summary>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);max-width:60ch;margin:0;padding:0 0 1.5rem">O NAV diário e os eventos críticos da operação são registrados na Stellar e podem ser consultados publicamente, por exemplo via Stellar Expert. A estrutura prevê prestadores registrados e auditoria independente.</p>
+      </details>
+      <details style="background:#ffffff;border-radius:20px;padding:0 28px">
+        <summary style="display:flex;justify-content:space-between;align-items:baseline;gap:2rem;padding:1.5rem 0">
+          <span style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.1875rem;letter-spacing:-0.01em">Quem pode investir?</span>
+          <span data-plus="true" style="font-family:'Geist Mono',monospace;font-weight:300;font-size:1.25rem;color:rgba(19,39,40,0.4);transition:transform 300ms cubic-bezier(0.16,1,0.3,1);flex:none">+</span>
+        </summary>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:rgba(19,39,40,0.7);max-width:60ch;margin:0;padding:0 0 1.5rem">Oferta restrita a investidores qualificados e profissionais, conforme a regulamentação CVM. Tíquetes a partir de R$ 500 mil no Brasil e US$ 100 mil para o investidor internacional.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section id="registro" data-screen-label="C · 09 Registro de interesse" style="position:relative;overflow:hidden;background:#132728;color:#e4e4e4;padding:10rem clamp(24px,6vw,96px)">
+  <div aria-hidden="true" style="position:absolute;inset:0;pointer-events:none">
+    <span style="position:absolute;top:-160px;right:-140px;width:520px;height:520px;border-radius:50%;filter:blur(60px);background:radial-gradient(ellipse at center,rgba(14,167,199,0.16) 0%,transparent 68%)"></span>
+  </div>
+  <div style="position:relative;z-index:10;max-width:1360px;margin:0 auto">
+    <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.3em;color:#0EA7C7;margin:0;text-transform:uppercase">09 — Onboarding</p>
+    <div style="display:flex;flex-wrap:wrap;gap:2.5rem 5rem;margin-top:1.5rem">
+      <div style="flex:1 1 340px;max-width:480px">
+        <h2 style="font-family:Chillax,sans-serif;font-weight:600;font-size:clamp(2.25rem,4.6vw,4rem);line-height:1.02;letter-spacing:-0.025em;margin:0;color:#e4e4e4">Registre seu interesse.</h2>
+        <p style="font-weight:300;font-size:1.1875rem;line-height:1.6;color:#A0CFE7;max-width:46ch;margin:2rem 0 0">Manifeste interesse no PLINA-RF. A equipe retorna em até <span style="font-family:'Geist Mono',monospace;font-size:1rem;letter-spacing:0.05em;color:#e4e4e4">48 horas</span> com a apresentação do instrumento e a documentação confidencial.</p>
+        <p style="font-family:'Geist Mono',monospace;font-size:0.6875rem;letter-spacing:0.1em;color:rgba(228,228,228,0.45);margin:3rem 0 0;text-transform:uppercase;line-height:2">Processo confidencial<br />Não caracteriza oferta pública<br />Oferta restrita · Investidor qualificado<br />CVM 175</p>
+      </div>
+      <div style="flex:1 1 480px;min-width:0">
+        <form onSubmit="{{ submitLead }}" id="lead-form" style="display:flex;flex-direction:column;gap:2rem;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:24px;padding:clamp(28px,4vw,48px)">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.25rem 1.5rem">
+            <div style="display:flex;flex-direction:column;gap:0.5rem">
+              <label for="c-nome" style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(228,228,228,0.6);padding-left:16px">Nome completo *</label>
+              <input id="c-nome" name="nome" type="text" required="required" autoComplete="name" placeholder="Nome e sobrenome" style="font-family:Satoshi,sans-serif;font-weight:400;font-size:1rem;color:#e4e4e4;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:9999px;padding:15px 24px;transition:border-color 300ms cubic-bezier(0.16,1,0.3,1)" style-focus="border:1px solid #0EA7C7;outline:none" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.5rem">
+              <label for="c-org" style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(228,228,228,0.6);padding-left:16px">Organização *</label>
+              <input id="c-org" name="org" type="text" required="required" autoComplete="organization" placeholder="Family office, gestora, fundo" style="font-family:Satoshi,sans-serif;font-weight:400;font-size:1rem;color:#e4e4e4;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:9999px;padding:15px 24px;transition:border-color 300ms cubic-bezier(0.16,1,0.3,1)" style-focus="border:1px solid #0EA7C7;outline:none" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.5rem">
+              <label for="c-email" style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(228,228,228,0.6);padding-left:16px">E-mail corporativo *</label>
+              <input id="c-email" name="email" type="email" required="required" autoComplete="email" placeholder="nome@organizacao.com" style="font-family:Satoshi,sans-serif;font-weight:400;font-size:1rem;color:#e4e4e4;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:9999px;padding:15px 24px;transition:border-color 300ms cubic-bezier(0.16,1,0.3,1)" style-focus="border:1px solid #0EA7C7;outline:none" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.5rem">
+              <label for="c-perfil" style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(228,228,228,0.6);padding-left:16px">Perfil do investidor *</label>
+              <select id="c-perfil" name="perfil" required="required" style="font-family:Satoshi,sans-serif;font-weight:400;font-size:1rem;color:#e4e4e4;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:9999px;padding:15px 24px;transition:border-color 300ms cubic-bezier(0.16,1,0.3,1)" style-focus="border:1px solid #0EA7C7;outline:none">
+                <option value="" style="color:#132728">Selecione</option>
+                <option style="color:#132728">Family office brasileiro</option>
+                <option style="color:#132728">Family office internacional</option>
+                <option style="color:#132728">Gestora / asset</option>
+                <option style="color:#132728">Fundo de crédito</option>
+                <option style="color:#132728">Tesouraria corporativa</option>
+                <option style="color:#132728">Outro institucional</option>
+              </select>
+            </div>
+          </div>
+          <sc-if value="{{ formCompleto }}" hint-placeholder-val="{{ true }}">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.25rem 1.5rem">
+            <div style="display:flex;flex-direction:column;gap:0.5rem">
+              <label for="c-tel" style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(228,228,228,0.6);padding-left:16px">Telefone / WhatsApp</label>
+              <input id="c-tel" name="telefone" type="tel" autoComplete="tel" placeholder="+55 11 99999-9999" style="font-family:Satoshi,sans-serif;font-weight:400;font-size:1rem;color:#e4e4e4;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:9999px;padding:15px 24px;transition:border-color 300ms cubic-bezier(0.16,1,0.3,1)" style-focus="border:1px solid #0EA7C7;outline:none" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.5rem">
+              <label for="c-jur" style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(228,228,228,0.6);padding-left:16px">Jurisdição principal</label>
+              <input id="c-jur" name="jurisdicao" type="text" placeholder="Brasil, EUA, Cingapura" style="font-family:Satoshi,sans-serif;font-weight:400;font-size:1rem;color:#e4e4e4;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:9999px;padding:15px 24px;transition:border-color 300ms cubic-bezier(0.16,1,0.3,1)" style-focus="border:1px solid #0EA7C7;outline:none" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.5rem">
+              <label for="c-ticket" style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(228,228,228,0.6);padding-left:16px">Tíquete indicativo *</label>
+              <select id="c-ticket" name="ticket" required="required" style="font-family:Satoshi,sans-serif;font-weight:400;font-size:1rem;color:#e4e4e4;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:9999px;padding:15px 24px;transition:border-color 300ms cubic-bezier(0.16,1,0.3,1)" style-focus="border:1px solid #0EA7C7;outline:none">
+                <option value="" style="color:#132728">Selecione</option>
+                <option style="color:#132728">US$ 100k – 500k</option>
+                <option style="color:#132728">US$ 500k – 1M</option>
+                <option style="color:#132728">US$ 1M – 5M</option>
+                <option style="color:#132728">R$ 500k – 2M</option>
+                <option style="color:#132728">R$ 2M – 10M</option>
+                <option style="color:#132728">Acima disso</option>
+              </select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.5rem">
+              <label for="c-moeda" style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(228,228,228,0.6);padding-left:16px">Moeda de preferência</label>
+              <select id="c-moeda" name="moeda" style="font-family:Satoshi,sans-serif;font-weight:400;font-size:1rem;color:#e4e4e4;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:9999px;padding:15px 24px;transition:border-color 300ms cubic-bezier(0.16,1,0.3,1)" style-focus="border:1px solid #0EA7C7;outline:none">
+                <option value="" style="color:#132728">Selecione (opcional)</option>
+                <option style="color:#132728">USDC</option>
+                <option style="color:#132728">EURC</option>
+                <option style="color:#132728">BRL / PIX</option>
+              </select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.5rem">
+              <label for="c-classe" style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(228,228,228,0.6);padding-left:16px">Classe de interesse</label>
+              <select id="c-classe" name="classe" style="font-family:Satoshi,sans-serif;font-weight:400;font-size:1rem;color:#e4e4e4;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:9999px;padding:15px 24px;transition:border-color 300ms cubic-bezier(0.16,1,0.3,1)" style-focus="border:1px solid #0EA7C7;outline:none">
+                <option value="" style="color:#132728">Selecione (opcional)</option>
+                <option style="color:#132728">Sênior (retorno prioritário)</option>
+                <option style="color:#132728">Subordinada (maior risco)</option>
+                <option style="color:#132728">Ambas</option>
+              </select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.5rem">
+              <label for="c-prazo" style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(228,228,228,0.6);padding-left:16px">Prazo de decisão</label>
+              <select id="c-prazo" name="prazo" style="font-family:Satoshi,sans-serif;font-weight:400;font-size:1rem;color:#e4e4e4;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:9999px;padding:15px 24px;transition:border-color 300ms cubic-bezier(0.16,1,0.3,1)" style-focus="border:1px solid #0EA7C7;outline:none">
+                <option value="" style="color:#132728">Selecione (opcional)</option>
+                <option style="color:#132728">Até 30 dias</option>
+                <option style="color:#132728">30 a 90 dias</option>
+                <option style="color:#132728">Acima de 90 dias</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.5rem">
+            <label for="c-obs" style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(228,228,228,0.6);padding-left:16px">Observações / perguntas</label>
+            <textarea id="c-obs" name="obs" rows="4" placeholder="Restrições de compliance, exigências de estrutura, perguntas iniciais" style="font-family:Satoshi,sans-serif;font-weight:400;font-size:1rem;color:#e4e4e4;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:15px 24px;resize:vertical;transition:border-color 300ms cubic-bezier(0.16,1,0.3,1)" style-focus="border:1px solid #0EA7C7;outline:none"></textarea>
+          </div>
+          </sc-if>
+          <div style="display:flex;align-items:flex-start;gap:0.875rem">
+            <input id="c-lgpd" name="lgpd" type="checkbox" required="required" style="margin-top:5px;accent-color:#0EA7C7;width:16px;height:16px" />
+            <label for="c-lgpd" style="font-weight:300;font-size:0.875rem;line-height:1.6;color:rgba(228,228,228,0.65)">Autorizo o uso dos dados fornecidos para contato sobre o PLINA-RF. As informações são tratadas conforme a LGPD e não são compartilhadas com terceiros.</label>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:1.25rem 2rem">
+            <button type="submit" style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;background:#0EA7C7;color:#132728;border:0;cursor:pointer;padding:20px 44px;border-radius:9999px;transition:background-color 300ms cubic-bezier(0.16,1,0.3,1),box-shadow 300ms cubic-bezier(0.16,1,0.3,1)" style-hover="background:#e4e4e4;box-shadow:0 20px 25px -5px rgba(14,167,199,0.25)">Submeter aplicação</button>
+            <p style="font-family:'Geist Mono',monospace;font-size:0.6875rem;letter-spacing:0.1em;color:rgba(228,228,228,0.5);margin:0;text-transform:uppercase">Retorno em até 48h</p>
+          </div>
+        </form>
+        <div id="lead-ok" style="display:none;border:1px solid rgba(14,167,199,0.4);border-radius:24px;padding:2.5rem 2rem;background:rgba(14,167,199,0.06)">
+          <p style="font-family:'Geist Mono',monospace;font-size:0.875rem;letter-spacing:0.12em;color:#0EA7C7;margin:0">REGISTRO RECEBIDO</p>
+          <p style="font-weight:300;font-size:1.0625rem;line-height:1.6;color:#A0CFE7;max-width:60ch;margin:0.875rem 0 0">A equipe retorna em até 48 horas pelo e-mail informado, com a apresentação do instrumento e os próximos passos de diligência.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer style="background:#132728;color:#e4e4e4;border-top:1px solid rgba(255,255,255,0.08);padding:5rem clamp(24px,6vw,96px) 3rem">
+  <div style="max-width:1360px;margin:0 auto">
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:3rem 4rem;padding-bottom:3.5rem;border-bottom:1px solid rgba(255,255,255,0.08)">
+      <div style="flex:1 1 320px;max-width:420px">
+        <span style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.75rem;letter-spacing:-0.02em;line-height:1">Plina<span style="color:#0EA7C7">.</span></span>
+        <p style="font-weight:300;font-size:1rem;line-height:1.6;color:#A0CFE7;margin:1.25rem 0 0">Conectando o capital global ao mercado brasileiro de direito creditório.</p>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:3rem 5rem">
+        <div style="display:flex;flex-direction:column;gap:0.875rem">
+          <span style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(255,255,255,0.5)">Navegação</span>
+          <a href="#produto" style="font-weight:300;font-size:0.9375rem;color:#e4e4e4;text-decoration:none" style-hover="color:#0EA7C7">Produto</a>
+          <a href="#tese" style="font-weight:300;font-size:0.9375rem;color:#e4e4e4;text-decoration:none" style-hover="color:#0EA7C7">Tese</a>
+          <a href="#compliance" style="font-weight:300;font-size:0.9375rem;color:#e4e4e4;text-decoration:none" style-hover="color:#0EA7C7">Compliance</a>
+          <a href="#registro" style="font-weight:300;font-size:0.9375rem;color:#e4e4e4;text-decoration:none" style-hover="color:#0EA7C7">Registrar interesse</a>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0.875rem;max-width:340px">
+          <span style="font-family:Geist,sans-serif;font-weight:700;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.2em;color:rgba(255,255,255,0.5)">Contato</span>
+          <a href="mailto:contato@plina.finance" style="font-family:'Geist Mono',monospace;font-size:0.875rem;letter-spacing:0.05em;color:#e4e4e4;text-decoration:none" style-hover="color:#0EA7C7">contato@plina.finance</a>
+          <p style="font-weight:300;font-size:0.8125rem;line-height:1.6;color:rgba(228,228,228,0.55);margin:0.5rem 0 0">A Plina Finance não é uma corretora. Atua como estruturadora de ativos digitais regulados sob o framework da CVM 175.</p>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:1rem;padding-top:2rem">
+      <p style="font-weight:300;font-size:0.8125rem;color:rgba(228,228,228,0.55);margin:0">© 2026 Plina Finance. Todos os direitos reservados.</p>
+      <a href="https://www.linkedin.com/company/plina-finance/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" style="color:rgba(228,228,228,0.7);display:inline-flex" style-hover="color:#0EA7C7"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg></a>
+    </div>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;metricasNumericas&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Conteúdo&quot;},&quot;formCompleto&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Formulário&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const metricas = this.props.metricasNumericas ?? true;
+    return {
+      metricas,
+      metricasOff: !metricas,
+      formCompleto: this.props.formCompleto ?? true,
+      submitLead: (e) => {
+        e.preventDefault();
+        const f = document.getElementById('lead-form');
+        const ok = document.getElementById('lead-ok');
+        if (f) f.style.display = 'none';
+        if (ok) ok.style.display = 'block';
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

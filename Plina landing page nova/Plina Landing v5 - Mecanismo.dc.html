@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=chillax@400,500,600&f[]=satoshi@300,400,500&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@300;400;500&display=swap" />
+<script src="./image-slot.js"></script>
+<style>
+html{scroll-behavior:smooth}
+body{margin:0;background:#0C1719;color:#EDF3F2;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit}
+a:hover{color:#0EA7C7}
+::selection{background:#0EA7C7;color:#0C1719}
+:focus-visible{outline:2px solid #0EA7C7;outline-offset:3px}
+[data-light] :focus-visible{outline-color:#046C88}
+[data-light] a:hover{color:#046C88}
+input::placeholder,textarea::placeholder{color:rgba(19,39,40,0.65)}
+summary{list-style:none;cursor:pointer}
+summary::-webkit-details-marker{display:none}
+details[open] [data-plus]{transform:rotate(45deg)}
+/* Drawer: a navegação colapsa, não desaparece (breakpoint desk 960px) */
+[data-drawer]{display:none}
+/* Skip link: invisivel ate receber foco de teclado. */
+[data-skip]{position:absolute;left:-9999px;top:0;z-index:100}
+[data-skip]:focus{left:clamp(24px,5vw,48px);top:12px;background:#EDF3F2;color:#0C1719;padding:10px 18px;border-radius:8px;font-family:Geist,sans-serif;font-weight:600;font-size:0.875rem;text-decoration:none}
+@media (max-width:960px){
+  [data-navlinks]{display:none !important}
+  [data-drawer]{display:block}
+}
+/* Breakpoint lap 760px: a trilha do mecanismo empilha e solta os conectores */
+@media (max-width:760px){
+  [data-rail]{grid-template-columns:1fr !important}
+  [data-rail] [data-rail-link]{display:none !important}
+  [data-rail] > div{padding:1.75rem 0 !important;border-top:1px solid rgba(237,243,242,0.08)}
+  [data-trio]{grid-template-columns:1fr !important}
+  /* A tabela vira lista: o cabecalho some da vista mas continua no leitor de tela. */
+  [data-table] thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  [data-table] tr{display:block;padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.1)}
+  [data-table] td{display:block;padding:0 0 0.375rem !important;border:0 !important;text-align:left !important}
+}
+/* Breakpoint palm 560px: toda grade de coluna fixa vira uma coluna */
+@media (max-width:560px){
+  [data-fork]{grid-template-columns:1fr !important}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:0.01ms !important;animation:none !important}html{scroll-behavior:auto}}
+</style>
+</helmet>
+<div style="font-family:Satoshi,system-ui,sans-serif;font-weight:400;font-size:1.0625rem;line-height:1.65">
+<a href="#topo" data-skip="true">Pular para o conteúdo</a>
+
+<sc-if value="{{ showBanner }}" hint-placeholder-val="{{ true }}">
+<div id="banner" style="background:#0EA7C7;color:#132728;padding:9px clamp(24px,5vw,48px);font-family:Geist,sans-serif;font-weight:500;font-size:0.8125rem;display:flex;align-items:center;justify-content:center;gap:1rem;position:relative"><span>Fase 01 em operação: originação com capital próprio, sob a Lei 11.795/2008 <a href="#fases" style="color:#132728;font-weight:600;text-decoration:none;border-bottom:1px solid rgba(19,39,40,0.4)">O que isso significa</a></span><button id="banner-x" type="button" aria-label="Fechar aviso" style="position:absolute;right:clamp(16px,3vw,24px);background:transparent;border:0;cursor:pointer;color:#132728;font-family:'Geist Mono',monospace;font-size:1rem;line-height:1;padding:4px 8px">×</button></div>
+</sc-if>
+
+<nav aria-label="Principal" style="position:sticky;top:0;z-index:50;background:rgba(12,23,25,0.85);backdrop-filter:blur(12px);border-bottom:1px solid rgba(237,243,242,0.08)">
+  <div style="max-width:1240px;margin:0 auto;padding:1.125rem clamp(24px,5vw,48px);display:flex;align-items:center;justify-content:space-between;gap:1.5rem">
+    <a href="#topo" style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.25rem;letter-spacing:-0.02em;text-decoration:none">Plina<span style="color:#0EA7C7">.</span></a>
+    <div data-navlinks="true" style="display:flex;align-items:center;gap:2rem">
+      <a href="#mecanismo" style="font-family:Geist,sans-serif;font-size:0.8125rem;color:rgba(237,243,242,0.65);text-decoration:none;transition:color 250ms cubic-bezier(0.22,1,0.36,1)" style-hover="color:#EDF3F2">Mecanismo</a>
+      <a href="#hoje" style="font-family:Geist,sans-serif;font-size:0.8125rem;color:rgba(237,243,242,0.65);text-decoration:none;transition:color 250ms cubic-bezier(0.22,1,0.36,1)" style-hover="color:#EDF3F2">O que existe hoje</a>
+      <a href="#cessao" style="font-family:Geist,sans-serif;font-size:0.8125rem;color:rgba(237,243,242,0.65);text-decoration:none;transition:color 250ms cubic-bezier(0.22,1,0.36,1)" style-hover="color:#EDF3F2">Cessão</a>
+      <a href="#controles" style="font-family:Geist,sans-serif;font-size:0.8125rem;color:rgba(237,243,242,0.65);text-decoration:none;transition:color 250ms cubic-bezier(0.22,1,0.36,1)" style-hover="color:#EDF3F2">Controles</a>
+      <a href="#fases" style="font-family:Geist,sans-serif;font-size:0.8125rem;color:rgba(237,243,242,0.65);text-decoration:none;transition:color 250ms cubic-bezier(0.22,1,0.36,1)" style-hover="color:#EDF3F2">Fase 02</a>
+      <a href="#faq" style="font-family:Geist,sans-serif;font-size:0.8125rem;color:rgba(237,243,242,0.65);text-decoration:none;transition:color 250ms cubic-bezier(0.22,1,0.36,1)" style-hover="color:#EDF3F2">FAQ</a>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem">
+      <a href="#contato" style="font-family:Geist,sans-serif;font-weight:600;font-size:0.8125rem;border:1px solid rgba(237,243,242,0.15);border-radius:8px;padding:9px 18px;text-decoration:none;white-space:nowrap;transition:border-color 250ms cubic-bezier(0.22,1,0.36,1),color 250ms cubic-bezier(0.22,1,0.36,1)" style-hover="border:1px solid #0EA7C7;color:#0EA7C7">Agendar conversa</a>
+      <details data-drawer="true">
+        <summary aria-label="Abrir menu" style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid rgba(237,243,242,0.15);border-radius:8px">
+          <span aria-hidden="true" style="font-family:'Geist Mono',monospace;font-size:1rem;line-height:1">≡</span>
+        </summary>
+        <div style="position:absolute;left:0;right:0;background:#0C1719;border-bottom:1px solid rgba(237,243,242,0.12);padding:0.5rem clamp(24px,5vw,48px) 1.5rem;display:flex;flex-direction:column">
+          <a href="#mecanismo" style="font-family:Geist,sans-serif;font-size:0.9375rem;padding:0.875rem 0;border-bottom:1px solid rgba(237,243,242,0.08);text-decoration:none">Mecanismo</a>
+          <a href="#hoje" style="font-family:Geist,sans-serif;font-size:0.9375rem;padding:0.875rem 0;border-bottom:1px solid rgba(237,243,242,0.08);text-decoration:none">O que existe hoje</a>
+          <a href="#cessao" style="font-family:Geist,sans-serif;font-size:0.9375rem;padding:0.875rem 0;border-bottom:1px solid rgba(237,243,242,0.08);text-decoration:none">Cessão</a>
+          <a href="#controles" style="font-family:Geist,sans-serif;font-size:0.9375rem;padding:0.875rem 0;border-bottom:1px solid rgba(237,243,242,0.08);text-decoration:none">Controles</a>
+          <a href="#fases" style="font-family:Geist,sans-serif;font-size:0.9375rem;padding:0.875rem 0;border-bottom:1px solid rgba(237,243,242,0.08);text-decoration:none">Fase 02</a>
+          <a href="#faq" style="font-family:Geist,sans-serif;font-size:0.9375rem;padding:0.875rem 0;text-decoration:none">FAQ</a>
+        </div>
+      </details>
+    </div>
+  </div>
+</nav>
+
+<header id="topo" data-screen-label="v5 · Hero" style="position:relative;padding:clamp(5rem,9vw,7rem) clamp(24px,5vw,48px) 0">
+  <div style="max-width:1240px;margin:0 auto">
+    <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.18em;color:rgba(237,243,242,0.55);margin:0;text-transform:uppercase">Direito creditório · Consórcio contemplado · Lei 11.795/2008</p>
+    <h1 style="font-family:Chillax,sans-serif;font-weight:500;font-size:clamp(2.75rem,6.5vw,5.5rem);line-height:1.04;letter-spacing:-0.03em;margin:2rem 0 0;max-width:17ch">O crédito já foi contemplado. Falta liquidez.</h1>
+    <p style="font-weight:400;font-size:1.1875rem;line-height:1.6;color:rgba(237,243,242,0.72);margin:2rem 0 0;max-width:60ch">O titular de uma cota contemplada já ganhou a carta de crédito. Quem prefere o dinheiro ao bem não tem para quem vender. A Plina compra esse direito com deságio e paga por PIX em até 48 horas.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:1rem;margin-top:2.5rem">
+      <a href="#contato" style="font-family:Geist,sans-serif;font-weight:600;font-size:0.9375rem;background:#EDF3F2;color:#0C1719;padding:15px 32px;border-radius:8px;text-decoration:none;transition:background-color 250ms cubic-bezier(0.22,1,0.36,1),color 250ms cubic-bezier(0.22,1,0.36,1)" style-hover="background:#0EA7C7;color:#132728">Agendar conversa técnica</a>
+      <a href="#mecanismo" style="font-family:Geist,sans-serif;font-weight:600;font-size:0.9375rem;border:1px solid rgba(237,243,242,0.15);color:#EDF3F2;padding:15px 32px;border-radius:8px;text-decoration:none;transition:border-color 250ms cubic-bezier(0.22,1,0.36,1),color 250ms cubic-bezier(0.22,1,0.36,1)" style-hover="border:1px solid #0EA7C7;color:#0EA7C7">Ver o mecanismo</a>
+    </div>
+    <figure style="margin:5rem 0 0">
+      <div style="width:100%;max-width:1100px;height:clamp(260px,42vw,480px);position:relative">
+        <image-slot id="v5-rio" src="./uploads/v5-rio.webp" shape="rounded" radius="16" placeholder="Fotografia: cidade brasileira reconhecível, enquadramento amplo, luz natural."></image-slot>
+      </div>
+      <figcaption style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.04em;color:rgba(237,243,242,0.55);margin-top:0.875rem;max-width:66ch">Rio de Janeiro. O consórcio é supervisionado pelo Banco Central desde 2008, sob a Lei 11.795.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<main>
+
+<section id="mecanismo" data-screen-label="v5 · 01 Mecanismo" style="border-top:1px solid rgba(237,243,242,0.12);padding:clamp(7rem,13vw,11rem) clamp(24px,5vw,48px);margin-top:6rem">
+  <div style="max-width:1240px;margin:0 auto">
+    <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.18em;color:rgba(237,243,242,0.55);margin:0;text-transform:uppercase">O mecanismo</p>
+    <h2 style="font-family:Chillax,sans-serif;font-weight:500;font-size:clamp(2rem,4vw,3.25rem);line-height:1.08;letter-spacing:-0.025em;margin:1.25rem 0 0;max-width:22ch">Onde o direito creditório nasce, e onde ele trava.</h2>
+
+    <figure style="margin:clamp(3.5rem,7vw,5.5rem) 0 clamp(3.5rem,7vw,5.5rem)">
+      <div style="overflow-x:auto;border-top:1px solid rgba(237,243,242,0.08);padding-top:clamp(2.5rem,5vw,4rem)">
+        <svg viewBox="-4 -4 1168 668" role="img" aria-labelledby="mec-t mec-d" style="width:100%;min-width:880px;height:auto;display:block">
+          <title id="mec-t">Do grupo de consórcio ao pool da Plina</title>
+          <desc id="mec-d">O grupo de consórcio produz a contemplação, por sorteio ou por lance, e a contemplação produz a carta de crédito. A partir daí o titular decide. Quem quer o bem usa a carta, e a rota termina ali. Quem quer o dinheiro cede o direito à Plina, que compra com deságio e paga por PIX em até 48 horas. O valor então se realiza por três rotas, revenda ao comprador-usuário, liquidação pela administradora ou prazo de grupo, e as três convergem para o mesmo pool.</desc>
+          <defs>
+            <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9" fill="none" stroke="rgba(237,243,242,0.25)" stroke-width="1.5"/>
+            </marker>
+            <marker id="arwc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9" fill="none" stroke="rgba(14,167,199,0.55)" stroke-width="1.5"/>
+            </marker>
+          </defs>
+          <rect x="20" y="0" width="320" height="80" rx="8" fill="#122224" stroke="rgba(237,243,242,0.2)" stroke-width="1"/><text x="40" y="26" font-family="'Geist Mono', monospace" font-size="11" letter-spacing="1.8" fill="rgba(237,243,242,0.55)">01</text><text x="40" y="50" font-family="Geist, sans-serif" font-weight="600" font-size="15" fill="#EDF3F2">Grupo de consórcio</text><text x="40" y="70" font-family="'Geist Mono', monospace" font-size="11.5" fill="rgba(237,243,242,0.55)">administradora autorizada · BACEN</text><rect x="420" y="0" width="320" height="80" rx="8" fill="#122224" stroke="rgba(237,243,242,0.2)" stroke-width="1"/><text x="440" y="26" font-family="'Geist Mono', monospace" font-size="11" letter-spacing="1.8" fill="rgba(237,243,242,0.55)">02</text><text x="440" y="50" font-family="Geist, sans-serif" font-weight="600" font-size="15" fill="#EDF3F2">Contemplação</text><text x="440" y="70" font-family="'Geist Mono', monospace" font-size="11.5" fill="rgba(237,243,242,0.55)">por sorteio ou por lance</text><rect x="820" y="0" width="320" height="80" rx="8" fill="#122224" stroke="rgba(237,243,242,0.2)" stroke-width="1"/><text x="840" y="26" font-family="'Geist Mono', monospace" font-size="11" letter-spacing="1.8" fill="rgba(237,243,242,0.55)">03</text><text x="840" y="50" font-family="Geist, sans-serif" font-weight="600" font-size="15" fill="#EDF3F2">Carta de crédito</text><text x="840" y="70" font-family="'Geist Mono', monospace" font-size="11.5" fill="rgba(237,243,242,0.55)">valor de face definido</text><line x1="340" y1="40" x2="410" y2="40" stroke="rgba(237,243,242,0.25)" stroke-width="1" marker-end="url(#arw)"/><line x1="740" y1="40" x2="810" y2="40" stroke="rgba(237,243,242,0.25)" stroke-width="1" marker-end="url(#arw)"/><path d="M980 80 L980 118 L250 118 L250 146" fill="none" stroke="rgba(237,243,242,0.25)" stroke-width="1" marker-end="url(#arw)"/><path d="M830 118 L830 146" fill="none" stroke="rgba(14,167,199,0.55)" stroke-width="1" marker-end="url(#arwc)"/><rect x="110" y="148" width="280" height="80" rx="8" fill="none" stroke="rgba(237,243,242,0.12)" stroke-width="1"/><text x="130" y="174" font-family="'Geist Mono', monospace" font-size="11" letter-spacing="1.8" fill="rgba(237,243,242,0.4)">ROTA COMUM</text><text x="130" y="198" font-family="Geist, sans-serif" font-weight="600" font-size="15" fill="rgba(237,243,242,0.55)">Usa a carta, compra o bem</text><text x="130" y="218" font-family="'Geist Mono', monospace" font-size="11.5" fill="rgba(237,243,242,0.4)">termina aqui</text><rect x="690" y="148" width="280" height="80" rx="8" fill="#122224" stroke="#0EA7C7" stroke-width="1"/><text x="710" y="174" font-family="'Geist Mono', monospace" font-size="11" letter-spacing="1.8" fill="#0EA7C7">ONDE A PLINA ENTRA</text><text x="710" y="198" font-family="Geist, sans-serif" font-weight="600" font-size="15" fill="#EDF3F2">Quer o dinheiro, não o bem</text><text x="710" y="218" font-family="'Geist Mono', monospace" font-size="11.5" fill="rgba(237,243,242,0.55)">sem mercado organizado</text><path d="M830 228 L830 260 L580 260 L580 290" fill="none" stroke="rgba(14,167,199,0.55)" stroke-width="1" marker-end="url(#arwc)"/><rect x="330" y="292" width="500" height="80" rx="8" fill="#122224" stroke="#0EA7C7" stroke-width="1"/><text x="350" y="318" font-family="'Geist Mono', monospace" font-size="11" letter-spacing="1.8" fill="rgba(237,243,242,0.55)">CESSÃO</text><text x="350" y="342" font-family="Geist, sans-serif" font-weight="600" font-size="15" fill="#EDF3F2">A Plina compra o direito com deságio</text><text x="350" y="362" font-family="'Geist Mono', monospace" font-size="11.5" fill="rgba(237,243,242,0.55)">PIX em até 48 horas</text><path d="M580 372 L580 404 L180 404 L180 432" fill="none" stroke="rgba(14,167,199,0.55)" stroke-width="1" marker-end="url(#arwc)"/><path d="M580 404 L580 432" fill="none" stroke="rgba(14,167,199,0.55)" stroke-width="1" marker-end="url(#arwc)"/><path d="M580 404 L980 404 L980 432" fill="none" stroke="rgba(14,167,199,0.55)" stroke-width="1" marker-end="url(#arwc)"/><rect x="20" y="434" width="320" height="80" rx="8" fill="#122224" stroke="rgba(237,243,242,0.2)" stroke-width="1"/><text x="40" y="460" font-family="'Geist Mono', monospace" font-size="11" letter-spacing="1.8" fill="rgba(237,243,242,0.55)">A</text><text x="40" y="484" font-family="Geist, sans-serif" font-weight="600" font-size="15" fill="#EDF3F2">Revenda ao comprador-usuário</text><text x="40" y="504" font-family="'Geist Mono', monospace" font-size="11.5" fill="rgba(237,243,242,0.55)">reserva de 72 horas</text><rect x="420" y="434" width="320" height="80" rx="8" fill="#122224" stroke="rgba(237,243,242,0.2)" stroke-width="1"/><text x="440" y="460" font-family="'Geist Mono', monospace" font-size="11" letter-spacing="1.8" fill="rgba(237,243,242,0.55)">B</text><text x="440" y="484" font-family="Geist, sans-serif" font-weight="600" font-size="15" fill="#EDF3F2">Liquidação pela administradora</text><text x="440" y="504" font-family="'Geist Mono', monospace" font-size="11.5" fill="rgba(237,243,242,0.55)">regras do grupo</text><rect x="820" y="434" width="320" height="80" rx="8" fill="#122224" stroke="rgba(237,243,242,0.2)" stroke-width="1"/><text x="840" y="460" font-family="'Geist Mono', monospace" font-size="11" letter-spacing="1.8" fill="rgba(237,243,242,0.55)">C</text><text x="840" y="484" font-family="Geist, sans-serif" font-weight="600" font-size="15" fill="#EDF3F2">Prazo de grupo</text><text x="840" y="504" font-family="'Geist Mono', monospace" font-size="11.5" fill="rgba(237,243,242,0.55)">até o encerramento</text><path d="M180 514 L180 546 L580 546" fill="none" stroke="rgba(237,243,242,0.25)" stroke-width="1"/><path d="M980 514 L980 546 L580 546" fill="none" stroke="rgba(237,243,242,0.25)" stroke-width="1"/><path d="M580 514 L580 574" fill="none" stroke="rgba(237,243,242,0.25)" stroke-width="1" marker-end="url(#arw)"/><rect x="330" y="576" width="500" height="80" rx="8" fill="#122224" stroke="rgba(237,243,242,0.2)" stroke-width="1"/><text x="350" y="602" font-family="'Geist Mono', monospace" font-size="11" letter-spacing="1.8" fill="rgba(237,243,242,0.55)">POOL</text><text x="350" y="626" font-family="Geist, sans-serif" font-weight="600" font-size="15" fill="#EDF3F2">Todo valor realizado converge aqui</text><text x="350" y="646" font-family="'Geist Mono', monospace" font-size="11.5" fill="rgba(237,243,242,0.55)">um só pool, três rotas</text>
+        </svg>
+      </div>
+      <figcaption style="font-family:'Geist Mono', monospace;font-size:0.75rem;letter-spacing:0.04em;color:rgba(237,243,242,0.55);margin-top:1.25rem;max-width:66ch">A linha em cyan é a operação da Plina. Tudo antes dela já existe no mercado de consórcio desde 2008.</figcaption>
+    </figure>
+
+    <div>
+      <div style="border-top:1px solid rgba(237,243,242,0.12);padding-top:2.5rem;margin-top:2.5rem">
+        <h3 style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.375rem;letter-spacing:-0.01em;margin:1rem 0 0;max-width:40ch">O que cada rota é, e por que as três juntas pagam mais.</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.25rem;margin-top:2rem">
+          <div style="padding-top:0.5rem">
+            <p style="font-family:'Geist Mono',monospace;font-size:2rem;font-weight:300;color:#0EA7C7;margin:0;line-height:1">A</p>
+            <h4 style="font-family:Geist,sans-serif;font-weight:600;font-size:1rem;margin:0.75rem 0 0">Revenda ao comprador-usuário</h4>
+            <p style="font-weight:400;font-size:0.9375rem;line-height:1.6;color:rgba(237,243,242,0.65);margin:0.625rem 0 0;max-width:46ch">Quem quer o imóvel compra a carta abaixo do valor de face. Reserva de 72 horas, transferência pela administradora.</p>
+          </div>
+          <div style="padding-top:0.5rem">
+            <p style="font-family:'Geist Mono',monospace;font-size:2rem;font-weight:300;color:#0EA7C7;margin:0;line-height:1">B</p>
+            <h4 style="font-family:Geist,sans-serif;font-weight:600;font-size:1rem;margin:0.75rem 0 0">Liquidação pela administradora</h4>
+            <p style="font-weight:400;font-size:0.9375rem;line-height:1.6;color:rgba(237,243,242,0.65);margin:0.625rem 0 0;max-width:46ch">A administradora liquida a cota pelas regras do grupo. A rota mais previsível, e a mais lenta.</p>
+          </div>
+          <div style="padding-top:0.5rem">
+            <p style="font-family:'Geist Mono',monospace;font-size:2rem;font-weight:300;color:#0EA7C7;margin:0;line-height:1">C</p>
+            <h4 style="font-family:Geist,sans-serif;font-weight:600;font-size:1rem;margin:0.75rem 0 0">Prazo de grupo</h4>
+            <p style="font-weight:400;font-size:0.9375rem;line-height:1.6;color:rgba(237,243,242,0.65);margin:0.625rem 0 0;max-width:46ch">Carregar até o encerramento do grupo. Usada quando as duas primeiras não pagam melhor.</p>
+          </div>
+        </div>
+        <p style="font-weight:400;font-size:0.9375rem;line-height:1.6;color:rgba(237,243,242,0.65);margin:2rem 0 0;max-width:66ch">Os concorrentes operam presos ao Caminho B. Trabalhar as três em conjunto é o que sustenta um deságio maior, e é decisão de gestão ativa, não efeito da tecnologia.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="hoje" data-screen-label="v5 · 02 O que existe hoje" style="border-top:1px solid rgba(237,243,242,0.12);padding:clamp(4.5rem,7vw,6rem) clamp(24px,5vw,48px)">
+  <div style="max-width:1240px;margin:0 auto">
+    <div style="display:flex;flex-wrap:wrap;gap:2rem 4rem;align-items:flex-end;justify-content:space-between">
+      <div>
+        <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.18em;color:rgba(237,243,242,0.55);margin:0;text-transform:uppercase">Fase 01 · Estado real</p>
+        <h2 style="font-family:Chillax,sans-serif;font-weight:500;font-size:clamp(2rem,4vw,3.25rem);line-height:1.08;letter-spacing:-0.025em;margin:1.25rem 0 0;max-width:22ch">O que já roda, e em que ambiente.</h2>
+      </div>
+      <span style="font-family:'Geist Mono',monospace;font-size:0.6875rem;letter-spacing:0.1em;color:#A0CFE7;border:1px solid rgba(160,207,231,0.3);border-radius:9999px;padding:6px 14px;white-space:nowrap">Testnet · demonstrável</span>
+    </div>
+    <p style="font-weight:400;font-size:1.1875rem;line-height:1.6;color:rgba(237,243,242,0.72);margin:1.5rem 0 0;max-width:66ch">O produto funciona ponta a ponta em ambiente de teste: entrada, KYC, pagamento por PIX e recebimento do token, com registro auditável a cada passo. O que falta são integrações de terceiros e o fechamento jurídico do veículo, não o núcleo.</p>
+
+    <table data-table="true" style="width:100%;border-collapse:collapse;margin-top:3.5rem;text-align:left">
+      <caption style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">Superfícies do produto em operação, o que cada uma faz e em que ambiente roda</caption>
+      <thead>
+        <tr>
+          <th scope="col" style="font-family:'Geist Mono',monospace;font-size:0.6875rem;letter-spacing:0.18em;text-transform:uppercase;color:rgba(237,243,242,0.55);font-weight:400;padding:0 0 0.875rem;border-bottom:1px solid rgba(237,243,242,0.12);width:180px">Superfície</th>
+          <th scope="col" style="font-family:'Geist Mono',monospace;font-size:0.6875rem;letter-spacing:0.18em;text-transform:uppercase;color:rgba(237,243,242,0.55);font-weight:400;padding:0 0 0.875rem;border-bottom:1px solid rgba(237,243,242,0.12);padding-left:2rem">O que faz</th>
+          <th scope="col" style="font-family:'Geist Mono',monospace;font-size:0.6875rem;letter-spacing:0.18em;text-transform:uppercase;color:rgba(237,243,242,0.55);font-weight:400;padding:0 0 0.875rem;border-bottom:1px solid rgba(237,243,242,0.12);padding-left:2rem;text-align:right">Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline"><span style="font-family:'Geist Mono',monospace;font-size:0.875rem;color:#EDF3F2">/vender</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem"><span style="font-weight:400;font-size:0.9375rem;color:rgba(237,243,242,0.72)">Cadastro, KYC, simulação do deságio e recebimento por PIX em até 48 horas</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem;text-align:right"><span style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.1em;color:rgba(237,243,242,0.55);white-space:nowrap">Testnet</span></td></tr>
+        <tr><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline"><span style="font-family:'Geist Mono',monospace;font-size:0.875rem;color:#EDF3F2">/comprar</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem"><span style="font-weight:400;font-size:0.9375rem;color:rgba(237,243,242,0.72)">Calculadora contra financiamento bancário e reserva da cota por 72 horas</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem;text-align:right"><span style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.1em;color:rgba(237,243,242,0.55);white-space:nowrap">Testnet</span></td></tr>
+        <tr><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline"><span style="font-family:'Geist Mono',monospace;font-size:0.875rem;color:#EDF3F2">/investir</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem"><span style="font-weight:400;font-size:0.9375rem;color:rgba(237,243,242,0.72)">KYC, escolha de classe, cotação, pagamento e recebimento do token</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem;text-align:right"><span style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.1em;color:rgba(237,243,242,0.55);white-space:nowrap">Testnet</span></td></tr>
+        <tr><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline"><span style="font-family:'Geist Mono',monospace;font-size:0.875rem;color:#EDF3F2">/minha-posicao</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem"><span style="font-weight:400;font-size:0.9375rem;color:rgba(237,243,242,0.72)">Saldo lido da blockchain, não de banco de dados interno</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem;text-align:right"><span style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.1em;color:rgba(237,243,242,0.55);white-space:nowrap">Testnet</span></td></tr>
+        <tr><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline"><span style="font-family:'Geist Mono',monospace;font-size:0.875rem;color:#EDF3F2">/pool</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem"><span style="font-weight:400;font-size:0.9375rem;color:rgba(237,243,242,0.72)">Valor do fundo, total de tokens e composição da carteira</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem;text-align:right"><span style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.1em;color:rgba(237,243,242,0.55);white-space:nowrap">Testnet · público</span></td></tr>
+        <tr><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline"><span style="font-family:'Geist Mono',monospace;font-size:0.875rem;color:#EDF3F2">/politica-clawback</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem"><span style="font-weight:400;font-size:0.9375rem;color:rgba(237,243,242,0.72)">As quatro hipóteses formais de recuperação, publicadas antes do primeiro incidente</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem;text-align:right"><span style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.1em;color:rgba(237,243,242,0.55);white-space:nowrap">Publicada</span></td></tr>
+      </tbody>
+    </table>
+    <p style="font-weight:400;font-size:0.875rem;line-height:1.6;color:rgba(237,243,242,0.55);margin:1.75rem 0 0;max-width:66ch">PIX e assinatura eletrônica rodam simulados. Nenhuma rota tem endereço público ainda: quando tiver, esta tabela vira uma lista de links.</p>
+  </div>
+</section>
+
+<section id="cessao" data-screen-label="v5 · 03 Cessão" style="border-top:1px solid rgba(237,243,242,0.12);padding:clamp(6.5rem,11vw,9rem) clamp(24px,5vw,48px)">
+  <div style="max-width:1240px;margin:0 auto">
+    <div style="display:flex;flex-wrap:wrap;gap:2.5rem 5rem;align-items:flex-end;justify-content:space-between">
+      <div>
+        <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.18em;color:rgba(237,243,242,0.55);margin:0;text-transform:uppercase">Cessão</p>
+        <h2 style="font-family:Chillax,sans-serif;font-weight:500;font-size:clamp(2rem,4vw,3.25rem);line-height:1.08;letter-spacing:-0.025em;margin:1.25rem 0 0;max-width:20ch">Como a cota muda de mãos.</h2>
+      </div>
+      <p style="flex:1 1 340px;font-weight:400;font-size:1.0625rem;line-height:1.65;color:rgba(237,243,242,0.65);max-width:46ch;margin:0">O que decide se a operação escala é operacional, não tecnológico: fazer a administradora reconhecer a transferência do direito. São dois caminhos, e o segundo tem preço.</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1.5rem;margin-top:3.5rem">
+      <div style="background:#122224;border:1px solid rgba(237,243,242,0.1);border-radius:16px;padding:clamp(28px,3.5vw,44px);display:flex;flex-direction:column;gap:1.25rem">
+        <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
+          <span style="font-family:'Geist Mono',monospace;font-size:0.6875rem;letter-spacing:0.1em;color:#0EA7C7;border:1px solid rgba(14,167,199,0.45);border-radius:9999px;padding:4px 12px;white-space:nowrap">Preferencial</span>
+        </div>
+        <h3 style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.375rem;letter-spacing:-0.01em;margin:0">Integração B2B com a administradora</h3>
+        <p style="font-weight:400;font-size:0.9375rem;line-height:1.65;color:rgba(237,243,242,0.72);margin:0;max-width:46ch">Transferência por API, com nível de serviço contratual. O caminho rápido, quando a administradora está integrada.</p>
+        <div style="display:flex;justify-content:space-between;gap:1rem;border-top:1px solid rgba(237,243,242,0.1);padding-top:1rem">
+          <span style="font-family:Geist,sans-serif;font-size:0.8125rem;color:rgba(237,243,242,0.65)">Custo adicional ao cedente</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;color:#EDF3F2">Nenhum</span>
+        </div>
+      </div>
+      <div style="padding:clamp(28px,3.5vw,44px) clamp(28px,3.5vw,44px) clamp(28px,3.5vw,44px) 0;display:flex;flex-direction:column;gap:1.25rem">
+        <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
+          <span style="font-family:'Geist Mono',monospace;font-size:0.6875rem;letter-spacing:0.1em;color:#A0CFE7;border:1px solid rgba(160,207,231,0.3);border-radius:9999px;padding:4px 12px;white-space:nowrap">Contingência</span>
+        </div>
+        <h3 style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.375rem;letter-spacing:-0.01em;margin:0">Cartório digital</h3>
+        <p style="font-weight:400;font-size:0.9375rem;line-height:1.65;color:rgba(237,243,242,0.72);margin:0;max-width:46ch">Sem integração, a cessão vai a cartório digital. Funciona com qualquer administradora, e é o que garante cobertura.</p>
+        <div style="display:flex;justify-content:space-between;gap:1rem;border-top:1px solid rgba(237,243,242,0.1);padding-top:1rem">
+          <span style="font-family:Geist,sans-serif;font-size:0.8125rem;color:rgba(237,243,242,0.65)">Taxa de anuência</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;color:#EDF3F2">Embutida no deságio</span>
+        </div>
+      </div>
+    </div>
+
+    <div data-trio="true" style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;margin-top:3.5rem">
+      <figure style="margin:0">
+        <div style="position:relative;aspect-ratio:3/4;min-height:300px">
+          <image-slot id="v5-cedente" src="./uploads/v5-cedente.webp" shape="rounded" radius="16" placeholder="Fotografia: pessoa real em contexto urbano brasileiro, sem posar."></image-slot>
+        </div>
+        <figcaption style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.04em;color:rgba(237,243,242,0.55);margin-top:0.875rem;max-width:46ch">O cedente. Contemplado que opta por liquidez em vez do bem.</figcaption>
+      </figure>
+      <figure style="margin:0">
+        <div style="position:relative;aspect-ratio:3/4;min-height:300px">
+          <image-slot id="v5-obra" src="./uploads/v5-obra.webp" shape="rounded" radius="16" placeholder="Fotografia: o bem em construção ou em operação. Documental."></image-slot>
+        </div>
+        <figcaption style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.04em;color:rgba(237,243,242,0.55);margin-top:0.875rem;max-width:46ch">O bem. O que a carta de crédito compra à vista.</figcaption>
+      </figure>
+      <figure style="margin:0">
+        <div style="position:relative;aspect-ratio:3/4;min-height:300px">
+          <image-slot id="v5-mesa" src="./uploads/v5-mesa.webp" shape="rounded" radius="16" placeholder="Fotografia: mesa institucional analisando a operação."></image-slot>
+        </div>
+        <figcaption style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.04em;color:rgba(237,243,242,0.55);margin-top:0.875rem;max-width:46ch">O destino. Onde o direito creditório passa a ser transferível.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="controles" data-screen-label="v5 · 04 Controles" style="border-top:1px solid rgba(237,243,242,0.12);padding:clamp(4.5rem,7vw,6rem) clamp(24px,5vw,48px)">
+  <div style="max-width:1240px;margin:0 auto">
+    <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.18em;color:rgba(237,243,242,0.55);margin:0;text-transform:uppercase">Controles</p>
+    <h2 style="font-family:Chillax,sans-serif;font-weight:500;font-size:clamp(2rem,4vw,3.25rem);line-height:1.08;letter-spacing:-0.025em;margin:1.25rem 0 0;max-width:22ch">Os freios existem antes do problema.</h2>
+    <p style="font-weight:400;font-size:1.1875rem;line-height:1.6;color:rgba(237,243,242,0.72);margin:1.5rem 0 0;max-width:66ch">Implementados e publicados na fase 01. Não dependem da constituição do fundo.</p>
+
+    <div style="margin-top:3.5rem;border-top:1px solid rgba(237,243,242,0.12)">
+      <details open="open" style="border-bottom:1px solid rgba(237,243,242,0.08)">
+        <summary style="display:grid;grid-template-columns:52px 1fr auto;gap:1.25rem;align-items:baseline;padding:1.5rem 0">
+          <span style="font-family:'Geist Mono',monospace;font-size:0.875rem;color:rgba(237,243,242,0.55)">01</span>
+          <span style="font-family:Geist,sans-serif;font-weight:600;font-size:1.0625rem">Recuperação com hipóteses fechadas</span>
+          <span data-plus="true" style="font-family:'Geist Mono',monospace;font-weight:300;font-size:1.25rem;color:rgba(237,243,242,0.55);transition:transform 300ms cubic-bezier(0.22,1,0.36,1)">+</span>
+        </summary>
+        <p style="font-weight:400;font-size:0.9375rem;line-height:1.65;color:rgba(237,243,242,0.65);margin:0;padding:0 0 1.5rem 68px;max-width:56ch">O ativo só pode ser recuperado sob quatro hipóteses formais, publicadas em <span style="font-family:'Geist Mono',monospace;font-size:0.875rem">/politica-clawback</span> antes do primeiro incidente. Erro de enquadramento regulatório não é uma delas.</p>
+      </details>
+      <details style="border-bottom:1px solid rgba(237,243,242,0.08)">
+        <summary style="display:grid;grid-template-columns:52px 1fr auto;gap:1.25rem;align-items:baseline;padding:1.5rem 0">
+          <span style="font-family:'Geist Mono',monospace;font-size:0.875rem;color:rgba(237,243,242,0.55)">02</span>
+          <span style="font-family:Geist,sans-serif;font-weight:600;font-size:1.0625rem">Dupla aprovação com prazo de expiração</span>
+          <span data-plus="true" style="font-family:'Geist Mono',monospace;font-weight:300;font-size:1.25rem;color:rgba(237,243,242,0.55);transition:transform 300ms cubic-bezier(0.22,1,0.36,1)">+</span>
+        </summary>
+        <p style="font-weight:400;font-size:0.9375rem;line-height:1.65;color:rgba(237,243,242,0.65);margin:0;padding:0 0 1.5rem 68px;max-width:56ch">Solicitante e aprovador precisam ser pessoas distintas, e o pedido expira em 72 horas sem ação.</p>
+      </details>
+      <details style="border-bottom:1px solid rgba(237,243,242,0.08)">
+        <summary style="display:grid;grid-template-columns:52px 1fr auto;gap:1.25rem;align-items:baseline;padding:1.5rem 0">
+          <span style="font-family:'Geist Mono',monospace;font-size:0.875rem;color:rgba(237,243,242,0.55)">03</span>
+          <span style="font-family:Geist,sans-serif;font-weight:600;font-size:1.0625rem">Só entra quem foi verificado</span>
+          <span data-plus="true" style="font-family:'Geist Mono',monospace;font-weight:300;font-size:1.25rem;color:rgba(237,243,242,0.55);transition:transform 300ms cubic-bezier(0.22,1,0.36,1)">+</span>
+        </summary>
+        <p style="font-weight:400;font-size:0.9375rem;line-height:1.65;color:rgba(237,243,242,0.65);margin:0;padding:0 0 1.5rem 68px;max-width:56ch">O ativo só é emitido para contas aprovadas em KYC. Verificar cedente e comprador é obrigação da própria Plina ao comprar cota de pessoa física, independente do veículo.</p>
+      </details>
+      <details style="border-bottom:1px solid rgba(237,243,242,0.08)">
+        <summary style="display:grid;grid-template-columns:52px 1fr auto;gap:1.25rem;align-items:baseline;padding:1.5rem 0">
+          <span style="font-family:'Geist Mono',monospace;font-size:0.875rem;color:rgba(237,243,242,0.55)">04</span>
+          <span style="font-family:Geist,sans-serif;font-weight:600;font-size:1.0625rem">Dado pessoal nunca vai para o registro público</span>
+          <span data-plus="true" style="font-family:'Geist Mono',monospace;font-weight:300;font-size:1.25rem;color:rgba(237,243,242,0.55);transition:transform 300ms cubic-bezier(0.22,1,0.36,1)">+</span>
+        </summary>
+        <p style="font-weight:400;font-size:0.9375rem;line-height:1.65;color:rgba(237,243,242,0.65);margin:0;padding:0 0 1.5rem 68px;max-width:56ch">Dados pessoais ficam em banco no Brasil. No livro-razão público constam apenas identificadores criptográficos e datas.</p>
+      </details>
+      <details style="border-bottom:1px solid rgba(237,243,242,0.08)">
+        <summary style="display:grid;grid-template-columns:52px 1fr auto;gap:1.25rem;align-items:baseline;padding:1.5rem 0">
+          <span style="font-family:'Geist Mono',monospace;font-size:0.875rem;color:rgba(237,243,242,0.55)">05</span>
+          <span style="font-family:Geist,sans-serif;font-weight:600;font-size:1.0625rem">A posição é lida da blockchain</span>
+          <span data-plus="true" style="font-family:'Geist Mono',monospace;font-weight:300;font-size:1.25rem;color:rgba(237,243,242,0.55);transition:transform 300ms cubic-bezier(0.22,1,0.36,1)">+</span>
+        </summary>
+        <p style="font-weight:400;font-size:0.9375rem;line-height:1.65;color:rgba(237,243,242,0.65);margin:0;padding:0 0 1.5rem 68px;max-width:56ch">Saldo e composição vêm do registro público, não de um banco de dados que precisaria ser confiado.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section id="fases" data-screen-label="v5 · 05 Fase 02" style="border-top:1px solid rgba(237,243,242,0.12);padding:clamp(7.5rem,14vw,12rem) clamp(24px,5vw,48px);background:#0A1214">
+  <div style="max-width:1240px;margin:0 auto">
+    <div style="display:flex;flex-wrap:wrap;gap:2.5rem 5rem;align-items:flex-end;justify-content:space-between">
+      <div>
+        <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.18em;color:rgba(237,243,242,0.55);margin:0;text-transform:uppercase">Fase 02 · Ainda não existe</p>
+        <h2 style="font-family:Chillax,sans-serif;font-weight:500;font-size:clamp(2rem,4vw,3.25rem);line-height:1.08;letter-spacing:-0.025em;margin:1.25rem 0 0;max-width:20ch">O que falta, dito com o mesmo cuidado do que já existe.</h2>
+      </div>
+      <p style="flex:1 1 360px;font-weight:400;font-size:1.1875rem;line-height:1.6;color:rgba(237,243,242,0.72);margin:0;max-width:46ch">A fase 01 vai a produção com capital próprio dos sócios, em operação privada sob a Lei 11.795/2008, sem fundo e sem investidor terceiro. O veículo regulado é fase 02.</p>
+    </div>
+
+    <table data-table="true" style="width:100%;border-collapse:collapse;margin-top:3.5rem;text-align:left">
+      <caption style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">O que ainda não existe, em que estado está e do que depende</caption>
+      <thead>
+        <tr>
+          <th scope="col" style="font-family:'Geist Mono',monospace;font-size:0.6875rem;letter-spacing:0.18em;text-transform:uppercase;color:rgba(237,243,242,0.55);font-weight:400;padding:0 0 0.875rem;border-bottom:1px solid rgba(237,243,242,0.12)">Item</th>
+          <th scope="col" style="font-family:'Geist Mono',monospace;font-size:0.6875rem;letter-spacing:0.18em;text-transform:uppercase;color:rgba(237,243,242,0.55);font-weight:400;padding:0 0 0.875rem;border-bottom:1px solid rgba(237,243,242,0.12);padding-left:2rem;width:150px">Estado</th>
+          <th scope="col" style="font-family:'Geist Mono',monospace;font-size:0.6875rem;letter-spacing:0.18em;text-transform:uppercase;color:rgba(237,243,242,0.55);font-weight:400;padding:0 0 0.875rem;border-bottom:1px solid rgba(237,243,242,0.12);padding-left:2rem;text-align:right;width:220px">Depende de</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline"><span style="font-family:Geist,sans-serif;font-weight:600;font-size:1rem;color:#EDF3F2">FIDC sob a Resolução CVM 175</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem"><span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.1em;color:#A0CFE7;white-space:nowrap">A constituir</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem;text-align:right"><span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;color:rgba(237,243,242,0.55);white-space:nowrap">Caminho crítico</span></td></tr>
+        <tr><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline"><span style="font-family:Geist,sans-serif;font-weight:600;font-size:1rem;color:#EDF3F2">Administradora, gestor, custodiante e auditoria independente</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem"><span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.1em;color:#A0CFE7;white-space:nowrap">A contratar</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem;text-align:right"><span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;color:rgba(237,243,242,0.55);white-space:nowrap">Estrutura do fundo</span></td></tr>
+        <tr><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline"><span style="font-family:Geist,sans-serif;font-weight:600;font-size:1rem;color:#EDF3F2">Classes Sênior e Subordinada com cascata de pagamento</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem"><span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.1em;color:#A0CFE7;white-space:nowrap">A implementar</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem;text-align:right"><span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;color:rgba(237,243,242,0.55);white-space:nowrap">Constituição do fundo</span></td></tr>
+        <tr><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline"><span style="font-family:Geist,sans-serif;font-weight:600;font-size:1rem;color:#EDF3F2">Trilha internacional em USDC e EURC</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem"><span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.1em;color:#A0CFE7;white-space:nowrap">A construir</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem;text-align:right"><span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;color:rgba(237,243,242,0.55);white-space:nowrap">Fase 02</span></td></tr>
+        <tr><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline"><span style="font-family:Geist,sans-serif;font-weight:600;font-size:1rem;color:#EDF3F2">Retorno-alvo por classe</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem"><span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.1em;color:#A0CFE7;white-space:nowrap">Em definição</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem;text-align:right"><span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;color:rgba(237,243,242,0.55);white-space:nowrap">Documentação da oferta</span></td></tr>
+        <tr><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline"><span style="font-family:Geist,sans-serif;font-weight:600;font-size:1rem;color:#EDF3F2">Prospecto, histórico de valor e janelas de liquidez</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem"><span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.1em;color:#A0CFE7;white-space:nowrap">Em construção</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem;text-align:right"><span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;color:rgba(237,243,242,0.55);white-space:nowrap">Constituição do fundo</span></td></tr>
+        <tr><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline"><span style="font-family:Geist,sans-serif;font-weight:600;font-size:1rem;color:#EDF3F2">Rating</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem"><span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;letter-spacing:0.1em;color:#A0CFE7;white-space:nowrap">A contratar</span></td><td style="padding:1.25rem 0;border-bottom:1px solid rgba(237,243,242,0.05);vertical-align:baseline;padding-left:2rem;text-align:right"><span style="font-family:'Geist Mono',monospace;font-size:0.8125rem;color:rgba(237,243,242,0.55);white-space:nowrap">Track record de operação</span></td></tr>
+      </tbody>
+    </table>
+
+    <p style="font-weight:400;font-size:0.9375rem;line-height:1.65;color:rgba(237,243,242,0.65);margin:2rem 0 0;max-width:66ch">Nenhuma linha acima tem data comprometida, e publicar estimativa seria o oposto do que esta seção faz. Se você é uma mesa de risco procurando o que não fecha, ela economiza a sua primeira hora.</p>
+  </div>
+</section>
+
+<section id="faq" data-light="true" data-screen-label="v5 · 06 FAQ" style="background:#EDF3F2;color:#132728;padding:clamp(5rem,8vw,7rem) clamp(24px,5vw,48px)">
+  <div style="max-width:900px;margin:0 auto">
+    <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.18em;color:rgba(19,39,40,0.65);margin:0;text-transform:uppercase">FAQ</p>
+    <h2 style="font-family:Chillax,sans-serif;font-weight:500;font-size:clamp(2rem,4vw,3.25rem);line-height:1.08;letter-spacing:-0.025em;margin:1.25rem 0 0;max-width:20ch">O que uma mesa de risco pergunta.</h2>
+    <div style="margin-top:3.5rem;border-top:1px solid rgba(19,39,40,0.12)">
+      <details style="border-bottom:1px solid rgba(19,39,40,0.09)">
+        <summary style="display:flex;gap:1.5rem;align-items:baseline;justify-content:space-between;padding:1.5rem 0">
+          <span style="font-family:Geist,sans-serif;font-weight:600;font-size:1.0625rem">Existe um fundo hoje?</span>
+          <span data-plus="true" style="font-family:'Geist Mono',monospace;font-weight:300;font-size:1.25rem;color:rgba(19,39,40,0.65);transition:transform 300ms cubic-bezier(0.22,1,0.36,1)">+</span>
+        </summary>
+        <p style="font-weight:400;font-size:0.9375rem;line-height:1.65;color:rgba(19,39,40,0.7);margin:0;padding:0 0 1.5rem;max-width:56ch">Não. A fase 01 opera com capital próprio dos sócios e não distribui cota a terceiros. O FIDC sob a Resolução CVM 175, com administradora, gestor, custodiante e auditoria, é fase 02.</p>
+      </details>
+      <details style="border-bottom:1px solid rgba(19,39,40,0.09)">
+        <summary style="display:flex;gap:1.5rem;align-items:baseline;justify-content:space-between;padding:1.5rem 0">
+          <span style="font-family:Geist,sans-serif;font-weight:600;font-size:1.0625rem">O que é uma cota contemplada?</span>
+          <span data-plus="true" style="font-family:'Geist Mono',monospace;font-weight:300;font-size:1.25rem;color:rgba(19,39,40,0.65);transition:transform 300ms cubic-bezier(0.22,1,0.36,1)">+</span>
+        </summary>
+        <p style="font-weight:400;font-size:0.9375rem;line-height:1.65;color:rgba(19,39,40,0.7);margin:0;padding:0 0 1.5rem;max-width:56ch">Cota cujo direito à carta de crédito já foi definido, por sorteio ou por lance. O titular pode usar a carta ou ceder a cota, e a Plina adquire esse direito com deságio.</p>
+      </details>
+      <details style="border-bottom:1px solid rgba(19,39,40,0.09)">
+        <summary style="display:flex;gap:1.5rem;align-items:baseline;justify-content:space-between;padding:1.5rem 0">
+          <span style="font-family:Geist,sans-serif;font-weight:600;font-size:1.0625rem">Como o deságio é definido?</span>
+          <span data-plus="true" style="font-family:'Geist Mono',monospace;font-weight:300;font-size:1.25rem;color:rgba(19,39,40,0.65);transition:transform 300ms cubic-bezier(0.22,1,0.36,1)">+</span>
+        </summary>
+        <p style="font-weight:400;font-size:0.9375rem;line-height:1.65;color:rgba(19,39,40,0.7);margin:0;padding:0 0 1.5rem;max-width:56ch">A partir do retorno-alvo do capital e dos custos da operação, cota a cota, incluindo a taxa de anuência quando a cessão passa por cartório. O cedente vê o valor líquido antes de assinar.</p>
+      </details>
+      <details style="border-bottom:1px solid rgba(19,39,40,0.09)">
+        <summary style="display:flex;gap:1.5rem;align-items:baseline;justify-content:space-between;padding:1.5rem 0">
+          <span style="font-family:Geist,sans-serif;font-weight:600;font-size:1.0625rem">Quem absorve a perda se uma cota não se realiza?</span>
+          <span data-plus="true" style="font-family:'Geist Mono',monospace;font-weight:300;font-size:1.25rem;color:rgba(19,39,40,0.65);transition:transform 300ms cubic-bezier(0.22,1,0.36,1)">+</span>
+        </summary>
+        <p style="font-weight:400;font-size:0.9375rem;line-height:1.65;color:rgba(19,39,40,0.7);margin:0;padding:0 0 1.5rem;max-width:56ch">Na fase 01, o capital próprio dos sócios, porque não há terceiro exposto. A subordinação, com uma classe absorvendo as primeiras perdas, entra com o fundo.</p>
+      </details>
+      <details style="border-bottom:1px solid rgba(19,39,40,0.09)">
+        <summary style="display:flex;gap:1.5rem;align-items:baseline;justify-content:space-between;padding:1.5rem 0">
+          <span style="font-family:Geist,sans-serif;font-weight:600;font-size:1.0625rem">Existe liquidez secundária?</span>
+          <span data-plus="true" style="font-family:'Geist Mono',monospace;font-weight:300;font-size:1.25rem;color:rgba(19,39,40,0.65);transition:transform 300ms cubic-bezier(0.22,1,0.36,1)">+</span>
+        </summary>
+        <p style="font-weight:400;font-size:0.9375rem;line-height:1.65;color:rgba(19,39,40,0.7);margin:0;padding:0 0 1.5rem;max-width:56ch">Não, e não está no escopo. Quando o veículo existir, o resgate será em janelas periódicas contra o valor do dia, com a frequência definida na documentação da oferta.</p>
+      </details>
+      <details style="border-bottom:1px solid rgba(19,39,40,0.09)">
+        <summary style="display:flex;gap:1.5rem;align-items:baseline;justify-content:space-between;padding:1.5rem 0">
+          <span style="font-family:Geist,sans-serif;font-weight:600;font-size:1.0625rem">O que dá para verificar sem falar com vocês?</span>
+          <span data-plus="true" style="font-family:'Geist Mono',monospace;font-weight:300;font-size:1.25rem;color:rgba(19,39,40,0.65);transition:transform 300ms cubic-bezier(0.22,1,0.36,1)">+</span>
+        </summary>
+        <p style="font-weight:400;font-size:0.9375rem;line-height:1.65;color:rgba(19,39,40,0.7);margin:0;padding:0 0 1.5rem;max-width:56ch">A política de recuperação, o painel público do pool e os eventos no livro-razão, hoje em rede de teste. O que não dá para verificar é o que ainda não existe, e está listado acima.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section id="contato" data-light="true" data-screen-label="v5 · 07 Contato" style="background:#EDF3F2;color:#132728;padding:clamp(6.5rem,11vw,9rem) clamp(24px,5vw,48px)">
+  <div style="max-width:1240px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:4rem">
+    <div>
+      <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.18em;color:rgba(19,39,40,0.65);margin:0;text-transform:uppercase">Contato</p>
+      <h2 style="font-family:Chillax,sans-serif;font-weight:500;font-size:clamp(2rem,4vw,3.25rem);line-height:1.08;letter-spacing:-0.025em;margin:1.25rem 0 0;max-width:18ch">Conversa técnica, não pitch.</h2>
+      <p style="font-weight:400;font-size:1.1875rem;line-height:1.6;color:rgba(19,39,40,0.7);margin:1.5rem 0 0;max-width:46ch">Registre interesse e o time retorna em até 48 horas com o estado real da operação e os próximos passos de diligência.</p>
+      <p style="font-family:'Geist Mono',monospace;font-size:0.8125rem;line-height:2;letter-spacing:0.1em;color:rgba(19,39,40,0.7);margin:2.5rem 0 0;text-transform:uppercase">Processo confidencial<br />Não caracteriza oferta pública<br />Fase 01 não distribui a terceiros<br />Retorno em até 48h</p>
+    </div>
+    <div>
+      <form onSubmit="{{ submitLead }}" id="lead-form" style="display:flex;flex-direction:column;gap:1.5rem;background:#ffffff;border:1px solid rgba(19,39,40,0.12);border-radius:16px;padding:clamp(28px,3.5vw,40px)">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.25rem">
+          <div style="display:flex;flex-direction:column;gap:0.5rem">
+            <label for="c-nome" style="font-family:Geist,sans-serif;font-weight:600;font-size:0.8125rem;color:rgba(19,39,40,0.7)">Nome completo *</label>
+            <input id="c-nome" name="nome" type="text" required="required" autoComplete="name" placeholder="Nome e sobrenome" style="font-family:Satoshi,sans-serif;font-weight:400;font-size:1rem;color:#132728;background:#ffffff;border:1px solid rgba(19,39,40,0.2);border-radius:8px;padding:13px 16px;transition:border-color 250ms cubic-bezier(0.22,1,0.36,1)" style-focus="border:1px solid #046C88;outline:none" />
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.5rem">
+            <label for="c-org" style="font-family:Geist,sans-serif;font-weight:600;font-size:0.8125rem;color:rgba(19,39,40,0.7)">Organização *</label>
+            <input id="c-org" name="org" type="text" required="required" autoComplete="organization" placeholder="Family office, gestora, administradora" style="font-family:Satoshi,sans-serif;font-weight:400;font-size:1rem;color:#132728;background:#ffffff;border:1px solid rgba(19,39,40,0.2);border-radius:8px;padding:13px 16px;transition:border-color 250ms cubic-bezier(0.22,1,0.36,1)" style-focus="border:1px solid #046C88;outline:none" />
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.5rem">
+            <label for="c-email" style="font-family:Geist,sans-serif;font-weight:600;font-size:0.8125rem;color:rgba(19,39,40,0.7)">E-mail corporativo *</label>
+            <input id="c-email" name="email" type="email" required="required" autoComplete="email" placeholder="nome@organizacao.com" aria-describedby="c-email-hint" style="font-family:Satoshi,sans-serif;font-weight:400;font-size:1rem;color:#132728;background:#ffffff;border:1px solid rgba(19,39,40,0.2);border-radius:8px;padding:13px 16px;transition:border-color 250ms cubic-bezier(0.22,1,0.36,1)" style-focus="border:1px solid #046C88;outline:none" />
+            <span id="c-email-hint" style="font-family:'Geist Mono',monospace;font-size:0.75rem;color:rgba(19,39,40,0.65)">É para este endereço que a resposta vai.</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.5rem">
+            <label for="c-interesse" style="font-family:Geist,sans-serif;font-weight:600;font-size:0.8125rem;color:rgba(19,39,40,0.7)">Natureza do interesse *</label>
+            <select id="c-interesse" name="interesse" required="required" style="font-family:Satoshi,sans-serif;font-weight:400;font-size:1rem;color:#132728;background:#ffffff;border:1px solid rgba(19,39,40,0.2);border-radius:8px;padding:13px 16px;transition:border-color 250ms cubic-bezier(0.22,1,0.36,1)" style-focus="border:1px solid #046C88;outline:none">
+              <option value="">Selecione</option>
+              <option>Investidor, fase 02</option>
+              <option>Administradora de consórcio</option>
+              <option>Cedente institucional</option>
+              <option>Parceria de distribuição</option>
+              <option>Imprensa ou pesquisa</option>
+              <option>Outro</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0.5rem">
+          <label for="c-obs" style="font-family:Geist,sans-serif;font-weight:600;font-size:0.8125rem;color:rgba(19,39,40,0.7)">Contexto ou perguntas</label>
+          <textarea id="c-obs" name="obs" rows="4" placeholder="Restrições de compliance, exigências de estrutura, perguntas iniciais" style="font-family:Satoshi,sans-serif;font-weight:400;font-size:1rem;color:#132728;background:#ffffff;border:1px solid rgba(19,39,40,0.2);border-radius:8px;padding:13px 16px;resize:vertical;transition:border-color 250ms cubic-bezier(0.22,1,0.36,1)" style-focus="border:1px solid #046C88;outline:none"></textarea>
+        </div>
+        <div style="display:flex;gap:0.75rem;align-items:flex-start">
+          <input id="c-lgpd" name="lgpd" type="checkbox" required="required" style="margin-top:5px;accent-color:#046C88;width:16px;height:16px" />
+          <label for="c-lgpd" style="font-weight:400;font-size:0.875rem;line-height:1.6;color:rgba(19,39,40,0.7)">Autorizo o uso dos dados fornecidos para contato sobre a operação. As informações são tratadas conforme a LGPD e não são compartilhadas com terceiros.</label>
+        </div>
+        <div id="c-erro" role="alert" style="display:none;border:1px solid #B3261E;border-radius:8px;padding:12px 16px;background:rgba(179,38,30,0.06)">
+          <p style="font-family:'Geist Mono',monospace;font-size:0.8125rem;line-height:1.6;color:#B3261E;margin:0">Não foi possível enviar. Nada do que você preencheu se perdeu: tente novamente, ou escreva para contato@plina.finance.</p>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:center;justify-content:space-between">
+          <button id="c-submit" type="submit" style="font-family:Geist,sans-serif;font-weight:600;font-size:0.9375rem;background:#132728;color:#ffffff;border:0;cursor:pointer;padding:15px 32px;border-radius:8px;transition:background-color 250ms cubic-bezier(0.22,1,0.36,1),color 250ms cubic-bezier(0.22,1,0.36,1)" style-hover="background:#0EA7C7;color:#132728">Registrar interesse</button>
+          <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;color:rgba(19,39,40,0.65);margin:0">contato@plina.finance</p>
+        </div>
+      </form>
+      <div id="lead-ok" role="status" tabindex="-1" style="display:none;border:1px solid rgba(4,108,136,0.35);border-radius:16px;padding:2.5rem 2rem;background:#ffffff">
+        <p style="font-family:'Geist Mono',monospace;font-size:0.875rem;letter-spacing:0.1em;color:#046C88;margin:0;text-transform:uppercase">Registro recebido</p>
+        <p style="font-weight:400;font-size:1rem;line-height:1.65;color:rgba(19,39,40,0.7);margin:1rem 0 0;max-width:46ch">O time retorna em até 48 horas para <span id="c-echo" style="font-family:'Geist Mono',monospace;font-size:0.9375rem;color:#132728">o endereço informado</span>, com a apresentação do instrumento e o estado real da operação.</p>
+        <button id="c-corrigir" type="button" style="font-family:Geist,sans-serif;font-weight:600;font-size:0.875rem;background:transparent;color:#046C88;border:1px solid rgba(4,108,136,0.35);border-radius:8px;padding:10px 20px;margin-top:1.5rem;cursor:pointer;transition:border-color 250ms cubic-bezier(0.22,1,0.36,1)" style-hover="border:1px solid #046C88">Corrigir os dados</button>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer style="border-top:1px solid rgba(237,243,242,0.1);padding:4.5rem clamp(24px,5vw,48px) 2.5rem">
+  <div style="max-width:1240px;margin:0 auto">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:2.5rem 3rem">
+      <div>
+        <span style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.25rem;letter-spacing:-0.02em">Plina<span style="color:#0EA7C7">.</span></span>
+        <p style="font-weight:400;font-size:0.9375rem;line-height:1.65;color:rgba(237,243,242,0.65);margin:1rem 0 0;max-width:40ch">Tornando transferível o direito creditório do consórcio contemplado brasileiro.</p>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.75rem">
+        <span style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.18em;color:rgba(237,243,242,0.55);text-transform:uppercase">Entender</span>
+        <a href="#mecanismo" style="font-weight:400;font-size:0.9375rem;color:rgba(237,243,242,0.72);text-decoration:none" style-hover="color:#0EA7C7">O mecanismo</a>
+        <a href="#hoje" style="font-weight:400;font-size:0.9375rem;color:rgba(237,243,242,0.72);text-decoration:none" style-hover="color:#0EA7C7">O que existe hoje</a>
+        <a href="#cessao" style="font-weight:400;font-size:0.9375rem;color:rgba(237,243,242,0.72);text-decoration:none" style-hover="color:#0EA7C7">Cessão</a>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.75rem">
+        <span style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.18em;color:rgba(237,243,242,0.55);text-transform:uppercase">Verificar</span>
+        <a href="#controles" style="font-weight:400;font-size:0.9375rem;color:rgba(237,243,242,0.72);text-decoration:none" style-hover="color:#0EA7C7">Controles</a>
+        <a href="#fases" style="font-weight:400;font-size:0.9375rem;color:rgba(237,243,242,0.72);text-decoration:none" style-hover="color:#0EA7C7">O que ainda não existe</a>
+        <a href="#faq" style="font-weight:400;font-size:0.9375rem;color:rgba(237,243,242,0.72);text-decoration:none" style-hover="color:#0EA7C7">FAQ</a>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.75rem">
+        <span style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.18em;color:rgba(237,243,242,0.55);text-transform:uppercase">Contato</span>
+        <a href="mailto:contato@plina.finance" style="font-family:'Geist Mono',monospace;font-size:0.875rem;color:rgba(237,243,242,0.72);text-decoration:none" style-hover="color:#0EA7C7">contato@plina.finance</a>
+        <p style="font-weight:400;font-size:0.8125rem;line-height:1.6;color:rgba(237,243,242,0.55);margin:0.5rem 0 0;max-width:36ch">A Plina Finance não é corretora nem distribuidora. Esta página não constitui oferta pública de valores mobiliários.</p>
+      </div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:center;justify-content:space-between;border-top:1px solid rgba(237,243,242,0.08);margin-top:3rem;padding-top:1.75rem">
+      <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;color:rgba(237,243,242,0.55);margin:0">© 2026 Plina Finance. Todos os direitos reservados.</p>
+      <a href="https://www.linkedin.com/company/plina-finance/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" style="color:rgba(237,243,242,0.55);display:inline-flex;transition:color 250ms cubic-bezier(0.22,1,0.36,1)" style-hover="color:#0EA7C7"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg></a>
+    </div>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showBanner&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Conteúdo&quot;}}">
+class Component extends DCLogic {
+  componentDidMount() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+    const groups = [];
+    const addGroup = (els, kind) => { if (els.length) groups.push({ els: Array.from(els), kind }); };
+    // Section headings: unmask
+    document.querySelectorAll('main section, header').forEach((sec) => {
+      addGroup(Array.from(sec.querySelectorAll(':scope h2')).slice(0, 1), 'unmask');
+    });
+    // Grid children and list rows: progression
+    document.querySelectorAll('main [style*="display:grid"]').forEach((d) => {
+      if (d.closest('form') || d.dataset.animDone) return;
+      const kids = Array.from(d.children).filter((c) => c.tagName === 'DIV' && !c.dataset.animDone);
+      if (kids.length >= 2) {
+        kids.forEach((k) => (k.dataset.animDone = '1'));
+        addGroup(kids, 'rise');
+      }
+    });
+    addGroup(document.querySelectorAll('#controles details'), 'rise');
+    addGroup(document.querySelectorAll('#faq details'), 'rise');
+    // Photographs: opening aperture
+    document.querySelectorAll('image-slot').forEach((slot) => addGroup([slot.parentElement], 'aperture'));
+    const prep = (el, kind) => {
+      if (kind === 'unmask') {
+        el.style.clipPath = 'inset(0 0 100% 0)';
+        el.style.transform = 'translateY(18px)';
+        el.style.transition = 'clip-path 900ms ' + EASE + ', transform 900ms ' + EASE;
+      } else if (kind === 'aperture') {
+        el.style.clipPath = 'inset(10% 10% 10% 10% round 24px)';
+        el.style.transform = 'scale(1.03)';
+        el.style.transition = 'clip-path 1100ms ' + EASE + ', transform 1100ms ' + EASE;
+      } else {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(26px)';
+        el.style.transition = 'opacity 750ms ' + EASE + ', transform 750ms ' + EASE;
+      }
+    };
+    const show = (el, kind, delay) => {
+      el.style.transitionDelay = delay + 'ms';
+      if (kind === 'unmask') {
+        el.style.clipPath = 'inset(0 0 -20% 0)';
+        el.style.transform = 'translateY(0)';
+      } else if (kind === 'aperture') {
+        el.style.clipPath = 'inset(0 0 0 0 round 16px)';
+        el.style.transform = 'scale(1)';
+      } else {
+        el.style.opacity = '1';
+        el.style.transform = 'translateY(0)';
+      }
+    };
+    const ioReveal = new IntersectionObserver((entries) => {
+      entries.forEach((en) => {
+        if (!en.isIntersecting) return;
+        const g = groups.find((gr) => gr.els[0] === en.target);
+        if (!g || g.done) return;
+        g.done = true;
+        g.els.forEach((el, i) => show(el, g.kind, i * 90));
+        ioReveal.unobserve(en.target);
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+    groups.forEach((g) => {
+      g.els.forEach((el) => prep(el, g.kind));
+      ioReveal.observe(g.els[0]);
+    });
+    // Hero entrance
+    const hero = document.querySelector('#topo > div');
+    if (hero) {
+      Array.from(hero.children).forEach((el, i) => {
+        if (el.querySelector('image-slot')) return;
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(22px)';
+        el.style.transition = 'opacity 800ms ' + EASE + ' ' + (120 + i * 130) + 'ms, transform 800ms ' + EASE + ' ' + (120 + i * 130) + 'ms';
+      });
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        Array.from(hero.children).forEach((el) => {
+          el.style.opacity = '1';
+          el.style.transform = 'translateY(0)';
+        });
+      }));
+    }
+    // Scroll-spy: a nav diz onde o leitor esta, em sete secoes de tela cheia.
+    const links = Array.from(document.querySelectorAll('[data-navlinks] a'));
+    const byHash = {};
+    links.forEach((a) => { byHash[a.getAttribute('href')] = a; });
+    const alvos = links.map((a) => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+    const ioSpy = new IntersectionObserver((entries) => {
+      entries.forEach((en) => {
+        const a = byHash['#' + en.target.id];
+        if (!a) return;
+        a.style.color = en.isIntersecting ? '#EDF3F2' : 'rgba(237,243,242,0.65)';
+      });
+    }, { rootMargin: '-45% 0px -45% 0px' });
+    alvos.forEach((t) => ioSpy.observe(t));
+    this._io = ioReveal;
+    this._spy = ioSpy;
+  }
+  componentWillUnmount() { [this._io, this._spy].forEach((io) => io && io.disconnect()); }
+  renderVals() {
+    return {
+      showBanner: this.props.showBanner ?? true,
+      submitLead: (e) => {
+        e.preventDefault();
+        const form = document.getElementById('lead-form');
+        const ok = document.getElementById('lead-ok');
+        const erro = document.getElementById('c-erro');
+        const btn = document.getElementById('c-submit');
+        const echo = document.getElementById('c-echo');
+        const email = (document.getElementById('c-email') || {}).value;
+        if (erro) erro.style.display = 'none';
+        // Estado pendente: o botao declara o que esta acontecendo.
+        if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; btn.style.opacity = '0.6'; btn.style.cursor = 'wait'; }
+        const restore = () => {
+          if (btn) { btn.disabled = false; btn.textContent = 'Registrar interesse'; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
+        };
+        // Substituir por POST real. O caminho de erro ja existe e preserva o preenchido.
+        window.setTimeout(() => {
+          restore();
+          if (echo && email) echo.textContent = email;
+          if (form) form.style.display = 'none';
+          if (ok) { ok.style.display = 'block'; ok.focus(); }
+        }, 900);
+      }
+    };
+  }
+}
+</script>
+<script>
+// Corrigir: devolve o formulario com tudo preenchido, sem recarregar.
+document.addEventListener('click', (e) => {
+  if (!e.target.closest) return;
+  // O drawer fecha ao escolher um destino.
+  const link = e.target.closest('[data-drawer] a');
+  if (link) {
+    const drawer = link.closest('[data-drawer]');
+    if (drawer) drawer.removeAttribute('open');
+    return;
+  }
+  // O aviso do topo fecha.
+  if (e.target.closest('#banner-x')) {
+    const b = document.getElementById('banner');
+    if (b) b.style.display = 'none';
+    return;
+  }
+  const btn = e.target.closest('#c-corrigir');
+  if (!btn) return;
+  const form = document.getElementById('lead-form');
+  const ok = document.getElementById('lead-ok');
+  if (ok) ok.style.display = 'none';
+  if (form) {
+    form.style.display = 'flex';
+    const email = document.getElementById('c-email');
+    if (email) email.focus();
+  }
+});
+</script>
+</body>
+</html>

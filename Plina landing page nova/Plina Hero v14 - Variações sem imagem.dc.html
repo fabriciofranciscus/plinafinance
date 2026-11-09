@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=chillax@400,500,600&f[]=satoshi@300,400,500&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@300;400&display=swap" />
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#ffffff;color:#132728;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+:focus-visible{outline:2px solid #046C88;outline-offset:4px}
+[data-dark] :focus-visible{outline-color:#0EA7C7}
+
+/* Etiqueta da folha de comparação. Não faz parte do desenho. */
+.rotulo{font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.16em;text-transform:uppercase;color:#046C88;padding:0.875rem clamp(20px,6vw,80px);border-top:1px solid rgba(19,39,40,0.12);border-bottom:1px solid rgba(19,39,40,0.12);background:#e4e4e4}
+.rotulo b{color:rgba(19,39,40,0.7);font-weight:400;text-transform:none;letter-spacing:0.04em}
+
+.tela{height:clamp(620px,86vh,880px);position:relative;overflow:hidden;display:grid;grid-template-rows:auto 1fr}
+.gut{padding:0 clamp(20px,6vw,80px)}
+
+/* ── O logotipo em todas as pranchetas ──────────────────────────────────────
+   Não é enfeite: sobre campo ciano o ponto da marca perde legibilidade (2.1),
+   e isso só aparece se a marca estiver na tela. Cada direção mostra a marca na
+   cor que aquela superfície permite. */
+.marca{font-family:Chillax,sans-serif;font-weight:600;font-size:1.3125rem;letter-spacing:-0.012em;padding:clamp(1.5rem,3vw,2.25rem) 0;display:inline-block}
+.marca-luz{color:#132728}
+.marca-luz span{color:#046C88}
+.marca-escura{color:#ffffff}
+.marca-escura span{color:#0EA7C7}
+/* Sobre ciano cheio o acento morre: em #046C88 dá 2.1, e branco dá 2.85, que o
+   sistema proíbe. O ponto vira pontuação. É a objeção, mostrada em vez de dita. */
+.marca-ciano{color:#132728}
+.marca-ciano span{color:#132728}
+
+.palco{display:flex;flex-direction:column;justify-content:center;min-height:0;padding-bottom:clamp(2.5rem,5vw,4.5rem)}
+.centro{max-width:1320px;width:100%;margin:0 auto}
+.tick{font-family:'Geist Mono',monospace;font-size:0.75rem;line-height:1.9;margin:0}
+.h1{font-family:Chillax,sans-serif;font-weight:400;line-height:1.06;letter-spacing:-0.018em;margin:0;text-wrap:balance}
+.sub{font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(1.125rem,1.7vw,1.5rem);line-height:1.5;letter-spacing:-0.008em;margin:clamp(1.25rem,2.5vw,1.75rem) 0 0;max-width:30ch;text-wrap:balance}
+
+/* ── Família 3 · tipografia que bifurca ─────────────────────────────────────
+   O sublinhado é o que diz que se clica. Sem seta: dentro da frase ela colide
+   com o sublinhado e com a pontuação. */
+.escolha{display:inline;text-decoration:none;color:inherit;box-shadow:inset 0 -2px 0 0 #046C88;transition:box-shadow 400ms cubic-bezier(0.16,1,0.3,1)}
+.escolha:hover{box-shadow:inset 0 -0.42em 0 0 rgba(14,167,199,0.35)}
+.fraco{color:rgba(19,39,40,0.42)}
+/* O nome nunca esmaece dentro da frase, e nunca perde o ponto: o ponto é a
+   marca, e o sistema proíbe dropar ou recolorir. Vale igual em texto corrido,
+   que é a convenção que a v8 já usava. */
+.nome-luz{color:#132728;font-weight:500}
+.nome-luz span{color:#046C88}
+.nome-escuro{color:#ffffff;font-weight:500}
+.nome-escuro span{color:#0EA7C7}
+
+/* 3a · a frase como massa: sem max-width, ocupando a largura toda. */
+.massa{font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(1.875rem,4.9vw,4.25rem);line-height:1.12;letter-spacing:-0.02em;margin:0}
+
+/* 3b · a pergunta: o hero pergunta, e as duas respostas são as portas. */
+.antes{font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.2em;text-transform:uppercase;color:rgba(19,39,40,0.7);margin:0 0 clamp(1.75rem,3.5vw,2.75rem);max-width:46ch;line-height:2}
+.pergunta{font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(2rem,5vw,4.25rem);line-height:1.12;letter-spacing:-0.02em;margin:0;max-width:20ch}
+
+/* ── Família 2 · ciano ──────────────────────────────────────────────────────
+   Tinta #132728 sobre #0EA7C7 dá 5.47, a razão que o sistema documenta.
+   Branco sobre ciano dá 2.85 e é proibido: tudo aqui é petróleo. */
+.ciano{background:#0EA7C7;color:#132728}
+.ciano .sub,.ciano .tick{color:rgba(19,39,40,0.78)}
+.ciano .escolha{box-shadow:inset 0 -2px 0 0 #132728}
+.ciano .escolha:hover{box-shadow:inset 0 -0.42em 0 0 rgba(19,39,40,0.22)}
+.ciano .fraco{color:rgba(19,39,40,0.52)}
+
+/* ── Família 4 · petróleo ───────────────────────────────────────────────────
+   #0EA7C7 sobre #132728 dá 5.47; #A0CFE7 sobre #132728 dá 8.63. */
+.petro{background:#132728;color:#e4e4e4}
+.petro .sub,.petro .tick{color:#A0CFE7}
+.petro .fraco{color:rgba(160,207,231,0.55)}
+.petro .escolha{box-shadow:inset 0 -2px 0 0 #0EA7C7}
+.petro .escolha:hover{box-shadow:inset 0 -0.42em 0 0 rgba(14,167,199,0.3)}
+
+/* Linhas de porta, para as direções que não põem a escolha dentro da frase. */
+.linhas{list-style:none;margin:clamp(2rem,4vw,3rem) 0 0;padding:0;max-width:52ch}
+.linhas li{border-top:1px solid rgba(19,39,40,0.35)}
+.linhas li:last-child{border-bottom:1px solid rgba(19,39,40,0.35)}
+.linhas a{display:flex;align-items:center;justify-content:space-between;gap:2rem;min-height:72px;padding:0.5rem 0;text-decoration:none;font-family:Geist,sans-serif;font-weight:600;font-size:1.125rem;transition:opacity 400ms cubic-bezier(0.16,1,0.3,1)}
+.linhas a:hover{opacity:0.62}
+.linhas i{font-family:'Geist Mono',monospace;font-style:normal;font-weight:400;font-size:1rem}
+.petro .linhas li{border-color:rgba(160,207,231,0.3)}
+.petro .linhas i{color:#0EA7C7}
+
+/* Fio de luz da 4b: um único filete ciano de largura cheia. */
+.fio{display:block;height:1px;background:#0EA7C7;margin:clamp(2.5rem,5vw,4rem) 0 0}
+
+@media (max-width:900px){
+  .tela{height:auto}
+  .meio{grid-template-rows:auto auto !important}
+}
+@media (prefers-reduced-motion:reduce){*{transition-duration:0.01ms !important}}
+</style>
+</helmet>
+<div style="font-family:Satoshi,system-ui,sans-serif;font-weight:300;font-size:1.125rem;line-height:1.65">
+
+<!--
+  Hero v14 — mais variações das famílias 3, 2 e 4 da v13. Duas de cada.
+
+  O LOGOTIPO ESTÁ EM TODAS de propósito. Sobre campo ciano o ponto da marca dá
+  2.1 de razão e some; branco no lugar dele dá 2.85 e o sistema proíbe. A marca
+  da Plina depende de um acento ciano que não pode existir sobre superfície
+  ciana. Mostrar isso em cada prancheta é o único jeito de a escolha ser
+  informada. A direção 2a existe justamente para resolver isso.
+
+  O QUE NÃO MUDA: o texto da v8, as duas portas com o mesmo peso, postura
+  neutra sobre o tempo, zero número da Plina.
+-->
+
+<!-- ═══════════════════════════ 3a ═══════════════════════════ -->
+<div class="rotulo">3a · a frase como massa &nbsp;<b>sem largura máxima: o texto ocupa a tela de margem a margem e vira bloco, não coluna. As duas escolhas terminam a frase. É a mais tipográfica das seis.</b></div>
+<header data-screen-label="v14 3a · Frase como massa" class="tela">
+  <div class="gut centro"><span class="marca marca-luz">Plina<span>.</span></span></div>
+  <div class="gut palco">
+    <div class="centro">
+      <p class="massa">O crédito já foi contemplado. <span class="fraco">O que faltava era liquidez, e é o que resolve a</span> <span class="nome-luz">Plina<span>.</span></span> <span class="fraco">Daqui,</span> <a class="escolha" href="/vender">tenho uma cota</a> <span class="fraco">ou</span> <a class="escolha" href="#gap">quero entender</a><span class="fraco">.</span></p>
+      <p class="tick" style="color:rgba(19,39,40,0.7);margin-top:clamp(2.5rem,5vw,3.5rem)">Estrutura de destino · FIDC sob a Resolução CVM 175</p>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════ 3b ═══════════════════════════ -->
+<div class="rotulo">3b · o hero pergunta &nbsp;<b>inverte a retórica: a afirmação vira rótulo em mono, e a manchete passa a ser uma pergunta cujas duas cláusulas são as portas. O leitor não escolhe um botão, responde uma frase.</b></div>
+<header data-screen-label="v14 3b · O hero pergunta" class="tela">
+  <div class="gut centro"><span class="marca marca-luz">Plina<span>.</span></span></div>
+  <div class="gut palco">
+    <div class="centro">
+      <p class="antes">O crédito já foi contemplado · O que faltava era liquidez</p>
+      <p class="pergunta">Você <a class="escolha" href="/vender">tem uma cota contemplada</a>, ou <a class="escolha" href="#gap">quer entender a operação</a>?</p>
+      <p class="tick" style="color:rgba(19,39,40,0.7);margin-top:clamp(2.5rem,5vw,3.5rem)">Estrutura de destino · FIDC sob a Resolução CVM 175</p>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════ 2a ═══════════════════════════ -->
+<div class="rotulo">2a · ciano abaixo da marca &nbsp;<b>o campo ciano começa depois do topo branco, então o logotipo mantém o ponto ciano e a legibilidade. É a única das ciano em que a marca sobrevive inteira, e o corte horizontal ainda dá ao hero uma aresta que ele não tinha.</b></div>
+<header data-screen-label="v14 2a · Ciano abaixo da marca" class="tela">
+  <div class="gut centro"><span class="marca marca-luz">Plina<span>.</span></span></div>
+  <div class="ciano" style="display:flex;align-items:center;min-height:0">
+    <div class="gut centro" style="padding-top:clamp(2.5rem,5vw,4rem);padding-bottom:clamp(2.5rem,5vw,4rem)">
+      <h1 class="h1" style="font-size:clamp(2.25rem,4.8vw,4.25rem);max-width:14ch">O crédito já foi contemplado.</h1>
+      <p class="sub">O que faltava era liquidez. É o que resolve a Plina.</p>
+      <ul class="linhas">
+        <li><a href="/vender">Tenho uma cota contemplada<i aria-hidden="true">&#8594;</i></a></li>
+        <li><a href="#gap">Quero entender a operação<i aria-hidden="true">&#8594;</i></a></li>
+      </ul>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════ 2b ═══════════════════════════ -->
+<div class="rotulo">2b · meio a meio &nbsp;<b>ciano em cima com a afirmação, branco embaixo com as portas. A cor carrega o argumento e o branco carrega a decisão. Committed sem ser total, e o logotipo continua no campo ciano com o mesmo problema de acento.</b></div>
+<header data-screen-label="v14 2b · Meio a meio" class="tela meio" style="grid-template-rows:1.15fr 1fr">
+  <div class="ciano" style="display:flex;flex-direction:column;justify-content:space-between;min-height:0">
+    <div class="gut centro"><span class="marca marca-ciano">Plina<span>.</span></span></div>
+    <div class="gut centro" style="padding-bottom:clamp(2.5rem,5vw,4rem)">
+      <h1 class="h1" style="font-size:clamp(2.25rem,4.8vw,4.25rem);max-width:14ch">O crédito já foi contemplado.</h1>
+      <p class="sub">O que faltava era liquidez. É o que resolve a Plina.</p>
+    </div>
+  </div>
+  <div class="gut centro" style="display:flex;flex-direction:column;justify-content:center;min-height:0">
+    <ul class="linhas" style="margin-top:0;max-width:none">
+      <li><a href="/vender">Tenho uma cota contemplada<i aria-hidden="true" style="color:#046C88">&#8594;</i></a></li>
+      <li><a href="#gap">Quero entender a operação<i aria-hidden="true" style="color:#046C88">&#8594;</i></a></li>
+    </ul>
+    <p class="tick" style="color:rgba(19,39,40,0.7);margin-top:clamp(1.5rem,3vw,2.25rem)">Estrutura de destino · FIDC sob a Resolução CVM 175</p>
+  </div>
+</header>
+
+<!-- ═══════════════════════════ 4a ═══════════════════════════ -->
+<div class="rotulo">4a · petróleo com a manchete em ciano &nbsp;<b>o ciano deixa de ser acento e vira a voz: a manchete inteira em #0EA7C7 sobre petróleo, razão 5.47. A frase que bifurca volta aqui, agora em campo escuro.</b></div>
+<header data-screen-label="v14 4a · Manchete em ciano" class="tela petro" data-dark="true">
+  <div class="gut centro"><span class="marca marca-escura">Plina<span>.</span></span></div>
+  <div class="gut palco">
+    <div class="centro">
+      <p class="massa" style="color:#0EA7C7">O crédito já foi contemplado. <span class="fraco">O que faltava era liquidez, e é o que resolve a</span> <span class="nome-escuro">Plina<span>.</span></span> <span class="fraco">Daqui,</span> <a class="escolha" href="/vender" style="color:#ffffff">tenho uma cota</a> <span class="fraco">ou</span> <a class="escolha" href="#gap" style="color:#ffffff">quero entender</a><span class="fraco">.</span></p>
+      <p class="tick" style="margin-top:clamp(2.5rem,5vw,3.5rem)">Estrutura de destino · FIDC sob a Resolução CVM 175</p>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════ 4b ═══════════════════════════ -->
+<div class="rotulo">4b · petróleo com fio de luz &nbsp;<b>campo escuro, tipo claro, e um único filete ciano de largura cheia separando a afirmação da decisão. O ciano vira instrumento de medida em vez de mancha. A mais contida das seis.</b></div>
+<header data-screen-label="v14 4b · Fio de luz" class="tela petro" data-dark="true">
+  <div class="gut centro"><span class="marca marca-escura">Plina<span>.</span></span></div>
+  <div class="gut palco">
+    <div class="centro">
+      <h1 class="h1" style="font-size:clamp(2.25rem,5vw,4.5rem);max-width:13ch;color:#ffffff">O crédito já foi contemplado.</h1>
+      <p class="sub">O que faltava era liquidez. É o que resolve a <span style="font-weight:600;color:#ffffff">Plina<span style="color:#0EA7C7">.</span></span></p>
+      <span class="fio" aria-hidden="true"></span>
+      <ul class="linhas" style="margin-top:0;max-width:none">
+        <li style="border-top:0"><a href="/vender">Tenho uma cota contemplada<i aria-hidden="true">&#8594;</i></a></li>
+        <li><a href="#gap">Quero entender a operação<i aria-hidden="true">&#8594;</i></a></li>
+      </ul>
+      <p class="tick" style="margin-top:clamp(1.75rem,3.5vw,2.5rem)">Estrutura de destino · FIDC sob a Resolução CVM 175</p>
+    </div>
+  </div>
+</header>
+
+</div>
+</x-dc>
+</body>
+</html>

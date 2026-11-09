@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=chillax@400,500,600&f[]=satoshi@300,400,500&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@300;400&display=swap" />
+<script src="./image-slot.js"></script>
+<style>
+html{scroll-behavior:smooth}
+body{margin:0;background:#ffffff;color:#132728;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit}
+section[id],header[id]{scroll-margin-top:5.5rem}
+p{text-wrap:pretty}
+::selection{background:#0EA7C7;color:#132728}
+:focus-visible{outline:2px solid #046C88;outline-offset:4px}
+[data-dark] :focus-visible{outline-color:#0EA7C7}
+input::placeholder,textarea::placeholder{color:rgba(19,39,40,0.65)}
+/* ── Alvos de toque ─────────────────────────────────────────────────────────
+   44px em tudo que se clica. Os estilos inline destes elementos nao definem
+   min-height, entao estas regras valem sem !important. Medido em 375px: o CTA
+   do menu tinha 24px de altura, os campos 37px e a caixa de LGPD 15px. */
+nav a,footer a,#lead-form a,[data-skip]{display:inline-flex;align-items:center;min-height:44px}
+#lead-form input:not([type="checkbox"]),#lead-form select{min-height:44px}
+[data-skip]{position:absolute;left:-9999px;top:0;z-index:100}
+[data-skip]:focus{left:clamp(20px,6vw,80px);top:12px;background:#132728;color:#ffffff;padding:10px 18px;font-family:Geist,sans-serif;font-weight:600;font-size:1.125rem;text-decoration:none}
+@media (max-width:820px){
+  [data-split]{grid-template-columns:1fr !important;gap:2rem !important}
+  [data-so-desktop]{display:none !important}
+}
+@media (max-width:600px){
+  /* Empilhado, a hairline de cada td virava quatro fios por linha. O fio passa
+     para a linha, que e a unidade que o leitor le. */
+  [data-table] thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  [data-table] tbody tr{display:block;padding:1.5rem 0;border-top:1px solid rgba(19,39,40,0.12)}
+  [data-table] td{display:block;padding:0 0 0.5rem !important;text-align:left !important;border-top:0 !important}
+  [data-table] td::before{content:attr(data-rotulo) " · ";font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.14em;text-transform:uppercase;color:rgba(19,39,40,0.62)}
+  [data-table] td:first-child::before{content:none}
+}
+
+/* ── Barra das tres portas ──────────────────────────────────────────────────
+   Primeiro elemento da pagina, antes da marca: a pergunta e "quem e voce", nao
+   "quem somos nos". Em cinco blocos ela e a unica navegacao que resta. */
+.portas{background:#e4e4e4;border-bottom:1px solid rgba(19,39,40,0.12)}
+.portas > div{max-width:1320px;margin:0 auto;padding:0 clamp(20px,6vw,80px);display:flex;flex-wrap:wrap;align-items:stretch;gap:0.25rem clamp(1.5rem,3vw,2.75rem)}
+.portas a{display:inline-flex;align-items:center;min-height:44px;font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.14em;text-transform:uppercase;color:rgba(19,39,40,0.7);text-decoration:none;border-bottom:1px solid transparent;transition:color 500ms cubic-bezier(0.16,1,0.3,1),border-color 500ms cubic-bezier(0.16,1,0.3,1)}
+.portas a:hover{color:#132728}
+.portas a:active{color:#046C88}
+.portas a[aria-current]{color:#132728;border-bottom-color:#046C88}
+@media (max-width:600px){.portas a{font-size:0.75rem;letter-spacing:0.1em}}
+
+/* ── Faixa de numeros do hero ───────────────────────────────────────────────
+   Tres numeros, nao quatro: e credibilidade, nao relatorio. O relatorio mora
+   em /operacao. */
+.numeros{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(1.5rem,3vw,3rem);border-top:1px solid rgba(19,39,40,0.12);padding-top:clamp(1.75rem,3.5vw,2.5rem)}
+.numeros dt{font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.14em;text-transform:uppercase;color:rgba(19,39,40,0.7);margin:0}
+.numeros dd{font-family:'Geist Mono',monospace;font-weight:400;font-size:clamp(1.5rem,2.8vw,2.25rem);line-height:1.1;color:#132728;margin:0.875rem 0 0;white-space:nowrap}
+/* Numero sem data e descontado por quem le profissionalmente. */
+.posicao{font-family:'Geist Mono',monospace;font-size:0.75rem;line-height:1.7;color:rgba(19,39,40,0.7);margin:clamp(1.25rem,2.5vw,1.75rem) 0 0}
+/* Tres itens num grid de duas colunas deixam um orfao na segunda linha. As tres
+   colunas aguentam ate 520px porque os valores sao curtos; abaixo disso, uma
+   coluna so, que e mais honesto que 2+1. */
+@media (max-width:820px){.numeros{gap:1.5rem}}
+@media (max-width:520px){.numeros{grid-template-columns:1fr;gap:1.5rem}.numeros dd{font-size:1.5rem;margin-top:0.5rem}}
+
+/* ── Indicacao de rolagem ───────────────────────────────────────────────────
+   Fio que desce e some, no lugar do mouse quicando: quicar viola a regra de
+   motion e nao diz o que ha embaixo. O rotulo diz. */
+[data-cue]{display:inline-flex;flex-direction:column;align-items:center;gap:0.875rem;text-decoration:none;justify-self:center;padding:0.5rem 1rem}
+[data-cue] span{font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.2em;text-transform:uppercase;color:rgba(19,39,40,0.7);transition:color 500ms cubic-bezier(0.16,1,0.3,1)}
+[data-cue]:hover span{color:#046C88}
+[data-cue] i{display:block;width:1px;height:36px;background:#046C88;transform-origin:top;animation:plina-descer 2600ms cubic-bezier(0.16,1,0.3,1) infinite}
+@keyframes plina-descer{0%{transform:scaleY(0);opacity:0}25%{opacity:1}100%{transform:scaleY(1);opacity:0}}
+@media (prefers-reduced-motion:reduce){[data-cue] i{transform:none;opacity:0.5}}
+
+/* ── Tres saidas para o mesmo lastro ────────────────────────────────────────
+   Alternativas, nao etapas: lado a lado, sem fio ligando. */
+.saidas{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(1.5rem,3.5vw,3rem)}
+.saidas h3{font-family:Geist,sans-serif;font-weight:600;font-size:1.125rem;line-height:1.35;margin:0;letter-spacing:-0.005em}
+.saidas h3 b{display:block;font-family:'Geist Mono',monospace;font-weight:400;font-size:clamp(1.5rem,2.4vw,2rem);line-height:1;color:#046C88;margin:0 0 clamp(0.875rem,1.8vw,1.125rem);padding-bottom:clamp(0.875rem,1.8vw,1.125rem);border-bottom:1px solid #046C88}
+@media (max-width:820px){.saidas{grid-template-columns:1fr;gap:clamp(1.5rem,4vw,2rem)}}
+
+/* ── Tabela da oferta ───────────────────────────────────────────────────────
+   Cabecalho discreto, valor com peso. */
+.oferta{width:100%;border-collapse:collapse;margin-top:clamp(3rem,6vw,4.5rem)}
+.oferta th{font-family:'Geist Mono',monospace;font-weight:400;font-size:0.75rem;letter-spacing:0.14em;text-transform:uppercase;color:rgba(19,39,40,0.7);text-align:left;padding:0 0 1rem}
+.oferta td{padding:1.5rem 0;border-top:1px solid rgba(19,39,40,0.12);vertical-align:baseline}
+.oferta th + th,.oferta td + td{padding-left:2rem}
+.oferta th:last-child,.oferta td:last-child{text-align:right}
+.oferta .rotulo{font-family:Geist,sans-serif;font-weight:600;font-size:1.125rem}
+.oferta .valor{font-family:'Geist Mono',monospace;font-size:1.125rem;color:#132728;white-space:nowrap}
+.oferta .dado{font-family:'Geist Mono',monospace;font-size:0.75rem;color:rgba(19,39,40,0.7);white-space:nowrap}
+@media (max-width:600px){.oferta th:last-child,.oferta td:last-child{text-align:left}}
+
+/* ── Por que confiar ────────────────────────────────────────────────────────
+   Quatro provas, uma frase cada, e o link que leva a prova inteira. Esta secao
+   e o indice da diligencia, nao a diligencia: quem quiser o resto vai em
+   /operacao. E o unico bloco escuro da pagina. */
+.confianca{display:grid;grid-template-columns:1fr 1fr;gap:clamp(2.25rem,4.5vw,3.5rem) clamp(3rem,6vw,5rem);margin-top:clamp(3rem,6vw,5rem);list-style:none;padding:0}
+.confianca > li{border-top:1px solid rgba(160,207,231,0.25);padding-top:clamp(1.5rem,3vw,2rem)}
+.confianca h3{font-family:Geist,sans-serif;font-weight:600;font-size:1.125rem;line-height:1.4;letter-spacing:-0.005em;margin:0;max-width:32ch;color:#e4e4e4}
+.confianca p{margin:0.75rem 0 0;max-width:46ch;font-size:1rem;line-height:1.65;color:#A0CFE7}
+/* Quatro links ciano no mesmo viewport passam do racionamento do sistema (tres
+   pontos). Em repouso a tinta e a do corpo e o ciano fica so no fio, que lido em
+   conjunto vira uma textura; no hover o link assume a cor inteira. */
+.confianca .verificar{display:inline-flex;align-items:center;min-height:44px;margin-top:0.75rem;color:#e4e4e4;border-bottom-color:rgba(14,167,199,0.5)}
+.confianca .verificar:hover{color:#0EA7C7;border-bottom-color:#0EA7C7}
+.confianca .verificar:active{color:#A0CFE7;border-bottom-color:#A0CFE7}
+@media (max-width:820px){.confianca{grid-template-columns:1fr;gap:1.75rem}}
+
+/* ── Link de verificacao ────────────────────────────────────────────────────
+   Mono, sublinhado fino, cor so no fio. Alvo de 44px quando e destino por si;
+   dentro de uma frase segue inline, porque ali a linha carrega o alvo. */
+.verificar{font-family:'Geist Mono',monospace;font-size:1rem;color:#046C88;text-decoration:none;border-bottom:1px solid rgba(4,108,136,0.35);padding-bottom:2px;transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)}
+.verificar:hover{border-bottom-color:#046C88}
+.verificar:active{color:#132728;border-bottom-color:#132728}
+.verificar.bloco{display:inline-flex;align-items:center;min-height:44px}
+
+/* ── Sintese do hero ────────────────────────────────────────────────────────
+   Sem caixa. O card arredondado de 24px era o unico objeto de UI numa pagina
+   que e toda documento, violava o raio do sistema (0 ou 9999, nada no meio) e
+   carregava a informacao que o titulo devia carregar. Agora e texto sobre o
+   mesmo chao, e o peso vem do espaco e da pilula. */
+.sintese{max-width:46ch}
+.sintese p{margin:0;line-height:1.7}
+.sintese .ticker{font-family:'Geist Mono',monospace;font-size:0.75rem;line-height:1.9;color:rgba(19,39,40,0.8);margin:clamp(1.25rem,2.5vw,1.75rem) 0 0;padding-top:clamp(1.25rem,2.5vw,1.75rem);border-top:1px solid rgba(19,39,40,0.2)}
+.sintese .promessa{font-family:'Geist Mono',monospace;font-size:0.75rem;line-height:1.7;color:rgba(19,39,40,0.7);margin:1rem 0 0}
+/* Pilula, como o sistema define para botao: sensacao de gestor de patrimonio.
+   Com a caixa dissolvida, o ciano migra da decoracao para a acao: e o unico
+   campo saturado do hero, e agora esta no lugar que o leitor deve tocar.
+   O passo e o de superficie clara (#046C88), nao o Action Cyan: #0EA7C7 sobre
+   branco da 2.85 e reprova o minimo de 3:1 para componentes (WCAG 1.4.11), que
+   vale para a borda do botao e nao so para o texto dentro dele. Aqui a razao do
+   preenchimento contra a pagina e 5.99, e a do texto branco sobre ele tambem. */
+.pilula{display:inline-flex;align-items:center;gap:0.875rem;margin-top:clamp(1.5rem,3vw,2rem);padding:17px 36px;border-radius:9999px;background:#046C88;color:#ffffff;font-family:Geist,sans-serif;font-weight:600;font-size:1.125rem;letter-spacing:0.01em;text-decoration:none;transition:background-color 500ms cubic-bezier(0.16,1,0.3,1),color 500ms cubic-bezier(0.16,1,0.3,1)}
+.pilula:hover{background:#132728;color:#ffffff}
+/* Sem transform: o sistema move cor, nao geometria. */
+.pilula:active{background:#0B1A1B;color:#ffffff}
+.pilula i{font-family:'Geist Mono',monospace;font-style:normal;font-weight:400;font-size:1rem}
+/* O hero empilha antes das demais divisoes: a coluna direita e mais estreita. */
+@media (max-width:1000px){[data-split="hero"]{grid-template-columns:1fr !important;gap:2.5rem !important}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:0.01ms !important;animation:none !important}html{scroll-behavior:auto}}
+</style>
+</helmet>
+<div style="font-family:Satoshi,system-ui,sans-serif;font-weight:300;font-size:1.125rem;line-height:1.65">
+<a href="#topo" data-skip="true">Pular para o conteúdo</a>
+
+<!--
+  v9 — landing enxuta. Cinco blocos, ~2 minutos de leitura.
+  A v8 (dez secoes, ~7 min) passa a ser a pagina /operacao: historico trimestral,
+  risco com mitigacao, estrutura completa, controles e o painel de verificacao.
+  Esta pagina faz tres coisas e para: a pessoa entende, acredita e pede a
+  conversa. Tudo que nao serve a essas tres saiu daqui e virou link.
+
+  Sem ancoras internas e sem drawer: em cinco blocos a rolagem e a navegacao.
+  A unica navegacao que resta e a barra das tres portas, que troca de publico.
+
+  PLACEHOLDERS: numeros de track record sao ficticios ate a fase 02.
+      grep -n 'data-placeholder' "Plina Landing v9 - Enxuta.dc.html"
+
+  ─────────────────────────────────────────────────────────────────────────────
+  NAO PUBLICAR ANTES DE FECHAR — analise de negocio de 21/08/2026
+  ─────────────────────────────────────────────────────────────────────────────
+  R1  Yield-alvo da Serie Senior confirmado pelo CEO.
+      Ate la a tabela publica a FAIXA (CDI+4% a 7% / SOFR+6% a 9%), que e o que
+      a empresa sabe hoje. Publicar o ponto fixa por divulgacao uma politica que
+      ninguem aprovou, e o mesmo numero define o desagio pago ao cedente.
+      -> DECISOES-CEO.md #3 (aberta, alta) · 2026-06-30-spread-cdi-provisorio.md
+
+  R2  Convencoes de taxa no NAV no regulamento: 252 dias uteis, incidencia sobre
+      o valor liquido do dia anterior, performance com marca d'agua na janela.
+      O NAV e gravado on-chain e permanente: publicado, nao volta atras.
+      -> DECISOES-CEO.md #4b
+
+  R3  Politica de provisao definida, ou ausencia declarada. Enquanto nao sair, a
+      pagina declara a convencao no proprio texto, como esta hoje.
+      -> DECISOES-CEO.md #4
+
+  R4  PARECER JURIDICO SOBRE ESTA PAGINA, nao so sobre o instrumento.
+      Retorno-alvo + tiquete minimo + formulario de captacao numa URL publica e
+      indexavel e o conjunto que um regulador pode ler como procura de
+      investidor em oferta com esforcos restritos. O aviso do rodape e uma
+      afirmacao sobre a pagina, nao uma protecao dela.
+      Quando o parecer sair, avaliar mover a tabela de series para tras do
+      M3_INSTITUTIONAL_GATING, que a ARQUITETURA-ALVO ja preve para este mesmo
+      conteudo. Hoje o produto guarda atras de portao o que a landing mostra na
+      frente. NAO ALTERADO NESTA RODADA: depende do juridico.
+
+  R5  Dono e janela de atendimento do lead. A pagina promete retorno em 48h em
+      canal publico e nao ha responsavel definido. -> DECISOES-CEO.md #9
+
+  R6  One-pager existente e envio automatico no submit, que o estado de sucesso
+      promete ("o resumo esta disponivel agora").
+
+  R7  /operacao, /pool, /politica-clawback, /vender e /comprar no ar. Quatro dos
+      cinco links de prova estao na secao que existe para provar seriedade.
+-->
+
+<nav class="portas" aria-label="Escolha de público">
+  <div>
+    <a href="#topo" aria-current="page">Investir no fundo</a>
+    <a href="/vender">Antecipar minha cota&nbsp;&#8594;</a>
+    <a href="/comprar">Comprar com carta de crédito&nbsp;&#8594;</a>
+  </div>
+</nav>
+
+<nav aria-label="Principal" style="position:sticky;top:0;z-index:50;background:rgba(255,255,255,0.9);backdrop-filter:blur(10px);border-bottom:1px solid rgba(19,39,40,0.12)">
+  <div style="max-width:1320px;margin:0 auto;padding:1.25rem clamp(20px,6vw,80px);display:flex;align-items:center;justify-content:space-between;gap:1.5rem">
+    <a href="#topo" style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.3125rem;letter-spacing:-0.012em;text-decoration:none">Plina<span style="color:#046C88">.</span></a>
+    <div style="display:flex;align-items:center;gap:clamp(1.25rem,3vw,2.25rem)">
+      <a href="/operacao" data-so-desktop="true" style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.06em;color:rgba(19,39,40,0.7);text-decoration:none;white-space:nowrap;transition:color 500ms cubic-bezier(0.16,1,0.3,1)" style-hover="color:#132728">Ver a operação em detalhe</a>
+      <a href="#contato" style="font-family:Geist,sans-serif;font-weight:600;font-size:0.75rem;color:#132728;text-decoration:none;border-bottom:1px solid rgba(19,39,40,0.3);padding-bottom:3px;white-space:nowrap;transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)" style-hover="border-bottom:1px solid #046C88">Solicitar apresentação</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══ 1 · HERO ════════════════════════════════════════════════════════════ -->
+<header id="topo" data-screen-label="v9 · 1 Hero" style="min-height:calc(100svh - 120px);display:grid;grid-template-rows:1fr auto auto;gap:clamp(2.5rem,5vw,4rem);padding:clamp(2.5rem,5vw,4.5rem) clamp(20px,6vw,80px) clamp(1.5rem,3vw,2.5rem)">
+  <div style="max-width:1320px;width:100%;margin:auto">
+    <div data-split="hero" style="display:grid;grid-template-columns:1.5fr 1fr;gap:clamp(3rem,8vw,8rem);align-items:end">
+      <div>
+        <h1 style="font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(2.75rem,6vw,5.25rem);line-height:1.08;letter-spacing:-0.018em;margin:0;max-width:15ch;text-wrap:balance">Onde o crédito contemplado vira ativo.</h1>
+        <p style="font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(1.25rem,2.1vw,1.75rem);line-height:1.5;letter-spacing:-0.008em;color:rgba(19,39,40,0.7);margin:clamp(1.5rem,3vw,2.25rem) 0 0;max-width:28ch;text-wrap:balance">A <span style="font-weight:600;color:#132728">Plina<span style="color:#046C88">.</span></span> origina a cessão, estrutura o fundo e emite a cota.</p>
+      </div>
+      <div class="sintese">
+        <p>Cotas de consórcio já contempladas são compradas com deságio e pagas por PIX em até 48 horas. O direito é carregado num FIDC sob a Resolução CVM 175, cujas cotas Sênior são emitidas em registro digital de valor diário público.</p>
+        <p class="ticker"><span data-placeholder="true">PLINA-RF · FIDC CVM 175 · Série 1 em operação desde 2026</span></p>
+        <a href="#contato" class="pilula">Solicitar apresentação<i aria-hidden="true">&#8594;</i></a>
+        <p class="promessa">O resumo da operação chega no mesmo minuto.</p>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1320px;width:100%;margin:0 auto">
+  <dl class="numeros">
+    <div>
+      <dt>Originado desde o início</dt>
+      <dd data-placeholder="true">R$ 412,6 mi</dd>
+    </div>
+    <div>
+      <dt>Cessões liquidadas</dt>
+      <dd data-placeholder="true">1.847</dd>
+    </div>
+    <div>
+      <dt>Inadimplência realizada</dt>
+      <dd data-placeholder="true">0,42%</dd>
+    </div>
+  </dl>
+  <p class="posicao" data-placeholder="true">Posição de 20/08/2026. Atualizada diariamente na carteira do fundo.</p>
+  </div>
+
+  <a href="#mecanismo" data-cue="true">
+    <span>Como funciona</span>
+    <i aria-hidden="true"></i>
+  </a>
+</header>
+
+<main>
+
+<!-- ═══ 2 · O MECANISMO ═════════════════════════════════════════════════════ -->
+<section id="mecanismo" data-screen-label="v9 · 2 Mecanismo" style="background:#e4e4e4;padding:clamp(6rem,12vw,11rem) clamp(20px,6vw,80px)">
+  <div style="max-width:1320px;margin:0 auto">
+    <div data-split="true" style="display:grid;grid-template-columns:1.15fr 1fr;gap:clamp(3rem,6vw,5rem);align-items:stretch">
+      <div>
+        <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.2em;color:rgba(19,39,40,0.7);margin:0;text-transform:uppercase">O mecanismo</p>
+        <h2 style="font-family:Chillax,sans-serif;font-weight:500;font-size:clamp(2.25rem,4.5vw,3.5rem);line-height:1.12;letter-spacing:-0.018em;margin:1.5rem 0 0;max-width:16ch;text-wrap:balance">Onde o crédito se forma, e onde ele perde liquidez.</h2>
+        <p style="margin:clamp(2rem,4vw,2.75rem) 0 0;max-width:52ch">O consórcio forma crédito sem banco, supervisionado pelo Banco Central desde 2008. A cada mês alguém é contemplado e ganha uma carta de crédito de valor de face definido.</p>
+        <p style="margin:1.5rem 0 0;max-width:52ch">A maioria usa a carta e compra o bem. Quem prefere o dinheiro não tem para quem vender.</p>
+        <p style="font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(1.375rem,2.2vw,1.875rem);line-height:1.34;letter-spacing:-0.012em;margin:clamp(2rem,4vw,2.75rem) 0 0;max-width:22ch;text-wrap:balance">É o mercado que a Plina faz.</p>
+        <p style="margin:1.125rem 0 0;max-width:52ch">O fundo compra o direito com deságio e paga por PIX em até 48 horas.</p>
+      </div>
+      <figure style="margin:0;display:flex;flex-direction:column">
+        <div style="position:relative;flex:1;min-height:clamp(320px,32vw,460px)">
+          <image-slot id="v9-obra" src="./uploads/v5-obra.webp" shape="rect" fit="cover" placeholder="Fotografia: o bem em construção ou em operação. Documental."></image-slot>
+        </div>
+        <figcaption style="font-family:'Geist Mono',monospace;font-size:0.75rem;color:rgba(19,39,40,0.7);margin-top:1rem">O bem. O que a carta de crédito compra à vista.</figcaption>
+      </figure>
+    </div>
+
+    <div style="margin:clamp(4rem,8vw,6.5rem) 0 0;max-width:1080px;border-top:1px solid rgba(19,39,40,0.12);padding-top:clamp(2.5rem,5vw,3.5rem)">
+      <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.2em;color:rgba(19,39,40,0.7);margin:0 0 clamp(1.75rem,3.5vw,2.5rem);text-transform:uppercase">As três saídas</p>
+      <ul class="saidas">
+        <li><h3><b>A</b> Revenda ao comprador-usuário</h3></li>
+        <li><h3><b>B</b> Liquidação pela administradora</h3></li>
+        <li><h3><b>C</b> Prazo de grupo</h3></li>
+      </ul>
+      <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.04em;line-height:1.9;color:rgba(19,39,40,0.8);margin:clamp(2rem,4vw,2.75rem) 0 0;max-width:66ch">Três saídas para o mesmo lastro. Trabalhar as três em conjunto é o que sustenta o deságio e encurta o prazo médio.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 3 · AS DUAS SÉRIES ══════════════════════════════════════════════════ -->
+<section id="produto" data-screen-label="v9 · 3 Séries" style="padding:clamp(6rem,10vw,9rem) clamp(20px,6vw,80px)">
+  <div style="max-width:1320px;margin:0 auto">
+    <div data-split="true" style="display:grid;grid-template-columns:1fr 1fr;gap:5rem;align-items:end">
+      <div>
+        <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.2em;color:rgba(19,39,40,0.7);margin:0;text-transform:uppercase">O produto</p>
+        <h2 style="font-family:Chillax,sans-serif;font-weight:500;font-size:clamp(2.25rem,4.5vw,3.5rem);line-height:1.12;letter-spacing:-0.018em;margin:1.5rem 0 0;max-width:16ch;text-wrap:balance">Um lastro real, duas séries da mesma cota.</h2>
+      </div>
+      <p style="margin:0;max-width:52ch">O PLINA-RF é a cota de um FIDC sob a Resolução CVM 175, emitida em registro digital auditável.</p>
+    </div>
+
+    <table data-table="true" class="oferta">
+      <caption style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Séries Sênior do PLINA-RF, moeda de liquidação, retorno-alvo e tíquete mínimo</caption>
+      <thead>
+        <tr>
+          <th scope="col">Série</th>
+          <th scope="col">Liquidação</th>
+          <th scope="col">Faixa de retorno-alvo</th>
+          <th scope="col">Tíquete mínimo</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td data-rotulo="Série"><span class="rotulo">Sênior · Brasil</span></td><td data-rotulo="Liquidação"><span class="dado" style="letter-spacing:0.1em">BRL · PIX</span></td><td data-rotulo="Faixa de retorno-alvo"><span class="valor">CDI + 4% a 7% a.a.</span></td><td data-rotulo="Tíquete mínimo"><span class="dado">R$ 500 mil</span></td></tr>
+        <tr><td data-rotulo="Série"><span class="rotulo">Sênior · Internacional</span></td><td data-rotulo="Liquidação"><span class="dado" style="letter-spacing:0.1em">USDC · EURC</span></td><td data-rotulo="Faixa de retorno-alvo"><span class="valor">SOFR + 6% a 9% a.a.</span></td><td data-rotulo="Tíquete mínimo"><span class="dado">US$ 100 mil</span></td></tr>
+      </tbody>
+    </table>
+    <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.04em;color:rgba(19,39,40,0.7);margin:1.25rem 0 0">Prazo médio de 30 a 90 dias. Resgate em janelas periódicas, contra o valor da cota no dia.</p>
+
+    <div style="margin:clamp(3rem,6vw,4.5rem) 0 0;border-top:1px solid rgba(19,39,40,0.12);padding-top:clamp(2.5rem,5vw,3.5rem)">
+      <p style="font-family:Chillax,sans-serif;font-weight:400;font-size:clamp(1.375rem,2.2vw,1.875rem);line-height:1.34;letter-spacing:-0.012em;margin:0;max-width:34ch;text-wrap:balance">A Plina integraliza a cota Subordinada e absorve as primeiras perdas.</p>
+      <p style="margin:clamp(2rem,4vw,2.75rem) 0 0;max-width:66ch;font-size:0.75rem;font-family:'Geist Mono',monospace;line-height:1.9;color:rgba(19,39,40,0.7)">Retornos-alvo são metas indicativas, sujeitas ao regulamento do fundo e à documentação da oferta. Não constituem promessa de rentabilidade. Oferta restrita a investidores qualificados e profissionais, conforme a regulamentação da CVM.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 4 · POR QUE CONFIAR ═════════════════════════════════════════════════
+     O indice da diligencia, nao a diligencia. Cada linha entrega uma frase e o
+     caminho para a prova inteira. Unico bloco escuro da pagina. -->
+<section id="confianca" data-dark="true" data-screen-label="v9 · 4 Confiança" style="background:#132728;color:#e4e4e4;padding:clamp(7rem,14vw,13rem) clamp(20px,6vw,80px)">
+  <div style="max-width:1320px;margin:0 auto">
+    <div data-split="true" style="display:grid;grid-template-columns:1fr 1fr;gap:5rem;align-items:end">
+      <div>
+        <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.2em;color:#A0CFE7;margin:0;text-transform:uppercase">Por que confiar</p>
+        <h2 style="font-family:Chillax,sans-serif;font-weight:500;font-size:clamp(2.25rem,4.5vw,3.5rem);line-height:1.12;letter-spacing:-0.018em;margin:1.5rem 0 0;max-width:18ch;text-wrap:balance">Quatro coisas que dá para conferir sem falar com ninguém.</h2>
+      </div>
+      <div style="max-width:52ch">
+        <p style="margin:0;color:#e4e4e4">Outras casas também compram cotas contempladas. Nenhuma publica o valor da cota e a composição da carteira.</p>
+        <p style="margin:1.5rem 0 0;color:#A0CFE7">É a separação de funções, não a tecnologia, que sustenta um FIDC. Cada item abaixo abre a evidência completa.</p>
+      </div>
+    </div>
+
+    <ul class="confianca">
+      <li>
+        <h3>A estrutura é separada da Plina</h3>
+        <p>Administrador fiduciário, gestor, custodiante e auditoria são partes registradas na CVM. À Plina cabem a originação e a emissão, e nenhuma das duas dá acesso ao patrimônio do fundo.</p>
+        <a href="/operacao#estrutura" class="verificar">Ver quem exerce cada função&nbsp;&#8594;</a>
+      </li>
+      <li>
+        <h3>Os limites estão gravados no próprio ativo</h3>
+        <p>A cota só é emitida para contas aprovadas em KYC. A recuperação existe apenas sob quatro hipóteses fechadas e publicadas, com dupla aprovação.</p>
+        <a href="/politica-clawback" class="verificar">Ver as quatro hipóteses&nbsp;&#8594;</a>
+      </li>
+      <li>
+        <h3>O valor da cota é público e diário</h3>
+        <p><span data-placeholder="true">R$ 1,0847 em 20/08/2026, líquido de taxa de administração e sem provisão para inadimplência.</span> A carteira inteira, com a composição por tipo de bem, fica aberta sem cadastro e sem login.</p>
+        <a href="/pool" class="verificar">Abrir a carteira do fundo&nbsp;&#8594;</a>
+      </li>
+      <li>
+        <h3>O histórico começa na primeira cessão</h3>
+        <p><span data-placeholder="true">1.847 cessões liquidadas e 12 de 12 janelas de resgate honradas.</span> Cada trimestre traz o volume originado e a inadimplência realizada.</p>
+        <a href="/operacao#historico" class="verificar">Ver o histórico trimestral&nbsp;&#8594;</a>
+      </li>
+    </ul>
+
+    <p style="margin:clamp(3rem,6vw,4.5rem) 0 0;max-width:60ch;font-family:'Geist Mono',monospace;font-size:0.75rem;line-height:1.9;color:#A0CFE7">O regulamento do fundo, o relatório de risco e o parecer da auditoria são entregues na diligência.</p>
+  </div>
+</section>
+
+<!-- ═══ 5 · CONTATO ═════════════════════════════════════════════════════════ -->
+<section id="contato" data-screen-label="v9 · 5 Contato" style="padding:clamp(6rem,10vw,9rem) clamp(20px,6vw,80px)">
+  <div style="max-width:1320px;margin:0 auto">
+    <div data-split="true" style="display:grid;grid-template-columns:1fr 1fr;gap:5rem;align-items:start">
+      <div>
+        <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.2em;color:rgba(19,39,40,0.65);margin:0;text-transform:uppercase">Contato</p>
+        <h2 style="font-family:Chillax,sans-serif;font-weight:500;font-size:clamp(2.25rem,4.5vw,3.5rem);line-height:1.12;letter-spacing:-0.018em;margin:1.5rem 0 0;max-width:14ch;text-wrap:balance">Apresentação da operação.</h2>
+        <p style="margin:2rem 0 0;max-width:44ch">O resumo da operação abre assim que você registra interesse. O time retorna em até 48 horas com a apresentação do instrumento, o regulamento do fundo e os próximos passos de diligência.</p>
+        <ul style="list-style:none;margin:2.5rem 0 0;padding:0;font-family:'Geist Mono',monospace;font-size:0.75rem;line-height:2.2;letter-spacing:0.04em;color:rgba(19,39,40,0.7)">
+          <li>Processo confidencial</li>
+          <li>Não caracteriza oferta pública</li>
+        </ul>
+        <a href="/operacao" class="verificar bloco" style="margin-top:1.5rem">Ou leia a operação em detalhe antes&nbsp;&#8594;</a>
+      </div>
+      <div>
+        <form onSubmit="{{ submitLead }}" id="lead-form" style="display:flex;flex-direction:column;gap:2rem">
+          <div style="display:flex;flex-direction:column;gap:0.625rem">
+            <label for="f-nome" style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.2em;text-transform:uppercase;color:rgba(19,39,40,0.65)">Nome completo *</label>
+            <input id="f-nome" name="nome" type="text" required="required" autoComplete="name" style="font-family:Satoshi,sans-serif;font-weight:300;font-size:1.125rem;color:#132728;background:transparent;border:0;border-bottom:1px solid rgba(19,39,40,0.25);padding:0 0 12px;transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)" style-focus="border-bottom:1px solid #046C88;outline:none" />
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.625rem">
+            <label for="f-org" style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.2em;text-transform:uppercase;color:rgba(19,39,40,0.65)">Organização *</label>
+            <input id="f-org" name="org" type="text" required="required" autoComplete="organization" style="font-family:Satoshi,sans-serif;font-weight:300;font-size:1.125rem;color:#132728;background:transparent;border:0;border-bottom:1px solid rgba(19,39,40,0.25);padding:0 0 12px;transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)" style-focus="border-bottom:1px solid #046C88;outline:none" />
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.625rem">
+            <label for="f-email" style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.2em;text-transform:uppercase;color:rgba(19,39,40,0.65)">E-mail corporativo *</label>
+            <input id="f-email" name="email" type="email" required="required" autoComplete="email" aria-describedby="f-hint" style="font-family:Satoshi,sans-serif;font-weight:300;font-size:1.125rem;color:#132728;background:transparent;border:0;border-bottom:1px solid rgba(19,39,40,0.25);padding:0 0 12px;transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)" style-focus="border-bottom:1px solid #046C88;outline:none" />
+            <span id="f-hint" style="font-family:'Geist Mono',monospace;font-size:0.75rem;color:rgba(19,39,40,0.65)">A resposta é enviada para este endereço.</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.625rem">
+            <label for="f-interesse" style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.2em;text-transform:uppercase;color:rgba(19,39,40,0.65)">Natureza do interesse *</label>
+            <select id="f-interesse" name="interesse" required="required" aria-describedby="f-qualif" style="font-family:Satoshi,sans-serif;font-weight:300;font-size:1.125rem;color:#132728;background:transparent;border:0;border-bottom:1px solid rgba(19,39,40,0.25);padding:0 0 12px;transition:border-color 500ms cubic-bezier(0.16,1,0.3,1)" style-focus="border-bottom:1px solid #046C88;outline:none">
+              <option value="">Selecione</option>
+              <option>Investidor institucional</option>
+              <option>Administradora de consórcio</option>
+              <option>Cedente institucional</option>
+              <option>Parceria de distribuição</option>
+              <option>Outro</option>
+            </select>
+            <span id="f-qualif" style="font-family:'Geist Mono',monospace;font-size:0.75rem;line-height:1.6;color:rgba(19,39,40,0.7)">A oferta é restrita a investidores qualificados e profissionais. O enquadramento é confirmado na primeira conversa, não aqui.</span>
+          </div>
+          <div style="display:flex;gap:0.875rem;align-items:flex-start;margin-top:0.5rem">
+            <input id="f-lgpd" name="lgpd" type="checkbox" required="required" style="margin-top:10px;accent-color:#046C88;width:20px;height:20px;flex:none" />
+            <label for="f-lgpd" style="font-size:1.125rem;line-height:1.6;color:rgba(19,39,40,0.7)">Autorizo o uso dos dados para contato sobre a operação, tratados conforme a LGPD e não compartilhados com terceiros.</label>
+          </div>
+          <div id="f-erro" role="alert" style="display:none;border-top:1px solid #B3261E;padding-top:1rem">
+            <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;line-height:1.6;color:#B3261E;margin:0">Não foi possível enviar. As informações preenchidas foram preservadas. Tente novamente, ou escreva para contato@plina.finance.</p>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:1.5rem;align-items:center;justify-content:space-between;margin-top:1rem">
+            <button id="f-submit" type="submit" style="font-family:Geist,sans-serif;font-weight:600;font-size:1.125rem;letter-spacing:0.02em;background:#046C88;color:#ffffff;border:0;cursor:pointer;padding:18px 40px;border-radius:9999px;transition:background-color 500ms cubic-bezier(0.16,1,0.3,1),color 500ms cubic-bezier(0.16,1,0.3,1)" style-hover="background:#132728;color:#ffffff">Solicitar apresentação</button>
+            <a href="mailto:contato@plina.finance" style="font-family:'Geist Mono',monospace;font-size:0.75rem;color:rgba(19,39,40,0.7);text-decoration:none;border-bottom:1px solid rgba(19,39,40,0.2);padding-bottom:2px">contato@plina.finance</a>
+          </div>
+        </form>
+        <div id="lead-ok" role="status" tabindex="-1" style="display:none;border-top:1px solid #046C88;padding-top:2rem">
+          <p style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.2em;color:#046C88;margin:0;text-transform:uppercase">Solicitação recebida</p>
+          <p style="margin:1.25rem 0 0;max-width:46ch">O resumo está disponível agora. A apresentação completa do instrumento vai em até 48 horas para <span id="f-echo" style="font-family:'Geist Mono',monospace;font-size:1.125rem;color:#132728">o endereço informado</span>.</p>
+          <a href="/resumo-plina-rf.pdf" class="pilula" style="margin-top:1.75rem">Abrir o resumo da operação<i aria-hidden="true">&#8594;</i></a>
+          <button id="f-corrigir" type="button" style="font-family:Geist,sans-serif;font-weight:600;font-size:1.125rem;background:transparent;color:#046C88;border:0;border-bottom:1px solid rgba(4,108,136,0.4);padding:0 0 3px;margin-top:1.75rem;cursor:pointer;display:block">Corrigir os dados</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer style="padding:clamp(3rem,6vw,5rem) clamp(20px,6vw,80px);border-top:1px solid rgba(19,39,40,0.12)">
+  <div style="max-width:1320px;margin:0 auto;display:flex;flex-wrap:wrap;gap:2rem 4rem;align-items:baseline;justify-content:space-between">
+    <span style="font-family:Chillax,sans-serif;font-weight:600;font-size:1.3125rem;letter-spacing:-0.012em">Plina<span style="color:#046C88">.</span></span>
+    <p style="margin:0;max-width:52ch;font-size:0.75rem;line-height:1.7;color:rgba(19,39,40,0.7)">A Plina Finance não é corretora nem distribuidora. Esta página não constitui oferta pública de valores mobiliários.</p>
+    <div style="display:flex;gap:2rem;align-items:baseline">
+      <a href="/operacao" style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.1em;color:rgba(19,39,40,0.7);text-decoration:none;text-transform:uppercase">A operação</a>
+      <a href="https://www.linkedin.com/company/plina-finance/" target="_blank" rel="noopener noreferrer" style="font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.1em;color:rgba(19,39,40,0.7);text-decoration:none;text-transform:uppercase">LinkedIn</a>
+      <span style="font-family:'Geist Mono',monospace;font-size:0.75rem;color:rgba(19,39,40,0.65);white-space:nowrap">© 2026</span>
+    </div>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  componentDidMount() {
+    this._ios = [];
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    // Uma gramatica so: o titulo se revela, a fotografia abre. Nada mais se mexe.
+    const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)';
+    // Quem e observado e o PAI, nunca o alvo. O Chromium desconta o clip-path do
+    // proprio elemento ao calcular a intersecao: observar o alvo ja escondido
+    // devolve ratio 0 para sempre e o titulo nao aparece nunca.
+    const alvos = [];
+    document.querySelectorAll('h1, main h2').forEach((el) => alvos.push({ el: el, pai: el.parentElement, tipo: 'unmask' }));
+    document.querySelectorAll('image-slot').forEach((el) => {
+      const caixa = el.parentElement;
+      if (caixa) alvos.push({ el: caixa, pai: caixa.parentElement, tipo: 'aperture' });
+    });
+    const vivos = alvos.filter((a) => a.el && a.pai);
+    vivos.forEach((a) => {
+      a.el.setAttribute('data-revelar', '');
+      a.el.style.clipPath = a.tipo === 'unmask' ? 'inset(0 0 100% 0)' : 'inset(6% 6% 6% 6%)';
+      a.el.style.transition = 'clip-path ' + (a.tipo === 'unmask' ? '1000ms ' : '1200ms ') + EASE;
+    });
+    const revelar = (a) => {
+      a.el.style.clipPath = a.tipo === 'unmask' ? 'inset(0 0 -25% 0)' : 'inset(0% 0% 0% 0%)';
+      a.el.removeAttribute('data-revelar');
+    };
+    // Dois observers, porque titulo e fotografia tem alturas de outra ordem.
+    // Com um limiar unico de 15%, uma foto de 560px abria com 84px na tela: a
+    // animacao acontecia inteira antes de o leitor ter como assisti-la.
+    const observador = (tipo, opcoes) => new IntersectionObserver((entradas, obs) => {
+      entradas.forEach((en) => {
+        if (!en.isIntersecting) return;
+        vivos.filter((a) => a.pai === en.target && a.tipo === tipo).forEach(revelar);
+        obs.unobserve(en.target);
+      });
+    }, opcoes);
+    const io = observador('unmask', { threshold: 0.15, rootMargin: '0px 0px -6% 0px' });
+    const ioFoto = observador('aperture', { threshold: [0, 0.4], rootMargin: '0px 0px -5% 0px' });
+    vivos.forEach((a) => (a.tipo === 'unmask' ? io : ioFoto).observe(a.pai));
+    this._ios.push(io, ioFoto);
+    // Rede de seguranca. Se o observer nao revelar (host que clipa o container,
+    // IO desligado), o que esta na tela aparece assim mesmo: titulo invisivel e
+    // falha de conteudo, nao de animacao. Varre so o que esta visivel, senao
+    // queimaria a revelacao do resto da pagina de uma vez.
+    const varrer = () => {
+      const presos = document.querySelectorAll('[data-revelar]');
+      if (!presos.length) { window.removeEventListener('scroll', agendar); return; }
+      Array.prototype.forEach.call(presos, (el) => {
+        const r = el.getBoundingClientRect();
+        if (r.top > window.innerHeight || r.bottom < 0) return;
+        el.style.transition = '';
+        el.style.clipPath = '';
+        el.removeAttribute('data-revelar');
+      });
+    };
+    let pendente = 0;
+    const agendar = () => {
+      if (pendente) return;
+      pendente = window.setTimeout(() => { pendente = 0; varrer(); }, 1200);
+    };
+    this._rede = window.setTimeout(varrer, 2600);
+    this._agendar = agendar;
+    window.addEventListener('scroll', agendar, { passive: true });
+  }
+  componentWillUnmount() {
+    (this._ios || []).forEach((io) => io.disconnect());
+    window.clearTimeout(this._rede);
+    if (this._agendar) window.removeEventListener('scroll', this._agendar);
+  }
+  renderVals() {
+    return {
+      submitLead: (e) => {
+        e.preventDefault();
+        const form = document.getElementById('lead-form');
+        const ok = document.getElementById('lead-ok');
+        const erro = document.getElementById('f-erro');
+        const btn = document.getElementById('f-submit');
+        const echo = document.getElementById('f-echo');
+        const email = (document.getElementById('f-email') || {}).value;
+        if (erro) erro.style.display = 'none';
+        if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; btn.style.opacity = '0.6'; btn.style.cursor = 'wait'; }
+        // Substituir por POST real. O caminho de erro ja existe e preserva o preenchido.
+        window.setTimeout(() => {
+          if (btn) { btn.disabled = false; btn.textContent = 'Solicitar apresentação'; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
+          if (echo && email) echo.textContent = email;
+          if (form) form.style.display = 'none';
+          if (ok) { ok.style.display = 'block'; ok.focus(); }
+        }, 900);
+      }
+    };
+  }
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest || !e.target.closest('#f-corrigir')) return;
+  const form = document.getElementById('lead-form');
+  const ok = document.getElementById('lead-ok');
+  if (ok) ok.style.display = 'none';
+  if (form) { form.style.display = 'flex'; const em = document.getElementById('f-email'); if (em) em.focus(); }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=chillax@400,500,600&f[]=satoshi@300,400,500&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@300;400&display=swap" />
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#ffffff;color:#132728;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+:focus-visible{outline:2px solid #0EA7C7;outline-offset:4px}
+
+.rotulo{font-family:'Geist Mono',monospace;font-size:0.75rem;letter-spacing:0.16em;text-transform:uppercase;color:#046C88;padding:0.875rem clamp(20px,6vw,80px);border-top:1px solid rgba(19,39,40,0.12);border-bottom:1px solid rgba(19,39,40,0.12);background:#e4e4e4}
+.rotulo b{color:rgba(19,39,40,0.7);font-weight:400;text-transform:none;letter-spacing:0.04em}
+.rotulo i{font-style:normal;color:#132728;font-weight:400}
+
+.tela{padding:clamp(3rem,6vw,5rem) clamp(20px,6vw,80px);background:#0C1719;color:#EDF3F2}
+.centro{max-width:1320px;margin:0 auto}
+.par{display:grid;grid-template-columns:1fr 1fr;gap:clamp(1.5rem,3vw,2.5rem);align-items:start}
+@media (max-width:900px){.par{grid-template-columns:1fr}}
+.eyebrow{font-family:'Geist Mono',monospace;font-size:0.6875rem;letter-spacing:0.2em;text-transform:uppercase;color:rgba(237,243,242,0.6);margin:0 0 1rem}
+.h{font-family:Chillax,sans-serif;font-weight:500;font-size:clamp(2rem,4.4vw,3.5rem);line-height:1.05;letter-spacing:-0.026em;margin:0;color:#EDF3F2}
+.num{font-family:'Geist Mono',monospace;font-weight:300;font-size:clamp(2rem,4.4vw,3.5rem);line-height:1;letter-spacing:-0.02em;margin:0;color:#EDF3F2}
+.medida{font-family:'Geist Mono',monospace;font-size:0.6875rem;line-height:1.85;color:rgba(237,243,242,0.68);margin:1.25rem 0 0;padding-top:0.875rem;border-top:1px solid rgba(237,243,242,0.15)}
+.campo{border-radius:24px;padding:clamp(24px,2.6vw,36px);min-height:190px;display:flex;flex-direction:column;justify-content:space-between;gap:1.25rem;position:relative}
+.campo > *{position:relative;z-index:1}
+.moldura::before{content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;z-index:0;
+  background:linear-gradient(135deg,rgba(237,243,242,0.55) 0%,rgba(160,207,231,0.18) 34%,rgba(237,243,242,0.04) 56%,rgba(14,167,199,0.42) 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
+
+/* ═══ OS INGREDIENTES, UM A UM ═══════════════════════════════════════════════
+
+   O que estas pranchetas isolam. Cada uma acrescenta UM ingrediente ao
+   anterior, para que de para ver o que cada um paga.
+
+   O TETO DA PLINA, medido antes de qualquer coisa. O que faz uma superficie
+   parecer metal e a AMPLITUDE: a distancia de luminancia entre o stop mais claro
+   e o mais escuro. Um chrome de referencia varre 0.012 -> 0.807, razao de 70x.
+   O metal que esta hoje na v11 varre 0.579 -> 0.885: razao de 1.5x. E por isso
+   que ele le como degrade e nao como metal -- nao e o angulo nem o numero de
+   stops, e amplitude.
+
+   E a amplitude no TEXTO tem teto baixo aqui, porque todo stop precisa passar em
+   AA contra o campo: abaixo de #4A9ED4 / #0EA7C7 a tinta reprova. O maximo
+   possivel e 3.1x. Longe dos 70x, e nao ha o que fazer -- metal de verdade
+   precisa de tons quase pretos, e tom quase preto sobre campo escuro e ilegivel.
+
+   NA SUPERFICIE NAO HA ESSE TETO. O campo nao contrasta consigo mesmo: so a
+   tinta em cima precisa passar contra o ponto mais claro dele. Ate #2B5157 a
+   tinta cheia ainda da 7.74, e ali a amplitude ja e de 13.3x.
+
+   DAI A CONCLUSAO QUE GOVERNA A v2: quem carrega o metal e a superficie, nao a
+   letra. No texto o efeito e tempero; no campo, ele pode ser o prato. */
+
+/* 1 · o que esta na v11 hoje */
+.t1{background:linear-gradient(168deg,#EDF3F2 0%,#EDF3F2 42%,#A0CFE7 72%,#EDF3F2 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.c1{background:linear-gradient(118deg,#122224 0%,#16292B 42%,#122224 74%),#122224}
+
+/* 2 · so amplitude: os mesmos 4 stops, esticados ate o limite da paleta */
+.t2{background:linear-gradient(168deg,#FFFFFF 0%,#FFFFFF 42%,#0EA7C7 72%,#FFFFFF 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+/* 3 · 7 stops simetricos. A referencia classica: 3 claros, 3 escuros, 1 no meio.
+   E a ALTERNANCIA que cria as bandas -- um degrade monotonico nunca vira metal,
+   porque metal reflete em faixas, nao em rampa. */
+.t3{background:linear-gradient(168deg,#4A9ED4 0%,#FFFFFF 16%,#A0CFE7 33%,#FFFFFF 50%,#0EA7C7 66%,#D4E4EA 83%,#FFFFFF 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+/* 4 · bandas estreitas. Os mesmos 7 stops, com as transicoes comprimidas: cada
+   par de stops quase se toca, e o que era rampa vira corte. E o ingrediente que
+   mais muda a leitura, e o que quase ninguem documenta. */
+.t4{background:linear-gradient(168deg,#4A9ED4 0%,#FFFFFF 10%,#FFFFFF 14%,#A0CFE7 30%,#A0CFE7 33%,#FFFFFF 46%,#FFFFFF 52%,#0EA7C7 64%,#0EA7C7 68%,#D4E4EA 80%,#FFFFFF 92%,#FFFFFF 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+/* 5 · o angulo. 135deg poe a luz no canto superior esquerdo, que e de onde ela
+   vem em todo o resto do sistema. 168deg e quase vertical e le como sombra de
+   cima para baixo, nao como reflexo. */
+.t5{background:linear-gradient(135deg,#4A9ED4 0%,#FFFFFF 10%,#FFFFFF 14%,#A0CFE7 30%,#A0CFE7 33%,#FFFFFF 46%,#FFFFFF 52%,#0EA7C7 64%,#0EA7C7 68%,#D4E4EA 80%,#FFFFFF 92%,#FFFFFF 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+/* 6 · a superficie com a amplitude que ela pode ter. Mesma logica de bandas,
+   agora sem teto de contraste: o campo varre de #0A1A1C a #203C40, 7.3x contra
+   os 3.6x de hoje, e a tinta cheia ainda fica em 10.50. */
+.c6{background:linear-gradient(135deg,#0A1A1C 0%,#16292B 16%,#0D1F21 32%,#203C40 50%,#0F2325 68%,#1B3336 86%,#0A1A1C 100%)}
+
+/* 7 · textura escovada. Listras de 1px a 2.5% de luz, no mesmo angulo do campo.
+   Sozinha nao e nada; sobre o campo em bandas ela e o que separa "metal polido"
+   de "metal escovado", e e o que faz a superficie parar de parecer plastico. */
+.c7{background:
+  repeating-linear-gradient(135deg,transparent 0 2px,rgba(237,243,242,0.025) 2px 3px),
+  linear-gradient(135deg,#0A1A1C 0%,#16292B 16%,#0D1F21 32%,#203C40 50%,#0F2325 68%,#1B3336 86%,#0A1A1C 100%)}
+
+/* 8 · o brilho especular: uma faixa clara e estreita atravessando o campo. E o
+   unico ingrediente que simula uma fonte de luz pontual em vez de ambiente.
+   Vai no ::after para nao disputar com a moldura, que mora no ::before. */
+.brilho::after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:0;
+  background:linear-gradient(118deg,transparent 34%,rgba(237,243,242,0.07) 46%,rgba(237,243,242,0.11) 50%,rgba(237,243,242,0.05) 55%,transparent 66%)}
+</style>
+</helmet>
+<div style="font-family:Satoshi,system-ui,sans-serif;font-weight:300;font-size:1.0625rem;line-height:1.6">
+
+<!--
+  ANATOMIA DO EFEITO METALICO — o que li, o que medi, e o que muda.
+
+  FONTES (lidas em 28/08/2026):
+    ibelick.com/blog/creating-metallic-effect-with-css
+    effect-labs.com/en/pages/blog/effet-holographique-css.html
+    texteffects.dev/posts/gold-text-effect
+    design.dev/tools/metallic-effect-generator
+
+  O QUE AS TRES FONTES CONCORDAM:
+    · 7 stops, simetricos, 3 claros e 3 escuros com um no meio (ibelick)
+    · alternancia clara/escura, nunca rampa monotonica (effect-labs: "alternating
+      between very dark and very light tones")
+    · angulo diagonal, 45 ou 135deg, para luz vir de um canto
+    · background-clip:text + text-fill-color:transparent para levar ao texto
+    · uma camada extra de brilho, por pseudo-elemento
+
+  O QUE NENHUMA DELAS DIZ, e que e o que decide na Plina: o efeito depende de
+  AMPLITUDE DE LUMINANCIA, e amplitude e exatamente o que uma paleta acessivel
+  nao pode ter no texto. Os numeros estao no comentario do CSS.
+-->
+
+<div class="rotulo">0 · o teto &nbsp;<b>o chrome de referência varre 70× de luminância. O metal que está na v11 hoje varre <i>1,5×</i>. Não é o ângulo nem o número de stops — é amplitude, e é por isso que ele lê como degradê.</b></div>
+
+<!-- 1 -->
+<div class="rotulo">1 · referência — o que está na v11 &nbsp;<b>4 stops, transições longas, ângulo quase vertical. Texto 1,5× · campo 3,6×.</b></div>
+<section data-screen-label="v2 · 1 Referência" class="tela">
+  <div class="centro par">
+    <div>
+      <p class="eyebrow">Texto</p>
+      <h2 class="h t1">O crédito já foi contemplado.</h2>
+      <p class="num t1" style="margin-top:1.5rem">R$ 232,9 bi</p>
+      <p class="medida">#EDF3F2 → #A0CFE7 → #EDF3F2 · 168° · amplitude 1,5× · pior stop 9,07</p>
+    </div>
+    <div class="campo moldura c1">
+      <p class="eyebrow" style="margin:0">Campo</p>
+      <p class="num" style="font-size:2rem">R$ 232,9 bi</p>
+      <p class="medida" style="margin:0;border:0;padding:0">#122224 → #16292B · 118° · amplitude 3,6×</p>
+    </div>
+  </div>
+</section>
+
+<!-- 2 -->
+<div class="rotulo">2 · + amplitude &nbsp;<b>os mesmos 4 stops, esticados até o limite da paleta. Já é outra coisa — e provou que o problema nunca foi a estrutura.</b></div>
+<section data-screen-label="v2 · 2 Amplitude" class="tela">
+  <div class="centro par">
+    <div>
+      <p class="eyebrow">Texto</p>
+      <h2 class="h t2">O crédito já foi contemplado.</h2>
+      <p class="num t2" style="margin-top:1.5rem">R$ 232,9 bi</p>
+      <p class="medida">#FFFFFF → #0EA7C7 → #FFFFFF · 168° · amplitude 3,1× · pior stop 5,32</p>
+    </div>
+    <div class="campo moldura c1">
+      <p class="eyebrow" style="margin:0">Campo inalterado</p>
+      <p class="num" style="font-size:2rem">R$ 232,9 bi</p>
+      <p class="medida" style="margin:0;border:0;padding:0">para isolar o efeito da amplitude no texto</p>
+    </div>
+  </div>
+</section>
+
+<!-- 3 -->
+<div class="rotulo">3 · + 7 stops simétricos &nbsp;<b>a receita clássica: 3 claros, 3 escuros, 1 no meio. A alternância é o que cria bandas — degradê monotônico nunca vira metal, porque metal reflete em faixas, não em rampa.</b></div>
+<section data-screen-label="v2 · 3 Sete stops" class="tela">
+  <div class="centro par">
+    <div>
+      <p class="eyebrow">Texto</p>
+      <h2 class="h t3">O crédito já foi contemplado.</h2>
+      <p class="num t3" style="margin-top:1.5rem">R$ 232,9 bi</p>
+      <p class="medida">7 stops alternados · 168° · pior stop #4A9ED4, 5,15</p>
+    </div>
+    <div class="campo moldura c1">
+      <p class="eyebrow" style="margin:0">Campo inalterado</p>
+      <p class="num t3" style="font-size:2rem">R$ 232,9 bi</p>
+      <p class="medida" style="margin:0;border:0;padding:0">o mesmo gradiente, em corpo menor</p>
+    </div>
+  </div>
+</section>
+
+<!-- 4 -->
+<div class="rotulo">4 · + bandas estreitas &nbsp;<b>os mesmos 7 stops, com as transições comprimidas: cada par quase se toca, e o que era rampa vira corte. <i>É o ingrediente que mais muda a leitura, e o que nenhuma das fontes documenta.</i></b></div>
+<section data-screen-label="v2 · 4 Bandas" class="tela">
+  <div class="centro par">
+    <div>
+      <p class="eyebrow">Texto</p>
+      <h2 class="h t4">O crédito já foi contemplado.</h2>
+      <p class="num t4" style="margin-top:1.5rem">R$ 232,9 bi</p>
+      <p class="medida">stops pareados (10/14, 30/33, 46/52, 64/68) · mesma amplitude do 3</p>
+    </div>
+    <div class="campo moldura c1">
+      <p class="eyebrow" style="margin:0">Campo inalterado</p>
+      <p class="num t4" style="font-size:2rem">R$ 232,9 bi</p>
+      <p class="medida" style="margin:0;border:0;padding:0">em corpo menor as bandas somem — é o limite do gesto</p>
+    </div>
+  </div>
+</section>
+
+<!-- 5 -->
+<div class="rotulo">5 · + ângulo a 135° &nbsp;<b>a luz passa a vir do canto superior esquerdo, como em todo o resto do sistema. 168° é quase vertical e lê como sombra de cima para baixo, não como reflexo.</b></div>
+<section data-screen-label="v2 · 5 Ângulo" class="tela">
+  <div class="centro par">
+    <div>
+      <p class="eyebrow">Texto</p>
+      <h2 class="h t5">O crédito já foi contemplado.</h2>
+      <p class="num t5" style="margin-top:1.5rem">R$ 232,9 bi</p>
+      <p class="medida">135° · a mesma direção da moldura e do verniz</p>
+    </div>
+    <div class="campo moldura c1">
+      <p class="eyebrow" style="margin:0">Campo inalterado</p>
+      <p class="num t5" style="font-size:2rem">R$ 232,9 bi</p>
+      <p class="medida" style="margin:0;border:0;padding:0">luz consistente entre peças é o que faz virar sistema</p>
+    </div>
+  </div>
+</section>
+
+<!-- 6 -->
+<div class="rotulo">6 · a superfície solta &nbsp;<b>aqui não há teto: o campo não contrasta consigo mesmo, só a tinta em cima precisa passar. De 3,6× para <i>7,3×</i>, e a tinta cheia ainda fica em 10,50.</b></div>
+<section data-screen-label="v2 · 6 Superfície" class="tela">
+  <div class="centro par">
+    <div class="campo moldura c1">
+      <p class="eyebrow" style="margin:0">Campo de hoje</p>
+      <p class="num" style="font-size:2rem">R$ 232,9 bi</p>
+      <p class="medida" style="margin:0;border:0;padding:0">amplitude 3,6×</p>
+    </div>
+    <div class="campo moldura c6">
+      <p class="eyebrow" style="margin:0">Campo em bandas</p>
+      <p class="num" style="font-size:2rem">R$ 232,9 bi</p>
+      <p class="medida" style="margin:0;border:0;padding:0">#0A1A1C ↔ #203C40 · 7 stops · 135° · amplitude 7,3× · tinta 10,50</p>
+    </div>
+  </div>
+</section>
+
+<!-- 7 -->
+<div class="rotulo">7 · + textura escovada e brilho &nbsp;<b>listras de 1px a 2,5% de luz, mais uma faixa especular atravessando. A textura é o que separa metal escovado de plástico; o brilho é a única fonte de luz pontual do conjunto.</b></div>
+<section data-screen-label="v2 · 7 Textura" class="tela">
+  <div class="centro par">
+    <div class="campo moldura c6">
+      <p class="eyebrow" style="margin:0">Só bandas</p>
+      <p class="num" style="font-size:2rem">R$ 232,9 bi</p>
+      <p class="medida" style="margin:0;border:0;padding:0">sem textura, sem brilho</p>
+    </div>
+    <div class="campo moldura brilho c7">
+      <p class="eyebrow" style="margin:0">Bandas + textura + brilho</p>
+      <p class="num" style="font-size:2rem">R$ 232,9 bi</p>
+      <p class="medida" style="margin:0;border:0;padding:0">repeating 2px/1px a 0.025 · especular a 0.11 no pico</p>
+    </div>
+  </div>
+</section>
+
+<!-- 8 -->
+<div class="rotulo">8 · a proposta &nbsp;<b>tudo junto: campo em bandas com textura e brilho, texto com amplitude e bandas a 135°. <i>O metal mora na superfície; no texto ele é tempero.</i></b></div>
+<section data-screen-label="v2 · 8 Proposta" class="tela">
+  <div class="centro">
+    <div class="campo moldura brilho c7" style="min-height:auto;padding:clamp(30px,3.4vw,48px)">
+      <p class="eyebrow" style="margin:0">O mercado</p>
+      <h2 class="h t5" style="font-size:clamp(2.5rem,6vw,4.5rem);margin:0.5rem 0 0">R$ 232,9 bi</h2>
+      <p style="margin:1rem 0 0;max-width:46ch;color:#EDF3F2">Em créditos comercializados pelo sistema de consórcio em cinco meses.</p>
+      <p class="medida">ABAC · janeiro a maio de 2026 &nbsp;·&nbsp; campo 7,3× · texto 3,1× · pior stop 5,15 · tinta 10,50</p>
+    </div>
+  </div>
+</section>
+
+</div>
+</x-dc>
+</body>
+</html>

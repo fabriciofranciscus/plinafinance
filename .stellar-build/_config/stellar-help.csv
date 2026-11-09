@@ -1,0 +1,17 @@
+module,skill,display-name,menu-code,description,action,args,phase,preceded-by,followed-by,required,output-location,outputs
+bmm,_meta,Contexto do projeto Plina,,"Fatos persistentes do Plina: o que é, invariantes de arquitetura, estado M0-M9, pendências",,,anytime,,,false,project-context.md,
+bmm,_meta,Docs Stellar (llms.txt),,"Documentação oficial Stellar otimizada para LLM",,,anytime,,,false,https://developers.stellar.org/llms.txt,
+bmm,stellar-help,BMad Help,HELP,"Onde você está no fluxo e qual o próximo passo",,,anytime,,,false,,
+bmm,party-mode,Party Mode,PARTY,"Roundtable com as personas como subagentes independentes que pensam por si",,--solo | --model <modelo>,anytime,,,false,,
+bmm,advanced-elicitation,Advanced Elicitation,AE,"Critica mais fundo a última saída — socrático, primeiros princípios, pre-mortem, red team",,,anytime,,,false,,
+bmm,investigate,Investigate,IN,"Investigação forense de bug ou incidente com achados graduados por evidência",,,anytime,,,false,,
+bmm,review-edge-case-hunter,Edge Case Hunter,ECH,"Percorre toda ramificação e condição de contorno; reporta só edge cases não tratados",,,anytime,,,false,,
+bmm,brainstorming,Brainstorming,BP,"Facilitação de ideação com técnicas criativas diversas",,,1-analysis,,product-brief,false,docs,
+bmm,prfaq,PRFAQ / Working Backwards,WB,"Forja e testa o conceito de produto de trás pra frente",,,1-analysis,brainstorming,product-brief,false,docs,*prfaq*.md
+bmm,product-brief,Product Brief,CB,"Brief de produto por descoberta guiada ou autônoma",,,1-analysis,brainstorming,prd,false,docs,*brief*.md
+bmm,prd,PRD,PRD,"Cria, atualiza ou valida o PRD — declare a intenção ou a skill pergunta",,,2-planning,product-brief,create-ux-design,true,docs,PRD*.md
+bmm,create-ux-design,UX Design,CU,"Padrões de UX e especificação que informam arquitetura e implementação",,,2-planning,prd,create-architecture,false,docs,*ux*.md
+bmm,create-architecture,Architecture,CA,"Registra as decisões técnicas que mantêm a implementação nos trilhos",,,3-solutioning,prd,create-epics-and-stories,true,docs,*arquitetura*.md
+bmm,create-epics-and-stories,Epics & Stories,CE,"Quebra os requisitos em épicos e histórias que dirigem o desenvolvimento",,,2-planning,create-architecture,dev-story,true,docs,*epic*.md
+bmm,dev-story,Dev Story,DS,"Escreve testes e código da próxima história ou da história indicada",,,4-implementation,create-epics-and-stories,code-review,true,docs,
+bmm,code-review,Code Review,CR,"Review adversarial em camadas paralelas com triagem estruturada — volta para DS se houver correção",,,4-implementation,dev-story,,false,,

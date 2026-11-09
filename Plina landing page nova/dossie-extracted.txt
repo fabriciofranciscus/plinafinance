@@ -1,0 +1,3314 @@
+P L I N A F I N A N C E · C O N F I D E N C I A L
+Dossiê de
+arquitetura e
+decisões
+Estado do produto, decisões pendentes do sponsor, plano por fase e arquitetura
+de destino — consolidados após a revisão de escopo contra o one-page do CEO.
+Data 	19 de agosto de 2026
+Preparado por 	Thais · CTO
+Para 	Fabrício · CEO
+Documentos 	04
+Repo verificado em 	chore/function-region-gru1 · 6cb17a4
+P L I N A F I N A N C E · C O N F I D E N C I A L 	1
+
+-- 1 of 72 --
+
+C O N T E Ú D O
+Neste dossiê
+0 1
+Acompanhamento do Desenvolvimento — Plina (para Fabrício, CEO)
+docs/ACOMPANHAMENTO-CEO.md
+0 2
+Decisões pendentes — Fabrício (CEO)
+docs/DECISOES-CEO.md
+0 3
+PRD Plina — v1.1 (Mockup Founder-led → Produto)
+docs/PRD-plina-v1.md
+0 4
+Arquitetura-alvo — Plina
+docs/ARQUITETURA-ALVO.md
+P L I N A F I N A N C E · C O N F I D E N C I A L 	2
+
+-- 2 of 72 --
+
+D O C U M E N T O 0 1 · A C O M PA N H A M E N T O E X E C U T I V O
+Acompanhamento do Desenvolvimento —
+Plina (para Fabrício, CEO)
+Visão executiva do estado do produto. Linguagem de negócio, foco em o que já f unciona, o que est á em andament o, o
+que f alt a e o que depende de t erceiros. Para o que depende de decisão sua, ver DECISOES-CEO.md . Atualizado
+em 2026-08-19. Para o detalhe de engenharia, ver docs/DOCUMENTACAO-TECNICA.md ; para o plano completo,
+docs/PRD-plina-v1.md .
+1. Onde estamos, em uma frase
+O produto está f uncionando pont a a pont a em ambient e de t est e (t est net ): dá para demonstrar um investidor
+entrando, passando por KYC, pagando via PIX e recebendo o token PLINA-RF na carteira — tudo auditável on-chain. O que
+falta para ir a produção (mainnet) são, em boa parte, int egrações com t erceiros (custódia Fireblocks, assinatura DocuSign,
+PIX real, APIs das administradoras) e o f echament o jurídico/regulat ório do f undo.
+2. O que já funciona hoje (demonstrável)
+Tudo abaixo roda em testnet e pode ser mostrado a um investidor ou parceiro:
+Invest ir ( /investir ) — fluxo completo: login → KYC → escolha de classe (Sênior/ Subordinada) → cotação → pagamento
+PIX → recebimento do token. Cada passo gera registro auditável na blockchain.
+Minha posição ( /minha-posicao ) — o investidor vê seu saldo por classe, lido diretamente da blockchain (não de um
+banco de dados interno).
+Pool ( /pool ) — painel público com NAV, total de tokens e composição da carteira, com link de auditoria pública.
+Vender ( /vender ) — cedente faz cadastro/KYC, simula o deságio e envia a cota; acompanha o andamento por um link.
+Comprar ( /comprar ) — calculadora comparativa, captura de lead e reserva de cota por 72h.
+Admin ( /admin ) — painel interno para originar cotas, conduzir o funil de venda, liquidar e operar o clawback.
+Polít ica de clawback ( /politica-clawback ) — as 4 hipóteses formais publicadas.
+Em resumo: a espinha dorsal do produt o exist e e é demonst rável. O trabalho restante é substituir os "simuladores" por
+integrações reais e fechar a estrutura regulatória.
+3. Painel de status por fase
+Legenda: O K pronto · PA R C I A L parcial (núcleo pronto, falta integração real) · N Ã O I N I C I A D O não iniciado / preparação.
+FA S E 	O Q UE É 	S TAT US 	LE I T URA PA RA O C E O
+M0 — Fundação Segurança e prontidão
+para mainnet
+PA R C I A L 	Fase 01. Base de segurança da Fase 1 entregue. Falta definir a guarda
+das chaves (três opções, decisão 2) e o login admin corporativo.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	3
+
+-- 3 of 72 --
+
+FA S E 	O Q UE É 	S TAT US 	LE I T URA PA RA O C E O
+M1 — Vender Compra de cota do
+cedente (PIX 48h +
+assinatura)
+PA R C I A L 	Funil completo no produto; falta DocuSign real, PIX real e APIs das
+administ radoras.
+M2 — Comprar Revenda da cota ao
+comprador-usuário
+PA R C I A L 	Calculadora, lead e reserva prontos; falta sinal PIX real e
+t ransf erência via administ radora.
+M3 — Invest ir
+BR
+Investidor institucional
+brasileiro
+PA R C I A L 	Fase 02 — não bloqueia mainnet. Fluxo completo e classes
+Sênior/Subordinada implementadas; o t ermo do FIDC e o questionário
+de
+suitability entram com a constituição do fundo.
+M4 — Invest ir
+Int l
+Investidor internacional
+(USDC/EURC)
+N Ã O I N I C I A D O Fase 02. Apenas o "gate" preparado; trilha internacional inteira a faz er.
+M5 — PLINA-RF
+(ficha t écnica)
+NAV, prospecto,
+transparência do token
+C R Í T I C O 	/pool mostra NAV e composição, mas o valor por t oken est á
+sendo calculado errado — ver abaixo. Falta hist órico de NAV,
+prospect o PDF e janelas de liquidez.
+M6 —
+Compliance
+Screening OFAC/PEP,
+jurídico, LGPD
+N Ã O I N I C I A D O Part ido: o screening de cedent e e comprador é fase 01 — é
+obrigação de AML da própria Plina ao comprar cota de pessoa física,
+não do fundo. A página de compliance com prestadores registrados é
+fase 02.
+M7 — Soroban
+(wat erf all)
+Cascata de resgate em
+contrato on-chain
+N Ã O I N I C I A D O Hoje a cascata roda no servidor; cont rat os ainda não escrit os.
+M8 — Operação Monitoramento, alertas,
+relatórios
+PA R C I A L 	Observabilidade e rate-limit no ar; falta alert as e relat ório mensal
+aut omát ico.
+M9 — Cut over Virada para mainnet 	N Ã O I N I C I A D O Fase 01. Preparado com trava de segurança. Com o faseamento de
+19/08, depende de M0, M1, M2 e da part e de NAV do M5 — não
+de M3 nem de M6 .
+Fonte: quadro de status do PRD (snapshot 2026-05-29).
+4. O que depende de terceiros (não é só código)
+Estes itens não est ão sob cont role t ot al do t ime de engenharia e tendem a definir o caminho crítico para mainnet:
+D E P E N D Ê N C I A 	PA RA Q UÊ 	S I T UA Ç Ã O
+Est rut ura f ormal do FIDC Veículo regulado (CVM 175) 	A constituir — é a port a de ent rada da f ase 02, não pré-
+requisito de mainnet. A fase 01 opera sob a Lei 11.795 com capital
+próprio.
+Guarda das chaves 	Assinar qualquer operação em
+produção
+Três opções em abert o (decisão 2). A fase 01 assume guarda
+própria com múltiplas assinaturas, sem fornecedor — trocar
+depois é rotação de assinatura, não migração.
+DocuSign 	Assinatura jurídica de cessões e termo
+do fundo
+Hoje simulado; precisa do contrato/conta real (M1/M3).
+PSP de PIX 	Pagamento/recebimento reais (Stark,
+BTG ou similar)
+Hoje simulado; provedor a definir (M1/M2).
+APIs das administ radoras Validar e transferir a cota (Embracon,
+Caixa, Bradesco, Porto, Itaú…)
+A integrar; há caminho alternativo manual como contingência
+(M1).
+P L I N A F I N A N C E · C O N F I D E N C I A L 	4
+
+-- 4 of 72 --
+
+D E P E N D Ê N C I A 	PA RA Q UÊ 	S I T UA Ç Ã O
+Cust odiant e regulado,
+audit oria (Big Four) e rat ing
+Exigências do fundo 	A contratar — f ase 02. Saíram do caminho crítico de mainnet
+com o faseamento de 19/08.
+Mensagem-chave, revist a em 19/08. Com a fase 01 sendo operação privada sem FIDC, o gargalo de mainnet deixou de
+ser a constituição do fundo e passou a ser cont rat os operacionais — assinatura eletrônica, PIX e administradoras — mais
+os defeitos técnicos da fila de engenharia. Constituir o fundo, custodiante, auditoria e rating continuam essenciais, só que para a
+f ase 02.
+5. Progresso recente
+Frentes entregues nas últimas iterações:
+Fundação de segurança (M0, Fase 1): assinatura à prova de falhas em mainnet, alarmes de saldo, observabilidade,
+feature flags e proteção anti-bot nos formulários.
+Classes Sênior e Subordinada (M3): seleção na interface, emissão dos dois tokens e acompanhamento da posição por
+classe — base da estrutura de risco do fundo.
+Cont a unificada + KYC (Pessoa): uma identidade única do cliente compartilhada entre os fluxos de vender, comprar e
+investir.
+Endureciment o do fluxo de compra: o valor do investimento agora fica "amarrado" à cotação no servidor e a troca de
+ativos virou uma operação atômica — elimina uma classe de erro/fraude.
+6. Próximos passos típicos
+Em ordem aproximada de prioridade para destravar mainnet:
+1. Fechar a est rut ura do FIDC e contratar custodiante/auditoria/rating (M6) — caminho crítico.
+2. Conect ar Fireblocks e migrar o login admin (M0 Fase 2).
+3. Int egrar DocuSign e PIX reais no fluxo de vender (M1).
+4. Corrigir o cálculo do valor por t oken ant es do primeiro regist ro em blockchain, e só depois completar a ficha
+técnica (histórico de NAV, prospecto) para o investidor (M5).
+Achado de 18/08 — o valor por t oken est á superest imado. Quando uma cota é realizada, o dinheiro entra na conta
+do fundo e, por um erro de cálculo, os tokens daquela cota saem da divisão. O efeito é o valor por token aparecer maior do que
+é. Num exemplo com duas cotas, o número correto seria R$ 1,06 e o sistema mostra R$ 2,13. Num cenário em que todas
+as cotas foram realizadas, o cálculo devolve zero — e é esse número que o sistema usaria para pagar quem quisesse sacar.
+Nada disso causou prejuízo até agora porque o saque ainda é simulado e não há investidor externo, mas o número já aparece
+na página pública /pool e é o mesmo que seria gravado em blockchain de forma permanente. A correção está especificada
+e é o item 6 da fila de engenharia; ela precisa entrar ant es do primeiro registro em blockchain.
+1. Execut ar o checklist de cut over e o comunicado à CVM (M9).
+P L I N A F I N A N C E · C O N F I D E N C I A L 	5
+
+-- 5 of 72 --
+
+7. Como acompanhar o desenvolvimento
+Ver f uncionando: peça uma demo do fluxo /investir em testnet (5 min) — é a melhor forma de sentir o estágio do
+produto.
+St at us det alhado por it em: docs/PRD-plina-v1.md (quadro de módulos).
+Decisões t écnicas regist radas: docs/M0-foundation-fase1.md e docs/2026-05-18-quote-binding-and-
+atomic-swap.md .
+Operação/incident es: docs/runbooks/ .
+Hist órico de ent regas: os
+Pull Requests no GitHub agrupam cada frente (M0, M1, classes…).
+8. Mini-glossário (termos técnicos em linguagem simples)
+Os termos de negócio (FIDC, CVM 175, consórcio, deságio…) você já domina; aqui ficam só os técnicos que aparecem nas
+conversas com o time:
+Test net / Mainnet — rede de t est es (sem dinheiro real) versus rede de produção. Estamos demonstrando em testnet; a
+virada para mainnet é a fase M9.
+On-chain — registrado na blockchain, público e auditável por qualquer um.
+Token PLINA-RF — a representação digital da cota do fundo na rede Stellar.
+Cart eira (wallet ) — onde o investidor "guarda" o token. Na Plina, ela é criada automaticamente no login (via Privy), sem o
+usuário lidar com chaves.
+KYC — verificação de identidade do cliente, exigência regulatória.
+Trust line — a "permissão" que a carteira do investidor precisa ter para receber o token; só é liberada após o KYC.
+Swap at ômico — a troca de um ativo por outro em uma única operação indivisível: ou acontece por inteiro, ou não acontece
+— sem risco de ficar "pela metade".
+Clawback — a capacidade regulatória de recuperar tokens já distribuídos, acionável apenas sob as 4 hipóteses formais
+publicadas.
+NAV — valor patrimonial do fundo por cota (quanto vale cada token). O número que hoje publicamos é o valor dos at ivos:
+ainda não desconta provisão para inadimplência nem a taxa de administração. O NAV
+líquido — que é o que precifica
+emissão e resgate — depende das decisões 4 e 4b em DECISOES-CEO.md .
+Anchor (Et herf use) — o parceiro regulado que converte reais ⇄ cript o via PIX.
+Fireblocks — a tecnologia de cust ódia inst it ucional que guardará as chaves do fundo em produção (padrão usado por
+bancos e gestoras).
+Cust ódia / self -cust ody — quem guarda as chaves: o f undo usa Fireblocks; o invest idor guarda as suas próprias (self-
+custody) via Privy.
+POC / MVP —
+prova de conceito (o que temos hoje, em testnet) e
+produto mínimo viável (o alvo em mainnet).
+Feat ure flag — uma "chave" que liga ou desliga um recurso sem precisar de nova versão — usamos para abrir
+funcionalidades de forma controlada.
+Este documento é um retrato do momento. Conforme as integrações com terceiros forem fechando, os status PA R C I A L migram
+para O K .
+P L I N A F I N A N C E · C O N F I D E N C I A L 	6
+
+-- 6 of 72 --
+
+D O C U M E N T O 0 2 · D E C I S Õ E S D O C E O
+Decisões pendentes — Fabrício (CEO)
+O que é est e document o. As decisões que só o CEO pode tomar, reunidas num lugar só. Cada uma t rava t rabalho de
+engenharia hoje — não são consultas de cortesia. Para cada uma: a pergunta, o que ela destrava, as opções com seus
+custos, e a recomendação da engenharia.
+Dat a: 2026-08-18 · De: Thais (CTO) · Para: Fabrício (CEO) Detalhe técnico em ARQUITETURA-ALVO.md §14 ; estado do
+produto em ACOMPANHAMENTO-CEO.md .
+Resumo em uma tela
+# D E C I S Ã O 	O Q UE T RAVA 	URG Ê N C I A
+1 Soft-launch sem o FIDC? Respondida pelo one-page — falta confirmar
+a leitura, e como o seed entra
+o escopo de tudo antes da mainnet 	alt a
+2 Custódia das chaves do fundo: qual fornecedor 	assinar qualquer operação em produção 	alt a
+3 Yield-alvo da Sênior e mix Sênior/Subordinada 	o motor de precificação do vendedor 	alt a
+4 Provisão para inadimplência, e como as t axas ent ram no NAV 	o NAV publicado, a ficha técnica e o track
+record da fase 02
+alt a
+5 Volume-alvo no cutover (AUM, cotas, investidores) 	dimensionamento e orçamento de
+infraestrutura
+média
+6 Quem aprova um clawback — nominalmente 	a dupla aprovação, hoje inexistente no
+código
+média
+7 Quem detém as chaves do fundo, e quantas pessoas 	a topologia de assinatura em mainnet 	média
+8 Responsável por dados pessoais (DPO) e praz os de guarda 	a página de LGPD e o direito do titular 	média
+9 Quem atende um incidente grave, e em que janela 	o plano de alertas ter destinatário 	baixa
+Nenhuma delas precisa de respost a t écnica. Todas precisam de uma frase de decisão do CEO, ou da indicação de
+quem responde.
+1. Soft-launch sem o FIDC — respondida pelo one-page, falta
+confirmar
+O que mudou. O one-page de 04/08 responde esta pergunta, e responde melhor do que as duas opções que eu tinha posto
+aqui. Ele fatia o produto em três fases, e a fase 01 é
+"originação com capital próprio dos sócios/seed, operação privada sob a Lei
+11.795/2008, testnet → mainnet". O FIDC sob CVM 175 aparece só na fase 02, junto com administradora, custodiante, gestor e
+auditoria.
+Ou seja: vamos a mainnet sem o f undo, e sem invest idor t erceiro. Não é "esperar" nem é "soft-launch com investidor"
+— é uma terceira resposta, e é a melhor das três, porque o único caminho sem volta é colocar token de terceiro na mão de
+alguém sob um enquadramento que depois se mostre errado. A política de clawback tem quatro hipóteses fechadas, e "erramos o
+regime" não é nenhuma delas.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	7
+
+-- 7 of 72 --
+
+A engenharia já reordenou a fila com base nisso — quatro entregas saíram do caminho crítico de mainnet e duas subiram.
+Registro técnico completo, com as alternativas recusadas, em ARQUITETURA-ALVO.md → Escopo.
+O que ainda precisa de você — duas f rases, não um document o.
+A P E RG UN TA 	P O R Q UE T RAVA
+1a A leitura acima está certa? Na fase 01, ninguém
+além da Plina det ém PLINA-RF?
+se estiver errada, metade da fila volta para o caminho crítico, e é melhor
+descobrir agora
+1b O seed entra como part icipação na Plina ou
+comprando PLINA-RF?
+se for compra de token, a fase 01 passa a ter holder terceiro e precisa de parecer
+jurídico sobre o instrumento ant es da primeira emissão
+1c Existe LOI institucional que precise alocar ant es da
+constituição do fundo?
+mesma consequência de 1b, pelo mesmo motivo
+Recomendação. Confirmar 1a como está. Para 1b e 1c, se a resposta for "sim" em qualquer uma, isso não inviabiliza nada — só
+antecipa a conta do jurídico, e é muito mais barato antecipar do que corrigir depois da emissão.
+Referência: PRD §8.1, atualizado em 2026-08-18 com esta resposta.
+2. Custódia das chaves do fundo
+A pergunt a. Fireblocks, alternativa equivalente, ou guarda própria com múltiplas assinaturas?
+O que t rava. Sem custódia definida, o sistema se recusa a assinar em produção — isso é proposital e não vai mudar. É o
+item que separa "pronto" de "operando".
+As t rês opções.
+O Q UE É 	T RA D E - O F F
+Fireblocks 	padrão de mercado
+institucional, com motor de
+políticas
+o estudo interno registra que é a opção mais cara da cat egoria para
+o nosso est ágio; é também a que menos explicação exige a um auditor
+Alt ernat iva equivalent e
+(BitGo e similares)
+mesma categoria, outro
+fornecedor
+vale avaliar se o auditor do fundo exigir custodiante qualificado com
+credencial específica
+Guarda própria com
+múlt iplas assinat uras
+recurso nativo da rede, sem
+fornecedor
+muit o mais barat a; transfere o ônus para nós, em compliance e em
+processo interno
+O que f alt a para decidir, e não é t écnico: o piso mensal e o custo por operação de cada alternativa — ninguém pediu
+essas cotações ainda. E a pergunta que só o auditor do fundo responde: ele exige cust odiant e qualificado? Se exigir, a
+terceira opção sai da mesa e a decisão fica entre duas.
+A decisão de f aseament o (18/08) responde met ade disso. Na fase 01 não há terceiro detendo token, e o auditor que
+poderia exigir custodiante qualificado só existe na fase 02. Então a arquitetura assume guarda própria com múlt iplas
+assinat uras na f ase 01, e a escolha de custodiante passa a ser uma decisão de fase 02 — tomada contra a exigência real do
+auditor, não contra a suposição sobre ela.
+O que torna isso seguro é técnico e vale saber: t rocar de cust odiant e depois é rot ação de assinat ura, não migração.
+Acrescenta-se a chave do novo custodiante à conta, remove-se a antiga, e pronto — sem reemitir token, sem mexer em quem
+detém o quê, sem parada. Não estamos nos amarrando a nada.
+Recomendação. Não assinar contrato de custódia agora. Pedir as cotações e fazer a pergunta ao auditor a tempo da fase 02, e
+casar a assinatura do contrato com a captação — contratar antes de existir volume é pagar piso sem receita. O que não pode
+P L I N A F I N A N C E · C O N F I D E N C I A L 	8
+
+-- 8 of 72 --
+
+esperar, e vale mais que o contrato: o plano de recuperação das chaves, testado de verdade. Guarda própria transfere para nós o
+ônus que o fornecedor absorveria, e esse plano deixa de ser boa prática para virar o controle principal.
+Referência: ESTUDO-CUSTODIA.md , ARQUITETURA-ALVO.md §14.3.
+3. Yield-alvo da Sênior e mix das classes
+A pergunt a. Qual retorno prometemos à cota Sênior — CDI + quanto no Brasil e SOFR + quanto no exterior? E qual a
+proporção-alvo entre Sênior e Subordinada?
+O que t rava. O deságio pago ao cedente é calculado a partir do retorno prometido ao investidor. Sem esse número, o mot or
+de precificação do vendedor não pode ser implement ado — e ele é o coração do M1.
+Onde est amos. Há números provisórios registrados desde 30/06, com a marcação explícita de que nunca f oram
+confirmados: CDI + 5% no Brasil (faixa segura de 4% a 7%) e SOFR + 7% no exterior (faixa de 6% a 9%). Foram calibrados
+pelo lado conservador de propósito — é mais fácil baixar o retorno prometido depois, com dados reais, do que subir depois de ter
+prometido pouco. O mix Sênior/Subordinada está pendente no PRD desde a redação original.
+Recomendação. Confirmar os provisórios como oficiais para o MVP, ou substituí-los. Os números atuais são defensáveis e
+comparáveis a FIDC de originador sem histórico; o que não é defensável é implementar precificação sobre um valor que
+ninguém aprovou. Se o retorno depender do resultado do outreach institucional, então a decisão útil hoje é:
+"implementa com
+CDI+5% e revisamos após as primeiras conversas" — isso desbloqueia o time sem fechar a porta.
+Referência: 2026-06-30-spread-cdi-provisorio.md , PRD §3.4.
+4. Provisão para inadimplência
+A pergunt a. O valor do fundo (NAV) que publicamos deve descontar uma provisão para cotas que não se realizam, ou
+publicamos o valor bruto?
+O que t rava. O NAV é publicado diariamente, aparece na ficha técnica e é regist rado na blockchain de f orma
+permanent e — publicado, não volta atrás. Hoje o cálculo soma as cotas ativas e o caixa, sem qualquer desconto por atraso ou
+perda.
+Por que é decisão sua e não da engenharia. Provisionar é política do fundo. A engenharia sabe implementar qualquer
+regra; não pode escolher qual.
+Recomendação. Se a resposta for "ainda não temos base para provisionar" — que é uma resposta legítima, sem histórico de
+operação —, então a decisão é publicar sem provisão e dizer que é sem provisão, com essas palavras, na ficha técnica.
+O risco não é publicar sem provisão; é publicar sem provisão e um investidor ou auditor descobrir depois que aquilo não era o
+que parecia.
+4b. E as taxas — a parte que não pode esperar
+O que descobrimos em 18/08. O NAV que publicamos hoje também não desconta a t axa de administ ração de 2% a.a.
+nem a t axa de perf ormance de 20%, que estão no one-page como as duas fontes de margem recorrente. O documento do
+produto tem a taxa na tabela de receita e não tem na fórmula do NAV — e o código seguiu a fórmula.
+Por que isso é mais urgent e que a provisão. Na fase 01 a Plina cobra de si mesma, então o número não prejudica
+ninguém hoje. Mas a série de NAV da fase 01 é exatamente o t rack record que vamos mostrar ao investidor e à agência de
+P L I N A F I N A N C E · C O N F I D E N C I A L 	9
+
+-- 9 of 72 --
+
+rating na fase 02. Se ela for publicada sem a taxa e a fase 02 for com a taxa, o histórico ganha um degrau bem no ponto que o
+analista olha — e o lado que parece melhor é o lado em que não havia investidor. Lido de fora, é retorno inflado em cerca de 2%
+ao ano.
+E não dá para consert ar depois. Cada NAV diário é registrado na blockchain de forma permanente. Corrigir um ano de
+série não é reprocessar um banco de dados: são 250 e poucos registros de correção, todos permanentes, e a explicação ao auditor
+de que a série publicada inteira estava errada.
+A recomendação da engenharia é aplicar a taxa de administração desde o primeiro dia, sem mover dinheiro — ela vira
+uma obrigação acumulada com o gestor e reduz o NAV, que é o efeito correto. A taxa de performance fica de fora até a decisão 3
+(yield-alvo da Sênior) sair, porque sem benchmark definido não existe excedente a calcular; até lá o NAV declara isso
+explicitamente.
+O que precisa de você e do jurídico são três convenções que entram no regulamento do veículo, e que não podem mudar
+depois do primeiro dia publicado:
+RE C O ME N D A Ç Ã O D A
+E N G E N H A RI A
+P O R Q UÊ
+Contagem de dias 252 dias út eis 	o benchmark é o CDI, que é 252. Misturar 365 na taxa com 252 no benchmark erra
+o cálculo do excedente todo dia, num valor pequeno demais para alguém notar
+olhando
+Sobre o que incide valor do f undo do dia
+ant erior, já líquido
+evita cobrar taxa sobre a própria taxa do dia
+Quando a
+performance é
+cobrada
+na janela de liquidez, com
+marca d'água
+a marca d'água impede cobrar performance duas vez es sobre a mesma alta
+Referência: ARQUITETURA-ALVO.md §8.2 e §14.11.
+5. Volume-alvo no cutover
+A pergunt a. Na virada para produção, qual a expectativa de patrimônio sob gestão, número de cotas na carteira, investidores
+ativos e operações por dia?
+O que t rava. Sem ordem de grandeza, o dimensionamento da infraestrutura e a frequência das rotinas diárias são chute. Um
+fundo com 50 cotas e um com 5.000 pedem desenhos diferentes de fechamento e de conciliação, e faixas de custo diferentes.
+O que bast a. Não precisa de precisão — precisa de ordem de grandeza e da faixa de erro.
+"Entre 20 e 100 cotas, 10 a 30
+investidores, algumas operações por dia" já é resposta suficiente para dimensionar. O que não serve é a ausência do número,
+porque aí a engenharia super-dimensiona por precaução, e isso é custo mensal recorrente.
+Referência: ARQUITETURA-ALVO.md §11.5.
+6. Quem aprova um clawback
+A pergunt a. Quem, nominalmente, tem poder de aprovar a recuperação de tokens já distribuídos — e a política exige que um
+dos dois aprovadores seja do jurídico?
+O que t rava. A documentação e o manual de operação afirmam que o clawback exige duas aprovações. O código não t em
+nada disso — hoje é um formulário de um clique. Vamos implementar a dupla aprovação; falta saber quem são as duas
+P L I N A F I N A N C E · C O N F I D E N C I A L 	1 0
+
+-- 10 of 72 --
+
+pessoas.
+O desenho. Quem solicita não pode aprovar. São necessárias duas pessoas distintas, e o pedido expira em 72 horas sem a
+segunda aprovação. Os dois nomes ficam registrados no evento gravado na blockchain — é o tipo de controle que um auditor
+procura primeiro.
+A rest rição prát ica. Com o time atual, compliance, jurídico e CTO tendem a ser a mesma pessoa. Duas aprovações exigem
+duas pessoas de verdade. Se hoje não existem duas, a decisão é quem será a segunda — pode ser você.
+Referência: ARQUITETURA-ALVO.md §5.4 e §14.4.
+7. Quem detém as chaves do fundo
+A pergunt a. Quantas pessoas detêm poder de assinatura sobre a conta emissora do fundo, e quem são?
+O que t rava. É a única situação em todo o sistema sem caminho de volt a. Perder a chave emissora não apaga os tokens dos
+investidores — eles continuam nas carteiras deles. O que se perde é a capacidade do fundo de emitir, autorizar novos
+investidores e executar clawback, inclusive nas hipóteses em que ele é obrigação regulatória. Isso não é um incidente: é um
+evento de encerramento.
+O que já est á decidido pela engenharia: assinatura única em produção está fora de questão. Serão múltiplos signatários,
+em custódias distintas, com cópia de recuperação guardada offline e t est ada antes da virada.
+O que depende de você: quantas pessoas, e quais. É decisão de governança — quem, na empresa, tem poder sobre o
+patrimônio do fundo. Depende parcialmente da decisão 2.
+Referência: ARQUITETURA-ALVO.md §10.5.
+8. Responsável por dados pessoais e prazos de guarda
+A pergunt a. Quem responde como encarregado de dados (DPO), e por quanto tempo guardamos cada tipo de informação do
+cliente?
+O que t rava. A página de LGPD e o atendimento a um pedido de titular. Há um conflito real aqui, e é melhor resolvê-lo antes do
+primeiro pedido: a regulação do fundo obriga a guardar registros por anos; a LGPD dá ao cliente o direito de pedir eliminação.
+Como a engenharia propõe resolver — a confirmar com o jurídico: enquanto o prazo regulatório correr, ele prevalece; o
+que se faz não é apagar, e sim anonimizar — os dados pessoais saem, o registro contábil e a trilha de auditoria permanecem
+íntegros. O sistema foi desenhado desde o início para que isso seja possível: os dados pessoais nunca foram para a blockchain, só
+para o banco no Brasil.
+O que f alt a: o nome do encarregado, e os prazos por categoria. Hoje a política de fato é "guardar tudo para sempre" — o que
+também é uma política, só que não escolhida.
+Referência: ARQUITETURA-ALVO.md §9.8.
+9. Quem atende um incidente grave
+A pergunt a. Quando um alerta crítico disparar às 3h de um sábado, quem atende — e é razoável prometer isso?
+P L I N A F I N A N C E · C O N F I D E N C I A L 	1 1
+
+-- 11 of 72 --
+
+O que t rava. Nada tecnicamente: os alertas serão construídos de qualquer forma. Mas alerta sem destinatário é ruído com nome
+bonito, e vale ser honesto sobre a cobertura real antes de prometê-la a um investidor institucional.
+Achado de 18/08, e ele muda a urgência. O canal por onde o alerta sairia hoje é o mesmo do e-mail comum do sistema, e
+ele foi desenhado para f alhar em silêncio quando não está configurado — é a decisão certa para um aviso de rotina e a errada
+para um alerta grave. Na prática: um problema sério em produção pode não avisar ninguém, e não haveria como saber que não
+avisou. A engenharia vai separar os dois canais e fazer o de alerta falhar de forma barulhenta, independentemente desta decisão.
+Mas separar o canal só resolve metade — a outra metade é ter para quem tocar.
+Recomendação. Declarar a janela verdadeira —
+"horário comercial, com melhor esforço fora dele" é uma resposta legítima
+para o estágio da empresa e melhor que uma promessa que não se cumpre. Se algum investidor exigir cobertura integral, isso
+vira custo de operação a orçar, e aí é decisão comercial.
+Informações a obter — não são decisões, são perguntas a terceiros
+Estas não dependem de escolha sua, mas de alguém responder. Sem elas, várias decisões acima ficam sem base:
+O Q UE P E RG UN TA R 	A Q UE M 	D E S T RAVA
+Data e preço do serviço em reais, por escrito, e se há
+compromisso de disponibilidade ou é melhor esforço
+Etherfuse 	a data da f ase 02 — a fase 01 não
+depende desse trilho
+A indicação ao Build Award da SCF traz expectativa de
+contrapartida? (atividade em mainnet, repositório público,
+suporte a SEP, praz o)
+Etherfuse 	se traz , parte disso é requisito de
+arquitetura e entra no sequenciamento da
+fase 01
+Piso mensal e custo por operação da custódia 	Fireblocks e alternativa 	decisão 2
+Exige custodiante qualificado? 	auditor do fundo 	decisão 2
+Preço por assinatura eletrônica, por PIX e por consulta de
+screening
+DocuSign, PSP, fornecedor
+de screening
+entram no cálculo do deságio, não em
+despesa fixa
+Data-alvo da constituição do FIDC 	jurídico/estruturador 	decisão 1
+O que não depende de você
+Para delimitar: o resto da fila é engenharia e segue independente destas respostas — conserto da integração de cadastro e KYC,
+login nominal no painel administrativo, trava de segurança das operações, recuperação de operações que travam no meio,
+correção dos achados de segurança, caminho de saída do investidor, webhooks e rotinas diárias. É a maior parte do trabalho, e ela
+não está esperando reunião.
+O que está esperando são estas dez respostas.
+Quando uma decisão for tomada, ela sai deste documento e desce para a seção correspondente do ARQUITETURA-ALVO.md .
+P L I N A F I N A N C E · C O N F I D E N C I A L 	1 2
+
+-- 12 of 72 --
+
+D O C U M E N T O 0 3 · P R D V 1 .1
+PRD Plina — v1.1 (Mockup Founder-led →
+Produto)
+St at us: v1.1 · Base: v1.0 de 2026-05-25 · Revisado em: 2026-08-19 Owner: CTO (Thais) · Sponsor: CEO (Fabrício) Font e
+do escopo de UX: mockup do fundador em https://mockup-plina.lovable.app/ Font e do est ado at ual: branch fix/n08-
+n13-medium-bundle (commit c4b59c8 )
+AT E N Ç Ã O Not a de escopo — v1.1. O one-page do CEO (04/08) é posterior a este PRD e manda sobre ele no faseamento.
+A fase 01 — o MVP que vai a mainnet — é operação privada sob a Lei 11.7 95/2008, sem FIDC const it uído e sem
+invest idor t erceiro det endo PLINA-RF. O FIDC sob CVM 175 e a distribuição a qualificados são a fase 02.
+Consequência para a leitura deste documento: onde ele trata cobertura CVM 175, prestadores registrados e termo de adesão ao
+FIDC como pré-requisito de mainnet (§0, §2.4, M3, M6, M9), isso passou a ser f ase 02. A fila de engenharia re-etiquetada por
+fase está em ARQUITETURA-ALVO.md §13 ; o registro da decisão, com as alternativas recusadas, no Escopo do mesmo doc.
+Registro de versões
+v1.1 — 2026-08-19. Revisão de escopo e correções materiais. O corpo do documento continua sendo o plano de v1.0; o que
+mudou está marcado no lugar onde vale, e listado aqui:
+O Q UE MUD O U 	O N D E 	P O R Q UÊ
+Faseament o: o MVP em mainnet é operação privada sob a
+Lei 11.795, sem FIDC e sem investidor terceiro. M3 e M6 saem
+do caminho crítico
+nota de
+escopo, §8.1
+o one-page do CEO é posterior a este PRD e manda no
+faseamento
+Fórmula do NAV corrigida para incluir taxa de
+administração e o nível "NAV líquido"
+§3.2 	o §3.5 declarava a taxa "subtraída do NAV" e a fórmula do §3.2
+não a tinha — o documento se contradiz ia, e o código seguiu
+a fórmula
+Denominador do NAV corrigido para o circulante on-
+chain, e o caixa passa a vir de um raz ão
+§3.2 	tokens_vivos vinha das cotas ativas no Postgres: o caixa
+entrava no numerador e os tokens saíam do denominador,
+dobrando a conta
+Cust ódia reabert a: de "Fireblocks, não reabrir" para três
+opções, com guarda própria na fase 01
+§1.2 	o invariante que não se reabre é "mainnet nunca assina com
+chave única em env" — o fornecedor nunca foi parte dele
+Divergência de f ornecedor de e-mail marcada (Resend
+no PRD, nodemailer/SMTP no código)
+F-M1-7 	aberta desde maio, e o canal de alerta não pode ser best-effort
+Ainda não f eit o, e é t rabalho próprio: reestruturar o corpo do PRD em torno das fases 01/02/03 em vez de M0–M9. As
+duas numerações convivem hoje, e a nota de escopo é o que as reconcilia. Uma v2 que unifique isso vale a pena quando a fase
+01 fechar.
+v1.0 — 2026-05-25. Versão original.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	1 3
+
+-- 13 of 72 --
+
+0. Sumário Executivo
+A Plina opera um produto único — PLINA-RF, token Stellar lastreado em FIDC de cotas de consórcio contempladas —
+distribuído via quatro superfícies digitais com f ricção assimét rica:
+S UP E RF Í C I E P ÚBLI C O 	F RI C Ç Ã O 	MÉ T RI C A D E S UC E S S O
+/ (Home) 	Investidor institucional BR + Internacional 	Alta (jargão completo, roadshow) 	Roadshow agendado
+/investir Mesmas personas acima 	Alta (KYC institucional, onboarding) Alocação ≥ ticket mínimo
+/vender 	Cotista contemplado (Ricardo) 	Mínima (lead → oferta → Pix 48h) 	Cessão assinada
+/comprar Comprador-usuário do bem (Maria, PJ) 	Mínima (calculadora → reserva 72h) 	Carta de crédito transferida
+O mockup formaliza um produto mult ilat eral já parcialmente implementado em testnet (POC funcional para vendedor,
+comprador e investidor) e define os elementos que ainda não exist em em código: classes Sênior/Subordinada, FIDC formal,
+Soroban waterfall, custódia Fireblocks, DocuSign real, KYC institucional internacional, e ficha técnica do PLINA-RF como ativo
+distribuível.
+Escopo dest e PRD: levar a Plina de POC testnet → MVP Mainnet com cobertura formal CVM 175, alinhando código ao
+mockup do fundador.
+(Revisado em 2026-08-18: a cobertura formal CVM 175 é fase 02 — ver nota de escopo no topo.) Não é
+um redesign — é um plano de at errissagem que reúsa o que já existe ( /vender , /comprar , /investir , /pool ,
+audit log on-chain, lint-auth-guard) e fecha os gaps regulatórios e econômicos.
+Não-objet ivos:
+Não atacamos varejo nesta versão (Fase 3 do pitch — 2028).
+Não implementamos liquidez secundária P2P entre holders de PLINA-RF (out-of-scope; janelas periódicas via resgate
+atômico só).
+Não suportamos clawback discricionário — segue restrito às 4 hipóteses do whitepaper §6.5.
+0.1 Estado de implementação — verificado contra o repo em 2026-
+05-29
+Legenda: O K implementado · PA R C I A L parcial · N Ã O I N I C I A D O não iniciado / só preparação.
+MÓ D ULO S TAT US 	I MP LE ME N TA D O H O J E 	P RI N C I PA I S LA C UN A S
+M0
+Foundat ion
+PA R C I A L
+Parcial
+Fase 1 (PR #42): port de assinatura
+( lib/stellar/signer.ts , fail-closed mainnet),
+alarme de saldo issuer/dist, OTEL spans +
+tracer.ts , 3 feature flags conectadas, BotID nos
+leads, runbooks
+Fase 2: FireblocksSigner concreto (só
+README), Admin→Clerk (ainda cookie POC),
+Vercel WAF, backend OTEL
+M1 Vender PA R C I A L
+Parcial
+/vender (simulador), /vender/lead
+(consentimento on-chain), funil no /admin
+(ofertas/cessão/pagamento), audit on-chain
+DocuSign real (hoje mvp-stub: ), Pix real
+( PIX_SIMULADO ), API administradora + fila
+de fallback, webhook DocuSign, email
+transacional, PDF Blob
+M2
+Comprar
+PA R C I A L
+Parcial
+/comprar (calculadora), /comprar/lead ,
+/comprar/reservar (72h), /cotas +
+/cotas/[id] , caminho A em
+RealizacaoCaminho
+Sinal Pix real (hoje sinalSimulado ),
+DocuSign comprador, transferência via API
+administradora, anti-fraude por documento
+P L I N A F I N A N C E · C O N F I D E N C I A L 	1 4
+
+-- 14 of 72 --
+
+MÓ D ULO S TAT US 	I MP LE ME N TA D O H O J E 	P RI N C I PA I S LA C UN A S
+M3 Invest ir
+BR
+PA R C I A L
+Parcial
+Fluxo /investir completo (welcome→…→receipt),
+onboard KYC Etherfuse, quote, swap atômico
+BRL→TESOURO→PLINARF, /minha-posicao .
+It ens desbloqueados implement ados: seletor de
+classe na UI, emissão PLINARFB (Subordinada)
+parametriz ada no swap mock+real e validada no XDR
+validator, trustlines Sênior+Subordinada autoriz adas no
+identity, HoldingPLINARF upsert pós-swap,
+/minha-posicao mostra saldo por classe, suitability
+CVM 30 (API+gating server-side via flag
+M3_INSTITUTIONAL_GATING ), ticket check 400 +
+audit
+Termo FIDC DocuSign (F-M3-7) — bloqueado
+por Trilha A. UI de questionário Suitability (API
+pronta). Bootstrap on-chain de PLINARFB no
+distributor (script ops). Reemissão
+PLINARFS/PLINARFB no issuer mainnet (M9).
+M4 Invest ir
+Int l
+N Ã O I N I C I A D O
+Não iniciado
+Só o gate inerte (flag INTL_INVESTOR_FLOW +
+jurisdicao / TipoInvestidor no schema;
+guard no onboard )
+Trilha internacional inteira: seletor de
+jurisdição, USDC/EURC, SEP-38/24 multi-
+anchor, i18n EN/PT, Calendly
+M5 PLINA-
+RF
+PA R C I A L
+Parcial
+/pool (NAV total, tokens, NAV/token, composição por
+tipo), /api/pool/summary (+ navSource ),
+/politica-clawback
+NavSnapshot cron diário (model só
+schema), gráfico NAV histórico,
+/pool/eventos , prospecto PDF, export
+CSV, classes, JanelaLiquidez
+M6
+Compliance
+N Ã O I N I C I A D O
+Mínimo
+/politica-clawback (4 hipóteses), form de
+clawback no /admin , audit log append-only
+/compliance expandida,
+PrestadorRegulado (só schema),
+screening OFAC/PEP (inexistente), /lgpd ,
+/admin/compliance , parecer jurídico
+M7
+Soroban
+N Ã O I N I C I A D O
+Não iniciado
+Flag SOROBAN_WATERFALL + gate inerte em
+pool/summary + campo
+NavSnapshot.publishedTxHash
+Zero contratos .rs
+( waterfall.rs / nav_oracle.rs );
+waterfall hoje é Postgres
+( lib/services/pool.ts )
+M8 Ops 	PA R C I A L
+Mínimo
+OTEL scaffold ( instrumentation.ts ) +
+tracer.ts + spans (Fase 1 M0), /admin , rate-limit
+(Upstash), alarme de saldo funder+issuer+dist
+/admin/ops , alertas (PagerDuty/Opsgenie),
+reporting mensal por email, status page,
+métricas de UX
+M9 Cut over N Ã O I N I C I A D O
+Preparação
+Flag MAINNET_ENABLED +
+mainnetCutoverGuard() (503) +
+docs/runbooks/mainnet-cutover.md
+Execução do checklist 50+, Vercel Rolling
+Releases (canary), comunicado CVM
+Schema vs. código: as extensões do §2.2 (classes, HoldingPLINARF , NavSnapshot , JanelaLiquidez ,
+PrestadorRegulado , campos de Investidor / Cessao ) já f oram migradas
+( prisma/migrations/20260527054949_prd_v1_extensions ), mas a maioria está só no schema, sem consumidor
+de código — preparação para M3/M5/M6/M7. Em uso real hoje: TipoInvestidor / jurisdicao (guard de onboard),
+razaoSocial / cnpj (leads).
+Int egrações ( lib/integrations/{docusign,administradoras,fireblocks,psp} ) são apenas READMEs de
+interface — nenhuma tem implementação concreta ainda.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	1 5
+
+-- 15 of 72 --
+
+1. Contexto & Premissas
+1.1 Regulatório
+CVM 175 + Lei 11.7 95/2008 são o enquadramento. FIDC formal em Fase 1 (depois desta entrega).
+BACEN VASP: a Plina é "tokenizadora institucional" (software white-label); a custódia fiat e KYC operam sob anchors
+registradas (Etherfuse/MoneyGram/Settle).
+AML/COAF: KYC obrigatório em ambas as pontas (cedente e investidor). Cedente via DocuSign + e-CPF; investidor via
+anchor SEP-12.
+LGPD: PII off-chain (Brasil); on-chain só hash, endereços e timestamps. Já enforced no schema atual (whitepaper §9).
+1.2 Decisões técnicas já tomadas (não reabrir)
+Rede: Stellar Mainnet (não Ethereum). Razão: clawback + auth flags nativos, USDC/EURC Circle direto, anchors SEP em
+múltiplas jurisdições. Ver Plina_Finance_Pitch.md §3 .
+Asset code on-chain: PLINARF (sem hífen, restrição Stellar). Branding PLINA-RF .
+Cust ódia do cedent e/comprador: Plina assina em nome do ato. Cedente/comprador não t êm wallet St ellar —
+usam Pix off-chain + DocuSign + carta de crédito na administradora.
+Cust ódia do invest idor: wallet Privy (self-custody com social recovery em Fase 2 via Soroban smart account).
+Cust ódia operacional: Fireblocks para issuer/distributor (mainnet) — reabert o em 2026-08-18. O invariante que não
+se reabre é
+"mainnet nunca assina com chave única vinda de env"; o fornecedor é escolha em aberto entre três (Fireblocks,
+custodiante equivalente, guarda própria com multisig nativo Stellar). A fase 01 assume guarda própria, e a escolha de
+custodiante é decisão de fase 02, contra a exigência real do auditor do FIDC. Trocar depois é rotação de signatário via
+setOptions , não migração — ver ARQUITETURA-ALVO.md §14.3 e §10.5.
+Aut h:
+Investidor: Privy JWT, withAuth em todas as rotas /api/investidor/** (lint enforce).
+Admin: cookie httpOnly + x-plina-admin header + CSRF token (POC). Migra para Clerk/Auth.js antes de mainnet.
+PII off -chain: auditável ( EventoAudit ), com cross-verify on-chain via memo-hash de tx de auto-pagamento.
+Idempot ência: privyId @unique , Quote.submitXdrHash @unique , WalletProvisioning ,
+LiquidacaoSubmit.xdrHash @unique . Padrão a manter em qualquer novo write path.
+1.3 O que o mockup do fundador adiciona que ainda não está no código
+1. Dif erenciação de classes Sênior vs. Subordinada na UI e no modelo de dados.
+2. Caminho pref erencial vs. f allback de cessão: integração B2B via API com administradora (SLA contratual) vs. cartório
+digital + taxa de anuência embutida no deságio.
+3. Trilha int ernacional completa (KYC anchor SEP-compliant não-BR, ticket US$ 100k-5M, classe via USDC/EURC).
+4. Ficha t écnica do PLINA-RF como ativo formal (NAV diário, prospecto, eventos on-chain visíveis no Stellar Expert).
+5. Compliance surf ace com prestadores nominais (administrador fiduciário, custodiante, auditor Big Four, agência de rating).
+6. Wat erf all on-chain via Soroban (hoje cálculo é em lib/services/pool.ts em Postgres).
+7. Validação operacional: Pix em mainnet real (hoje PIX_SIMULADO em testnet), DocuSign real (hoje stub), e-CPF real.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	1 6
+
+-- 16 of 72 --
+
+2. Arquitetura Técnica
+2.1 Topologia
+┌────────────────────────────────────────────────────────────────────────┐
+│ 	Vercel (Next.js 16) 	│
+│ Fluid Compute · App Router · Server Actions · Routing Middleware 	│
+└──┬────────────────────┬──────────────────────────┬─────────────────────┘
+│ 	│ 	│
+▼ 	▼ 	▼
+┌────────┐ 	┌──────────┐ 	┌──────────┐
+│ Neon │ 	│ Privy │ 	│ Fireblocks│
+│ (Pg 16)│ 	│ (auth+ │ 	│ (issuer+ │
+│ Prisma │ 	│ wallet) │ 	│ dist.) │
+└────┬───┘ 	└────┬─────┘ 	└────┬─────┘
+│ 	│ 	│
+│ 	▼ 	▼
+│ 	┌──────────┐ 	┌──────────────┐
+│ 	│ Etherfuse│ 	│ Stellar │
+│ 	│ Anchor BR│ 	│ Mainnet │
+│ 	│ SEP-12/24│ 	│ (Horizon │
+│ 	│ SEP-38 │ 	│ + Soroban) │
+│ 	└──────────┘ 	└──────────────┘
+│
+▼
+┌──────────┐ ┌──────────┐ ┌──────────────┐
+│ DocuSign │ │ Resend │ │ Stellar 	│
+│ (e-CPF) │ │ (email) │ │ Expert (UI) │
+└──────────┘ └──────────┘ └──────────────┘
+Runt ime:
+Vercel Funct ions (Fluid Comput e, Node 24 LT S): APIs /api/** . Timeout default 300s; jobs longos (NAV diário,
+polling Etherfuse) usam Vercel Workflow DevKit ou Cron Jobs.
+Vercel Rout ing Middleware: rate-limit por IP nas rotas P0 públicas ( /api/vender/lead , /api/comprar/lead ) e bot
+detection via Vercel Bot ID nos forms de lead.
+Next .js App Rout er: SSR para / , /pool , /cotas/[id] (precisam estar indexáveis). CSR para fluxos interativos
+/investir , /vender , /comprar .
+Persist ência:
+Neon Post gres 16 (já em uso). Branching automático por preview deploy.
+Vercel Blob para PDFs (prospecto, contratos assinados pós-DocuSign, comprovantes). Privado por default.
+Vercel Edge Config para feature flags (ex: MAINNET_ENABLED , KYC_PROVIDER , INTL_INVESTOR_FLOW ).
+Observabilit y:
+Vercel Analyt ics + Speed Insight s (já default).
+OpenTelemet ry → Dat adog (ou equivalente) para traces de Stellar SDK + Etherfuse calls.
+Logs est rut urados ( lib/stellar/log-error.ts já existe) — expandir para audit-grade.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	1 7
+
+-- 17 of 72 --
+
+Alarme de saldo do f under já implementado (commit cc4c948 N-09); estender para alarme de saldo do
+issuer/distributor mainnet.
+2.2 Data Model — extensões do schema atual
+St at us (2026-05-29): O K todas as extensões abaixo já est ão no schema e migradas
+( prisma/migrations/20260527054949_prd_v1_extensions ). Mas a maioria está só no schema, sem consumidor
+de código — ClassePLINARF , HoldingPLINARF , CaminhoCessao , NavSnapshot , JanelaLiquidez ,
+PrestadorRegulado e os campos regulatórios de Investidor / Cessao aguardam M3/M5/M6/M7. Em uso real:
+TipoInvestidor / jurisdicao (guard de onboard) e razaoSocial / cnpj (leads).
+Schema existente ( prisma/schema.prisma ) está sólido. Adicionar:
+P L I N A F I N A N C E · C O N F I D E N C I A L 	1 8
+
+-- 18 of 72 --
+
+// M5 — Classes Sênior/Subordinada
+enum ClassePLINARF {
+SENIOR
+SUBORDINADA
+}
+model HoldingPLINARF {
+id 	String @id @default(cuid())
+investidorId String
+investidor Investidor @relation(fields: [investidorId], references: [id])
+classe 	ClassePLINARF
+/// Quantidade de PLINA-RF da classe (subasset code: PLINARFS / PLINARFB).
+saldo 	Decimal @db.Decimal(20, 7) @default(0)
+emissaoTxHash String?
+@@unique([investidorId, classe])
+@@index([classe])
+}
+// M1/M2 — Caminho preferencial vs. fallback
+enum CaminhoCessao {
+API_ADMINISTRADORA // Caminho preferencial (SLA contratual)
+CARTORIO_DIGITAL // Fallback (taxa de anuência 1-3% embutida)
+}
+// Estender Cessao
+model Cessao {
+// ... campos existentes
+caminhoCessao 	CaminhoCessao @default(CARTORIO_DIGITAL)
+taxaAnuenciaBps 	Int? 	// 100-300 bps em fallback
+administradoraApiId String? 	// ref externo da administradora (quando API)
+}
+// M3/M4 — Tickets, jurisdição, investidor tipado
+enum TipoInvestidor {
+INST_BR_QUALIFICADO
+INST_BR_PROFISSIONAL
+INST_INTERNACIONAL_PROFISSIONAL
+}
+model Investidor {
+// ... existente
+tipo 	TipoInvestidor?
+jurisdicao 	String? // ISO 3166-1 alpha-2 ("BR", "US", "GB", "SG")
+ticketMinimoCheck Boolean @default(false)
+razaoSocial 	String?
+cnpj 	String?
+enderecoEntidade Json?
+}
+P L I N A F I N A N C E · C O N F I D E N C I A L 	1 9
+
+-- 19 of 72 --
+
+// M5 — Fechamento NAV diário (auditoria)
+model NavSnapshot {
+id 	String @id @default(cuid())
+data 	DateTime @unique // 1 por dia (UTC-3 close)
+navTotal 	Decimal @db.Decimal(20, 2)
+navPorToken Decimal @db.Decimal(20, 7)
+tokensVivos Decimal @db.Decimal(20, 7)
+classeSeniorNav Decimal @db.Decimal(20, 2)
+classeSubordinadaNav Decimal @db.Decimal(20, 2)
+composicaoJson Json
+publishedTxHash String? // hash on-chain do snapshot
+@@index([data])
+}
+// M5 — Janela de liquidez (resgate)
+model JanelaLiquidez {
+id 	String @id @default(cuid())
+abreEm 	DateTime
+fechaEm 	DateTime
+capTotal Decimal? @db.Decimal(20, 2) // teto de resgate
+consumido Decimal @db.Decimal(20, 2) @default(0)
+status 	String @default("AGENDADA") // AGENDADA, ABERTA, FECHADA
+@@index([abreEm])
+}
+2.3 On-chain layer
+Asset st ruct ure:
+PLINARFS (Sênior) — issuer flags: AUTH_REQUIRED | AUTH_REVOCABLE | AUTH_CLAWBACK_ENABLED
+PLINARFB (Subordinada) — mesmas flags
+TESOURO — asset bridge da Etherfuse (BRL on-chain), trustline pré-requisito
+USDC / EURC — Circle, trustlines opcionais para investidor internacional
+Operações:
+Emissão (mint): buildDistributionTx (já existe em lib/stellar/transactions.ts ) — estender para aceitar
+assetCode (Sênior vs. Subordinada).
+Resgat e (burn): payment do holder → distributor; já implementado em lib/services/liquidacao.ts . Estender para
+janela + classe.
+Clawback: 4 hipóteses ( MotivoClawback enum). Não muda.
+Audit memo-hash: padrão atual mantido. Cada estado crítico ( COTA_VALIDADA , CESSAO_ASSINADA , etc.) gera
+Memo.hash de auto-pagamento na conta operacional.
+Soroban (M7 ):
+Contrato waterfall.rs : recebe distribuição periódica do pool, distribui via cascata:
+1. Despesas operacionais (mgmt fee 2% a.a. proporcional)
+2. Yield prometido à classe Sênior (CDI+x% BR / SOFR+y% intl)
+3. Resto vai para Subordinada (Plina como skin-in-the-game)
+P L I N A F I N A N C E · C O N F I D E N C I A L 	2 0
+
+-- 20 of 72 --
+
+Contrato nav_oracle.rs : publica NavSnapshot diário on-chain (escrito apenas pelo issuer multisig).
+2.4 KYC / Anchors
+SEP-compliance (já parcialment e em uso via Et herf use):
+S E P 	F UN Ç Ã O 	P RO V I D E R H O J E 	P RO V I D E R MA I N N E T
+SEP-10 	Web auth Stellar 	— 	Etherfuse / próprio
+SEP-12 	KYC padroniz ado 	Etherfuse (BR) 	+ MoneyGram (US), Settle (EU)
+SEP-24 	Onramp/offramp hosted 	Etherfuse (PIX↔TESOURO) 	Etherfuse (BR) / Circle (USDC)
+SEP-38 	Cotação FX 	Etherfuse 	Multi-anchor por jurisdição
+Trilhas de onboarding (alinhar UI ao mockup):
+1. Inst it ucional BR — Plina white-label → Etherfuse SEP-12 (business) → Suitability CVM 30 → assinatura termo FIDC
+(DocuSign) → trustlines TESOURO+PLINARF.
+2. Int ernacional Profissional — Plina white-label → seletor de jurisdição → anchor regional SEP-12 → trustline USDC/EURC
+→ SEP-38 → SEP-24 → trustline PLINARF.
+2.5 FX & Pricing
+Invest idor BR: BRL → TESOURO (1:1 via Etherfuse) → PLINARF.
+Invest idor Int ernacional: USDC/EURC → quote SEP-38 → TESOURO → PLINARF. Atomicidade via swap envelope (já em
+design — docs/2026-05-18-quote-binding-and-atomic-swap.md ).
+Preço base: R$ 1,0000 / PLINARF, ajustado diariamente pelo NavSnapshot.navPorToken .
+Quot e binding: já implementado ( Quote.submitXdrHash @unique , N-12 round explícito) — manter padrão para todo
+write path.
+2.6 Segurança operacional (já parcialmente implementado)
+C O N T RO LE 	S TAT US 	O RI G E M
+Zod strict em todos os bodies 	O K 	C-01..C-07
+Rate-limit em rotas P0 	O K 	C-06
+withAuth em /api/investidor/** 	O K 	F-02 + lint enforce
+x-plina-admin header em POST admin 	O K 	N-10/N-11 ( e24620a )
+CSRF token admin 	O K 	requireAdminCsrf
+Audit log append-only + privyId 	O K 	EventoAudit
+Idempotência (privyId, quote, xdrHash) 	O K 	Schema
+CPF normaliz ado + synthetic flag 	O K 	N-14
+Cap diário do funder + alarme 	O K 	N-09 ( cc4c948 )
+Hash on-chain de cessão 	O K 	N-13 ( 2f9764b )
+OT EL spans (st ellar + et herf use) 	O K 	M0 (Fase 1, PR #42)
+Alarme de saldo issuer/dist ribut or 	O K 	M0 (Fase 1, PR #42)
+Feat ure flags (Edge Config) + guard mainnet 	O K 	M0 (Fase 1, PR #42)
+P L I N A F I N A N C E · C O N F I D E N C I A L 	2 1
+
+-- 21 of 72 --
+
+C O N T RO LE 	S TAT US 	O RI G E M
+Bot ID nos f orms de lead 	O K 	M0 (Fase 1, PR #42)
+Port de assinat ura + f ail-closed mainnet 	O K 	M0 (Fase 1, PR #42)
+Migração de admin para Clerk 	N Ã O I N I C I A D O M0 (Fase 2)
+Cust ódia Fireblocks de issuer/dist 	N Ã O I N I C I A D O M0 (Fase 2 — seam pronto, FireblocksSigner falta)
+Sign-off de DocuSign real 	N Ã O I N I C I A D O M1
+OFAC/sanct ions check no KYC 	N Ã O I N I C I A D O M3
+3. Modelo Econômico/Financeiro
+3.1 Estrutura de classes
+Citando o pitch §6 e o mockup:
+Classe Sênior (PLINARFS)
+Direito preferencial no waterfall.
+Yield alvo: CDI + x% (BR) / SOFR + y% (internacional). x e y calibrados por safra do pool.
+Rating em processo (M6).
+Maioria do AUM (target ~80% — confirmar com CEO).
+Classe Subordinada (PLINARFB)
+Absorve primeiras perdas.
+Mantida majoritariamente pela Plina como skin-in-t he-game (whitepaper).
+Pode ser oferecida a investidores qualificados que aceitem risco superior em troca de yield potencialmente maior.
+3.2 NAV
+NAV_ativos(t) = Σ (valor_realizável_cota_i × prob_realização_i × fator_desconto_temporal_i)
++ caixa_TESOURO_não_aplicado(t)
+NAV_líquido(t) = NAV_ativos(t)
+− provisões(t)
+− taxa_adm_apropriada(t) 	[2% a.a., base 252, sobre NAV_líquido(t−1)]
+− taxa_performance_provisionada(t) [20% do excedente; só após o yield-alvo ser fixado]
+NAV_por_token(t) = NAV_líquido(t) / tokens_em_circulação(t) [supply on-chain − tesouraria no distributor]
+NAV_classe_Sênior(t) = NAV_total(t) × peso_Sênior(t) [via waterfall]
+NAV_classe_Subordinada(t) = NAV_total(t) − NAV_classe_Sênior(t)
+valor_realizável_cota_i : já calculado em lib/services/pool.ts:navDaCota . Manter.
+fator_desconto_temporal_i : refletir status de estoque (VERDE/AMARELO/VERMELHO/BAIXA). Em VERMELHO aplicar
+haircut. Em BAIXA reconhecer perda.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	2 2
+
+-- 22 of 72 --
+
+Snapshot diário às 18:00 BRT (após fechamento do mercado de consórcio); persistido em NavSnapshot e publicado on-
+chain via nav_oracle.rs (M7) ou via memo-hash (interim).
+Corrigido em 2026-08-18. A fórmula original omitia as taxas que o §3.5 declara serem "subtraídas do NAV" — o documento
+se contradizia, e o código ( lib/services/pool.ts ) seguiu a fórmula. O que precifica emissão e resgate é o NAV líquido;
+NAV_ativos é nível intermediário e não deve ser publicado sozinho. A apropriação vale desde o primeiro snapshot ,
+inclusive na fase 01 em que a Plina cobra de si mesma, porque a série é o track record da fase 02 e o snapshot ancorado on-
+chain não se recalcula barato. Convenções de apropriação e o motivo de cada uma em ARQUITETURA-ALVO.md §8.2.
+O denominador t ambém est ava errado. tokens_vivos era derivado das cotas ativas no Postgres: quando uma cota é
+realizada o caixa entra no numerador
+e os tokens dela saem do denominador, dobrando a conta — e com o pool em runoff o
+resultado é zero. O denominador é o circulant e on-chain (supply menos a tesouraria no distributor, já que o resgate não
+queima), e o caixa passa a vir de um razão append-only em vez da soma de valorRealizado , porque essa soma nunca
+subtraiu resgate pago.
+3.3 Waterfall (cascata de pagamentos)
+Em cada janela de liquidez ( JanelaLiquidez ) ou evento de distribuição:
+1. Despesas operacionais — mgmt fee 2% a.a. pró-rata + custos de prestadores (auditor, custodiante).
+2. Yield Sênior — pagamento até atingir CDI+x% / SOFR+y% no período.
+3. Excedent e — performance fee 20% para Plina (sobre o excedente do benchmark).
+4. Sobra final — alocada à classe Subordinada (Plina + qualquer investidor subordinado).
+Janela de inadimplência: se uma cota entra em INADIMPLENCIA , o valor é debitado primeiro do NAV da classe
+Subordinada. Se Subordinada não cobrir, a Sênior absorve (mas isso aciona ratings/disclosure).
+3.4 Deságio (pricing do cotista)
+Fórmula de oferta (M1, estender lib/services/originacao.ts:gerarOferta ):
+desagio_total = desagio_base(prazo, administradora, tipoBem)
++ spread_curva_yield_pool
++ (caminho_cessao == CARTORIO_DIGITAL ? taxa_anuencia_bps : 0)
++ margem_operacional_Plina
+valor_liquido_vendedor = valor_face × (1 − desagio_total)
+desagio_base : tabela por administradora × prazo (Embracon, Caixa, Bradesco, Porto Seguro etc.). Configurável (Edge
+Config / DB seed).
+spread_curva_yield_pool : derivado do yield alvo da Sênior + custo de capital.
+taxa_anuencia_bps : 100-300 bps quando fallback (cartório digital), explicitado ao cedente na oferta.
+margem_operacional_Plina : o spread bruto do produto — receita principal (pitch §6).
+3.5 Receita
+F O N T E 	BA S E 	TA X A 	RE C O N H E C I ME N T O
+Spread de
+originação
+Por operação 	desagio_total −
+custo_real_realização
+Quando cota REALIZADA
+Mgmt fee 	AUM 	2% a.a. 	Pró-rata diário (subtraído do
+NAV)
+P L I N A F I N A N C E · C O N F I D E N C I A L 	2 3
+
+-- 23 of 72 --
+
+F O N T E 	BA S E 	TA X A 	RE C O N H E C I ME N T O
+Performance fee 	Excedente sobre
+benchmark
+20% 	Em janela de liquidez
+3.6 Tickets e limites
+P E RS O N A 	MÍ N I MO 	MÁ X I MO VA LI D A Ç Ã O
+Inst. BR Qualificado 	R$ 500k R$ 10M 	Auto-declaração + Suitability CVM 30 + ticket check no onboarding
+Inst. BR Profissional 	R$ 1M 	sem teto 	Mesmo
+Inst. Internacional 	US$ 100k US$ 5M 	KYC anchor + ticket check
+Validação implementada em Investidor.ticketMinimoCheck + guard nas rotas /api/investidor/quote e
+/api/investidor/buy/* .
+4. Segurança & Compliance — visão consolidada
+4.1 Camadas defensivas
+┌─────────────────────────────────────────────────────────┐
+│ Edge: Vercel Firewall (WAF) + BotID + rate-limit IP │
+├─────────────────────────────────────────────────────────┤
+│ App: Zod strict, withAuth, CSRF admin, idempotência │
+├─────────────────────────────────────────────────────────┤
+│ Domain: ticket check, KYC status, ownership checks 	│
+├─────────────────────────────────────────────────────────┤
+│ Off-chain: PII em Neon Brasil + LGPD audit 	│
+├─────────────────────────────────────────────────────────┤
+│ On-chain: clawback (4 hipóteses), auth flags, audit │
+│ 	memo-hash, multisig issuer (Fireblocks) 	│
+└─────────────────────────────────────────────────────────┘
+4.2 Matriz regulatória
+V E T O R 	C O N T RO LE 	O W N E R E X T E RN O
+Estrutura jurídica 	FIDC formal CVM 175 	Administrador fiduciário registrado
+Custódia direito creditório 	Custodiante regulado CVM 	A contratar (M6)
+Auditoria 	Big Four 	A contratar (M6)
+Rating 	Agência de rating 	A contratar (M6)
+KYC/AML cedente 	DocuSign + e-CPF + screening 	DocuSign + provedor AML
+KYC/AML investidor BR 	Etherfuse anchor regulada 	Etherfuse
+KYC/AML investidor intl 	Anchor SEP-12 por jurisdição 	MoneyGram / Settle / Bitso
+Custódia de chaves operacionais 	Fireblocks (multisig + policy engine) 	Fireblocks
+P L I N A F I N A N C E · C O N F I D E N C I A L 	2 4
+
+-- 24 of 72 --
+
+V E T O R 	C O N T RO LE 	O W N E R E X T E RN O
+Reporte mensal NAV + composição 	NavSnapshot publicado + dashboard 	Plina
+Auditoria on-chain pública 	Stellar Expert 	Stellar Foundation
+LGPD 	PII off-chain, hash on-chain 	Plina (DPO interno)
+4.3 Sanctions / OFAC / PEP
+KYC anchor cobre BR (Etherfuse) e intl (MoneyGram/Settle). Plina adiciona camada própria de screening cont ínuo (M6):
+Lista OFAC + União Europeia + ONU.
+PEPs (Politically Exposed Persons) BR via Receita Federal + outras fontes.
+Re-check trimestral; alerta → review humano antes de qualquer payment.
+5. Roadmap por Módulos
+Os módulos abaixo são increment os de valor ent regáveis independent ement e. Dependências explicitadas. Cada
+módulo tem Objet ivo, Fluxos cobert os, Feat ures, Aceit es mensuráveis, e Riscos.
+Convenção de aceit e: todo aceite deve ser (a) executável em CI (testes unit/e2e) ou (b) verificável manualmente em staging
+com checklist. Aceites sem critério mensurável são reescritos.
+M0 — Foundation (Mainnet readiness) · PA R C I A L PARCIAL
+Implement ado (Fase 1, PR #42): F-M0-1 port de assinatura + fail-closed mainnet · F-M0-3 OTEL spans · F-M0-4 alarme
+issuer/dist · F-M0-6 as 3 flags conectadas · F-M0-5 BotID nos leads · F-M0-7 runbooks. Falt a (Fase 2 — Trilha A):
+FireblocksSigner concreto (F-M0-1), Admin→Clerk (F-M0-2, ainda cookie POC), Vercel WAF (F-M0-5), backend OTEL.
+Objet ivo. Preparar o app que hoje roda em testnet POC para suportar mainnet sem refactor estrutural. Substitui secrets em env
+por Fireblocks, migra admin para Clerk, e levanta observabilidade de produção.
+Dependências. Nenhuma (é base de tudo).
+Fluxos cobert os.
+Cutover testnet → mainnet via feature flag STELLAR_NETWORK=public + MAINNET_ENABLED=true .
+Reemissão dos assets PLINARFS / PLINARFB no issuer mainnet com flags AUTH_REQUIRED | AUTH_REVOCABLE |
+AUTH_CLAWBACK_ENABLED .
+Admin login via Clerk (não cookie POC).
+Feat ures.
+F-M0-1: Custódia Fireblocks de issuerSecret e distributorSecret . SDK Fireblocks signing replacing
+Keypair.fromSecret .
+F-M0-2: Migração AdminSession → Clerk (manter EventoAudit.privyId rastreabilidade equivalente).
+F-M0-3: OpenTelemetry traces em lib/stellar/** e lib/anchors/** .
+F-M0-4: Alerta de saldo issuer/distributor (extensão do alarme do funder N-09).
+F-M0-5: Vercel Firewall (WAF) com regras: rate-limit IP em /api/* , bloqueio de bots não-verificados em forms de lead via
+BotID.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	2 5
+
+-- 25 of 72 --
+
+F-M0-6: Edge Config feature flags ( MAINNET_ENABLED , INTL_INVESTOR_FLOW , SOROBAN_WATERFALL ).
+F-M0-7: Runbook de incident response (clawback, pause emissão, rotate Fireblocks policy).
+Aceit es.
+1. npm run test:unit && npm run test:e2e passa em mainnet config com Fireblocks mockado.
+2. Assets PLINARFS e PLINARFB visíveis no Stellar Expert mainnet com 3 flags ativas.
+3. Admin login funciona via Clerk, e /api/admin/* continua exigindo x-plina-admin + CSRF.
+4. Alerta de saldo issuer dispara em staging quando saldo < threshold definido.
+5. Runbook documentado em docs/runbooks/ com 4 cenários: clawback, pause, rotate-keys, incident.
+6. Vercel Firewall ativo; teste de carga (k6 ou similar) confirma rate-limit em /api/vender/lead e /api/comprar/lead .
+Riscos. Fireblocks tem onboarding lento (KYB próprio) — começar em paralelo agora. Clerk requer mapeamento de admins
+existentes.
+M1 — Fluxo Cotista produção (Vender com Pix 48h real + DocuSign real) · PA R C I A L
+PARCIAL
+Implement ado: /vender (simulador via /api/vender/simular ), /vender/lead (captura + consentimento LGPD on-
+chain), funil no /admin (oferta→cessão→pagamento), audit on-chain por estado. Falt a: F-M1-1 DocuSign real (hoje mvp-
+stub: ), F-M1-2 Pix real (hoje PIX_SIMULADO ), F-M1-3 API administradora, F-M1-4 fila de validação manual + taxa de
+anuência, F-M1-6 webhook DocuSign, F-M1-7 email transacional, F-M1-8 PDF Blob. CaminhoCessao só schema.
+Objet ivo. Levar /vender da POC testnet para produção mainnet: DocuSign real, Pix real, hash on-chain de cessão, e suporte
+ao caminho preferencial (API administradora) vs. fallback (cartório digital com taxa de anuência).
+Dependências. M0.
+Fluxos cobert os (mockup §2 — Para Cot ist as).
+1. Envio da cot a — formulário com adm./número/valor face/data contemplação. Já existe.
+2. Validação jurídica aut omát ica — call à API da administradora (M1.A) ou queue de validação manual via cartório digital
+(M1.B).
+3. Propost a & negociação — gerarOferta atualizado com caminho de cessão; oferta 24h.
+4. Cessão digit al real — DocuSign envelope com template "Termo de Cessão de Direitos Creditórios", assinatura e-CPF do
+cedente, hash do PDF assinado.
+5. Depósit o Pix real — execução Pix via PSP regulado (Banco real, não simulado).
+6. Cessão concluída — link Stellar Expert + comprovante.
+Feat ures.
+F-M1-1: DocuSign API: client em lib/integrations/docusign.ts . Envelope creation, polling de status (webhook +
+fallback poll), download de PDF assinado, SHA-256 → memo-hash on-chain.
+F-M1-2: Pix real: integração com PSP (provedor a definir — Stark Infra, BTG OpenFinance ou similar). Idempotência via
+Pagamento.idempotencyKey @unique .
+F-M1-3: Caminho pref erencial: client B2B genérico em lib/integrations/administradoras/ . Adapter por
+administradora (Embracon, Caixa, Bradesco, Porto, Itaú). Suporte mínimo a verificar contemplação + adimplência +
+titularidade.
+F-M1-4: Caminho f allback: queue de validação manual (operador interno valida documentos) + taxa de anuência embutida
+(100-300 bps configurável por administradora).
+P L I N A F I N A N C E · C O N F I D E N C I A L 	2 6
+
+-- 26 of 72 --
+
+F-M1-5: UI /vender atualizada com etapas explícitas: Cadastro & KYC · Validação · Proposta · Cessão · Pix · Concluído
+(alinhar com terminal-mode do mockup).
+F-M1-6: Webhook DocuSign assinado (verificar HMAC), idempotente, registra Cessao.assinadaEm + memo-hash.
+F-M1-7: Email transacional ao cedente em cada transição (Resend — divergência abert a desde maio: o código usa
+nodemailer/SMTP ( lib/email/transporter.ts ), não Resend. Decidir o fornecedor e alinhar; ver ARQUITETURA-
+ALVO.md §11.2). O canal de alert a é separado do t ransacional e não pode ser best-effort.
+F-M1-8: PDF de comprovante (Vercel Blob privado) com link assinado de curto prazo.
+Aceit es.
+1. E2E em staging: lead → oferta → DocuSign sandbox → Pix sandbox PSP → cessão concluída em < 48h end-to-end (teste
+cronometrado).
+2. Hash do PDF DocuSign assinado é idênt ico ao payloadHash do EventoAudit.CESSAO_ASSINADA , e ao Memo.hash
+da tx Stellar referenciada. Test e2e valida.
+3. Para administradora com API integrada: validação automática completa < 30s. Para fallback: queue manual com SLA
+documentado.
+4. Pix sandbox PSP executado com idempotência: retry da mesma Pagamento.id não duplica débito.
+5. UI mostra trilha de auditoria com link stellar://tx/... clicável (abre Stellar Expert).
+6. Webhook DocuSign valida assinatura HMAC e rejeita payloads adulterados (test unit + e2e).
+7. Rate-limit /api/vender/lead (Vercel Firewall) testado com k6 — bloqueia >10 req/min/IP.
+8. Cobertura de testes ≥ 70% nas novas funções de lib/integrations/docusign.ts e
+lib/integrations/administradoras/* .
+Riscos. Onboarding DocuSign exige conta empresarial + e-CPF da Plina. PSP Pix exige conta corrente PJ ativa. Acordos com
+administradoras (API B2B) demoram meses — iniciar M1.A em paralelo, mas M1.B (fallback) é unblocker.
+M2 — Fluxo Comprador produção (Comprar Cota com carta de crédito real) · PA R C I A L
+PARCIAL
+Implement ado: /comprar (calculadora comparativa), /comprar/lead , /comprar/reservar (lock 72h via
+/api/comprar/reservar ), /cotas + /cotas/[id] , caminho A em RealizacaoCaminho (spread capturado no
+/admin ). Falt a: F-M2-2 sinal Pix real (hoje sinalSimulado ), F-M2-3 DocuSign comprador, F-M2-4 transferência via API
+administradora, F-M2-7 anti-fraude por documento.
+Objet ivo. Levar /comprar ao MVP mainnet: reserva 72h, sinal real (Pix), assinatura e-CPF do comprador, transferência de
+titularidade real na administradora (carta de crédito), e captura de spread.
+Dependências. M0, M1 (infraestrutura DocuSign + administradoras compartilhada).
+Fluxos cobert os (mockup §4 — Comprar Cot a).
+1. Buscar cot a — listagem com filtros (tipo de bem, desconto mínimo, valor de face). Já existe parcialmente em /cotas .
+2. Selecionar cot a — detalhe + simulador "Você paga vs. Economia".
+3. Forma de pagament o — TED/Pix/financiamento próprio (M2.1 só Pix; financiamento em fase posterior).
+4. Cart ório digit al com e-CPF — DocuSign do termo de cessão Plina → comprador.
+5. Direit o credit ório t ransf erido — API administradora (M1.A) ou queue manual (M1.B).
+6. Comprador recebe cart a de crédit o — confirmação na administradora, email + comprovante.
+Feat ures.
+F-M2-1: UI /comprar com etapas (manter calculadora comparativa atual).
+P L I N A F I N A N C E · C O N F I D E N C I A L 	2 7
+
+-- 27 of 72 --
+
+F-M2-2: Reserva com sinal real Pix (substituir sinalSimulado ); expiração mantida em 72h.
+F-M2-3: Termo de cessão Plina → comprador via DocuSign (template separado de M1).
+F-M2-4: RealizacaoCaminho (já existe — caminho A) com valorRealizado , spread recalculados em mainnet.
+F-M2-5: Notificação ao comprador (email + dashboard /minha-compra ) quando carta de crédito disponível.
+F-M2-6: Cancelamento de reserva (já existe — N-13 — manter idempotente e auditado).
+F-M2-7: Anti-fraude: limite de tentativas de reserva por documento (CPF/CNPJ) em janela 24h, validação Receita.
+Aceit es.
+1. E2E: lead → reserva → sinal Pix sandbox → cessão comprador → realização cota → status REALIZADA +
+caminho=A_REVENDA .
+2. Reserva.status=ATIVA expira automaticamente em 72h e libera Cota.status=DISPONIVEL via cron (cron job
+idempotente).
+3. Comprador recebe email com link assinado para comprovante (Vercel Blob privado) em ≤ 5 min após realização.
+4. Para administradora com API integrada: transferência de titularidade automática < 10 min. Fallback: queue manual com SLA.
+5. Spread realizado ( RealizacaoCaminho.spread ) bate com pool service: valorRealizado − custoAquisicao . Teste
+de precisão decimal.
+6. Anti-fraude: tentativa de 4ª reserva pelo mesmo CPF em 24h é bloqueada com erro 429 + audit log.
+7. UI exibe "Você paga R$ X / Economia R$ Y" calculado server-side (bound como Quote ), não computado client-side.
+Riscos. Variação de processo entre administradoras pode forçar M2 a esperar M1 completo. Mitigação: lançar M2 apenas para
+administradoras já integradas em M1.
+M3 — Fluxo Investidor Institucional BR (FIDC + classes + tickets) · PA R C I A L PARCIAL
+Implement ado: fluxo /investir end-to-end (welcome→identity→banking→quote→onramp→
+settling→claiming→confirm→receipt), onboard KYC Etherfuse, quote BRL→TESOURO, swap atômico → PLINARF, /minha-
+posicao (saldo on-chain + NAV + liquidação). Schema
+Investidor.tipo/jurisdicao/cnpj/razaoSocial/suitabilityJson migrado. Falt a: F-M3-2 HoldingPLINARF
+por classe (só schema), F-M3-3 emissão PLINARFS/PLINARFB (hoje só PLINARF), F-M3-4 seletor de classe na UI, F-M3-5
+suitability CVM 30 (campo só schema), F-M3-6 ticket check server-side, F-M3-7 termo FIDC (DocuSign).
+Objet ivo. Habilitar /investir para investidor BR com onboarding institucional formal: Suitability CVM 30, ticket mínimo R$
+500k, escolha de classe Sênior/Subordinada, assinatura termo FIDC via DocuSign.
+Dependências. M0. Idealmente M1+M2 (lado de originação ativo para gerar lastro).
+Fluxos cobert os (mockup §3 — Para Invest idores · t rilha BR).
+1. Onboarding inst it ucional BR — coleta CNPJ, razão social, endereço, AUM declarado, perfil regulatório
+(qualificado/profissional).
+2. Suit abilit y CVM 30 — questionário + persistência da prova de adequação.
+3. KYC — Etherfuse SEP-12 business + screening Plina (OFAC/PEP).
+4. Assinat ura t ermo FIDC — DocuSign template "Termo de Adesão FIDC PLINA-RF".
+5. Escolha de classe — Sênior (preferencial) ou Subordinada (skin-in-game compartilhado com Plina).
+6. Alocação — quote BRL → TESOURO → PLINARFS/PLINARFB. Atomicidade via swap (Phase 2 do plano existente).
+7. Confirmação & cust ódia — wallet Privy do investidor recebe; dashboard /minha-posicao mostra saldo + NAV.
+Feat ures.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	2 8
+
+-- 28 of 72 --
+
+F-M3-1: Schema Investidor.tipo , jurisdicao , cnpj , razaoSocial , enderecoEntidade ,
+ticketMinimoCheck .
+F-M3-2: HoldingPLINARF por classe.
+F-M3-3: Issuer mainnet emite PLINARFS e PLINARFB com flags. Distributor configurado.
+F-M3-4: UI seletor de classe com explicação clara: yield alvo, risco, posição no waterfall. Disclaimer "sem promessa de
+rentabilidade".
+F-M3-5: Suitability CVM 30 — questionário (perfil arrojado/moderado, AUM, experiência), persistido em
+Investidor.suitabilityJson .
+F-M3-6: Ticket check server-side antes de aceitar /quote (R$ 500k inst. qualificado, R$ 1M profissional).
+F-M3-7: DocuSign template "Adesão FIDC" assinado pelo representante legal da entidade (e-CPF + procuração).
+F-M3-8: /minha-posicao mostra saldo por classe, NAV/token corrente, último snapshot, e fila de janela de liquidez.
+Aceit es.
+1. Investidor com CNPJ válido completa onboarding em < 15 min em staging (Etherfuse sandbox + DocuSign sandbox).
+2. Ticket abaixo de R$ 500k é rejeitado server-side com erro 400 + audit log (test e2e).
+3. Holder de classe Sênior tem HoldingPLINARF.classe=SENIOR + trustline PLINARFS aprovada pelo issuer (test e2e).
+4. Suitability completada antes da primeira alocação; sem suitability, /quote retorna 403.
+5. Swap atômico BRL → TESOURO → PLINARFS executa em uma única tx Stellar (multi-op envelope). Test e2e valida operações
+esperadas.
+6. /api/investidor/quote aplica round explícito (já existe — N-12) e binding via Quote.submitXdrHash .
+7. Stellar Expert mostra emissão PLINARFS para a wallet do investidor com memo-hash referenciando
+EventoAudit.TOKEN_EMITIDO .
+Riscos. FIDC formal exige administrador fiduciário registrado — bloqueador para mainnet real. M3 pode rodar em "modo soft-
+launch" pré-FIDC com sociedade limitada + termo de cessão direto (capítulo de Fase 0 do pitch). Decisão estratégica com CEO +
+jurídico.
+M4 — Fluxo Investidor Institucional Internacional (SEP intl + USDC/EURC) · N Ã O I N I C I A D O
+NÃO INICIADO
+Implement ado: apenas o gate inerte — flag INTL_INVESTOR_FLOW + guard no /api/investidor/onboard
+(jurisdição não-BR exige a flag), TipoInvestidor / jurisdicao no schema. Falt a: toda a trilha — F-M4-1 multi-anchor
+por jurisdição, F-M4-2 seletor de jurisdição, F-M4-3 USDC/EURC, F-M4-4 SEP-38, F-M4-6 Calendly, F-M4-7 i18n EN/PT.
+Objet ivo. Habilitar /investir trilha internacional: seletor de jurisdição, KYC anchor SEP-12 não-BR, ticket US$ 100k-5M,
+settlement via USDC ou EURC.
+Dependências. M0, M3 (compartilha schema e UI base).
+Fluxos cobert os (mockup §3 — Para Invest idores · t rilha Int l).
+1. Selet or de jurisdição — US, EU, UK, SG, MX (lista inicial). Cada jurisdição vincula a um anchor SEP-12.
+2. KYC anchor regional — MoneyGram (US), Settle (EU/UK), Bitso (LATAM), conforme jurisdição.
+3. Trust lines USDC/EURC — pré-requisito.
+4. SEP-38 quot e — USDC/EURC → TESOURO BRL.
+5. SEP-24 set t lement — onramp se necessário; depósito direto se já tem USDC/EURC.
+6. At omic swap — USDC → TESOURO → PLINARFS/PLINARFB.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	2 9
+
+-- 29 of 72 --
+
+7. Roadshow CTA — para tickets ≥ US$ 1M, agendar reunião com founders (Calendly embed) antes do onboarding (modelo
+founder-led declarado).
+Feat ures.
+F-M4-1: Multi-anchor abstração em lib/anchors/ (já existe estrutura) — adapter por jurisdição.
+F-M4-2: Seletor de jurisdição no UI, com validação cruzada via IP geolocation (alerta, não bloqueio).
+F-M4-3: Suporte a USDC e EURC: trustlines, payments, swap paths.
+F-M4-4: SEP-38 quote multi-currency.
+F-M4-5: Ticket check US$ 100k mínimo.
+F-M4-6: Calendly embed em /investir para "Solicitar Roadshow" se ticket declarado > US$ 1M (qualificação manual
+founder-led).
+F-M4-7: Suporte EN/PT-BR no UI (i18n com next-intl ou similar). EN é default para essa trilha.
+F-M4-8: Disclaimer regulatório por jurisdição (Reg D para US, MiFID II para EU).
+Aceit es.
+1. Investidor US completa onboarding via MoneyGram sandbox em < 30 min, recebe PLINARFS em wallet Privy.
+2. Investidor EU completa onboarding via Settle sandbox, settle em EURC.
+3. Swap atômico USDC → TESOURO → PLINARFS executa em uma única tx (multi-op envelope).
+4. SEP-38 quote retorna preço e fee dentro do prazo de validade (tested no anchor sandbox).
+5. UI EN/PT funciona; switch de idioma persiste por sessão.
+6. Calendly aparece para ticket > US$ 1M; abaixo, fluxo self-service standard.
+7. Disclaimer regulatório por jurisdição renderizado e exigido aceite antes do KYC.
+Riscos. Cada anchor regional tem rate de aprovação KYC distinto. Mitigação: começar com MoneyGram (US, maior volume) e
+expandir progressivamente.
+M5 — PLINA-RF como ativo distribuível (Ficha técnica, NAV, eventos públicos) · PA R C I A L
+PARCIAL
+Implement ado: /pool (NAV total, tokens vivos, NAV/token, composição por tipo de bem), /api/pool/summary
+(+ navSource ), cálculo de NAV em lib/services/pool.ts , /politica-clawback . Falt a: F-M5-1 NavSnapshot
+via cron diário (model só schema, sem job), F-M5-3 gráfico de NAV histórico, F-M5-5 /pool/eventos (mint/burn/clawback),
+F-M5-4 prospecto PDF, F-M5-6 export CSV, classes Sênior/Subordinada, JanelaLiquidez .
+Objet ivo. Levar /pool ao nível de "ficha técnica institucional": NAV diário publicado, composição do pool, eventos on-chain
+rastreáveis no Stellar Expert, link para prospecto FIDC.
+Dependências. M0. Aproveitável já em soft-launch.
+Fluxos cobert os (mockup §5 — PLINA-RF).
+Métricas em tempo real: AUM, NAV total, NAV/token, tokens vivos por classe, spread realizado.
+Composição do pool (cotas em CSV/JSON download).
+Eventos on-chain: lista de mint/burn/clawback com links Stellar Expert.
+Mecanismos de cessão: preferencial vs. fallback (UI explicativa).
+Download de prospecto FIDC (PDF).
+Status de classes Sênior e Subordinada.
+Feat ures.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	3 0
+
+-- 30 of 72 --
+
+F-M5-1: NavSnapshot diário via cron (18:00 BRT). Persistência + publicação on-chain via memo-hash (M7 substitui por
+Soroban oracle).
+F-M5-2: Endpoint público /api/pool/summary ampliado: classes, NAV histórico (últimos 90 dias), spread realizado,
+distribuição por administradora.
+F-M5-3: UI /pool expandida: gráfico de NAV, composição por tipo de bem, eventos on-chain (paginação).
+F-M5-4: Prospecto FIDC PDF em Vercel Blob público + link permanente.
+F-M5-5: Página /pool/eventos com lista de operações on-chain (filtros: tipo, data) e links diretos para Stellar Expert.
+F-M5-6: Export CSV/JSON da composição do pool para due diligence de investidor.
+Aceit es.
+1. Cron diário publica NavSnapshot antes das 19:00 BRT; falha → alarme.
+2. /api/pool/summary retorna composição compatível com OpenAPI documentado, com Cache-Control apropriado
+(60s).
+3. Gráfico de NAV mostra 90 dias com pelo menos 1 ponto por dia (gaps logados, não silenciados).
+4. Prospecto PDF acessível em URL pública estável; versão registrada em EventoAudit.PROSPECTO_PUBLICADO .
+5. Filtros em /pool/eventos funcionam server-side (paginação cursor).
+6. Cada evento on-chain linka para Stellar Expert mainnet correto.
+7. Teste e2e: e2e/pool-api.spec.ts cobre composição e NavSnapshot.
+Riscos. NAV diário precisa de prestadores formais (auditor) confirmando valuation antes da publicação pública oficial. Soft-
+launch: publicar com label "preliminar" até auditor formalizado em M6.
+M6 — Compliance surface (Prestadores nominais + CVM 175 + monitoring) · N Ã O I N I C I A D O
+MÍNIMO
+Implement ado: /politica-clawback (4 hipóteses), form de clawback no /admin (motivo + fundamentoUrl ), audit
+log append-only ( EventoAudit ). Falt a: F-M6-1 /compliance expandida, F-M6-2 PrestadorRegulado em uso (só
+schema), F-M6-3 screening OFAC/PEP (inexistente), F-M6-4 /lgpd , F-M6-5 /admin/compliance , F-M6-6 parecer
+jurídico, F-M6-7 política de risco.
+Objet ivo. Levar /compliance (e o footer regulatório) de declaração para evidência: prestadores nominais com link para
+registro CVM, parecer jurídico publicado, política de KYC/AML detalhada, e monitoring contínuo (OFAC/PEP).
+Dependências. M0. Encadeada com decisões de M3 (FIDC formal).
+Fluxos cobert os (mockup §6 — Compliance).
+Regulação: links para registros CVM, BACEN, parecer jurídico.
+Custódia: prestador nominal + comprovante.
+Administrador fiduciário + auditor: nomes + links.
+Controles on-chain: política de clawback (já existe em /politica-clawback ).
+Monitoring contínuo: OFAC/PEP/sanctions screening.
+Feat ures.
+F-M6-1: Página /compliance expandida (atualmente apenas /politica-clawback ).
+F-M6-2: Schema PrestadorRegulado (administrador fiduciário, custodiante, auditor, agência de rating, anchor) com
+nome , cnpj , numeroRegistroCVM , urlVerificacao .
+F-M6-3: Worker semanal de screening OFAC/PEP em base de investidores + cedentes. Disparo de alerta humano em hit.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	3 1
+
+-- 31 of 72 --
+
+F-M6-4: Política de privacidade LGPD + página /lgpd com formulário de direitos do titular.
+F-M6-5: Dashboard interno /admin/compliance com fila de alertas (KYC pendente, OFAC hit, suitability vencida).
+F-M6-6: Parecer jurídico CVM 175 em Vercel Blob público.
+F-M6-7: Política de gestão de riscos publicada (waterfall, classes, hipóteses de clawback).
+Aceit es.
+1. /compliance mostra 4 pilares com prestadores nominais (links externos verificáveis).
+2. Screening OFAC roda semanalmente; teste em staging valida hit-rate em lista mockada.
+3. Política LGPD acessível em todas as páginas (link no footer); formulário /lgpd recebe e roteia para DPO.
+4. Admin dashboard mostra fila de alertas em tempo real; ação manual gera EventoAudit.COMPLIANCE_REVIEW .
+5. Parecer jurídico tem versão + hash registrado on-chain.
+6. Política de gestão de riscos publicada; menciona explicitamente waterfall, hipóteses de clawback, custodiante, e regime de
+KYC.
+7. Lighthouse a11y ≥ 95 em /compliance e /lgpd (linha-base PRODUCT.md).
+Riscos. Contratação de prestadores externos (administrador fiduciário, custodiante, auditor Big Four) tem tempo de fechamento
+≥ 3 meses cada. M6 pode entrar com prestadores "intent" se ainda não contratados, mas isso degrada o valor da página.
+M7 — Soroban Waterfall (Smart contract de distribuição) · N Ã O I N I C I A D O NÃO INICIADO
+Implement ado: apenas o gate — flag SOROBAN_WATERFALL consumida em /api/pool/summary (seleciona
+navSource , inerte) + campo NavSnapshot.publishedTxHash . Falt a: tudo — F-M7-1 waterfall.rs , F-M7-2
+nav_oracle.rs (zero arquivos .rs ), F-M7-3 auditoria externa, F-M7-4 test suite. Waterfall hoje é Postgres ( pool.ts ).
+Objet ivo. Substituir cálculo de waterfall em Postgres ( lib/services/pool.ts ) por contrato Soroban auditável. Atender o
+claim do mockup: "Estrutura FIDC sob CVM 175 · Waterfall de distribuição via Soroban".
+Dependências. M5 (NAV snapshot estável), M3 (classes em produção).
+Fluxos cobert os.
+Cada janela de liquidez ou evento de distribuição executa contrato Soroban que valida e propaga payments.
+NavSnapshot diário publicado via Soroban oracle (escritor: issuer Fireblocks multisig).
+Auditoria pública via Stellar Expert mostra contrato + execuções.
+Feat ures.
+F-M7-1: Contrato waterfall.rs em Soroban com lógica:
+1. Deduz mgmt fee pro-rata.
+2. Paga yield Sênior até atingir CDI+x% / SOFR+y%.
+3. Aloca performance fee 20% sobre excedente para Plina.
+4. Resto vai para Subordinada.
+F-M7-2: Contrato nav_oracle.rs com slot diário (write-once por data, escritor = issuer multisig).
+F-M7-3: Auditoria formal do código Soroban por firma externa (custo: ~US$ 30-50k).
+F-M7-4: Test suite Mollusk ou SVM para contratos.
+F-M7-5: UI /pool linka para endereço dos contratos no Stellar Expert.
+F-M7-6: Migração: backfill de NavSnapshot histórico para oracle (com label "histórico, não validado on-chain").
+Aceit es.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	3 2
+
+-- 32 of 72 --
+
+1. Contrato waterfall.rs deployed em mainnet; primeiro execution lookup em Stellar Expert.
+2. Auditoria externa concluída sem findings críticos; relatório publicado.
+3. Cálculo de waterfall produz mesmo resultado que lib/services/pool.ts para o mesmo input (diff test em CI por 30
+dias antes do cutover).
+4. Cron diário publica NavSnapshot via oracle (não mais memo-hash).
+5. EventoAudit.WATERFALL_EXECUTADO registra cada execução com stellarTxHash do contrato.
+6. Test suite Soroban tem ≥ 90% coverage do contrato.
+Riscos. Soroban smart contracts são código com superfície de risco. Auditoria externa é não-negociável. CTO (Thais) tem
+expertise em Soroban — mas alocação de tempo precisa ser bloqueada para isso (estimativa: 6-10 semanas de eng + 4-6
+semanas de auditoria).
+M8 — Observabilidade & Ops (Reporting, alertas, NAV diário, runbooks) · PA R C I A L
+MÍNIMO
+Implement ado: F-M8-1 OTEL scaffold ( instrumentation.ts ) + lib/observability/tracer.ts + spans
+stellar.submit / etherfuse.request (via Fase 1 M0), /admin (painel operacional), rate-limit (Upstash), alarme de
+saldo funder+issuer+dist, runbooks em docs/runbooks/ . Falt a: F-M8-2 /admin/ops , F-M8-3 alertas
+(PagerDuty/Opsgenie), F-M8-4 reporting mensal por email, F-M8-6 status page, F-M8-7 métricas de UX.
+Objet ivo. Suportar mainnet 24/7 com observability de produção, alertas acionáveis e runbooks de incidente.
+Dependências. M0.
+Fluxos cobert os.
+Logs estruturados de toda operação Stellar / Etherfuse / DocuSign / Fireblocks.
+Métricas: latência, error rate, AUM, NAV, alertas de saldo issuer/distributor/funder.
+Reporting mensal automatizado para investidores (NAV, posições, fees, eventos).
+Runbooks: clawback, pause emissão, rotate Fireblocks, incident response.
+Feat ures.
+F-M8-1: OpenTelemetry em todas as integrações externas; traces visíveis em Datadog/equivalente.
+F-M8-2: Dashboard ops em /admin/ops com: AUM, NAV diário, saldo issuer/dist/funder, transações pendentes, queue de
+DocuSign/Etherfuse/PSP.
+F-M8-3: Alertas configuráveis (PagerDuty/Opsgenie): saldo issuer < X, error rate > Y, polling Etherfuse stuck > Z.
+F-M8-4: Reporting mensal por email aos investidores (extrato + NAV history + lista de eventos).
+F-M8-5: Runbooks publicados em docs/runbooks/ :
+Clawback execution (com checklist legal).
+Pause emissão (toggle Edge Config + invalidate cache).
+Rotate Fireblocks key.
+DocuSign provider down (fallback manual).
+Etherfuse stuck (cancellation + refund flow).
+F-M8-6: Status page público (uptime, manutenções programadas).
+F-M8-7: Métricas de UX em /vender e /comprar : TTFB, conversão por etapa, drop-off.
+Aceit es.
+1. Trace de uma /api/investidor/buy/onramp/create aparece em Datadog mostrando spans Etherfuse + Stellar.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	3 3
+
+-- 33 of 72 --
+
+2. Alerta de saldo issuer dispara em < 5 min do threshold; test fire em staging.
+3. Reporting mensal enviado no dia 5 de cada mês; teste fixture valida formato + valores.
+4. Runbook de clawback executado em staging em < 10 min (drill).
+5. Status page publicado em status.plina.finance com SLA documentado.
+6. Métricas UX visíveis em dashboard; queries SQL documentadas para conversão por etapa.
+Riscos. Custo de observability tier-1 (Datadog) é significativo. Alternativa: Vercel Analytics + open-source stack. Definir budget
+com CEO.
+M9 — Mainnet Cutover (Coordenação final) · N Ã O I N I C I A D O PREPARAÇÃO
+Implement ado: F-M9-3 flag MAINNET_ENABLED + mainnetCutoverGuard() (503 nas rotas mainnet sensíveis), F-M9-1
+docs/runbooks/mainnet-cutover.md . Falt a: execução do checklist 50+, F-M9-2 Vercel Rolling Releases (canary), F-
+M9-4 comunicado CVM, F-M9-5 email aos LOI. Operacional/futuro.
+Objet ivo. Trocar STELLAR_NETWORK=public em produção, com checklist de pre-launch executado, freeze de mudanças, e
+capacidade de rollback rápido se necessário.
+Dependências. M0 + M1 + M3 + M5 + M6 + M8 (M2, M4, M7 podem rodar pós-cutover).
+Fluxos cobert os.
+Pre-launch checklist (regulatório, técnico, ops, comunicação).
+Cutover gradual via Vercel Rolling Releases (canary 10% → 50% → 100%).
+Freeze de 2 semanas após cutover.
+Comunicação (CVM, parceiros, investidores LOI).
+Feat ures.
+F-M9-1: Pre-launch checklist em docs/runbooks/mainnet-cutover.md com 50+ itens.
+F-M9-2: Vercel Rolling Releases configurado para canary deployment.
+F-M9-3: Feature flags MAINNET_ENABLED controla cutover; rollback é toggle off + Vercel rollback.
+F-M9-4: Comunicado formal CVM (carta) registrando início de operação.
+F-M9-5: Email aos investidores LOI com link para onboarding mainnet.
+Aceit es.
+1. Checklist 100% executado e assinado por CEO + CTO + jurídico.
+2. Canary 10% roda 48h sem incident; expande para 50% por 48h; full em 24h.
+3. Rollback testado em staging: toggle MAINNET_ENABLED=false reverte para testnet em < 5 min.
+4. Carta CVM enviada e acknowledgment recebido.
+5. Primeiro investidor LOI completa onboarding mainnet com sucesso (success criterion declarado).
+Riscos. Cutover prematuro é risco existencial — falha visível mata o produto. Critério de "ready": 2 administ radoras
+int egradas (M1), 3 prest adores f ormais cont rat ados (M6), 1 LOI inst it ucional assinado (pitch Fase 1 marco), 30 dias
+de t est net shadow-t est sem incident crít ico.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	3 4
+
+-- 34 of 72 --
+
+6. Ordem de execução sugerida
+Trilha A (regulat ório-bloqueant e, longo lead t ime): iniciar imediatamente em paralelo.
+Contratação de administrador fiduciário, custodiante, auditor Big Four (M6).
+Conta Fireblocks + onboarding KYB (M0).
+Conta DocuSign empresarial + e-CPF Plina (M1).
+Acordos B2B com primeira administradora (M1.A).
+Parecer jurídico CVM 175 finalizado (pitch Fase 0).
+Trilha B (engenharia, sequenciada):
+1. M0 — Foundat ion (4-6 semanas)
+2. M1 — Vender produção (6-8 semanas; bloqueado por DocuSign + PSP onboarding)
+3. M3 — Invest ir BR + M5 — PLINA-RF (paralelos, 6-8 semanas cada)
+4. M2 — Comprar produção (4 semanas; reusa M1)
+5. M6 — Compliance (3-4 semanas; bloqueado por trilha A)
+6. M8 — Ops (contínuo durante 1-3)
+7. M9 — Cut over (2 semanas + freeze 2)
+8. M4 — Invest ir Int ernacional (pós-cutover; 6-8 semanas)
+9. M7 — Soroban Wat erf all (pós-cutover; 10-16 semanas)
+Est imat iva t ot al at é mainnet cut over (M9): ~5-6 meses se trilha A não atrasa.
+7. Princípios de execução
+1. Fricção assimét rica é não-negociável. / e /investir são institucionais (fricção alta = filtro de público). /vender e
+/comprar operam fricção mínima. Não tentar caber 4 vozes em uma página (PRODUCT.md §design-principle-5).
+2. Compliance é o produt o, não o disclaimer. CVM 175, FIDC, clawback aparecem em destaque editorial — não em
+letras pequenas no rodapé.
+3. Toda mudança de est ado relevant e grava EventoAudit . Sem exceção. Hash on-chain via memo é o trilho de
+auditoria.
+4. PII off -chain. On-chain apenas hash, endereço, t imest amp. LGPD não é discutível.
+5. Idempot ência em t odo writ e pat h. Padrão estabelecido (privyId, quote, xdrHash, walletProvisioning, liquidacaoSubmit).
+Mantido em código novo.
+6. Ant i-padrão de _type/_at/_ref no payload do invest idor. Já existe strip em /api/investidor/events (N-17).
+Manter.
+7. Sem promessas de rent abilidade. Todas as menções de yield são "alvo" ou "histórico"; disclaimer regulatório aplicado.
+8. Soroban ent ra onde Horizon não alcança. Waterfall (M7) e smart account social recovery (Fase 2). Resto é Horizon
+nativo.
+9. Edge Config para f eat ure flags. Cutover, kill-switches, anchor selection.
+10. Lint -aut h-guard é blocking em CI. Toda nova rota /api/investidor/** precisa de withAuth .
+P L I N A F I N A N C E · C O N F I D E N C I A L 	3 5
+
+-- 35 of 72 --
+
+8. Pendências para sponsor (CEO)
+Decisões que travam parte do roadmap e exigem alinhamento com Fabrício:
+1. Fase 0 soft -launch sem FIDC f ormal? Respondida pelo one-page (04/08): a f ase 01 é operação privada
+sob a Lei 11.7 95, sem FIDC e sem invest idor t erceiro det endo PLINA-RF. M3 não espera a constituição do fundo
+— sai do caminho crítico de mainnet junto com M6. Restam duas perguntas ao CEO, em DECISOES-CEO.md §1: como o
+seed entra (equity ou compra de token) e se há LOI que precise alocar antes do fundo.
+2. Mix-alvo Sênior/Subordinada. Pitch sugere majoritariamente intl. Confirmar pesos para calibrar yield alvo.
+3. Cust ódia Fireblocks. Custo + tempo de onboarding KYB. Aprovar budget.
+4. Audit oria Soroban ext erna (M7 ). US$ 30-50k. Não-negociável tecnicamente, mas timing depende de mainnet ter
+volume justificável.
+5. Anchors int ernacionais (M4) — sequência. Começar com MoneyGram (US) é menor risco. Confirmar.
+6. St at us page público + report ing t ransparent e. Pitch fala em transparência total. Confirmar que NAV, AUM, eventos
+são públicos desde o cutover.
+9. Apêndice — Mapa de referências
+D O C UME N T O 	C O N T E ÚD O
+Plina_Finance_Pitch.md 	Pitch v1.0 — visão, mercado, time, roadmap, captação
+PRODUCT.md 	Personas, brand, princípios de design, accessibility
+DESIGN.md 	Design tokens, vibe terminal-financeiro
+ONBOARDING.md 	Setup dev + convenções
+prisma/schema.prisma 	Schema canônico (estender, não substituir)
+docs/security-audit-*.md 	Bundles C/F/N — controles já implementados
+docs/2026-05-18-quote-binding-
+and-atomic-swap.md
+Plano de atomicidade de emissão
+docs/video-integracao-
+roteiro.md
+Documentação do path Etherfuse + Stellar
+docs/brand_guidelines.pdf 	Brand v1.0
+Mockup do fundador 	https://mockup-plina.lovable.app/
+Whitepaper Plina 	/home/dalekthai/Documentos/Workspace/Plina/PlinaFinance-1.pdf
+(referenciado no schema)
+Fim do PRD v1.1. Próximo passo: confirmação do faseamento com o CEO ( DECISOES-CEO.md §1), depois quebra dos itens de
+fase 01 em épicos/issues no tracker.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	3 6
+
+-- 36 of 72 --
+
+D O C U M E N T O 0 4 · A R Q U I T E T U R A - A LV O
+Arquitetura-alvo — Plina
+O que é est e document o. A arquitetura de destino: a stack que a Plina deve usar, o conjunto completo de rotas que o
+produto precisa ter, e os contratos transversais que toda rota nova deve respeitar. É o alvo, não o retrato — para o estado atual
+veja docs/DOCUMENTACAO-TECNICA.md ; para o plano por fase, docs/PRD-plina-v1.md .
+Dat a: 2026-08-18 · Owner: CTO (Thais) · Sponsor: CEO (Fabrício) Verificado cont ra o repo em: 2026-08-18 (branch
+chore/function-region-gru1 , commit 6cb17a4 )
+Escopo
+O alvo é o MVP em mainnet , e desde 2026-08-18 isso quer dizer a f ase 01 do one-page — não o produto inteiro. O
+faseamento do material do CEO ( One page - Plina Finance.pdf ) é a fonte da verdade de escopo, e ele fatia o produto
+assim:
+V E Í C ULO 	F I N A N C I A ME N T O Q UE M D E T É M PLINA-RF
+01 · MVP 	operação privada, Lei 11.795/2008 	equity dos sócios + seed só a Plina — ver decisão abaixo
+02 · Of ert a Privada FIDC sob CVM 175, com prestadores registrados investidores qualificados BR R$ 500k–10M · intl US$ 100k–5M
+03 · Of ert a Pública idem, após track record e rating 	varejo qualificado 	via plataformas parceiras
+As trilhas pós-cutover que já têm encaixe no código (M4 internacional, M7 Soroban) seguem no alvo, agora explicitamente como
+fase 02. Fora do alvo, por decisão registrada no PRD §0: varejo (fase 03), liquidez secundária P2P entre holders, e clawback
+discricionário.
+Vocabulário. Onde este documento diz "o fundo", leia "o veículo" — sociedade na fase 01, FIDC na fase 02. Onde diz FIDC ou
+CVM 175 com todas as letras, é requisito de fase 02.
+Legenda de status usada nas tabelas:
+S I G N I F I C A D O
+O K 	existe e está alinhado ao alvo
+A J U S T E 	existe, precisa de ajuste (descrito na coluna)
+N O V O 	não existe, precisa ser criado
+S A I 	existe e deve sair
+Decisão de escopo — quem detém PLINA-RF na fase 01
+Decidido em 2026-08-18 (CT O, sobre o one-page do CEO): ninguém além da Plina. O token é emitido em mainnet
+como registro auditável do pool próprio, comprado com caixa da empresa; /investir fica gated por flag até a fase 02.
+O argumento que decide é reversibilidade. A política de clawback tem quatro hipóteses fechadas (§8.1), e
+"distribuímos sob o
+regime errado" não é nenhuma delas — se um terceiro receber PLINA-RF na fase 01 e o enquadramento se mostrar
+equivocado, não existe caminho on-chain de volta. Ligar a distribuição depois é uma flag; recolher um token emitido não é.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	3 7
+
+-- 37 of 72 --
+
+A LT E RN AT I VA O Q UE E RA 	P O R Q UE N Ã O
+B · círculo
+rest rit o
+sócios e seed detêm PLINA-RF sob termo
+privado de cessão, sem termo de adesão a
+FIDC
+põe token de terceiro em mainnet antes de existir veículo que o legitime,
+com o problema de reversibilidade acima. Continua sendo a opção certa
+se o seed for estruturado como compra de token
+C · qualificados
+de f at o
+distribuição na fase 01 sob regime de
+dispensa de registro; a fase 02 passaria a
+diferir só pela existência do FIDC
+mesmo risco de B, com superfície maior: exige parecer jurídico sobre a
+dispensa antes do cutover e mantém M3 inteiro — suitability CVM 30 e
+ticket check — no caminho crítico de mainnet
+Razões de apoio, nenhuma delas decisiva sozinha:
+T ira o f ornecedor do caminho crít ico. O rail BRL do anchor não é GA (§2.3), e todo o caminho BRL → ativo-ponte →
+PLINARF depende dele. O motor de receita da fase 01 — /vender e /comprar , com PIX via PSP, DocuSign e
+administradora — não passa pelo anchor em nenhuma perna. A fase 01 vai a mainnet sem depender de uma data de GA que
+não é nossa.
+O regist ro on-chain é o ent regável. A fase 03 do one-page exige track record e rating, e isso não se produz
+retroativamente. Emitir com capital próprio e ninguém do outro lado é o que torna a fase 01 valiosa apesar de não distribuir
+nada.
+O que cust a. /investir fica pronto e desligado — M3 está quase inteiro, e é flag, não deleção. E a originação passa a ser
+limitada ao caixa próprio: se o ciclo de realização for mais lento que o previsto, a fase 01 trava por capital, não por engenharia.
+O que revert e est a decisão — qualquer um dos dois basta, e a chamada é do CEO:
+1. o seed ser estruturado como compra de t oken, e não como equity na Plina → força a opção B;
+2. LOI inst it ucional que precise alocar antes da constituição do FIDC → opção B, com parecer jurídico sobre o instrumento
+ant es da primeira emissão a terceiro, não depois.
+"Sem FIDC" não é "sem compliance". AML/COAF e LGPD não dependem do veículo: KYC nas duas pontas, trilha de
+auditoria, operadorId nomeado e o ciclo de vida do dado pessoal são requisito de fase 01. O que a fase 02 acrescenta são os
+prestadores registrados e a moldura da CVM 175 — não a obrigação de se comportar.
+1. Princípios invariantes
+Os seis primeiros já são doutrina do projeto e não se reabrem. Os três últimos são novos: nascem de gaps verificados no
+código em 2026-08-18 e passam a ter o mesmo peso.
+1. DB depois da chain. Horizon é a fonte da verdade de saldos; o Postgres é cache/registro. Gravação em banco só após
+sucesso on-chain.
+2. Hexagonal-lit e, com parcimônia. Serviço nunca importa SDK de terceiro direto — a chamada concreta vive em
+lib/integrations/<fornecedor>/ . Mas port a genérica só nasce com o segundo consumidor real (§7.2).
+Abstrair antes disso produz interface errada.
+3. Fail-closed. Flag ausente = desligada. Guard ausente = build quebra. E mainnet recusa assinar quando o mat erial de
+assinat ura é uma chave única vinda de env — o invariante é essa propriedade, não um fornecedor (§10.1).
+4. PII off -chain. On-chain só hash, endereço e timestamp. LGPD não é negociável.
+5. Idempot ência em t odo writ e pat h. Chave única explícita por operação.
+6. Toda t ransição de est ado grava EventoAudit com payloadHash ancorado on-chain via memo.hash .
+7. Todo at o administ rat ivo é at ribuível a uma pessoa. EventoAudit.operadorId vem do contexto de autenticação
+— nunca de uma constante nem de argumento que o handler pode esquecer. Auditoria que não atribui ato a pessoa não
+serve nem à operação privada da fase 01 nem ao FIDC da fase 02 — e é o registro da fase 01 que a fase 02 vai auditar.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	3 8
+
+-- 38 of 72 --
+
+8. O kill-swit ch cobre t odo moviment o de valor, por const rução. O guard de cutover é aplicado num choke point
+com lint bloqueante (§6.7), não chamada a chamada. Pausar a emissão tem de pausar de fato — e continuar pausando depois
+do próximo PR.
+9. Paridade ent rada/saída. Todo caminho de entrada tem caminho de saída simétrico, alcançável pela navegação. Fluxo de
+saída inacessível conta como fluxo inexistente.
+2. Stack-alvo
+2.1 Núcleo — decidido, não reabrir
+C A MA D A 	T E C N O LO G I A 	N O TA
+Framework 	Next .js 16 (App Router) + React 19 	SSR nas páginas indexáveis, CSR nos wiz ards. Ler
+node_modules/next/dist/docs/ antes de codar
+Linguagem 	T ypeScript strict
+Pacotes 	pnpm
+Estilo 	Tailwind v4 config-less 	tokens em @theme no app/globals.css
+Design 	design-system/plina-design-
+system.md
+autoritativo sobre UI; self-check §13 obrigatório
+ORM/DB 	Prisma 6 + Neon Post gres 	DATABASE_URL pooled, DIRECT_URL para migrations
+Blockchain 	St ellar ( @stellar/stellar-sdk
+13)
+flags regulatórias nativas; Soroban em M7
+Auth investidor Privy 	wallet embarcada, assinatura raw-hash Ed25519
+Plataforma 	Vercel — Fluid Compute, Node 24,
+região gru1
+gru1 co-loca function e Postgres em São Paulo; PII de KYC não sai do país
+Storage 	Vercel Blob privado 	prospecto, contratos, comprovantes
+Flags 	Vercel Edge Config 	canônico em prod, process.env como fallback
+Rate-limit 	Upst ash Redis 	serverless não tem memória compartilhada
+Observabilidade OpenTelemet ry 	exportador trocável
+Validação 	Z od 4 	.strict() em todo body
+Testes 	Vit est + Playwright
+2.2 A contratar — arquitetura pronta, fornecedor pendente
+F UN Ç Ã O 	A LV O 	O N D E V I V E N O C Ó D I G O 	BLO Q UE I O
+Custódia
+issuer/distributor
+f ase 01: guarda própria com
+mult isig nat ivo St ellar · fase
+02: decidir custodiante contra a
+exigência real do auditor do FIDC
+lib/stellar/signer.ts 	nenhum bloqueio na fase 01.
+Três opções em aberto para a
+fase 02 — ver §14.3,
+DECISOES-CEO.md §2 e
+ESTUDO-CUSTODIA.md
+Auth admin 	Clerk (ou Auth.js) com usuários
+nomeados + RBAC
+lib/auth/admin.ts 	nenhum técnico — é o item que
+destrava o princípio 7
+P L I N A F I N A N C E · C O N F I D E N C I A L 	3 9
+
+-- 39 of 72 --
+
+F UN Ç Ã O 	A LV O 	O N D E V I V E N O C Ó D I G O 	BLO Q UE I O
+Assinatura 	DocuSign empresarial + e-CPF lib/integrations/docusign/ 	contrato
+PIX 	PSP (Stark, BTG ou similar) 	lib/integrations/psp/ 	contrato
+Cessão B2B 	APIs das administ radoras
+(Embracon, Caixa, Bradesco,
+Porto, Itaú)
+lib/integrations/administradoras/ acordo comercial; fallback
+cartório digital
+Screening 	OFAC/UE/ONU + PEP BR 	lib/integrations/screening/
+N O V O
+fornecedor a definir
+Rating / auditoria
+/ custodiante
+Big Four, agência, custodiante
+CVM
+— 	comercial (M6)
+2.3 Anchor — Etherfuse
+Decidido: mant er o Et herf use — e o mot ivo é est rat égico, não t écnico. A Plina segue com o fornecedor para ser
+indicada por ele ao Build Award da SCF (Stellar Community Fund).
+Isso precisa estar escrito com essas palavras, porque a leitura técnica isolada é fraca — endpoints removidos, sunset vencido, API
+proprietária que não é SEP (abaixo), rail BRL ainda não-GA — e quem ler só os custos daqui a seis meses conclui que a decisão foi
+erro, ou "otimiza" a dependência para fora. Decisão sem mot ivo regist rado é decisão que o próximo revert e. O motivo
+opera noutro eixo, e é bom: a indicação vale mais que o atrito da migração.
+O que isso não muda. O rail BRL continua fora do caminho crítico da fase 01 (Escopo): a originação roda por PIX off-chain e
+não toca o fornecedor. Essa separação fica mais valiosa com a decisão estratégica, não menos — ela permite manter a relação
+sem que a relação defina a data de mainnet. Manter o fornecedor e depender do fornecedor são coisas diferentes.
+O que isso muda. A integração quebrada deixa de ser só dívida técnica. Se o fornecedor é quem indica, o estado da integração
+é o cartão de visitas com ele — e hoje ela chama três endpoints removidos e opera depois de um sunset vencido. O item 1 da §13
+ganhou um prazo comercial que não tinha.
+A t ensão a nomear ant es que alguém not e. A fase 01 não exercita o rail BRL em mainnet. Se a narrativa da indicação for
+"construído em Stellar sobre os trilhos do Etherfuse", a resposta pronta é: o KYC de pessoa f ísica é int egração viva na f ase
+01, e o caminho completo BRL → ativo-ponte → PLINARF é demonstrável ponta a ponta em t est net . A narrativa se sustenta —
+como argumento consciente, não como descoberta em conversa.
+A porta segue isolando o fornecedor (§7.1), mas o adaptador atual (SDK vendorizado com 7 patches PLINA-MOD-* ) está
+quebrado: usa endpoints cujo sunset foi 16/08/2026 e três que já foram removidos.
+AT E N Ç Ã O O rail BRL ainda não é GA. A documentação do fornecedor lista Brasil (BRL) como "Upcoming" — o único
+mercado live é o México (MXN). O fornecedor está construindo uma ramp USDC↔BRL; a Plina segue com TESOURO como
+ponte (§8.1), tratando o símbolo como configuração para não depender de qual dos dois vence. Data de GA e pricing para BR
+precisam ser confirmados por escrito antes de qualquer compromisso de mainnet. Plano de execução em PLANO-MIGRACAO-
+ANCHOR.md .
+E N D P O I N T US A D O H O J E 	S I T UA Ç Ã O N A A P I
+D O F O RN E C E D O R
+A LV O
+POST /ramp/agreements/electronic-
+signature
+removido 	assinatura acontece dentro do launch /idv
+POST /ramp/agreements/terms-and-
+conditions
+removido 	idem
+P L I N A F I N A N C E · C O N F I D E N C I A L 	4 0
+
+-- 40 of 72 --
+
+E N D P O I N T US A D O H O J E 	S I T UA Ç Ã O N A A P I
+D O F O RN E C E D O R
+A LV O
+POST /ramp/agreements/customer-
+agreement
+removido 	idem
+POST /ramp/onboarding-url 	sunset 16/08/2026 	criar org + launch /idv
+POST /ramp/customer/{id}/kyc 	sunset 16/08/2026 	POST /ramp/customer/{id}/verification
+POST
+/ramp/customer/{id}/kyc/documents
+deprecado, sem data POST .../verification/documents (multipart
+real, ordem explícita, resposta 202)
+GET /ramp/customer/{id}/kyc 	não deprecado 	manter
+POST /ramp/bank-account 	ativo 	validar contra POST /ramp/customer/{id}/bank-
+account , que é o caminho documentado
+Consequências para a arquitetura, além do conserto de chamadas:
+KYC deixa de ser síncrono. Toda submissão responde 202 (aceito, sendo aplicado) e o estado chega por webhook
+( kyc_updated , kyb_updated ). O produto precisa de rota de webhook, estado intermediário persistido e UI de espera —
+ver /api/webhooks/anchor na §4.
+Verificação é organizat ion-level, não per-wallet: Wallet.kycStatus saiu das respostas. O "customer" passa a ser uma
+organização personal cujo id nós geramos — esse UUID é o customer_id em todo o resto da API.
+Sempre há um passo hospedado. Três requisitos só podem ser cumpridos pelo cliente dentro do widget /idv , sem API
+equivalente: confirmação de e-mail, selfie de liveness e aceit e do cust omer agreement . O que se escolhe não é
+"hosted ou API", e sim quant o se pré-preenche por API ant es do launch.
+KYC (PF) vs KYB (PJ) — são produtos dif erentes
+C E D E N T E / C O MP RA D O R ( P F ) 	I N V E S T I D O R I N S T I T UC I O N A L ( PJ )
+Organiz ação personal 	business
+Verificação 	KYC — dados pessoais, documento de identidade,
+ocupação, comprovante de endereço, selfie,
+agreement
+KYB — contrato social, registro, certidões, estrutura societária,
+UBOs, procuração, demonstrações financeiras, origem de recursos,
+carta de informações corporativas
+Superfície 	/verification/* + launch /idv
+( scope: verification )
+launch /kyb ( scope: kyb , ?org=<id> ) — sem caminho
+programát ico
+Webhook 	kyc_updated 	kyb_updated
+Quem mais é
+verificado
+ninguém 	cada UBO e representante legal faz o KYC próprio; empresas-mãe
+recursivamente
+O patch PLINA-MOD-001 fixa accountType: 'business' para todo mundo. No alvo isso vira condicional pelo papel:
+cedente e comprador são personal ; investidor institucional é business e passa por KYB — um processo muito mais
+pesado, que precisa aparecer no roadshow como prazo, não como formulário.
+Recom endação de fluxo
+Um só desenho, nos dois funis: pré-preencher por API t udo o que a Plina já colet a, e lançar /idv só para o que
+sobra. Os passos ficam:
+P L I N A F I N A N C E · C O N F I D E N C I A L 	4 1
+
+-- 41 of 72 --
+
+1. POST /ramp/organization 	cria a org personal (id gerado por nós, userInfo.email obrigatório)
+2. POST .../verification 	dados pessoais → 202
+⤷ aguardar webhook kyc_updated (roteamento por país é assíncrono; enviar antes dá 409)
+3. GET .../kyc?requirements=true lê o que ainda falta
+4. POST .../verification/documents multipart real (não base64) — só o que veio pending
+5. POST .../verification/questionnaire ocupação (o código de `industry` vem de
+GET /ramp/verification/occupations)
+6. launch /idv 	e-mail + selfie + agreement (requiresLaunch: true)
+7. webhook kyc_updated → approved
+Isso preserva o wizard sob o design system (a Plina já coleta nome, CPF e documentos desde o commit 029c41c ), evita pedir a
+mesma coisa duas vezes e ainda assim termina no widget — que é obrigatório. Para PJ, o passo 6 vira o launch /kyb .
+Pont o de at enção: os dados pessoais são cruzados com o documento enviado. Endereço, nome ou data de nascimento
+divergentes travam o cliente em revisão manual em vez de aprovar. O 202 nunca é prova de que o requisito foi satisfeito.
+O cont rat o é vendor-shaped, e isso est á declarado de propósit o. Organização personal / business , launch
+/idv , launch /kyb , webhooks kyc_updated — nenhum desses conceitos tem equivalente em SEP-12, SEP-24 ou SEP-
+38, que é como MoneyGram e Settle falam (PRD §2.4). A consequência a escrever agora, em vez de descobrir em M4: um
+anchor SEP não vai encaixar como adapt ador — vai f orçar re-derivar o cont rat o de Ramp quando a segunda
+implementação real chegar. É o argumento da §7.2 aplicado a este fornecedor, e é por isso que a §7.1 devolve Ramp para
+integração concreta até lá. O SEP-1 ( stellar.toml , §4.1) é outro assunto e segue correto.
+2.4 Multi-anchor (M4 — fase 02)
+A rampa passa a resolver por jurisdição: BR (fornecedor atual, PIX), US (MoneyGram), EU (Settle). Seleção via
+CUSTODY_PROVIDERS / INTL_INVESTOR_FLOW e Investidor.jurisdicao .
+É aqui que a port a Ramp nasce, e não antes (§7.1): é o momento em que existe a segunda implementação real. Contar com
+re-derivar o contrato nesse ponto é o plano, não o acidente — os fornecedores regionais falam SEP e o atual não (§2.3). O Kyc ,
+esse já é porta na fase 01, e em M4 ganha os provedores regionais como segundo adaptador.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	4 2
+
+-- 42 of 72 --
+
+3. Topologia
+┌──────────────────────────────────┐
+proxy.ts ───────▶│ Vercel · Next 16 · Fluid · gru1 │
+(i18n, locale) │ App Router · Server Actions 	│
+└──┬─────────┬─────────┬───────────┘
+│ 	│ 	│
+┌──────────────┘ 	│ 	└──────────────┐
+▼ 	▼ 	▼
+┌───────────┐ 	┌──────────────────┐ 	┌────────────────┐
+│ Neon │ 	│ Portas (lib/) │ 	│ Stellar 	│
+│ Postgres │ 	│ Kyc 	│ 	│ Horizon 	│
+│ (cache + │ 	│ StellarSigner │─────▶│ + Soroban(M7) │
+│ trilha) │ 	│ Signature 	│ 	└────────────────┘
+└───────────┘ 	│ Payments 	│
+│ Administradora │ 	┌────────────────┐
+┌───────────┐ 	│ Screening 	│◀────▶│ Fornecedores │
+│ Upstash │ 	└──────────────────┘ 	│ externos 	│
+│ (rate) │ 	▲ 	└────────────────┘
+└───────────┘ 	│ 	│
+└── webhooks ────────────┘
+Regra de dependência: app/ → lib/services/ → portas. Nunca app/ → adaptador concreto.
+Estrutura de módulos
+lib/
+services/ 	regras de negócio (pessoa, investidor, originacao, realizacao,
+tokenizacao, liquidacao, pool, holdings, cessao-comprador,
+nav 🆕, screening 🆕, janela-liquidez 🆕)
+anchors/ 	porta `Kyc` + adaptadores (§7.1). A rampa sai daqui e volta a ser
+integração concreta em `integrations/` até M4
+stellar/ 	Horizon, XDR, signer, audit, fee, classes
+integrations/ docusign · psp · administradoras · fireblocks · screening 🆕
+auth/ 	admin (Clerk 🔧) + RBAC 🆕 + CSRF
+wallet/ 	auth-guard (investidor) · pessoa-auth (multi-papel)
+api/ 	envelope, erros, with-api
+env/ 	flags, feature-gates, lab
+audit/ email/ comprovante/ rate-limit/ observability/ format/ http/ i18n/
+P L I N A F I N A N C E · C O N F I D E N C I A L 	4 3
+
+-- 43 of 72 --
+
+4. Mapa de rotas
+4.1 Páginas públicas
+RO TA 	P ÚBLI C O 	S TAT US N O TA
+/ 	investidor
+institucional
+O K 	i18n pt-BR/EN via proxy.ts
+/pool 	qualquer um,
+auditoria
+A J U S T E falta histórico de NAV e link para eventos
+/pool/eventos 	auditoria 	N O V O eventos on-chain do fundo, links Stellar Expert (M5)
+/cotas , /cotas/[id] 	comprador 	O K 	vitrine + diligência
+/politica-clawback 	qualquer um 	O K 	as 4 hipóteses
+/compliance 	investidor, regulador N O V O prestadores nominais, CVM 175, pareceres (M6) — f ase 02
+/lgpd 	qualquer um 	N O V O política de dados, DPO e canal de pedido do titular — arquitetura
+em §9.8 (M6)
+/prospecto 	investidor 	N O V O ficha técnica + PDF no Blob (M5)
+/.well-
+known/stellar.toml
+SEP-1 	O K 	único CORS * do sistema, correto
+4.2 Funil de baixa fricção
+RO TA 	S TAT US N O TA
+/vender 	O K 	wiz ard do cedente
+/vender/lead 	O K
+/vender/acompanhar/[leadId] 	O K 	leadId é token opaco, sem auth por design
+/comprar 	O K 	calculadora + funil
+/comprar/lead 	O K
+/comprar/reservar 	A J U S T E consolidar com /comprar/reserva — hoje são duas rotas quase
+idênticas
+/comprar/[reservaId]/comprovante O K
+/cessao/[id]/comprovante 	O K
+4.3 Área autenticada
+RO TA 	S TAT US 	N O TA
+/entrar 	O K 	login dedicado, roteia por ?next=
+/painel 	A J U S T E 	hub pós-login role-aware; precisa expor o caminho de saída
+/investir 	A J U S T E 	wiz ard completo; falta UI de suitability e seletor de jurisdição (M4)
+/minha-posicao 	A J U S T E 	987 linhas com o resgate embutido; extrair o resgate para /sacar
+/sacar 	A J U S T E 	órf ã — nenhuma navegação leva a ela. Vira o caminho único de saída
+P L I N A F I N A N C E · C O N F I D E N C I A L 	4 4
+
+-- 44 of 72 --
+
+RO TA 	S TAT US 	N O TA
+/lab 	A J U S T E 	página sem gate; aplicar isLabEnabled() como já é feito nas APIs
+Decisão de arquit et ura — caminho de saída único. Hoje existem duas metades desconectadas: /minha-posicao
+liquida PLINARF contra o distributor pagando
+BRL fictício ( lib/services/liquidacao.ts:7 ), e /sacar faz o off-ramp
+real TESOURO→BRL via PIX sem estar linkada. O alvo é um fluxo só, espelho da entrada:
+entrada: BRL ──PIX──▶ TESOURO ──swap atômico──▶ PLINARF
+saída: PLINARF ──resgate──▶ TESOURO ──off-ramp PIX──▶ BRL
+/minha-posicao mostra posição e abre /sacar ; /sacar conduz as duas pernas em um wizard, respeitando
+JanelaLiquidez quando a janela existir (M5).
+4.4 Painel administrativo
+O painel tem superfície, identidade e fluxo de aprovação próprios, então vive inteiro na §5 — páginas, Server Actions e as rotas
+de API que sobram. Descrever metade dele aqui e metade lá é como as duas versões divergem.
+4.5 API — investidor
+Sob withAuth / requireInvestidor , salvo onde a tabela indicar — onboard é a única exceção, e é pública por
+construção: é ela que cria o Investidor que as demais exigem. VA L O R classifica a rota como movimentadora de valor —
+não é instrução para adicionar chamada manual. Ver §6.7.
+RO TA 	S TAT US N O TA
+POST /api/investidor/onboard 	O K 	pública por design; valida token Privy no handler
+POST /api/investidor/quote 	O K
+VA L O R
+aplica ticket mínimo ( ticketMinimoFor ,
+lib/config/suitability.ts:34 ). O t et o e o limite
+de concentração por cotista são fase 02 e ainda não existem em
+código (§9.3)
+POST /api/investidor/suitability 	O K 	CVM 30
+POST /api/investidor/entidade 	O K
+POST /api/investidor/bank-
+account/register
+A J U S T E migrar para o endpoint per-customer do anchor
+GET /api/investidor/events 	O K 	strip de chaves _
+.../buy/trust-bridge/{build,submit} 	A J U S T E
+VA L O R
+renomeada de trust-tesouro ; ativo por configuração
+.../buy/trust-plinarf/{build,submit} 	O K
+VA L O R
+.../buy/onramp/create 	O K
+VA L O R
+.../buy/onramp/status 	O K 	passará a ser complementado por webhook
+.../buy/onramp/sandbox-pay 	O K 	403 fora de sandbox
+.../buy/claim/{build,submit} 	A J U S T E
+VA L O R
+renovar XDR expirado antes de submeter
+P L I N A F I N A N C E · C O N F I D E N C I A L 	4 5
+
+-- 45 of 72 --
+
+RO TA 	S TAT US N O TA
+.../buy/swap/build 	O K
+VA L O R
+.../buy/swap/submit 	O K
+VA L O R
+é a emissão de f at o — hoje fora do guard; o choke point
+resolve
+.../buy/offramp/{create,status,signing-
+tx,submit}
+A J U S T E
+VA L O R
+pré-check de carteira antes de criar a ordem
+.../liquidar/{quote,build,submit} 	A J U S T E
+VA L O R
+pagamento hoje é BRL fictício — ver §4.3
+GET /api/investidor/kyc/status 	N O V O 	estado do KYC assíncrono (pós-webhook)
+4.6 API — conta, vender, comprar
+RO TA 	A UT H 	S TAT US
+GET /api/conta/me 	Pessoa 	O K
+POST /api/conta/kyc 	Pessoa 	A J U S T E migrar para /verification +
+assíncrono
+POST /api/vender/simular 	público 	O K
+POST /api/vender/lead 	Pessoa + KYC 	O K
+POST /api/vender/aceitar-oferta 	Pessoa + KYC 	O K
+GET /api/comprar/cotas 	Pessoa 	O K
+GET
+/api/comprar/cota/[id]/diligencia
+Pessoa 	O K
+POST /api/comprar/lead 	público 	O K BotID + rate-limit
+POST /api/comprar/reserva 	Pessoa 	O K
+POST /api/comprar/reservar 	Pessoa 	S A I duplicata de /reserva
+POST /api/comprar/kyc 	Pessoa 	A J U S T E idem /conta/kyc
+POST /api/comprar/cessao 	Pessoa + KYC +
+ownership
+O K
+POST /api/comprar/confirmar 	Pessoa + KYC +
+ownership
+O K VA L O R
+4.7 API — admin
+Ver §5.2. Resumo: mutação de painel é Server Action; sobram três rotas de API, todas com consumidor externo ao painel.
+4.8 API — webhooks, crons e plataforma
+Faltam por inteiro hoje. São pré-requisito de mainnet: sem eles, o sistema depende de polling para estado que os fornecedores
+entregam por push, e não há fechamento diário.
+RO TA 	S TAT US N O TA
+POST /api/webhooks/anchor N O V O 	kyc_updated , kyb_updated , ordens. Verificação de assinatura obrigatória
+P L I N A F I N A N C E · C O N F I D E N C I A L 	4 6
+
+-- 46 of 72 --
+
+RO TA 	S TAT US N O TA
+POST
+/api/webhooks/docusign
+N O V O envelope assinado → Cessao.ASSINADA + hash on-chain
+POST /api/webhooks/psp 	N O V O confirmação de PIX (entrada e saída)
+POST /api/cron/nav-
+snapshot
+N O V O 18:00 BRT, grava NavSnapshot e ancora o hash (M5)
+POST /api/cron/reservas-
+expiradas
+N O V O expira reservas de 72h
+POST /api/cron/estoque-
+status
+N O V O recalcula VERDE/AMARELO/VERMELHO/BAIXA
+POST /api/cron/screening-
+recheck
+N O V O re-screening trimestral
+POST
+/api/cron/fechamento-
+mensal
+N O V O fechamento contábil do mês — posição, caixa e taxa apropriada, a partir de
+MovimentoFundo + NavSnapshot (§8.2). Fase 01, porque alimenta o track
+record e a contabilidade. O relatório ao investidor que se apoia nele é fase 02
+GET /api/pool/summary 	A J U S T E aplicar publicLimiter
+GET
+/api/pool/nav/historico
+N O V O série do NavSnapshot (M5)
+GET /api/health 	N O V O liveness para status page
+/api/lab/* 	O K 	gated por LAB_ENABLED , 404 em mainnet
+Crons autenticados por CRON_SECRET (header), nunca acessíveis publicamente.
+5. Painel administrativo
+O painel não é acessório: o modelo de negócio é operado à mão — originar cota, conduzir funil, liquidar, executar clawback. Ele
+é a interface do veículo, e é onde a operação encosta no dinheiro. Esta seção é a única descrição dele: páginas, superfície de
+mutação, identidade e o fluxo de aprovação.
+Hoje é uma página única de 598 linhas com seis seções, autenticada por senha compartilhada.
+5.1 Páginas
+Route group com layout próprio, navegação lateral e visibilidade por papel.
+RO TA 	S TAT US C O N T E ÚD O 	PA P E L MÍ N I MO
+/admin 	A J U S T E dashboard: NAV, tokens vivos, caixa, concentração, alertas LEITURA
+/admin/originacao 	A J U S T E incorporar cota, validação legal, estoque 	OPERADOR
+/admin/vendedores 	A J U S T E pipeline do cedente (oferta → cessão → PIX →
+incorporação)
+OPERADOR
+/admin/compradores A J U S T E pipeline do comprador (reserva → cessão → realiz ação) 	OPERADOR
+/admin/investidores A J U S T E posições, trustlines, suitability, revogação 	OPERADOR
+P L I N A F I N A N C E · C O N F I D E N C I A L 	4 7
+
+-- 47 of 72 --
+
+RO TA 	S TAT US C O N T E ÚD O 	PA P E L MÍ N I MO
+/admin/clawback 	A J U S T E solicitação e aprovação (§5.4) — hoje é um form de um
+clique
+OPERADOR solicita ·
+APROVADOR aprova
+/admin/compliance 	N O V O screening OFAC/PEP, prestadores regulados, alertas (M6) OPERADOR
+/admin/ops 	N O V O saúde das integrações, saldos, crons, incidentes — e as
+ações de reparo da §6 .8
+LEITURA para ver · OPERADOR
+para reparar
+/admin/leads 	N O V O leads EOI da waitlist + export CSV — hoje o endpoint
+existe sem UI
+LEITURA
+/admin/audit 	A J U S T E trilha filtrável por operador, ação, período 	LEITURA
+O painel é pt -BR fixo (§12.2).
+5.2 Superfície única de mutação
+Hoje convivem Server Actions ( ensureAuth() , só cookie) e rotas API ( isAdminAuthenticated + requireAdminCsrf )
+mutando o mesmo domínio com contratos de segurança diferentes. E as duas rotas API são multiplexadores por string action ,
+o que destoa do resto do código.
+Regra: mutação disparada por form do painel é Server Act ion. Rota de API existe apenas onde o consumidor não é o próprio
+painel. Um caminho, um guard.
+Todas as actions com requireAdmin(papel) , operadorId vindo do contexto de autenticação (§6.7) e revalidatePath
+do que foi afetado. VA L O R marca a action que move valor: ela declara classificação de cutover como qualquer rota, e o lint da
+§6.7 varre este arquivo junto com app/api/** . A proteção CSRF nativa do Next 16 para Server Actions substitui o header x-
+plina-admin manual.
+S E RV E R A C T I O N 	S TAT US S UBS T I T UI
+incorporarCotaAction · atualizarStatusCotaAction A J U S T E originacao : incorporar-cota , status
+registrarValidacaoLegalAction 	O K 	laudo + hash on-chain
+gerarOfertaAction · registrarCessaoAction ·
+executarPagamentoAction VA L O R
+A J U S T E originacao : as três actions restantes; em
+mainnet o pagamento chama a integração de PIX
+cancelarReservaAction · executarRealizacaoAction
+VA L O R
+A J U S T E realizacao
+solicitarClawbackAction · aprovarClawbackAction 	N O V O fluxo da §5.4
+repararOperacaoAction VA L O R 	N O V O retoma a perna travada de uma saga (§6.8); grava
+estado de origem no EventoAudit
+revisarScreeningAction 	N O V O M6
+RO TA D E A P I 	S TAT US 	C O N S UMI D O R
+GET /api/admin/leads-eoi 	O K 	download de CSV pelo browser
+GET /api/admin/ops/health 	N O V O 	monitoração externa / status page
+POST /api/admin/logout 	O K 	form de logout
+5.3 Identidade e RBAC
+Senha única compartilhada sai. Entram usuários nomeados (Clerk) e t rês papéis:
+P L I N A F I N A N C E · C O N F I D E N C I A L 	4 8
+
+-- 48 of 72 --
+
+PA P E L 	P O D E
+OPERADOR 	originar cota, conduz ir funis, registrar cessão e pagamento, revisar screening, solicit ar clawback
+APROVADOR 	tudo do operador, mais aprovar clawback (§5.4)
+LEITURA 	dashboards e trilha, sem mutação
+Todo handler recebe a identidade e propaga para EventoAudit.operadorId . A constante 'admin-panel' , hoje presente
+em nove pontos de mutação, deixa de existir.
+Por que t rês e não cinco. O requisito real é segregação de f unções no clawback — duas pessoas distintas assinando
+um ato irreversível. Isso se satisfaz com APROVADOR . Papéis funcionais ( COMPLIANCE , JURIDICO , CTO ) descrevem cargos
+que hoje são a mesma pessoa; modelar cargo antes de existir gente para ocupá-lo produz um modelo de permissão caro de
+migrar quando errado, e fácil de expandir quando o time crescer. A qualificação do aprovador (jurídico ou CTO) é política
+registrada em AprovacaoClawback.papel e conferida no runbook, não gate de código.
+5.4 Dupla aprovação de clawback
+Os docs e o runbooks/clawback.md afirmam que existe; o código não tem nada disso. O alvo:
+solicitar ──▶ PENDENTE_APROVACAO ──▶ aprovada por 2 pessoas distintas
+│ 	(motivo + fundamentoUrl 	dois `APROVADOR` distintos;
+│ 	+ hash do documento) 	solicitante não pode aprovar)
+│ 	│
+└─ expira em 72h sem 2ª aprovação 	▼
+executa on-chain · irreversível
+EventoAudit.CLAWBACK_EXECUTADO
+com os dois aprovadores nomeados
+Modelo novo SolicitacaoClawback (motivo do enum MotivoClawback , fundamento, solicitante, aprovadores, status). O
+solicitante não pode ser um dos aprovadores.
+6. Contratos transversais
+6.1 Matriz de autenticação
+ME C A N I S MO 	E S C O P O 	I MP LE ME N TA Ç Ã O
+withAuth / requireInvestidor 	/api/investidor/** 	Bearer Privy → Investidor
+withPessoaAuth / requirePessoa 	conta, vender, comprar 	Bearer Privy → Pessoa multi-papel
+requireAdmin(papel) N O V O 	/admin/** ,
+/api/admin/**
+sessão Clerk + papel + CSRF
+verifyWebhookSignature(fornecedor)
+N O V O
+/api/webhooks/** 	HMAC do fornecedor; rejeita sem assinatura
+válida
+requireCronSecret N O V O 	/api/cron/** 	header secreto
+público 	5 rotas, allowlist explícita 	scripts/lint/require-auth-
+guard.mjs
+P L I N A F I N A N C E · C O N F I D E N C I A L 	4 9
+
+-- 49 of 72 --
+
+O lint de pré-build já cobre t odo app/api/** com allowlist justificada — mantê-lo assim, estendê-lo aos novos marcadores
+( requireAdmin , webhook, cron) e às Server Actions do painel, que hoje ficam fora da varredura (§6.7).
+6.2 Envelope e erros
+{ data, error: null } / { data: null, error: { code, message, requestId } } , header x-request-id
+em toda resposta, cliente discrimina por error.code . Adoção hoje é incremental — no alvo é universal, via
+lib/api/with-api.ts .
+6.3 Idempotência
+Toda operação que move valor ou cria registro externo declara chave única: privyId , Quote.submitXdrHash ,
+LiquidacaoSubmit.xdrHash , WalletProvisioning , OnRampOrder.quoteId , CessaoComprador.reservaId , e
+— novos — WebhookEvento.eventoId (dedupe de entrega repetida) e SolicitacaoClawback.id .
+6.4 Rate-limit
+leadLimiter (5/60s) · publicLimiter (20/60s) · sensitiveAuthLimiter (10/60s) · adminLoginLimiter
+(5/15min). No alvo, pool/summary e comprovante entram no publicLimiter , e webhooks ganham limiter próprio por
+fornecedor.
+Limit e por pessoa não é rat e-limit , e não pode virar um. Rate-limit protege infraestrutura e conta por IP e rota; o que a
+fase 01 precisa é limite por document o, que é regra de negócio e vive no serviço, com EventoAudit e chave de
+idempotência (§6.3). Trocar um pelo outro dá a sensação de proteção e nenhum efeito: quem tenta fraude troca de IP antes de
+trocar de CPF.
+Hoje não há onde apoiar essa regra. LeadComprador.documento é String? sem @unique e sem índice, e a única
+chave da tabela é email @unique — e-mail é trivial de variar. Os campos normalizados entram na §9.3;
+lib/format/parse-cpf.ts e parse-cnpj.ts já existem e são a base.
+E a pont a que import a na f ase 01 é a do cedent e, não a do comprador. É ali que sai dinheiro da Plina por PIX contra
+um direito creditório. LeadVendedor tem nome , email , cpf? e nenhum campo que ident ifique a cot a —
+administradora, grupo, número e valor de face não existem no funil; a cota só ganha identidade quando um operador a incorpora
+à mão. Sem isso não há como detectar a mesma cota oferecida duas vezes, nem ligar oferta a cota antes de pagar. A identidade
+lógica da cota no funil (§9.3) é pré-requisito do controle, não enfeite.
+6.5 Feature flags
+MAINNET_ENABLED (kill-switch) · M3_INSTITUTIONAL_GATING · INTL_INVESTOR_FLOW · CUSTODY_PROVIDERS ·
+SOROBAN_WATERFALL · BUYER_SELF_REALIZACAO · LAB_ENABLED . Canônicas no Edge Config, default false , fail-
+closed. Novas no alvo: ANCHOR_PROVIDER (seleção de adaptador) e SCREENING_ENABLED .
+6.6 Segurança de plataforma
+I T E M 	A LV O 	E S TA D O
+next sem CVE
+aberto
+linha 16.x corrigida 	A J U S T E hoje 16.2.4, CVE-2026-23870 aberto
+Headers de segurança CSP, X-Frame-Options, X-Content-Type-Options, Referrer-
+Policy
+N O V O next.config.ts sem
+headers()
+Comprovante PDF 	acesso vinculado ao dono ou token assinado com expiração A J U S T E hoje capability URL permanente
+WAF 	Vercel Firewall 	N O V O M0 Fase 2
+P L I N A F I N A N C E · C O N F I D E N C I A L 	5 0
+
+-- 50 of 72 --
+
+I T E M 	A LV O 	E S TA D O
+Secrets 	só server-side, custódia em mainnet 	O K
+6.7 O guard de cutover é um choke point
+Espalhar mainnetCutoverGuard() por vinte rotas é o padrão que produziu o estado atual — três rotas cobertas de quarenta e
+seis. Guard adicionado à mão é guard esquecido no próximo PR.
+O alvo repete a solução que já funciona no projeto para autenticação:
+1. Aplicação cent ral. O wrapper lib/api/with-api.ts recebe a classificação da rota e aplica o guard. Server Action
+equivalente recebe o mesmo tratamento via requireAdmin .
+2. Classificação declarada, não inferida: a rota declara se move valor. Ausência de declaração é erro, não default permissivo.
+3. Lint bloqueant e no prebuild , no mesmo molde do require-auth-guard.mjs : superfície mutante sem
+classificação quebra o build, com allowlist explícita e justificada.
+As duas superf ícies cont am. O lint de auth hoje varre app/api/** , mas a §5.2 move a mutação do painel para Server
+Actions — e duas delas movem dinheiro: executarPagamentoAction (que em mainnet chama o PSP) e
+executarRealizacaoAction . Server Action não vive sob app/api/** . Se o lint só olhar para lá, o princípio 8 fica falso
+justamente no caminho que a operação usa todo dia. O varredor cobre app/api/** e os módulos de Server Action
+( **/actions.ts ), e requireAdmin(papel) recebe a mesma classificação que o with-api .
+Trade-off aceito: perde-se granularidade fina por rota, que este produto não precisa. Ganha-se a propriedade de que o princípio 8
+cont inua verdadeiro sem ninguém lembrar dele.
+O mesmo raciocínio vale para o operadorId do princípio 7: se depender de cada handler passar a identidade, uma hora
+alguém não passa. Ele deve vir do contexto de autenticação.
+6.8 Operações de várias pernas e recuperação
+O princípio 1 diz em que ordem gravar. A §6.3 diz como não duplicar. Nenhum dos dois diz o que acontece quando a perna 3
+falha com a perna 2 já confirmada on-chain — e é exatamente aí que o dinheiro fica parado.
+Não é hipótese: a §11.2 já prevê
+"ordem de saída sem transação" como SEV1, e a §11.3 estabelece que a reconciliação nunca
+corrige sozinha. Ou seja, hoje o sistema detecta a operação travada, acorda alguém, e não oferece caminho de volta.
+Regra: t oda operação de mais de uma perna declara t rês coisas — estado intermediário persistido (enum no schema,
+nunca inferido por ausência de registro), classe de recuperação, e quem tem o botão. Fluxo sem as três não vai para mainnet.
+Três classes de recuperação, e só três:
+C LA S S E S I G N I F I C A D O 	Q UE M E X E C UTA
+Ret omável a perna é idempotente por chave já existente; reexecutar é seguro 	automático, com teto de tentativas e alerta depois
+Reparável precisa de decisão ou de dado novo (XDR expirado, carteira sem trustline) operador, por ação no painel
+Irreversível efeito on-chain consumado, não há desfaz er 	ninguém — só registro contábil e comunicação
+Onde cada fluxo pode parar
+Ent rada — compra de cot a. onramp/create → PIX pago → claim/{build,submit} → swap/{build,submit}
+P L I N A F I N A N C E · C O N F I D E N C I A L 	5 1
+
+-- 51 of 72 --
+
+FA LH A E N T RE 	O Q UE F I C A
+P E N D URA D O
+C LA S S E RE PA RO
+PIX confirmado e claim 	dinheiro entrou, investidor
+sem ativo
+retomável reclamar o claimable balance; a chave é o id do balance, repetir é
+seguro
+claim e swap 	investidor com ativo-ponte,
+sem cota
+reparável reexecutar o swap, regenerando o XDR se expirou. Não é perda: é
+posição parada no ativo errado
+dentro do swap 	nada 	— 	o swap é atômico por construção; as duas pernas passam ou
+nenhuma passa
+swap confirmado e
+gravação em banco
+chain certa, Postgres atrás retomável reprojetar a partir do Horiz on. Nunca reemit ir t ransação — a
+chain é a verdade (princípio 1)
+Saída — resgat e. liquidar/{quote,build,submit} → offramp/create → offramp/{signing-tx,submit}
+→ PIX recebido
+FA LH A E N T RE 	O Q UE F I C A P E N D URA D O 	C LA S S E 	RE PA RO
+liquidação e
+offramp/create
+investidor com ativo-ponte, sem
+BRL
+reparável 	criar a ordem de saída; a posição segue rendendo
+enquanto isso
+offramp/create e o XDR ordem aberta sem transação — a
+falha silenciosa
+reparável 	o pré-check de carteira da §4.5 evita criar a ordem;
+ordem já criada se cancela e refaz
+XDR submetido e confirmação
+do PSP
+dinheiro em trânsito 	nenhuma — só
+espera
+aguardar o webhook. Reemitir aqui é pagar duas
+vez es
+Originação — cessão. oferta aceita → assinatura → PIX ao cedente → incorporação da cota ao pool
+FA LH A E N T RE O Q UE F I C A P E N D URA D O 	C LA S S E RE PA RO
+assinatura e PIX obrigação jurídica assumida, cedente não pago 	reparável o praz o aqui tem consequência contratual, não só
+operacional
+PIX e
+incorporação
+caixa saiu, cota fora do pool — o NAV fica
+subest imado
+reparável incorporar; alerta próprio, porque contamina o
+número da §8.2
+Regras que valem para os três
+Ret ry só sobre chave de idempot ência exist ent e. Sem chave declarada (§6.3) a perna não é retomável — é
+reparável, por mais repetível que pareça.
+Ant es de reexecut ar qualquer perna com ef eit o on-chain, consult ar o Horizon. O Postgres é cache e pode estar
+atrás do que já aconteceu.
+Reparo é at o administ rat ivo. Grava EventoAudit com operadorId (princípio 7) e o estado de origem. Reparo
+silencioso é pior que operação travada.
+Se não t em bot ão, não é reparável. Toda linha marcada "reparável" precisa de ação correspondente em /admin/ops ;
+sem isso vira chamado de engenharia com investidor esperando.
+Reparo não cria valor. Reexecuta a perna prevista ou registra o ocorrido — nunca emite, paga ou queima fora do fluxo
+normal.
+Todo est ado int ermediário t em prazo. Vencido, vira alerta com a severidade da §11.2. Estado pendente sem relógio é
+estado esquecido.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	5 2
+
+-- 52 of 72 --
+
+7. Integrações e portas
+7.1 As duas portas que existem
+P O RTA 	A RQ UI V O 	C O N T RAT O 	A D A P TA D O RE S
+Kyc N O V O 	de lib/anchors/types.ts 	verificação de identidade: criar
+organiz ação, submeter dados e
+documentos, ler requisitos e estado
+fornecedor atual (PF, fase 01);
+KYB e outras jurisdições na
+fase 02
+Ramp A J U S T E lib/integrations/<fornecedor>/ quote, on/off-ramp, conta bancária um só, e sem consumidor
+vivo na f ase 01 — porta
+genérica só em M4
+StellarSigner lib/stellar/signer.ts 	publicKey() ,
+signEnvelope() async
+multisig por guarda própria
+(fase 01) ou custodiante (fase
+02)
+A Anchor era uma port a só, e a f ase 01 most rou a cost ura. O que está de fato em uso hoje é apenas o KYC de
+pessoa f ísica — cedente e comprador. A metade de rampa tem zero consumidores vivos na f ase 01: o rail BRL não é
+GA (§2.3) e a originação não precisa dele, porque roda por PIX off-chain. Pela regra que a própria §7.2 estabelece — porta genérica
+só nasce com o segundo consumidor real — Ramp não deveria ser porta ainda, e volta a ser integração concreta até M4 trazer a
+segunda implementação.
+Partir também desfaz uma restrição que ninguém escolheu, só herdou: um provedor de KYC não precisa ser um anchor.
+Para PF no Brasil, Idwall, Unico ou Serpro resolvem sem tocar em Stellar. Amarrar identidade ao fornecedor de rampa fecha essa
+porta sem motivo.
+Quando f azer: dent ro da migração do anchor (§13, item 1), que já vai reescrever esse adaptador inteiro porque os
+endpoints mudaram e o sunset venceu em 16/08. Partir durante uma reescrita que já vai acontecer é quase de graça; partir
+depois é projeto próprio.
+O StellarSigner , esse sim, se pagou sem ressalva: isola o segredo mais sensível do sistema e sustenta o comportamento fail-
+closed.
+Not a sobre o signer: com custódia real a assinatura vira assíncrona (a política pode exigir aprovação humana). O contrato
+precisa migrar de sign(tx): void para signEnvelope(): Promise<string> ant es de plugar o fornecedor — hoje
+os call-sites assumem assinatura síncrona.
+A porta isola
+como se assina.
+Quem detém a chave, com que redundância e o que acontece se ela se perder é a §10.5 — e é o
+único cenário deste documento que não tem reparo.
+7.2 As integrações que não devem virar porta ainda
+DocuSign, PSP de PIX, APIs das administradoras e screening têm hoje apenas READMEs de interface em
+lib/integrations/ — cont rat o desenhado, zero implement ação. Dois deles nem têm fornecedor escolhido.
+Regra: escrever a int egração concret a primeiro, dent ro do serviço que a usa. Ext rair a port a quando aparecer
+o segundo consumidor real.
+A justificativa está no próprio repositório. O StellarSigner foi desenhado com antecedência, sem nenhuma implementação
+de custódia existindo — e a primeira coisa que a integração real exige é mudar o cont rat o de síncrono para assíncrono,
+tocando todos os call-sites. Interface desenhada antes da primeira implementação é interface errada; a diferença é só quando
+você descobre.
+Exceção com data marcada: administ radoras nascem com dois consumidores conhecidos desde o primeiro dia (API B2B e
+fallback de cartório digital, modelados no enum CaminhoCessao ). Essa pode nascer como porta.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	5 3
+
+-- 53 of 72 --
+
+Isso não afrouxa o princípio 2. Serviço continua não importando SDK de terceiro diretamente: a chamada concreta fica em
+lib/integrations/<fornecedor>/ , com uma função por caso de uso. O que se adia é a int erf ace genérica, não o
+isolamento.
+8. Camada on-chain
+8.1 Ativos e operações
+AT I V O 	PA P E L 	F LA G S
+PLINARF →
+PLINARFS
+cota Sênior 	AUTH_REQUIRED + AUTH_REVOCABLE +
+AUTH_CLAWBACK_ENABLED
+PLINARFB 	cota Subordinada 	idem
+TESOURO 	at ivo-pont e — atual e preferido 	denominado em BRL; ponte cambialmente neutra para o fundo, e
+rende
+USDC / EURC 	entrada internacional (M4); ponte
+alternativa
+Circle
+O código diz PLINARF , não PLINARFS . A decisão registrada em lib/stellar/classes.ts:7 é
+"PLINARF legacy =
+Sênior": o ativo existente continua sendo a Sênior, e a Subordinada nasceu com code novo. A renomeação para PLINARFS só
+acontece na reemissão do cut over (M9), num issuer limpo e sem holders a migrar. Quem for implementar hoje procura
+PLINARF — o code vem de ASSET_CODE , e é por isso que ele é configuração.
+A pont e é configuração, não const ant e. O símbolo do ativo-ponte é parâmetro ( resolveBridgeAsset ), resolvido em
+runtime via GET /ramp/assets . Trocar é mudar configuração, não código. TESOURO segue como valor at ual e como
+pref erência: sendo denominado em BRL, mantém o fundo cambialmente neutro — passivo e ativos em real — e ainda
+rende no caixa não aplicado. Migrar para USDC só se o fornecedor descontinuar TESOURO no rail BR, ou se M4 mostrar que
+unificar a ponte compensa a exposição cambial. Ver PLANO-MIGRACAO-ANCHOR.md §3 .
+Operações: emissão via distributor, swap atômico de duas pernas, resgate, clawback restrito às 4 hipóteses, e memo.hash de
+auditoria em toda transição.
+O resgat e não queima — devolve à t esouraria. A decisão existe desde o MVP e vivia só num comentário de serviço
+( lib/services/liquidacao.ts:14 ): o PLINARF resgatado volta ao distributor e fica disponível para a próxima captação,
+em vez de ser queimado. Sobe para cá porque muda o que "supply" significa para o auditor e para quem lê o Stellar Expert:
+o supply on-chain nunca decresce, e a diferença entre supply e circulante é tesouraria, não emissão nova. Consequências: o
+denominador do NAV é o circulante e não o supply (§8.2), a reconciliação da §11.3 precisa das três quantidades, e a ficha técnica
+publica as três com esses nomes. Queimar seria a alternativa — mais legível de fora, mais cara em operação, porque cada
+captação nova exigiria emissão nova e a política de emissão passaria a ser exercida toda semana em vez de raramente.
+Soroban (M7 ): waterfall.rs (despesas → yield Sênior → performance fee → Subordinada) e nav_oracle.rs (publica
+NavSnapshot diário, escrita só pelo issuer multisig). Hoje a cascata roda em Postgres ( lib/services/pool.ts ); a migração
+é gated por SOROBAN_WATERFALL e exige auditoria externa do contrato antes de valer em mainnet.
+8.2 Publicação de NAV
+Do NAV dependem preço de emissão, valor de resgate, cascata e ficha técnica. Ele é calculado off-chain e ancorado on-chain
+— e ancorar é irreversível, como o clawback. A diferença é que o clawback tem dupla aprovação (§5.4) e o NAV roda sozinho,
+P L I N A F I N A N C E · C O N F I D E N C I A L 	5 4
+
+-- 54 of 72 --
+
+num cron, sem ninguém olhando.
+O cálculo é derivado, não armazenado. As funções de lib/services/pool.ts são puras e usam Decimal — isso
+está certo e se mantém. NavSnapshot é fotografia datada, nunca fonte: ninguém lê NAV do snapshot para precificar, lê do
+cálculo.
+Três níveis, não um número. Hoje existe um só: navTotalDoPoolAsDecimal ( lib/services/pool.ts:97 ) soma
+cotas ativas a valor presente mais caixa realizado, e é isso que se publica. Faltam as duas deduções que o modelo econômico
+prevê, e o alvo separa os três níveis explicitamente:
+NAV dos ativos 	Σ cotas ativas a valor presente + caixa do razão 	← razão, não soma de tabelas
+(abaixo)
+− provisões 	inadimplência e cota em atraso 	← política do fundo, ainda
+inexistente
+− taxas apropriadas administração acumulada + performance provisionada
+= NAV líquido 	o número que precifica emissão e resgate
+NAV líquido por token = NAV líquido ÷ tokens em circulação 	← Horizon, não Postgres (abaixo)
+"NAV brut o" era vocabulário impreciso e sai: ele cobria só a ausência de provisão, quando o número também é bruto de
+taxa. Cada nível tem nome próprio, e a ficha técnica publica a pont e ent re eles, não só o resultado — é o "de onde vem a
+margem" do one-page virando verificável em vez de declarado.
+A t axa de administ ração ent ra desde o primeiro snapshot ; a de perf ormance espera. Os 2% a.a. são número
+firme (one-page). Já a performance é 20% sobre o excedente do benchmark, e o yield-alvo da Sênior é a decisão §14.5 — sem ele
+não há excedente a calcular. Enquanto isso, o NAV publicado declara que a provisão de performance não entra: declarar é o que
+impede um número meio líquido de ser lido como líquido.
+Apropriar sempre, liquidar nunca na f ase 01. A taxa acumula como obrigação com o gestor e reduz o NAV; o caixa não se
+move. Na fase 01 pagador e recebedor são a mesma empresa (Escopo), e mover dinheiro entre duas contas dela é teatro contábil
+que só gera ruído de reconciliação — mas o número fica certo e a mecânica chega exercitada na fase 02.
+Por que não deixar para a f ase 02, se na f ase 01 a Plina cobra de si mesma. Porque a série de NAV da fase 01 é o
+track record que sustenta a fase 02 — foi o argumento que decidiu o escopo. Publicar bruto agora e líquido depois põe uma
+descontinuidade exatamente onde o analista de rating vai olhar, com a metade que parece melhor sendo a que não tinha
+investidor. E recalcular depois não é reprocessar: cada snapshot está ancorado on-chain, e correção é registro novo (abaixo).
+Restaurar um ano de série significa 250 e poucas âncoras de correção e uma conversa com o auditor sobre por que a série
+publicada inteira estava errada. Num banco comum "a gente reprocessa depois" seria resposta; aqui a própria arquitetura fecha
+essa porta.
+As convenções de apropriação são parâmet ro, não código. Base de dias, base de incidência e regra de cristalização da
+performance entram em ParametrosPool (§9.3) e são decisão de jurídico/estruturador, não de engenharia — §14.11. O alvo
+recomenda 252 dias út eis (o benchmark é CDI, que é 252; misturar 365 na taxa e 252 no benchmark produz erro sistemático
+no excedente, de 0,0079% ao dia, que ninguém percebe olhando), incidência sobre o NAV líquido do dia ant erior (evita taxa
+sobre a própria taxa do dia) e cristalização por janela de liquidez, com marca d'água.
+O denom inador vem da chain
+Há t rês quantidades de token, e o código trata as três como uma:
+O Q UE É 	O N D E S E LÊ
+supply 	tudo que o issuer emitiu 	Horiz on, amount do ativo
+P L I N A F I N A N C E · C O N F I D E N C I A L 	5 5
+
+-- 55 of 72 --
+
+O Q UE É 	O N D E S E LÊ
+em circulação 	supply − tesouraria (o que voltou ao distributor no
+resgate)
+Horiz on, duas leituras
+last reado por cot a
+at iva
+tokensEmitidos das cotas
+DISPONIVEL / RESERVADA
+Postgres — é o que tokensEmitidosVivos
+usa hoje
+O denominador do NAV/token é o em circulação. Hoje é o terceiro, e o erro não é marginal: quando uma cota é realizada, o
+caixa entra no numerador
+e os tokens dela saem do denominador — conta dobrada. Com duas cotas de 80 tokens, uma
+realizada por R$ 90 e outra ativa a R$ 80, o correto é 170 ÷ 160 = 1,0625 e o código devolve 170 ÷ 80 = 2,1250 .
+No caso limite em que toda cota foi realizada, o denominador zera e navPorToken retorna 0 — e
+lib/services/liquidacao.ts:94 precifica o resgate com essa função. Um investidor que resgatasse ali receberia
+amount × 0 .
+Correção: circulante = amount do ativo (Horizon) − saldo do distributor , por asset code. É o princípio 1
+aplicado ao denominador do preço, que hoje é a única parte da precificação que ignora a chain.
+O caixa vem de um razão, não de um a som a de tabelas
+caixaRealizadoAsDecimal soma valorRealizado das realizações. Nada subt rai o caixa pago a quem resgat ou.
+Hoje está mascarado porque o pagamento é BRL fictício (§4.3); com off-ramp real, o NAV passa a superestimar pelo total já
+resgatado, de forma cumulativa e silenciosa. A taxa apropriada decidida acima seria a próxima omissão pelo mesmo motivo.
+A causa é comum aos dois: o NAV é derivado de t abelas operacionais — cot as e realizações — em vez de um
+razão do f undo. Cada forma nova de mover dinheiro exige lembrar de somar um termo à fórmula. É a mesma falha da §6.7,
+onde espalhar o guard de cutover à mão produziu três rotas cobertas de quarenta e seis; e a resposta é a mesma: tornar a
+propriedade est rut ural em vez de lembrada.
+Alvo: modelo append-only MovimentoFundo (§9.2), uma linha por movimento — aquisição de cota, realização, resgate pago,
+taxa apropriada, taxa liquidada, aporte. Caixa do fundo é a soma do razão. A propriedade que isso compra é que um t ipo novo
+de moviment o não consegue se omit ir do NAV, porque não há caminho para o dinheiro que não passe por uma linha. O
+backfill é barato enquanto não há mainnet: as realizações existentes viram lançamentos.
+Trade-off regist rado. A alternativa barata é corrigir as fórmulas onde estão, sem razão. Custa dias em vez de semanas e
+funciona — até o quarto tipo de movimento aparecer, que na prática é a liquidação da taxa de administração. Se o calendário
+da fase 01 forçar essa escolha, ela é defensável desde que fique escrit o que o NAV passa a depender de alguém
+lembrar, com data para pagar a dívida. O que não é defensável é fazer a versão barata e chamar de pronto.
+Por classe, o que dá e o que não dá
+NavSnapshot.classeSeniorNav e classeSubordinadaNav estão no schema desde
+20260527054949_prd_v1_extensions e nenhuma linha de código escreve neles. O rateio entre as classes depende
+da cascata, que depende do yield-alvo da Sênior — decisão §14.5 —, então o preenchimento fica bloqueado e os campos
+seguem como dívida visível (§9.4).
+O que não depende de nada é fazer tudo por asset code: PLINARFS e PLINARFB têm supply, tesouraria e circulante
+próprios, e tanto o gate abaixo quanto a reconciliação da §11.3 rodam por ativo. Um cálculo escrito no singular hoje passa em
+testnet com uma classe só e quebra no primeiro aporte subordinado.
+Gat e de sanidade ant es de ancorar. O cron das 18:00 valida e só então publica:
+V E RI F I C A Ç Ã O 	S E FA LH A R
+variação contra o snapshot anterior dentro da banda ( ParametrosPool.bandaVariacaoNavPct ) — líquido
+cont ra líquido, nunca comparando níveis diferentes
+não publica ·
+SEV2
+P L I N A F I N A N C E · C O N F I D E N C I A L 	5 6
+
+-- 56 of 72 --
+
+V E RI F I C A Ç Ã O 	S E FA LH A R
+apropriação de taxa do dia calculada e aplicada, com a mesma convenção do snapshot anterior 	não publica ·
+SEV2
+NAV líquido e NAV líquido por token maiores que z ero 	não publica ·
+SEV1
+toda cota ativa com parâmetros de precificação completos 	não publica ·
+SEV2
+por at ivo, circulante do Horiz on (supply − tesouraria) conferindo com Σ HoldingPLINARF (§11.3) 	não publica ·
+SEV1
+caixa do raz ão não negativo, e todo lançamento do dia com contrapartida rastreável (ordem, tx ou apropriação) 	não publica ·
+SEV1
+Falhar é não publicar. Ausência do snapshot do dia é um alerta que alguém resolve pela manhã; snapshot errado ancorado é
+permanente. É o princípio 3 aplicado ao número mais sensível do produto — e é a razão de o gate existir antes da âncora, não
+depois.
+Correção é snapshot novo, nunca UPDATE . Se um NAV publicado estiver errado, grava-se outro registro apontando para
+o corrigido ( corrigeSnapshotId + motivo), com aprovação de um APROVADOR . O hash antigo continua ancorado: não há
+como apagar, e a resposta certa é declará-lo ao auditor — mesmo raciocínio da §9.5.
+A banda é parâmet ro, não const ant e no código, e seu valor inicial ainda não existe. É a decisão pendente §14.7. Até que
+ela seja tomada, o gate roda em modo observação: calcula, alerta e não bloqueia — chutar a banda agora só produziria um
+número que vira fato por repetição.
+9. Modelo de dados
+O schema atual ( prisma/schema.prisma ) é sólido e a regra é est ender, nunca subst it uir. Catálogo completo dos
+modelos existentes na DOCUMENTACAO-TECNICA.md §9 . Esta seção descreve só o que o alvo acrescenta ou muda.
+9.1 Fronteira on-chain / off-chain
+Não é convenção de estilo — é o contrato de LGPD do produto, e vale para todo modelo novo.
+F I C A N O P O S T G RE S ( BRA S I L) 	VA I PA RA A C H A I N
+nome, CPF/CNPJ, endereço, e-mail, telefone, documentos, dados de KYC/KYB 	payloadHash (SHA-256 do payload canônico)
+valores, status, relacionamentos, trilha completa 	endereço Stellar, timestamp, hash da transação
+Todo modelo novo que participe de uma transição de estado grava EventoAudit com payloadHash ancorado via
+memo.hash . Sem exceção.
+Esta seção diz onde o dado pessoal vive. Por quanto tempo, e o que acontece no fim, é a §9.8.
+9.2 Modelos novos
+MO D E LO 	P RO P Ó S I T O 	C A MP O S - C H AV E
+AdminUser 	identidade nomeada do
+operador — substitui a senha
+única (§5.3)
+id · externalId C H AV E (Clerk) · email C H AV E · nome ·
+papel ( AdminPapel ) · ativoDesde · desativadoEm
+P L I N A F I N A N C E · C O N F I D E N C I A L 	5 7
+
+-- 57 of 72 --
+
+MO D E LO 	P RO P Ó S I T O 	C A MP O S - C H AV E
+SolicitacaoClawback fluxo de dupla aprovação (§5.4) id · investidorId · amount · motivo ( MotivoClawback ) ·
+fundamentoUrl · hashDocumento ·
+solicitanteId →AdminUser · status · expiraEm ·
+executadoTxHash
+AprovacaoClawback uma linha por aprovador 	id · solicitacaoId · aprovadorId →AdminUser · papel ·
+aprovadoEm · @@unique([solicitacaoId,
+aprovadorId])
+WebhookEvento 	entregas do anchor e de
+terceiros, append-only
+id · fornecedor · eventoId C H AV E (dedupe) · tipo ·
+payloadJson · assinaturaValida · recebidoEm ·
+processadoEm · erro
+ScreeningResultado OFAC/UE/ONU/PEP por pessoa
+(M6)
+id · pessoaId · provedor · listas[] · resultado ·
+scoreJson · revisadoPor →AdminUser · verificadoEm
+LeadEoi 	waitlist institucional — já
+exist e em produção e não
+est á document ado
+id · nome · org · email · jurisdiction · ticket ·
+classe · status
+SolicitacaoTitular pedidos de titular sob LGPD
+(§9.8) — acesso, correção,
+eliminação, portabilidade
+id · pessoaId · tipo · canal · recebidaEm · prazoEm ·
+status · respondidaEm · respostaResumo ·
+tratadaPorId →AdminUser
+MovimentoFundo 	raz ão append-only do caixa do
+fundo (§8.2). Todo movimento de
+dinheiro é uma linha; caixa é a
+soma, nunca uma fórmula que
+soma tabelas
+id · data · tipo ( AQUISICAO_COTA , REALIZACAO ,
+RESGATE_PAGO , TAXA_APROPRIADA , TAXA_LIQUIDADA ,
+APORTE ) · valor @db.Decimal(20,2) (sinal explícito) ·
+assetCode · cotaId? · investidorId? ·
+referenciaExterna C H AV E (ordem, txHash ou chave de
+apropriação — é a idempotência do §6.3) ·
+registradoPorId →AdminUser? · payloadHash
+9.3 Campos acrescentados a modelos existentes
+MO D E LO 	C A MP O S 	MO T I V O
+Pessoa 	orgAccountType ( personal / business )
+· kycRequirementsJson ·
+kycUserMessage
+verificação assíncrona dirigida por requisitos; o
+userMessage do anchor é
+point-in-time e some se
+não for persistido na chegada
+Pessoa 	anonimizadaEm ·
+anonimizadaPorId →AdminUser
+eliminação sob LGPD é anonimiz ação, não DELETE
+(§9.8)
+Investidor 	kybOrganizationId · kybStatus ·
+kybApprovedAt
+KYB é produto distinto do KYC (§2.3)
+EventoAudit 	operadorId →AdminUser 	princípio 7 — operador como string livre deixa de
+bastar
+ParametrosPool 	bridgeAssetSymbol ·
+bandaVariacaoNavPct
+ativo-ponte vira configuração (§8.1); banda do gate de
+NAV é parâmetro, não constante (§8.2)
+ParametrosPool 	taxaAdmBps · taxaPerformanceBps ·
+baseDiasAno · baseIncidenciaTaxa ·
+cristalizacaoPerformance ·
+marcaDaguaAtiva
+convenções de apropriação (§8.2) — decisão de
+jurídico/estruturador (§14.11), nunca constante no código
+P L I N A F I N A N C E · C O N F I D E N C I A L 	5 8
+
+-- 58 of 72 --
+
+MO D E LO 	C A MP O S 	MO T I V O
+NavSnapshot 	corrigeSnapshotId · motivoCorrecao ·
+aprovadoPorId →AdminUser ·
+ancoradoTxHash
+correção de NAV é registro novo, nunca UPDATE (§8.2)
+NavSnapshot 	navAtivos · provisoes ·
+taxaAdmApropriada ·
+taxaPerformanceProvisionada ·
+navLiquido · navLiquidoPorToken ·
+convencoesJson
+os três níveis da §8.2 e a ponte entre eles.
+navTotal / navPorToken existentes passam a
+significar NAV dos at ivos; o que precifica é
+navLiquido . convencoesJson congela as
+convenções vigentes no dia — série recalculada com
+convenção nova, sem registro da antiga, é série que
+ninguém consegue auditar
+OnRampOrder ·
+LiquidacaoSubmit ·
+CessaoComprador
+estadoSaga (enum) · ultimaFalhaEm ·
+reparadoPorId →AdminUser
+estado intermediário é enum persistido, não ausência de
+registro (§6.8)
+LeadComprador ·
+LeadVendedor
+documentoNormalizado (11/14 dígitos,
+@@index )
+limite por pessoa é regra de domínio e precisa de chave
+(§6.4). Hoje documento é String? sem índice e
+cpf idem; a única chave é email @unique , que
+não segura ninguém
+LeadVendedor 	administradora · grupo · cota ·
+valorFace ·
+@@unique([administradora, grupo,
+cota])
+identidade lógica da cota no funil de venda (§6.4). Sem
+ela não há como detectar a mesma cota oferecida duas
+vez es ant es de o PIX sair
+Investidor 	tetoTicket · suitabilityValidaAte f ase 02. Teto por tipo — R$ 10M (qualificado), sem teto
+(profissional), US$ 5M (intl) — e limite de concentração
+por cotista são controle regulatório de FIDC, não UX; a
+validade da suitability alimenta a fila de "suitability
+vencida" do /admin/compliance . Registrados
+agora para não sumirem de novo; implementados
+quando M3 for retomado
+9.4 Modelos migrados que ainda esperam consumidor
+Foram migrados em 20260527054949_prd_v1_extensions e seguem sem código que os use. O alvo lhes dá consumidor
+— enquanto não tiver, são schema morto e devem ser tratados como dívida visível, não como "pronto":
+MO D E LO 	C O N S UMI D O R N O A LV O
+NavSnapshot 	cron de NAV às 18:00 BRT com o gate de sanidade da §8.2 +
+/pool/nav/historico (M5)
+JanelaLiquidez 	wiz ard de resgate em /sacar (M5)
+PrestadorRegulado 	/compliance e /admin/compliance (M6) — fase 02
+NavSnapshot.classeSeniorNav ·
+classeSubordinadaNav
+rateio da cascata entre as classes — bloqueado pelo yield-alvo da Sênior (§14.5).
+Migrados em maio, nunca escritos. Enquanto isso, tudo que não depende do rateio
+roda por asset code (§8.2)
+9.5 Migração dos dados existentes
+Duas mudanças da §9.3 não são alteração de coluna — são migração com backfill, e precisam de plano antes de virar código:
+P L I N A F I N A N C E · C O N F I D E N C I A L 	5 9
+
+-- 59 of 72 --
+
+Pessoa.etherfuseCustomerId muda de semânt ica. Hoje guarda o id gerado pelo fornecedor; no alvo guarda o UUID da
+organização que nós geramos. Os registros existentes não têm esse UUID. Ou se cria a organização retroativamente para cada
+Pessoa já cadastrada, ou se mantém os dois campos durante a transição ( etherfuseCustomerId legado + anchorOrgId
+novo) e se trata ausência como "ainda não migrado". A segunda opção é reversível; a primeira não.
+EventoAudit.operador → operadorId . A trilha é append-only e histórica: registros antigos gravaram a constante
+'admin-panel' e não podem ser reescrit os sem quebrar os hashes já ancorados on-chain. O campo novo convive com
+o antigo; consultas por operador tratam o período anterior como não-atribuível. Isso é uma limitação a declarar ao auditor, não um
+problema a esconder.
+9.6 Premissas não verificadas
+Marcadas para não virarem fato por repetição:
+P RE MI S S A 	O N D E I MPA C TA 	C O MO V E RI F I C A R
+O anchor envia id de evento
+estável por entrega
+WebhookEvento.eventoId como
+chave de dedupe (§9.2)
+inspecionar payload real em sandbox; se não houver,
+derivar chave de (tipo, recurso, status,
+timestamp)
+A assinatura de webhook do
+anchor é HMAC verificável server-
+side
+§6.1 	guia de verificação do fornecedor
+Clerk como fonte de identidade
+não conflita com AdminUser
+local
+§9.2 	definir sincroniz ação: upsert preguiçoso no login, ou
+webhook do provedor
+9.7 Regras de evolução
+Idempot ência declarada no schema, não no handler: toda operação que move valor ou cria registro externo tem
+@unique explícito (§6.3).
+Enums para est ado, string livre nunca. status como String (caso de JanelaLiquidez.status ) é dívida a corrigir.
+Decimal com precisão explícit a para dinheiro e token — @db.Decimal(20,7) para quantidade de token, (20,2)
+para BRL. Nunca Float .
+cuid() em t odo id — não enumerável. Exceção: ids que espelham UUID de terceiro (org do anchor, Quote.id ).
+9.8 Ciclo de vida do dado pessoal
+A §9.1 resolve onde o dado vive. Falta o resto do ciclo — e há um conflito real aqui, que é melhor nomear do que descobrir com
+um pedido de titular na mesa:
+a regulação do veículo e a legislação civil e tributária exigem ret er registros por anos após o encerramento;
+a LGPD dá ao titular direito de eliminação;
+a trilha é append-only com hash ancorado on-chain — apagar quebra o hash.
+A leit ura que a arquit et ura assume (a confirmar com jurídico e DPO, não decidida aqui): retenção para cumprimento de
+obrigação legal e regulatória prevalece sobre o pedido de eliminação enquanto o prazo correr. O que se elimina é o dado pessoal
+f ora do registro regulado; o que se faz com o resto é anonimizar, não apagar.
+O mecanismo é a quebra do vínculo. O que está on-chain é hash, endereço e timestamp — foi para isso que a §9.1 existe. O
+endereço Stellar é pseudônimo, e o que o liga a uma pessoa vive só no Post gres. Anonimizar corta esse vínculo: a chain
+continua íntegra, a contabilidade continua completa, e o dado deixa de ser atribuível. É a §9.1 pagando dividendo.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	6 0
+
+-- 60 of 72 --
+
+C AT E G O RI A 	RE T E N Ç Ã O 	N O F I M D O P RA ZO
+Lead de funil e LeadEoi não
+convertidos
+curta (§14.8) 	exclusão real — não há registro regulado a preservar
+Cadastro, KYC/KYB de quem operou 	relação + praz o
+regulatório
+anonimização: PII nula, anonimizadaEm gravado
+Documentos de KYC no Blob 	idem 	exclusão do objet o, preservando hash e metadados no
+Postgres
+Valores, status, relacionamentos 	permanente 	nunca tocado — não é dado pessoal depois da anonimiz ação
+EventoAudit e payloadHash 	permanente 	nunca t ocado; já é só hash e identificadores
+E-mails e comunicação transacional 	curta (§14.8) 	exclusão
+Regras de execução
+Anonimização é at o administ rat ivo: requireAdmin , EventoAudit com operadorId , e é irreversível — não
+existe "desanonimizar".
+Idempot ent e: rodar duas vezes sobre a mesma Pessoa não é erro.
+Nunca DELETE em modelo que part icipa de t rilha. Chave estrangeira órfã corrompe a auditoria de forma silenciosa,
+que é o pior modo de falhar num registro contábil que a fase 02 vai auditar.
+O pedido do t it ular vira regist ro, não e-mail. /lgpd publica o canal; o pedido entra como SolicitacaoTitular
+com prazo, dono e resposta arquivada. Prazo vencido é alerta.
+Backup t ambém guarda PII. Anonimizar o banco vivo e manter backup de dois anos com o dado íntegro não cumpre
+nada. A janela de retenção de backup é limite superior do que se consegue prometer — ver §10.5.
+O que ainda não exist e. Verificado no schema em 2026-08-18: nenhum campo de retenção, anonimização ou expurgo. O
+ciclo de vida hoje é "guardar para sempre por omissão", que é uma política — só não é uma escolhida.
+10. Ambientes e configuração
+10.1 Os três ambientes
+D E S E N V O LV I ME N T O / C I P RE V I E W ( P O R P R) 	P RO D UÇ Ã O
+Stellar 	testnet 	testnet 	mainnet
+Anchor 	sandbox 	sandbox 	produção
+Postgres 	local ou branch Neon 	branch Neon
+aut omát ica
+Neon gru1
+Rate-limit 	in-memory 	Upstash 	Upstash
+Flags 	process.env 	Edge Config 	Edge Config
+Assinatura 	KeypairSigner (secret em
+env)
+KeypairSigner 	mult isig — f ail-closed, por guarda própria ou
+custodiante
+/api/lab/* e
+/lab
+disponível com
+LAB_ENABLED
+idem 	404 sempre
+Privy 	stub em e2e 	real 	real
+P L I N A F I N A N C E · C O N F I D E N C I A L 	6 1
+
+-- 61 of 72 --
+
+Regra dura, enunciada por propriedade e não por f ornecedor: com STELLAR_NETWORK=PUBLIC , o sistema recusa
+assinar se um único segredo de ambient e f or suficient e para produzir assinat ura válida. Não existe caminho em
+que mainnet assine com secret em env.
+Isso vale igualmente para guarda própria com multisig, Fireblocks ou BitGo — e é uma mudança com consequência imediata
+no código. Hoje custodyConfigured() ( lib/stellar/signer.ts:56 ) verifica literalmente FIREBLOCKS_API_KEY e
+FIREBLOCKS_API_SECRET , ou seja, o invariante está codificado em torno de um f ornecedor. Com a decisão de fase 01
+(§2.2), mainnet recusaria assinar mesmo com multisig corretamente configurado, e alguém teria de editar esse arquivo sob
+pressão — o pior momento possível para mexer nele. A verificação passa a ser da topologia de assinatura, não da presença de
+credencial de fornecedor.
+O f under é exceção declarada. Ele continua assinando com secret em env mesmo em mainnet
+( lib/stellar/signer.ts:10 ) — é chave quente fora da custódia, e a decisão vivia só num comentário de serviço. Ela se
+sustenta porque o funder só custeia criação de conta e trustline, sem poder emitir, autorizar nem mover ativo do fundo; mas o raio
+de explosão e o teto diário dela precisam ser tratados como controle, não como detalhe de implementação.
+Ident ificadores de at ivo dif erem ent re sandbox e produção. Resolver sempre via GET /ramp/assets , nunca
+hardcode — vale para o ativo-ponte e para qualquer asset do anchor.
+10.2 Configuração
+Categorias em .env.example (sem segredos). Fonte canônica das flags em produção é o Edge Config; process.env é
+fallback de dev/test. Acrescentam-se ao alvo:
+VA RI ÁV E L 	PA RA Q UÊ
+CRON_SECRET 	autenticação das rotas /api/cron/**
+ANCHOR_WEBHOOK_SECRET 	verificação de assinatura das entregas
+BRIDGE_ASSET_SYMBOL 	símbolo do ativo-ponte (§8.1)
+CLERK_* 	identidade do painel admin
+10.3 Custo é entrada de arquitetura
+Para uma empresa levantando US$ 500k, run-rate não é assunto de finanças — é restrição de desenho. A arquitetura-alvo
+acumula fornecedores, e cada um tem piso.
+F O RN E C E D O R 	MO D E LO 	O RD E M D E G RA N D E ZA O BS E RVA Ç Ã O
+Custódia (Fireblocks) mínimo de
+plataforma + fee
+o maior it em da list a 	o ESTUDO-CUSTODIA.md registra que é a opção mais cara
+da categoria para early-stage; self-custody com multisig nativo
+Stellar é a alternativa de menor custo, com ônus de compliance
+Anchor 	bps sobre volume escala com AUM 	há part ner f ee configurável que pode ser receita, não só custo
+Vercel + Neon +
+Upstash + Blob
+assinatura + uso 	baixo no estágio atual 	escala com tráfego, não com AUM
+Clerk 	por usuário ativo baixo — são operadores
+internos
+DocuSign · PSP ·
+screening
+por envelope /
+transação / consulta
+escala com originação 	entram no desagio_total , não em overhead
+Observabilidade e
+alerta
+assinatura por
+volume de dados, ou
+stack própria
+o PRD marca como risco
+de budget e est e
+document o não list ava
+hoje o alerta sai por SMTP (§11.2). O PRD F-M8-1/F-M8-3 assume
+Datadog + PagerDuty/Opsgenie e registra o custo como decisão
+do CEO
+P L I N A F I N A N C E · C O N F I D E N C I A L 	6 2
+
+-- 62 of 72 --
+
+F O RN E C E D O R 	MO D E LO 	O RD E M D E G RA N D E ZA O BS E RVA Ç Ã O
+E-mail transacional por envio 	baixo 	fornecedor não decidido: PRD diz Resend, código usa SMTP
+(§11.2)
+Auditoria de
+contrato Soroban
+(M7)
+projeto 	US$ 30–50k (PRD §8.4) 	só quando houver volume que justifique — fase 02
+Duas leituras que isso força:
+Cust o por operação ent ra na precificação. DocuSign, PSP e screening são custo variável por cessão originada e
+pertencem à fórmula do deságio (PRD §3.4), não ao overhead fixo.
+A ordem de cont rat ação import a. Fechar custódia antes de existir volume em mainnet é pagar piso sem receita. O
+runbook de cutover já prevê canary — o mesmo faseamento vale para os contratos.
+E f alt a o principal: os números. A tabela acima diz "ordem de grandeza" e não traz uma cifra. Uma coluna de custo sem
+valor não restringe decisão nenhuma — é opinião com formatação de tabela. A diferença entre custódia na ordem de US$
+3k/mês e US$ 30k/mês muda a resposta da decisão pendente §14.3, e hoje o documento não sabe qual das duas é.
+Não vou preencher com estimativa: número chutado em doc de arquitetura vira fato por repetição, que é o que a §9.6 existe para
+impedir. O que fica registrado é o que pergunt ar:
+O BT E R 	D E Q UE M 	D E S T RAVA
+Piso mensal + fee por transação da custódia, nas duas
+alternativas
+Fireblocks e BitGo 	§14.3 — e a ordem de contratação
+Bps do anchor no rail BR, e o teto de partner fee 	fornecedor 	se a integração é custo ou receita líquida
+Preço por envelope, por transação PIX e por consulta de
+screening
+DocuSign, PSP, fornecedor de
+screening
+a fórmula do deságio (PRD §3.4)
+Piso do plano de Neon com a janela de PITR necessária Neon 	o RPO da §10.5 deixa de ser "a confirmar"
+Custo de observabilidade e de plantão nas duas
+alternativas — fornecedor tier-1 versus stack própria
+Datadog/equivalente, e o time se o alerta da §11.2 tem destino pago ou
+construído, e quanto pesa no run-rate da fase 01
+10.4 Pipeline
+prebuild (lint de auth-guard, bloqueia deploy em regressão) → next build → runtime Fluid Compute em gru1 . Cutover
+de mainnet por Rolling Releases (10% → 50% → 100%) com as flags no Edge Config, permitindo desligar trilha sem novo
+deploy. Rollback ≤ 5 min via flag.
+10.5 Continuidade e recuperação de desastre
+C O MP O N E N T E 	P E RD A T O LE RA D A
+( RP O )
+V O LTA E M
+( RT O )
+ME C A N I S MO
+Estado on-chain 	zero 	— 	Horiz on é a fonte da verdade; não há o que restaurar
+Postgres (Neon) 	minutos 	minutos 	point-in-time recovery; janela real depende do plano
+contratado — confirmar e regist rar
+Blob (prospecto, contratos,
+comprovantes)
+z ero 	minutos 	documento assinado é registro do fundo; retenção e
+versionamento explícitos
+Aplicação 	z ero 	minutos 	redeploy ou rollback por flag (§10.4)
+Material de chave 	não se aplica 	— 	não se restaura de backup de banco; ver abaixo
+P L I N A F I N A N C E · C O N F I D E N C I A L 	6 3
+
+-- 63 of 72 --
+
+Que o estado on-chain tenha RPO zero não é sorte de plataforma — é o princípio 1 pagando dividendo. Um banco perdido se
+reprojeta a partir do Horizon; o inverso não vale.
+O m aterial de chave do issuer
+Este é o único ponto do documento sem caminho de volta, e por isso ele fica escrito com todas as letras.
+Perder ou comprometer a chave do issuer significa que o fundo não consegue mais emit ir, aut orizar t rust line nem
+revogar. A precisão importa: os tokens já emitidos continuam existindo nas contas dos investidores e transferíveis conforme as
+flags do ativo. O que morre é a capacidade de operar o fundo sobre eles — inclusive o clawback das 4 hipóteses, que é
+obrigação regulatória. Não é um incidente com SEV; é evento de encerramento.
+O desenho que a arquitetura assume:
+Issuer é mult isig nat ivo St ellar, nunca signatário único em mainnet. Threshold e número de signatários são a decisão
+pendente §14.10 — o que já está decidido é que um só, não.
+Signat ários em cust ódias dist int as. Concentrar todos no mesmo fornecedor troca "perder a chave" por "perder a conta no
+fornecedor", que é o mesmo risco com outro nome.
+Issuer e dist ribut or com chaves separadas. O distributor opera todo dia e tem raio de explosão maior; o issuer assina
+raramente e pode viver com atrito muito mais alto.
+Recovery kit gerado, guardado offline em dois locais f ísicos dist int os, e t est ado. Testado significa restaurar de
+fato, em testnet, antes da mainnet — kit de recuperação nunca exercitado é uma suposição, não um controle.
+O drill ent ra no calendário, com periodicidade definida e resultado registrado. Backup que ninguém restaurou não conta
+como backup.
+A escolha de cust odiant e não é uma port a de mão única — a t opologia é. Signatário Stellar rotaciona por
+setOptions : acrescenta-se a chave do custodiante como signatário, remove-se a antiga, ajusta-se o threshold. Sem reemissão
+de ativo, sem migração de holder, sem downtime. É esse fato que torna seguro entrar na fase 01 com guarda própria e decidir
+custodiante na fase 02 (§2.2) — a fase 02 não herda uma decisão, herda uma conta cujos signatários se trocam.
+O que não fica barato adiando é o recovery kit acima. Guarda própria concentra em nós exatamente o ônus que um fornecedor
+absorveria, e o kit deixa de ser boa prática para virar o controle. Ele entra na fase 01, junto com a topologia — não depois dela.
+O comportamento fail-closed da §10.1 já cobre a metade fácil: sem topologia de assinatura válida, mainnet não assina. Ele não
+cobre a metade difícil, que é ter para onde voltar.
+11. Observabilidade, operação e testes
+11.1 O que instrumentar
+OpenTelemetry com withSpan(name, attrs, fn) . Toda chamada externa vira span: Horizon, anchor, custódia, DocuSign,
+PSP, administradora. Todo response carrega x-request-id , que correlaciona log, span e EventoAudit .
+Mét ricas de f unil saem da t rilha, não de um SDK de analyt ics. Na fase 01 o spread de originação é a receita e a
+conversão de /vender e /comprar determina se o capital próprio gira — medir isso deixou de ser desejável e virou
+instrumento de gestão. Hoje existe só @vercel/analytics (pageview), embora LeadVendedor e LeadComprador já
+carreguem utmSource / utmMedium / utmCampaign : a atribuição de entrada existe e ninguém mede os passos.
+Não é preciso fornecedor novo. Cada et apa do f unil já é uma t ransição de est ado que grava EventoAudit (princípio
+6), então conversão por etapa, drop-off e tempo entre etapas são uma
+view sobre a trilha. Isso evita SDK no cliente, evita um
+contrato novo, e evita mandar comportamento de cedente e comprador para fora do país — que seria problema de LGPD (§9.8)
+criado para resolver um problema de produto.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	6 4
+
+-- 64 of 72 --
+
+11.2 Alertas
+Hoje existe alarme de saldo. O alvo cobre as falhas que passam despercebidas:
+A LE RTA 	C O N D I Ç Ã O 	S E V E RI D A D E
+Saldo de
+issuer/distributor/funder
+abaixo do floor 	SEV2
+Webhook falhando 	assinatura inválida, ou evento sem processadoEm além do
+limiar (§11.5)
+SEV2
+Cron não executou 	janela esperada sem execução (NAV, reservas, estoque) 	SEV2
+NAV reprovado no gate 	snapshot do dia não publicado por falha de sanidade (§8.2) 	SEV2, ou SEV1 nos dois critérios
+duros
+Operação parada no meio 	estado intermediário além do praz o declarado (§6.8) 	SEV2
+KYC/KYB travado 	cliente em in_progress além do SLA (§11.5) 	SEV3
+Ordem de saída sem transação off-ramp criado sem XDR — a falha silenciosa da §7.1 do plano de
+migração
+SEV1
+Divergência Horiz on ×
+Postgres
+saldo espelhado diverge do on-chain 	SEV1
+Falha de assinatura em
+mainnet
+custódia recusando 	SEV1
+O canal de alert a é separado do canal t ransacional, e f alha ruidosament e. Hoje os dois são o mesmo: SMTP via
+nodemailer, e lib/email/transporter.ts devolve null sem erro quando o SMTP não está configurado —
+"best-
+effort, vira no-op". Para e-mail transacional é decisão razoável. Para o canal que carrega "falha de assinatura em mainnet" e
+"divergência Horizon × Postgres" é o mesmo que não ter alerta, e o modo de descobrir é um incidente que ninguém soube que
+aconteceu.
+No alvo: dest ino de alert a ausent e em produção quebra o boot , no mesmo espírito do princípio 3, e falha de envio de
+alerta é ela própria um alerta, por um segundo caminho. O destino nomeado e o escalonamento por severidade dependem da
+decisão de quem atende incidente ( DECISOES-CEO.md §9) — mas a separação dos canais não depende de ninguém e entra
+antes.
+Divergência a resolver de passagem: o PRD F-M1-7 nomeia Resend e o código usa nodemailer/SMT P. Um dos dois
+está errado desde maio, e o fornecedor de e-mail não aparece em nenhuma tabela de stack ou de custo deste documento.
+Severidades e procedimento em runbooks/incident.md .
+11.3 Reconciliação
+O princípio "DB depois da chain" só se sustenta se alguém verificar. Job periódico, por asset code ( PLINARFS e PLINARFB
+têm supply e tesouraria próprios), comparando:
+C O N F RO N T O 	D I V E RG Ê N C I A S I G N I F I C A
+Σ HoldingPLINARF × saldos por conta no Horiz on 	espelho de posição atrás da chain, ou emissão fora do fluxo
+supply (Horiz on) − saldo do distributor × circulante usado no NAV (§8.2) 	o denominador do preço está errado — é o defeito que a §8.2
+corrige
+caixa do raz ão MovimentoFundo × movimento efetivo de PIX e on-
+chain do período
+lançamento faltando, duplicado, ou dinheiro que se moveu
+fora do raz ão
+P L I N A F I N A N C E · C O N F I D E N C I A L 	6 5
+
+-- 65 of 72 --
+
+Divergência gera alerta, nunca correção aut omát ica silenciosa — e a diferença entre supply, circulante e tesouraria é
+informação a publicar, não ruído a normalizar.
+11.4 Testes
+C A MA D A F E RRA ME N TA 	C O BRE
+Unit 	Vitest 	serviços, cálculo de NAV, parsers de XDR, hash de auditoria
+Integração Vitest 	rotas com Prisma, guards de auth, idempotência
+E2E 	Playwright (+ stub de Privy) 	wiz ards de ponta a ponta, workers=1 para não competir no Neon
+Contrato scripts de smoke 	anchor em sandbox, Stellar, trilha de auditoria
+Webhook 	N O V O replay de payload assinado 	dedupe, assinatura inválida, entrega duplicada, fora de ordem
+Invariant es que precisam de t est e dedicado, porque falham em silêncio:
+rota mutante sem guard de auth → o lint de prebuild já barra; manter allowlist justificada
+clawback executado com aprovação única, ou com solicitante entre os aprovadores
+rota ou Server Act ion que move valor sem classificação de cutover (§6.7)
+operação de várias pernas que falha no meio e não deixa estado intermediário persistido (§6.8)
+NAV ancorado com o gate de sanidade reprovado, ou NavSnapshot corrigido por UPDATE (§8.2)
+NAV/token calculado com denominador vindo do Postgres em vez do circulante do Horizon (§8.2) — o teste que pega é o pool
+em runoff : toda cota realizada, caixa positivo, tokens em circulação, e o preço tem de ser maior que zero
+movimento de dinheiro sem lançamento correspondente em MovimentoFundo , e lançamento sem referenciaExterna
+— resgate pago que não reduz o caixa do NAV é o caso concreto
+cálculo de NAV, gate ou reconciliação escritos no singular, passando com uma classe e quebrando com PLINARFS +
+PLINARFB simultâneos
+EventoAudit gravado com operadorId nulo em ação administrativa
+XDR expirado submetido sem tentativa de renovação
+11.5 Os números que faltam
+Este documento não tem um único SLO, volume-alvo ou orçamento de latência. Isso torna várias decisões inf alsificáveis:
+Postgres como cache do Horizon está certo para qual volume? Reconciliação diária basta, ou precisa ser horária? Um cron de
+NAV às 18:00 é suficiente com quantas cotas ativas? Sem grandeza, essas são preferências, não escolhas.
+A resposta não é inventar valores — é aplicar o mesmo tratamento da §9.6 e registrar como premissa a levantar, com dono.
+Grandezas a obt er ant es da mainnet
+G RA N D E ZA 	O Q UE E LA D E C I D E 	Q UE M RE S P O N D E
+AUM e nº de cotas ativas no cutover 	frequência de NAV e de reconciliação, alerta de concentração CEO — §14.9
+Investidores ativos e operações por dia 	rate-limits, dimensionamento de Neon e Upstash 	CEO — §14.9
+Tempo de processamento do KYC no anchor 	o SLA do alerta "KYC travado" e a UI de espera da §2.3 	fornecedor
+Tempo entre PIX submetido e confirmação do PSP o praz o de cada estado intermediário da §6.8 	fornecedor
+Janela de PITR do plano de Neon 	o RPO da §10.5 	plano contratado
+Latência p95 dos wiz ards 	orçamento de chamadas externas por passo 	medir, não perguntar
+P L I N A F I N A N C E · C O N F I D E N C I A L 	6 6
+
+-- 66 of 72 --
+
+A última linha é a regra geral: a instrumentação da §11.1 já produz esses spans. Latência, taxa de erro e volume real vêm da
+produção, e por isso não entram aqui como meta chutada. O que precisa de resposta agora é só o que vem de fora — negócio
+e fornecedor.
+Regist ro de placeholders. Todo número ainda indefinido no documento, num lugar só, para que nenhum vire constante
+esquecida no código:
+P LA C E H O LD E R 	O N D E E N Q UA N T O N Ã O H O UV E R
+banda de variação diária do NAV 	§8.2 	gate roda em modo observação
+praz o de cada estado intermediário de saga 	§6.8 	sem alerta de operação parada
+limiar de webhook não processado, e SLA de KYC travado 	§11.2 	alerta não configurável
+praz os de retenção por categoria 	§9.8 	retenção indefinida por omissão
+threshold e nº de signatários do issuer 	§10.5 	não há mainnet
+Nenhum deles vira const ant e no código. Todos são parâmetro de ParametrosPool , configuração ou flag — pelo
+mesmo motivo do ativo-ponte na §8.1: valor que muda com a operação não pertence ao build.
+12. Internacionalização
+M4 não é "traduzir a landing" — é abrir a trilha do investidor internacional. Isso torna o i18n um problema de arquitetura: decide
+URL, cache, conteúdo gerado e documento jurídico.
+12.1 O que já existe
+A base está correta e deve ser preservada: cookie plina_locale resolvido no proxy.ts a partir de Accept-Language ,
+propagado por header x-plina-locale , lido por getDictionary() no Server Component, distribuído como props para os
+componentes, com <html lang> correto e seletor de idioma via Server Action.
+Os limites também são claros:
+LI MI T E 	C O N S E Q UÊ N C I A
+proxy.ts tem matcher: ['/'] 	só a landing é bilíngue
+Dictionary é modelado na landing ( Caminho ,
+Principio , Membro )
+não escala para wiz ards
+getDictionary() usa headers() — server-only 	os wiz ards ( /investir , /vender , /sacar ) são client
+components e não têm como consumir
+idioma não aparece na URL 	sem hreflang, sem link compartilhável por idioma, uma URL indexada
+em duas línguas
+DEFAULT_LOCALE = 'en' em cookie.ts , mas
+getLocale() cai em 'pt-BR'
+dois defaults conflitantes no mesmo módulo — resolvido em favor de
+pt-BR pela §12.2
+12.2 Estratégia de URL — híbrido
+A decisão central. O alvo segue o mesmo princípio de fricção assimétrica que rege o produto:
+P L I N A F I N A N C E · C O N F I D E N C I A L 	6 7
+
+-- 67 of 72 --
+
+S UP E RF Í C I E 	E S T RAT É G I A 	P O R Q UÊ
+Páginas públicas e indexáveis — / , /pool ,
+/cotas , /compliance , /prospecto ,
+/politica-clawback
+prefixo só no idioma não-def ault ( /pool
+é pt-BR, /en/pool é inglês), com
+hreflang e canônico por idioma
+precisam ser indexadas nas duas
+línguas e compartilhadas em
+roadshow por link direto
+Fluxos autenticados — /investir ,
+/vender , /comprar , /sacar ,
+/painel , /minha-posicao
+cookie, como hoje 	ficam atrás de login, não têm valor de
+SEO, e prefixo aqui só acrescenta rota
+sem benefício
+/admin 	pt -BR fixo 	operação interna; traduz ir painel
+administrativo é custo sem retorno
+A assimet ria é deliberada: pt -BR não ganha prefixo. /pool é a versão em português e /en/pool a em inglês. O
+motivo é churn: as URLs públicas já existem, já foram indexadas e já circularam — prefixar todo mundo obrigaria a uma camada
+de redirects permanentes para não perder o que está indexado, em troca de simetria estética. Consequências que precisam estar
+escritas, porque são justamente o que se esquece:
+o canônico de /pool é a versão pt-BR, não uma terceira URL neutra;
+hreflang declara o par ( pt-BR → /pool , en → /en/pool ) nas duas páginas;
+x-default apont a para /pool — é a decisão que faz o buscador servir português a quem não casa com nenhum dos
+dois;
+/pt-BR/pool não existe. Se aparecer, redireciona 308 para /pool , para não criar duplicata indexável do mesmo
+conteúdo.
+Isso resolve o def ault conflit ant e da §12.1. Se pt-BR é o idioma sem prefixo, ele é o default do sistema — e o
+DEFAULT_LOCALE = 'en' de lib/i18n/cookie.ts está errado, não o fallback de getLocale() . Um default, num
+lugar só.
+O matcher do proxy.ts passa a cobrir as rotas públicas, resolvendo prefixo → cookie → Accept-Language → default,
+nessa ordem de precedência. URL vence cookie: um link /en/pool renderiza em inglês mesmo para quem tem cookie pt-
+BR , e atualiza o cookie.
+Cache: com prefixo, cada idioma tem sua própria URL e a CDN cacheia normalmente. Sem prefixo nenhum, uma página
+pública cacheada por URL serviria o idioma errado — é o outro motivo, além de SEO, para o prefixo existir. A rota sem prefixo
+continua cacheável porque serve sempre pt-BR: ela não varia por Accept-Language , e é isso que a mantém segura.
+12.3 Dicionários
+O tipo monolítico moldado na landing dá lugar a namespaces por superf ície, carregados sob demanda:
+lib/i18n/dictionaries/{pt-BR,en}/
+common.ts 	navegação, botões, estados, erros
+landing.ts o dicionário atual, migrado
+investir.ts wizard do investidor
+vender.ts 	wizard do cedente
+pool.ts 	ficha técnica e NAV
+legal.ts 	compliance, LGPD, política de clawback
+Um tipo por namespace, com en e pt-BR obrigados a ter a mesma forma — divergência quebra o typecheck, que é como se
+garante que nada fica sem tradução.
+Acesso do client e: um LocaleProvider no app/layout.tsx expõe locale e namespace aos client components,
+mantendo getDictionary() para o servidor. Sem isso os wizards não têm caminho, e é o que hoje bloqueia M4.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	6 8
+
+-- 68 of 72 --
+
+12.4 Além da UI
+A parte que costuma ser esquecida e que, aqui, tem peso regulatório:
+C O N T E ÚD O 	RE G RA
+E-mails transacionais 	no locale da Pessoa , persistido no cadastro — não no locale do request que disparou
+Comprovantes e recibos PDF idem; um investidor internacional que recebe comprovante em português perde a trilha
+Prospecto e ficha técnica 	ambas as línguas, versionadas em par
+Termo do FIDC e documentos
+assinados
+versão jurídica prevalent e é a pt -BR, com tradução de cortesia identificada como tal. Não é escolha
+de produto
+Mensagens de erro da API 	error.code é a interface de máquina e permanece em inglês; a tradução acontece no cliente. O
+message nunca é apresentado ao usuário final
+Trilha de auditoria e
+EventoAudit
+pt-BR fixo — é registro, não apresentação
+12.5 Formatação
+Intl com o locale ativo, nunca 'pt-BR' cravado — hoje há Intl.NumberFormat('pt-BR') espalhado em /admin ,
+/minha-posicao e outros.
+Dist inção que precisa ficar explícit a: locale formata, não converte. Um valor em reais continua exibido em BRL para um
+leitor em inglês — muda o separador e a posição do símbolo, não a moeda. Confundir os dois em um fundo com duas moedas
+de entrada é erro material.
+Números com significado financeiro seguem em Geist Mono por regra do design system, independentemente do idioma.
+12.6 Idioma não é jurisdição
+Investidor.jurisdicao governa trilha regulatória, ticket mínimo, anchor e suitability. Locale governa apresentação. São
+ortogonais: um investidor brasileiro pode operar em inglês, e um fundo americano com procurador no Brasil pode preferir
+português. Derivar uma coisa da outra — gatear conteúdo por idioma ou inferir jurisdição do Accept-Language — é bug de
+compliance, não de UX.
+13. Do estado atual ao alvo
+Est a é a list a do que muda, não o cronograma. Três documentos já descrevem filas de trabalho — PRD §6, esta seção e
+PLANO-MIGRACAO-ANCHOR §9 — e listas paralelas divergem: a §10 da DOCUMENTACAO-TECNICA afirma até hoje que rotas
+são públicas, semanas depois de o código as ter protegido.
+Portanto: o sequenciament o vive no PRD §6, onde as dependências comerciais e jurídicas também estão. O que segue é o
+delta arquitetural que o alimenta, agrupado por urgência técnica. Onde os dois divergirem, o PRD manda no
+quando e este doc
+manda no
+o quê.
+A coluna Fase aplica a decisão de escopo do topo do documento. 01 é pré-requisito de mainnet e impede operar com dinheiro
+real na operação privada. 02 entra com a constituição do FIDC e a distribuição a terceiros: segue no alvo, mas não bloqueia o
+cutover. Onde a entrega tem duas metades, a coluna diz qual parte é de cada fase — e é justamente aí que se erra o
+sequenciamento, cortando de menos ou de mais.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	6 9
+
+-- 69 of 72 --
+
+# E N T RE G A 	FA S E 	P O R Q UÊ
+1 Migração do anchor (org + /verification ,
+webhooks, KYC assíncrono, backfill da §9.5) — e a
+part ição Anchor → Kyc + Ramp (§7.1) na
+mesma passada
+01 (PF) · 02
+(KYB)
+onboarding e KYC estão quebrados: endpoints
+removidos e sunset vencido em 16/08. A metade
+PF — cedente e comprador — é fase 01; o KYB
+do investidor institucional é fase 02. A partição
+sai quase de graça dentro de uma reescrita que
+já vai acontecer. Tem prazo comercial além
+do t écnico: o fornecedor é quem indica a
+Plina ao Build Award da SCF (§2.3)
+2 Ident idade + RBAC no admin e operador real 01 	princípio 7; a fase 01 é operada à mão todo dia,
+e é esse registro que a fase 02 vai auditar
+3 Dupla aprovação de clawback 	flags 01 · fluxo
+02
+as flags do ativo são fixadas na emissão e são
+irreversíveis — errar agora é errar para sempre.
+O fluxo de aprovação só tem uso quando existe
+holder terceiro
+4 Choke point do guard de cut over + lint
+bloqueant e sobre rotas e Server Actions (§6.7)
+01 	o kill-switch cobre 3 de 46 rotas, e a mutação
+do painel fica fora da varredura
+5 Est ados int ermediários e reparo das sagas
+(§6.8): enum de estado, praz o, ações de reparo em
+/admin/ops
+01 (originação)
+· 02
+(entrada/saída)
+a saga de cessão — assinatura → PIX ao
+cedente → incorporação — é o fluxo da fase 01,
+e é onde o dinheiro fica parado com obrigação
+jurídica já assumida
+6 NAV corret o ant es da primeira âncora (§8.2), em
+duas partes: (a) raz ão MovimentoFundo ,
+denominador vindo do circulante do Horiz on,
+apropriação de taxa e cálculo por asset code; (b) gate
+de sanidade antes de publicar
+01 	hoje o NAV/token superestima — caixa entra no
+numerador e os tokens da cota realiz ada saem
+do denominador — e devolve 0 com o pool em
+runoff, que é o número com que
+liquidacao.ts:94 precifica resgate. NAV
+errado ancorado é irreversível, e na fase 01 a
+série é o entregável: é o track record que a fase
+03 exige e que não se produz retroativamente
+7 Topologia de assinat ura do issuer + recovery
+kit t est ado em t est net (§10.5)
+01 	é o único cenário do documento sem reparo, e
+independe de quem detém o token
+8 Upgrade do Next + headers de segurança + auth no
+comprovante
+01 	5 achados da auditoria de 08/06, todos abertos
+9 Webhooks de DocuSign/PSP + crons (NAV, reservas,
+estoque)
+01 	DocuSign e PSP são o motor de originação da
+fase 01; sem eles não há fechamento diário nem
+estado push
+10 Topologia de assinat ura + cont rat o async do
+signer + custodyConfigured() por
+propriedade (§7.1, §10.1, §10.5)
+01 	a chave do issuer vive em mainnet desde o
+primeiro dia. O guard de fail-closed hoje exige
+credencial de um fornecedor específico e
+bloquearia a guarda própria escolhida para a
+fase 01
+11 Alertas da §11.2, reconciliação da §11.3 e os limiares da
+§11.5 — começando pela separação do canal de
+alert a do t ransacional
+01 	alerta sem número é alerta que não dispara; e o
+canal atual devolve null sem erro quando
+não está configurado, o que faz o SEV1 sumir
+em silêncio
+11b Limit e por document o nas duas pont as +
+ident idade da cot a no f unil de venda (§6.4, §9.3)
+01 	/vender e /comprar são o produto da
+fase 01, e é onde sai dinheiro da Plina por PIX.
+Hoje não há chave em que apoiar o controle
+P L I N A F I N A N C E · C O N F I D E N C I A L 	7 0
+
+-- 70 of 72 --
+
+# E N T RE G A 	FA S E 	P O R Q UÊ
+11c Mét ricas de f unil derivadas do EventoAudit
+(§11.1) e cron de fechamento mensal (§4.8)
+01 	a conversão do funil determina se o capital
+próprio gira; sai sem fornecedor novo e sem PII
+saindo do país
+12 Ciclo de vida do dado pessoal (§9.8):
+anonimiz ação, SolicitacaoTitular , canal
+em /lgpd
+01 	cedente e comprador são titulares desde a
+primeira cessão; LGPD não espera FIDC
+13 Superfície única de mutação no admin (Server Actions,
+§5.2) e fim de `/comprar/reserva\
+reservar` 	01 	dívida
+estrutural
+no painel
+que opera
+a fase 01
+14 Screening OFAC/PEP de cedente e comprador (§2.2,
+lib/integrations/screening/ )
+01 	AML/COAF é obrigação própria da Plina ao
+adquirir direito creditório de pessoa física —
+não é obrigação do fundo
+15 Série histórica de NAV e /pool/eventos 	01 	é o track record em si
+16 Caminho de saída único ( /sacar linkado,
+resgate real)
+02 	saída inacessível = saída inexistente, mas na
+fase 01 não há terceiro de quem sair
+17 Superfície de compliance ( /compliance ,
+PrestadorRegulado , pareceres) e prospecto
+02 	prestadores registrados e prospecto só existem
+com o FIDC constituído
+18 i18n: namespaces + LocaleProvider + prefixo
+nas páginas públicas
+02 	pré-requisito de M4 — hoje o dicionário é
+server-only e os wiz ards são client (§12)
+19 Trilha internacional (M4) e waterfall Soroban (M7) 	02 / pós
+14. Decisões pendentes
+Cada uma trava desenho, não só implementação. As que dependem do CEO estão reunidas em linguagem de negócio, com
+opções e recomendação, em DECISOES-CEO.md :
+1. Anchor: migrar o atual ou avaliar substituto? · Plano B de parceiro de PIX? Resolvidos: mant er o Et herf use, por
+razão est rat égica — a Plina será indicada por eles ao Build Award da SCF (§2.3). Com isso a pergunta "abrimos avaliação
+de alternativa em paralelo?" fica encerrada e saiu do DECISOES-CEO.md , que é lista de pedidos vivos ao CEO; o registro
+permanente é este. Seguem abertas, como perguntas comerciais ao fornecedor e não como decisões: dat a, preço e
+compromisso de disponibilidade do rail BRL — que datam a fase 02, não a 01 — e se a indicação t raz
+expect at iva de cont rapart ida (atividade em mainnet, repositório público, suporte a SEP, prazo). Se trouxer, parte disso é
+requisito de arquitetura e entra no sequenciamento.
+2. KYC host ed ou programát ico? Resolvido: híbrido — pré-preenche por API, lança /idv para e-mail, selfie e
+agreement, que não têm API (§2.3). Em aberto: o prazo de KYB do investidor institucional cabe no funil do roadshow?
+3. Cust ódia — t rês opções, e a decisão é de f ase 02. Fireblocks, custodiante equivalente (BitGo e similares) ou guarda
+própria com mult isig nat ivo St ellar. As três estão em DECISOES-CEO.md §2; este documento estava atrasado, listando
+duas. Para a f ase 01 a arquit et ura assume guarda própria (§2.2): não há terceiro detendo token e o auditor que poderia
+exigir custodiante qualificado é fase 02, então pagar o piso do fornecedor mais caro da categoria agora é comprar sinal de
+compliance sem plateia (§10.3). O que decide na fase 02 é a exigência real do auditor do FIDC, não a suposição sobre ela — e
+a troca é rotação de signatário, não migração (§10.5).
+P L I N A F I N A N C E · C O N F I D E N C I A L 	7 1
+
+-- 71 of 72 --
+
+4. Qualificação dos aprovadores de clawback: quem, nominalmente, ocupa APROVADOR — e a política exige que um
+deles seja do jurídico? É registro em AprovacaoClawback.papel e regra de runbook, não gate de código (§5.3).
+5. Yield-alvo da Sênior ( spread_curva_yield_pool ) — provisório em CDI+5% / SOFR+7% , nunca fixado. Não
+implementar antes da confirmação do CEO (ver 2026-06-30-spread-cdi-provisorio.md ). Também t rava a
+provisão de perf ormance no NAV (§8.2): sem benchmark fixado não há excedente a calcular, e o NAV segue líquido só
+de administração.
+6. Soft -launch sem FIDC f ormal? Resolvido em 2026-08-18: sim. A fase 01 opera sob a Lei 11.795/2008 sem FIDC, e
+ninguém além da Plina detém PLINA-RF — decisão, alternativas recusadas e gatilhos de reversão no Escopo. Em aberto, e é
+do CEO: a estrutura do seed (equity na Plina ou compra de token) e a existência de LOI que precise alocar antes da constituição
+do fundo. O PRD §8.1 e o DECISOES-CEO.md ainda registram isso como pendente e precisam ser atualizados.
+7. Banda de variação diária do NAV ( ParametrosPool.bandaVariacaoNavPct ): qual variação entre snapshots é
+normal e qual é sinal de erro de cálculo? Depende do perfil de prazo e inadimplência da carteira, que só a operação revela.
+Até definir, o gate da §8.2 roda em modo observação — alerta sem bloquear.
+8. Prazos de ret enção por cat egoria de dado (§9.8), e a confirmação de que retenção regulatória prevalece sobre pedido
+de eliminação enquanto o prazo correr. É decisão de jurídico e DPO, não de engenharia — mas trava o /lgpd , a
+anonimização e a resposta ao primeiro titular que perguntar.
+9. Volume-alvo no cut over: AUM, número de cotas ativas, investidores e operações por dia (§11.5). Sem isso, frequência de
+NAV, de reconciliação e dimensionamento de infraestrutura são chute. Vem do CEO e do resultado do outreach institucional.
+10. Topologia de assinat ura do issuer (§10.5): quantos signatários, qual threshold, em quantas custódias distintas. Já
+decidido que signatário único em mainnet está fora; falta o desenho, e ele depende parcialmente da decisão 3.
+1. Convenções de apropriação de t axa (§8.2): base de dias, base de incidência e regra de cristalização da performance.
+Recomendação da engenharia registrada na §8.2 — 252 dias úteis, incidência sobre o NAV líquido do dia anterior,
+cristalização por janela com marca d'água —, mas a escolha é de jurídico/estruturador e entra no regulamento do veículo.
+Tem prazo curt o por um mot ivo específico: convenção só vale a partir do primeiro snapshot ancorado. Mudar depois
+não é trocar um parâmetro, é corrigir a série publicada, com o mesmo custo descrito na §8.2. Anda junto com a decisão 4
+sobre provisão, em DECISOES-CEO.md §4.
+Este documento é o alvo. Quando uma decisão da §14 for tomada, ela desce para a seção correspondente e sai daqui.
+P L I N A F I N A N C E · C O N F I D E N C I A L 	7 2
+
+-- 72 of 72 --
+

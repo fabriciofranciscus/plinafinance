@@ -1,0 +1,59 @@
+# CI — roda em PR e em push pra main os mesmos 4 gates que já existiam no
+# package.json e só rodavam na máquina de quem lembrasse. `main` chegou a ficar
+# com typecheck e testes vermelhos sem ninguém notar porque o `prebuild` da
+# Vercel só executa o lint de auth-guard.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      # Nenhum gate toca o banco: os testes mockam `@/lib/db` e o build só
+      # precisa que `prisma generate` resolva o datasource. URLs de fachada
+      # mantêm o CI sem segredo nenhum.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
+      # Fail-closed: rotas /lab/* só existem em testnet com opt-in explícito.
+      STELLAR_NETWORK: TESTNET
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # `postinstall` roda `prisma generate` — o typecheck depende dos tipos
+      # gerados do client.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      # Redundante com o `prebuild`, mas isolado dá sinal de falha legível:
+      # "rota nova sem auth-guard" em vez de "build falhou".
+      - name: Auth guard
+        run: pnpm lint:auth-guard
+
+      - name: Build
+        run: pnpm build

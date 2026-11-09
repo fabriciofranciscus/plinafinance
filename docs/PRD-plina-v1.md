@@ -1,8 +1,42 @@
-# PRD Plina — v1.0 (Mockup Founder-led → Produto)
+# PRD Plina — v1.1 (Mockup Founder-led → Produto)
 
-**Status:** Draft 1 · **Data:** 2026-05-25 · **Owner:** CTO (Thais) · **Sponsor:** CEO (Fabrício)
+**Status:** v1.1 · **Base:** v1.0 de 2026-05-25 · **Revisado em:** 2026-08-19
+**Owner:** CTO (Thais) · **Sponsor:** CEO (Fabrício)
 **Fonte do escopo de UX:** mockup do fundador em https://mockup-plina.lovable.app/
 **Fonte do estado atual:** branch `fix/n08-n13-medium-bundle` (commit `c4b59c8`)
+
+> ⚠️ **Nota de escopo — v1.1.** O one-page do CEO (04/08) é posterior a este PRD e manda
+> sobre ele no faseamento. A fase 01 — o MVP que vai a mainnet — é **operação privada sob a
+> Lei 11.795/2008, sem FIDC constituído e sem investidor terceiro detendo PLINA-RF**. O FIDC
+> sob CVM 175 e a distribuição a qualificados são a fase 02.
+>
+> Consequência para a leitura deste documento: onde ele trata cobertura CVM 175, prestadores
+> registrados e termo de adesão ao FIDC como pré-requisito de mainnet (§0, §2.4, M3, M6, M9),
+> isso passou a ser **fase 02**. A fila de engenharia re-etiquetada por fase está em
+> [`ARQUITETURA-ALVO.md §13`](./ARQUITETURA-ALVO.md#13-do-estado-atual-ao-alvo); o registro da
+> decisão, com as alternativas recusadas, no
+> [Escopo do mesmo doc](./ARQUITETURA-ALVO.md#decisão-de-escopo--quem-detém-plina-rf-na-fase-01).
+
+---
+
+## Registro de versões
+
+**v1.1 — 2026-08-19.** Revisão de escopo e correções materiais. O corpo do documento continua
+sendo o plano de v1.0; o que mudou está marcado no lugar onde vale, e listado aqui:
+
+| O que mudou | Onde | Por quê |
+|---|---|---|
+| **Faseamento**: o MVP em mainnet é operação privada sob a Lei 11.795, sem FIDC e sem investidor terceiro. M3 e M6 saem do caminho crítico | nota de escopo, §8.1 | o one-page do CEO é posterior a este PRD e manda no faseamento |
+| **Fórmula do NAV corrigida** para incluir taxa de administração e o nível "NAV líquido" | §3.2 | o §3.5 declarava a taxa "subtraída do NAV" e a fórmula do §3.2 não a tinha — o documento se contradizia, e o código seguiu a fórmula |
+| **Denominador do NAV corrigido** para o circulante on-chain, e o caixa passa a vir de um razão | §3.2 | `tokens_vivos` vinha das cotas ativas no Postgres: o caixa entrava no numerador e os tokens saíam do denominador, dobrando a conta |
+| **Custódia reaberta**: de "Fireblocks, não reabrir" para três opções, com guarda própria na fase 01 | §1.2 | o invariante que não se reabre é "mainnet nunca assina com chave única em env" — o fornecedor nunca foi parte dele |
+| **Divergência de fornecedor de e-mail** marcada (Resend no PRD, nodemailer/SMTP no código) | F-M1-7 | aberta desde maio, e o canal de alerta não pode ser best-effort |
+
+**Ainda não feito, e é trabalho próprio:** reestruturar o corpo do PRD em torno das fases
+01/02/03 em vez de M0–M9. As duas numerações convivem hoje, e a nota de escopo é o que as
+reconcilia. Uma v2 que unifique isso vale a pena quando a fase 01 fechar.
+
+**v1.0 — 2026-05-25.** Versão original.
 
 ---
 
@@ -19,7 +53,7 @@ A Plina opera um produto único — **PLINA-RF**, token Stellar lastreado em FID
 
 O mockup formaliza um produto **multilateral** já parcialmente implementado em testnet (POC funcional para vendedor, comprador e investidor) e define os elementos que ainda **não existem em código**: classes Sênior/Subordinada, FIDC formal, Soroban waterfall, custódia Fireblocks, DocuSign real, KYC institucional internacional, e ficha técnica do PLINA-RF como ativo distribuível.
 
-**Escopo deste PRD:** levar a Plina de POC testnet → MVP Mainnet com cobertura formal CVM 175, alinhando código ao mockup do fundador. Não é um redesign — é um **plano de aterrissagem** que reúsa o que já existe (`/vender`, `/comprar`, `/investir`, `/pool`, audit log on-chain, lint-auth-guard) e fecha os gaps regulatórios e econômicos.
+**Escopo deste PRD:** levar a Plina de POC testnet → MVP Mainnet com cobertura formal CVM 175, alinhando código ao mockup do fundador. *(Revisado em 2026-08-18: a cobertura formal CVM 175 é fase 02 — ver nota de escopo no topo.)* Não é um redesign — é um **plano de aterrissagem** que reúsa o que já existe (`/vender`, `/comprar`, `/investir`, `/pool`, audit log on-chain, lint-auth-guard) e fecha os gaps regulatórios e econômicos.
 
 **Não-objetivos:**
 - Não atacamos varejo nesta versão (Fase 3 do pitch — 2028).
@@ -69,7 +103,7 @@ Legenda: ✅ implementado · 🟡 parcial · 🔲 não iniciado / só preparaç�
 - **Asset code on-chain:** `PLINARF` (sem hífen, restrição Stellar). Branding `PLINA-RF`.
 - **Custódia do cedente/comprador:** Plina assina em nome do ato. Cedente/comprador **não têm wallet Stellar** — usam Pix off-chain + DocuSign + carta de crédito na administradora.
 - **Custódia do investidor:** wallet Privy (self-custody com social recovery em Fase 2 via Soroban smart account).
-- **Custódia operacional:** Fireblocks para issuer/distributor (mainnet) — substitui secrets em env do POC.
+- **Custódia operacional:** ~~Fireblocks para issuer/distributor (mainnet)~~ — **reaberto em 2026-08-18.** O invariante que não se reabre é *"mainnet nunca assina com chave única vinda de env"*; o fornecedor é escolha em aberto entre três (Fireblocks, custodiante equivalente, guarda própria com multisig nativo Stellar). A fase 01 assume **guarda própria**, e a escolha de custodiante é decisão de fase 02, contra a exigência real do auditor do FIDC. Trocar depois é rotação de signatário via `setOptions`, não migração — ver [`ARQUITETURA-ALVO.md` §14.3 e §10.5](./ARQUITETURA-ALVO.md#14-decisões-pendentes).
 - **Auth:**
   - Investidor: Privy JWT, `withAuth` em todas as rotas `/api/investidor/**` (lint enforce).
   - Admin: cookie httpOnly + `x-plina-admin` header + CSRF token (POC). Migra para Clerk/Auth.js antes de mainnet.
@@ -310,11 +344,15 @@ Citando o pitch §6 e o mockup:
 ### 3.2 NAV
 
 ```
-NAV_total(t) = Σ (valor_realizável_cota_i × prob_realização_i × fator_desconto_temporal_i)
-             + caixa_TESOURO_não_aplicado(t)
-             − provisões(t)
+NAV_ativos(t)  = Σ (valor_realizável_cota_i × prob_realização_i × fator_desconto_temporal_i)
+               + caixa_TESOURO_não_aplicado(t)
 
-NAV_por_token(t) = NAV_total(t) / tokens_vivos(t)
+NAV_líquido(t) = NAV_ativos(t)
+               − provisões(t)
+               − taxa_adm_apropriada(t)            [2% a.a., base 252, sobre NAV_líquido(t−1)]
+               − taxa_performance_provisionada(t)  [20% do excedente; só após o yield-alvo ser fixado]
+
+NAV_por_token(t) = NAV_líquido(t) / tokens_em_circulação(t)   [supply on-chain − tesouraria no distributor]
 
 NAV_classe_Sênior(t) = NAV_total(t) × peso_Sênior(t)  [via waterfall]
 NAV_classe_Subordinada(t) = NAV_total(t) − NAV_classe_Sênior(t)
@@ -323,6 +361,22 @@ NAV_classe_Subordinada(t) = NAV_total(t) − NAV_classe_Sênior(t)
 - `valor_realizável_cota_i`: já calculado em `lib/services/pool.ts:navDaCota`. Manter.
 - `fator_desconto_temporal_i`: refletir status de estoque (VERDE/AMARELO/VERMELHO/BAIXA). Em VERMELHO aplicar haircut. Em BAIXA reconhecer perda.
 - Snapshot diário às 18:00 BRT (após fechamento do mercado de consórcio); persistido em `NavSnapshot` e publicado on-chain via `nav_oracle.rs` (M7) ou via memo-hash (interim).
+
+> **Corrigido em 2026-08-18.** A fórmula original omitia as taxas que o §3.5 declara serem
+> "subtraídas do NAV" — o documento se contradizia, e o código (`lib/services/pool.ts`) seguiu a
+> fórmula. O que precifica emissão e resgate é o **NAV líquido**; `NAV_ativos` é nível
+> intermediário e não deve ser publicado sozinho. A apropriação vale **desde o primeiro
+> snapshot**, inclusive na fase 01 em que a Plina cobra de si mesma, porque a série é o track
+> record da fase 02 e o snapshot ancorado on-chain não se recalcula barato. Convenções de
+> apropriação e o motivo de cada uma em
+> [`ARQUITETURA-ALVO.md` §8.2](./ARQUITETURA-ALVO.md#82-publicação-de-nav).
+>
+> **O denominador também estava errado.** `tokens_vivos` era derivado das cotas ativas no
+> Postgres: quando uma cota é realizada o caixa entra no numerador *e* os tokens dela saem do
+> denominador, dobrando a conta — e com o pool em runoff o resultado é zero. O denominador é o
+> **circulante on-chain** (supply menos a tesouraria no distributor, já que o resgate não queima),
+> e o caixa passa a vir de um razão append-only em vez da soma de `valorRealizado`, porque essa
+> soma nunca subtraiu resgate pago.
 
 ### 3.3 Waterfall (cascata de pagamentos)
 
@@ -491,7 +545,7 @@ Os módulos abaixo são **incrementos de valor entregáveis independentemente**.
 - F-M1-4: **Caminho fallback**: queue de validação manual (operador interno valida documentos) + taxa de anuência embutida (100-300 bps configurável por administradora).
 - F-M1-5: UI `/vender` atualizada com etapas explícitas: Cadastro & KYC · Validação · Proposta · Cessão · Pix · Concluído (alinhar com terminal-mode do mockup).
 - F-M1-6: Webhook DocuSign assinado (verificar HMAC), idempotente, registra `Cessao.assinadaEm` + memo-hash.
-- F-M1-7: Email transacional ao cedente em cada transição (Resend).
+- F-M1-7: Email transacional ao cedente em cada transição (~~Resend~~ — **divergência aberta desde maio**: o código usa nodemailer/SMTP (`lib/email/transporter.ts`), não Resend. Decidir o fornecedor e alinhar; ver [`ARQUITETURA-ALVO.md` §11.2](./ARQUITETURA-ALVO.md#112-alertas)). **O canal de alerta é separado do transacional** e não pode ser best-effort.
 - F-M1-8: PDF de comprovante (Vercel Blob privado) com link assinado de curto prazo.
 
 **Aceites.**
@@ -885,7 +939,7 @@ Os módulos abaixo são **incrementos de valor entregáveis independentemente**.
 
 Decisões que travam parte do roadmap e exigem alinhamento com Fabrício:
 
-1. **Fase 0 soft-launch sem FIDC formal?** Pitch §11 sugere iniciar com capital próprio dos sócios (operação privada Lei 11.795). Decidir: M3 espera FIDC formal ou roda em modo soft-launch?
+1. ~~**Fase 0 soft-launch sem FIDC formal?**~~ **Respondida pelo one-page (04/08): a fase 01 é operação privada sob a Lei 11.795, sem FIDC e sem investidor terceiro detendo PLINA-RF.** M3 não espera a constituição do fundo — sai do caminho crítico de mainnet junto com M6. Restam duas perguntas ao CEO, em [`DECISOES-CEO.md` §1](./DECISOES-CEO.md): como o seed entra (equity ou compra de token) e se há LOI que precise alocar antes do fundo.
 2. **Mix-alvo Sênior/Subordinada.** Pitch sugere majoritariamente intl. Confirmar pesos para calibrar yield alvo.
 3. **Custódia Fireblocks.** Custo + tempo de onboarding KYB. Aprovar budget.
 4. **Auditoria Soroban externa (M7).** US$ 30-50k. Não-negociável tecnicamente, mas timing depende de mainnet ter volume justificável.
@@ -912,4 +966,4 @@ Decisões que travam parte do roadmap e exigem alinhamento com Fabrício:
 
 ---
 
-*Fim do PRD v1.0. Próximo passo: revisão com CEO + jurídico, depois quebra dos módulos M0..M9 em épicos/issues no tracker.*
+*Fim do PRD v1.1. Próximo passo: confirmação do faseamento com o CEO (`DECISOES-CEO.md` §1), depois quebra dos itens de fase 01 em épicos/issues no tracker.*

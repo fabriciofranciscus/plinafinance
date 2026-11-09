@@ -1,0 +1,991 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Plina — Yield institucional para o mundo</title>
+<meta name="description" content="Conectando capital global ao direito creditório brasileiro. PLINA-RF: token institucional lastreado em FIDC sob CVM 175, distribuído via Stellar." />
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=chillax@500,600,700&f[]=satoshi@300,400,500&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500&family=Geist:wght@300;400;600;700&display=swap" />
+<style>
+/* ─────────────────────────────────────────────────────────────
+   Plina Finance — "The Regulated Terminal"
+   Tokens espelham design-system/tokens.json
+   ───────────────────────────────────────────────────────────── */
+:root{
+  --sheet-white:#ffffff;
+  --document-grey:#e4e4e4;
+  --deep-petrol:#132728;
+  --abyss:#080f10;
+
+  --cyan-on-dark:#0EA7C7;   /* 5.47 / 6.79 */
+  --cyan-on-white:#057A99;  /* 4.94 */
+  --cyan-on-grey:#046C88;   /* 4.71 / 5.99 */
+  --glacier:#A0CFE7;        /* dark-surface only */
+
+  --ink:#132728;
+  --ink-70:rgba(19,39,40,.7);
+  --ink-60:rgba(19,39,40,.6);
+  --ink-40:rgba(19,39,40,.4);
+  --ink-20:rgba(19,39,40,.2);
+  --ink-15:rgba(19,39,40,.15);
+
+  --hairline-light:rgba(19,39,40,.12);
+  --hairline-dark:rgba(255,255,255,.10);
+
+  --ease:cubic-bezier(0.16,1,0.3,1);
+  --gutter:clamp(24px,8vw,120px);
+  --container:1280px;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{
+  margin:0;
+  background:var(--document-grey);
+  color:var(--ink);
+  font-family:'Satoshi',system-ui,sans-serif;
+  font-weight:300;
+  font-size:1.125rem;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+img,svg{max-width:100%}
+a{color:inherit}
+::selection{background:var(--cyan-on-dark);color:var(--deep-petrol)}
+
+/* Type roles */
+.display,.title{font-family:'Chillax',system-ui,sans-serif;font-weight:600;letter-spacing:-.02em}
+.label{font-family:'Geist',system-ui,sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.2em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+
+/* Layout */
+.wrap{max-width:var(--container);margin-inline:auto;padding-inline:var(--gutter)}
+section{padding-block:8rem}
+@media (max-width:768px){section{padding-block:5rem}}
+.surface-white{background:var(--sheet-white)}
+.surface-grey{background:var(--document-grey)}
+.surface-petrol{background:var(--deep-petrol);color:var(--document-grey)}
+
+.eyebrow{
+  display:flex;align-items:center;gap:.75rem;
+  font-family:'Geist Mono',ui-monospace,monospace;
+  font-size:11px;text-transform:uppercase;letter-spacing:.2em;
+  margin-bottom:4rem;
+}
+.eyebrow .n,.eyebrow .sep{color:var(--ink-40)}
+.eyebrow .t{color:var(--ink-70)}
+.surface-petrol .eyebrow .n,.surface-petrol .eyebrow .sep{color:rgba(255,255,255,.4)}
+.surface-petrol .eyebrow .t{color:rgba(255,255,255,.75)}
+
+.lede{grid-column:span 4;color:var(--ink-70);font-size:1.125rem;line-height:1.6;max-width:70ch}
+.surface-petrol .lede{color:rgba(255,255,255,.7)}
+.split{display:grid;grid-template-columns:repeat(12,1fr);gap:3rem 2rem;align-items:end}
+.split .display{grid-column:span 8}
+@media (max-width:1024px){
+  .split{grid-template-columns:1fr}
+  .split .display,.lede{grid-column:auto}
+}
+
+/* Focus — cyan por superfície, 3:1 mínimo */
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{
+  outline:2px solid var(--cyan-on-grey);outline-offset:4px;
+}
+.surface-petrol a:focus-visible,.surface-petrol button:focus-visible,
+.topbar a:focus-visible,.nav a:focus-visible,.nav button:focus-visible{
+  outline-color:var(--cyan-on-dark);
+}
+.surface-white a:focus-visible,.surface-white button:focus-visible,
+.surface-white input:focus-visible,.surface-white select:focus-visible,.surface-white textarea:focus-visible{
+  outline-color:var(--cyan-on-white);
+}
+
+.skip-link{
+  position:absolute;top:-100px;left:16px;z-index:100;
+  background:var(--deep-petrol);color:#fff;padding:12px 24px;border-radius:9999px;
+  font-family:'Geist',sans-serif;font-size:.75rem;font-weight:700;
+  text-transform:uppercase;letter-spacing:.2em;
+  transition:top 200ms var(--ease);
+}
+.skip-link:focus{top:16px}
+
+/* ── TopBar + Nav ───────────────────────────────────────────── */
+.shell{position:fixed;inset:0 0 auto 0;z-index:50}
+.topbar{
+  background:var(--deep-petrol);border-bottom:1px solid var(--hairline-dark);
+  font-family:'Geist Mono',ui-monospace,monospace;font-size:10px;
+  text-transform:uppercase;letter-spacing:.16em;
+  overflow:hidden;max-height:2rem;opacity:1;
+  transition:max-height 300ms var(--ease),opacity 300ms var(--ease);
+}
+.shell[data-past-hero="true"] .topbar{max-height:0;opacity:0}
+.topbar .row{max-width:var(--container);margin-inline:auto;padding-inline:var(--gutter);
+  height:2rem;display:flex;align-items:center;justify-content:center;gap:.75rem;
+  white-space:nowrap;overflow:hidden}
+.topbar .dot{width:6px;height:6px;border-radius:9999px;background:var(--cyan-on-dark);flex:none}
+.topbar .txt{color:rgba(255,255,255,.7)}
+.topbar .sep{color:rgba(255,255,255,.3)}
+.topbar a{color:#fff;text-decoration:underline;text-underline-offset:3px;
+  text-decoration-color:rgba(255,255,255,.35);transition:color 300ms var(--ease),text-decoration-color 300ms var(--ease)}
+.topbar a:hover{color:var(--cyan-on-dark);text-decoration-color:var(--cyan-on-dark)}
+
+@media (max-width:820px){
+  .topbar{max-height:0;opacity:0;border-bottom-width:0}
+}
+
+.nav{transition:background-color 300ms var(--ease),border-color 300ms var(--ease);
+  border-bottom:1px solid transparent;backdrop-filter:blur(12px)}
+.shell[data-past-hero="true"] .nav{background:rgba(19,39,40,.95);border-bottom-color:var(--hairline-dark)}
+.nav .row{max-width:var(--container);margin-inline:auto;padding-inline:var(--gutter);
+  height:5rem;display:flex;align-items:center;justify-content:space-between;gap:2rem;position:relative}
+.logo{font-family:'Chillax',sans-serif;font-weight:600;font-size:2rem;letter-spacing:-.02em;
+  color:var(--document-grey);text-decoration:none;line-height:1}
+.logo .period{color:var(--cyan-on-dark)}
+.nav .links{display:flex;gap:1.75rem;position:absolute;left:50%;transform:translateX(-50%)}
+.nav .links a{font-family:'Geist',sans-serif;font-weight:600;font-size:11px;text-transform:uppercase;
+  letter-spacing:.2em;color:rgba(255,255,255,.8);text-decoration:none;white-space:nowrap;
+  transition:color 300ms var(--ease)}
+.nav .links a:hover{color:#fff}
+.nav .right{display:flex;align-items:center;gap:1.25rem}
+.lang{display:flex;align-items:center;gap:.5rem;font-family:'Geist',sans-serif;font-weight:600;
+  font-size:10px;text-transform:uppercase;letter-spacing:.2em}
+.lang button{background:none;border:0;padding:0;cursor:pointer;color:rgba(255,255,255,.55);
+  font:inherit;transition:color 300ms var(--ease)}
+.lang button[aria-current="true"],.lang button:hover{color:#fff}
+.lang .slash{color:rgba(255,255,255,.3)}
+.btn-ghost{
+  display:inline-flex;align-items:center;min-height:44px;padding:.75rem 1.5rem;border-radius:9999px;
+  border:1px solid var(--hairline-dark);background:transparent;color:#fff;text-decoration:none;
+  font-family:'Geist',sans-serif;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.2em;
+  transition:background-color 300ms var(--ease),color 300ms var(--ease),border-color 300ms var(--ease);
+  cursor:pointer;white-space:nowrap;
+}
+.btn-ghost:hover{background:var(--cyan-on-dark);color:var(--deep-petrol);border-color:var(--cyan-on-dark)}
+@media (max-width:1100px){.nav .links{display:none}}
+@media (max-width:640px){.lang{display:none}}
+
+/* ── Hero — abyss + ambient light blobs ─────────────────────── */
+.hero{
+  position:relative;min-height:100svh;display:flex;align-items:center;
+  background:var(--abyss);overflow:hidden;padding-block:9rem 4rem;
+}
+.blobs{position:absolute;inset:0;pointer-events:none}
+.blob{position:absolute;border-radius:50%}
+.blob.a{width:46vw;height:46vw;left:-8vw;top:8%;background:rgba(14,167,199,.22);filter:blur(55px)}
+.blob.b{width:34vw;height:34vw;left:28vw;top:-12%;background:rgba(14,167,199,.13);filter:blur(50px)}
+.blob.c{width:28vw;height:28vw;left:12vw;bottom:-14%;background:rgba(14,167,199,.10);filter:blur(45px)}
+.blob.d{width:40vw;height:40vw;right:-14vw;top:24%;background:rgba(14,167,199,.07);filter:blur(40px)}
+.hero .wrap{position:relative;z-index:1}
+.hero h1{
+  font-family:'Chillax',sans-serif;font-weight:600;color:#fff;margin:0;
+  font-size:clamp(2.25rem,6vw,5rem);line-height:.95;letter-spacing:-.04em;
+}
+.hero h1 .accent{color:var(--cyan-on-dark)}
+.hero p{color:rgba(255,255,255,.7);margin:2.5rem 0 0;max-width:70ch;font-size:1.125rem}
+.hero p .mono{color:#fff}
+.hero-meta{
+  display:flex;flex-wrap:wrap;gap:0 2rem;margin-top:3.5rem;
+  font-family:'Geist Mono',ui-monospace,monospace;font-size:10px;
+  text-transform:uppercase;letter-spacing:.2em;color:rgba(255,255,255,.45);
+}
+.hero-meta .sep{color:rgba(255,255,255,.2)}
+.reveal-hero{opacity:0;animation:heroUp 900ms var(--ease) 150ms forwards}
+@keyframes heroUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+
+/* ── Reveal ─────────────────────────────────────────────────── */
+.reveal{opacity:0;transform:translateY(20px);
+  transition:opacity 900ms var(--ease),transform 900ms var(--ease)}
+.reveal.active{opacity:1;transform:none}
+.d1{transition-delay:80ms}.d2{transition-delay:160ms}.d3{transition-delay:240ms}
+
+/* ── Produto ────────────────────────────────────────────────── */
+.h-produto{font-size:clamp(3.5rem,11vw,9rem);line-height:.9;letter-spacing:-.045em;margin:0}
+.h-produto .deep{color:var(--cyan-on-white)}
+.specs{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+  background:var(--hairline-light);border-block:1px solid var(--hairline-light);margin-top:6rem}
+.specs > div{background:var(--sheet-white);padding:32px}
+.specs h3{margin:0 0 1rem;font-family:'Geist Mono',ui-monospace,monospace;font-size:10px;
+  font-weight:400;text-transform:uppercase;letter-spacing:.2em;color:var(--ink-60)}
+.specs .val{font-family:'Chillax',sans-serif;font-size:1.5rem;font-weight:600;
+  color:var(--ink);margin:0 0 .75rem;letter-spacing:-.02em}
+.specs .val .mono{font-size:1.25rem;font-weight:500;letter-spacing:-.01em}
+.specs p{margin:0;font-size:.9375rem;color:var(--ink-60);line-height:1.6}
+@media (max-width:1024px){.specs{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:600px){.specs{grid-template-columns:1fr}}
+
+/* ── Tese ───────────────────────────────────────────────────── */
+.h-tese{font-size:clamp(3rem,8.5vw,7rem);line-height:.95;letter-spacing:-.04em;margin:0}
+.table-scroll{overflow-x:auto;margin-top:5rem}
+table{width:100%;min-width:720px;border-collapse:collapse;text-align:left}
+caption{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+thead tr{border-block:1px solid var(--ink-20)}
+th,td{padding:1.25rem 1rem;vertical-align:middle}
+thead th{padding-block:1.5rem;vertical-align:bottom}
+thead th:first-child,tbody th{padding-left:0;padding-right:1.5rem;width:18%}
+thead th + th,tbody td{border-left:1px solid var(--hairline-light)}
+tbody tr{border-bottom:1px solid var(--hairline-light)}
+tbody tr:last-child{border-bottom:0}
+.col-label{font-family:'Geist',sans-serif;font-weight:700;font-size:10px;
+  text-transform:uppercase;letter-spacing:.2em;color:var(--ink-60)}
+.col-letter{display:block;font-family:'Geist Mono',ui-monospace,monospace;font-size:1.75rem;
+  font-weight:300;color:var(--cyan-on-grey);margin-bottom:.75rem}
+.col-title{display:block;font-family:'Chillax',sans-serif;font-weight:600;font-size:1.0625rem;
+  letter-spacing:-.02em;line-height:1.2}
+td .mono{font-size:1.0625rem;font-weight:500}
+.spark{display:block;width:120px;height:28px}
+.paths{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;margin-top:4rem;
+  background:var(--hairline-light);border-block:1px solid var(--hairline-light)}
+.paths article{background:var(--document-grey);padding:32px}
+.paths header{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;margin-bottom:1.5rem}
+.paths header .grp{display:flex;align-items:baseline;gap:1rem}
+.paths h3{margin:0;font-family:'Chillax',sans-serif;font-weight:600;font-size:1.125rem;
+  letter-spacing:-.02em;line-height:1.2}
+.paths .letter{font-family:'Geist Mono',ui-monospace,monospace;font-size:1.5rem;font-weight:300;color:var(--cyan-on-grey)}
+.paths p{margin:0;color:var(--ink-70);font-size:1rem}
+.footnote{margin-top:3rem;font-family:'Geist Mono',ui-monospace,monospace;font-size:10px;
+  text-transform:uppercase;letter-spacing:.2em;color:var(--ink-60);max-width:70ch;line-height:1.9}
+@media (max-width:900px){.paths{grid-template-columns:1fr}}
+
+/* ── Marco regulatório ──────────────────────────────────────── */
+.h-marco{font-size:clamp(4rem,13vw,12rem);line-height:.85;letter-spacing:-.05em;margin:0;
+  font-family:'Chillax',sans-serif;font-weight:600;color:#fff;grid-column:span 8}
+.h-marco span{display:block}
+.h-marco .arrow{color:var(--cyan-on-dark)}
+.h-marco .num{font-variant-numeric:tabular-nums}
+.marco-copy p{margin:0 0 2rem}
+.marco-copy p:last-child{margin:0;color:#fff;font-weight:400}
+.milestones{list-style:none;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;margin:6rem 0 0;padding:0;
+  background:var(--hairline-dark);border-block:1px solid var(--hairline-dark)}
+.milestones li{background:var(--deep-petrol);padding:2rem 1.5rem;display:flex;flex-direction:column;gap:1rem}
+.milestones .delta{font-family:'Geist Mono',ui-monospace,monospace;font-size:10px;
+  text-transform:uppercase;letter-spacing:.22em;color:rgba(255,255,255,.4)}
+.milestones .year{font-family:'Geist Mono',ui-monospace,monospace;font-weight:500;color:#fff;
+  font-size:clamp(2rem,4.2vw,3.5rem);letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.milestones .lbl{font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;
+  text-transform:uppercase;letter-spacing:.18em;color:rgba(255,255,255,.65);line-height:1.7}
+@media (max-width:768px){.milestones{grid-template-columns:1fr}}
+
+/* ── Compliance — item numerado (padrão assinatura) ─────────── */
+.h-compliance{font-size:clamp(3rem,8.5vw,7rem);line-height:.95;letter-spacing:-.04em;margin:0}
+.principles{margin-top:8rem}
+.principle{
+  position:relative;display:grid;grid-template-columns:repeat(12,1fr);gap:1.5rem;align-items:end;
+  padding-block:4rem;border-bottom:1px solid var(--hairline-light);
+}
+.principle:first-child{border-top:1px solid var(--hairline-light)}
+.principle .bar{position:absolute;left:0;top:0;width:1px;height:100%;background:var(--cyan-on-white);
+  transform:scaleY(0);transform-origin:top;transition:transform 700ms var(--ease)}
+.principle:hover .bar,.principle:focus-within .bar{transform:scaleY(1)}
+.principle .num{grid-column:span 7;order:1;display:block;
+  font-family:'Geist Mono',ui-monospace,monospace;font-weight:300;color:var(--ink-15);
+  font-size:clamp(6rem,16vw,14rem);letter-spacing:-.06em;line-height:1;font-variant-numeric:tabular-nums;
+  transition:color 700ms var(--ease)}
+.principle:hover .num{color:var(--cyan-on-white)}
+.principle .body{grid-column:span 5;order:2}
+.principle.mirrored .num{order:2;grid-column:6 / span 7}
+.principle.mirrored .body{order:1;grid-column:1 / span 5}
+.principle .tag{display:block;margin-bottom:1.25rem;font-family:'Geist Mono',ui-monospace,monospace;
+  font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.22em;color:var(--cyan-on-white)}
+.principle h3{margin:0 0 1.5rem;font-family:'Chillax',sans-serif;font-weight:600;
+  font-size:clamp(2.25rem,4.5vw,4rem);line-height:1.02;letter-spacing:-.025em}
+.principle p{margin:0;color:var(--ink-70);max-width:34rem}
+@media (max-width:1024px){
+  .principle{grid-template-columns:1fr;padding-block:3rem}
+  .principle .num,.principle .body,.principle.mirrored .num,.principle.mirrored .body{grid-column:auto}
+  .principle .num{order:1}.principle .body{order:2}
+}
+
+/* ── Equipe ─────────────────────────────────────────────────── */
+.team{display:flex;flex-direction:column;gap:8rem}
+.member{position:relative;display:grid;grid-template-columns:repeat(12,1fr);gap:2rem;align-items:end}
+.member .op{
+  position:absolute;left:-3.5rem;top:0;display:flex;align-items:center;
+  writing-mode:vertical-rl;transform:rotate(180deg);
+  font-family:'Geist Mono',ui-monospace,monospace;font-size:10px;
+  text-transform:uppercase;letter-spacing:.3em;color:var(--ink-40);
+}
+.member .who{grid-column:span 8}
+.member h3{margin:0;font-family:'Chillax',sans-serif;font-weight:600;
+  font-size:clamp(3rem,9vw,7.5rem);line-height:.92;letter-spacing:-.04em}
+.member .role{display:block;margin-top:1.5rem;font-family:'Geist Mono',ui-monospace,monospace;
+  font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.2em;color:var(--cyan-on-grey)}
+.member .bio{grid-column:span 4;color:var(--ink-70);max-width:70ch;margin:0}
+@media (max-width:1280px){.member .op{display:none}}
+@media (max-width:1024px){.member{grid-template-columns:1fr}.member .who,.member .bio{grid-column:auto}}
+
+/* ── Lead capture ───────────────────────────────────────────── */
+#onboarding{padding-block:10rem}
+.h-lead{font-size:clamp(3rem,8.5vw,7rem);line-height:.95;letter-spacing:-.04em;margin:0}
+form{max-width:56rem;margin-top:4rem}
+fieldset{border:0;padding:0;margin:0 0 1.5rem;display:grid;grid-template-columns:repeat(2,1fr);gap:1.5rem 1rem}
+fieldset.single{grid-template-columns:1fr}
+legend{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.field{display:flex;flex-direction:column;gap:.375rem}
+.field label{margin-left:1rem;font-family:'Geist',sans-serif;font-weight:700;font-size:11px;
+  text-transform:uppercase;letter-spacing:.2em;color:var(--ink-60)}
+input[type=text],input[type=email],input[type=tel],select,textarea{
+  width:100%;padding:1rem 1.75rem;min-height:44px;
+  border:1px solid var(--hairline-light);border-radius:9999px;
+  background:rgba(228,228,228,.3);color:var(--ink);
+  font-family:'Satoshi',sans-serif;font-weight:300;font-size:1rem;
+  transition:border-color 300ms var(--ease);
+}
+textarea{border-radius:0;resize:none;line-height:1.6}
+input::placeholder,textarea::placeholder{color:var(--ink-40)}
+input:focus,select:focus,textarea:focus{border-color:var(--cyan-on-white)}
+.select-wrap{position:relative}
+.select-wrap select{appearance:none;padding-right:3rem;cursor:pointer}
+.select-wrap svg{position:absolute;right:1.5rem;top:50%;transform:translateY(-50%);
+  width:12px;height:12px;pointer-events:none;color:var(--ink-60)}
+.lgpd{display:flex;align-items:flex-start;gap:.75rem;margin-bottom:2rem}
+.lgpd input{margin-top:.35rem;width:16px;height:16px;accent-color:var(--cyan-on-white);flex:none;cursor:pointer}
+.lgpd label{font-size:.875rem;color:var(--ink-60);line-height:1.6;cursor:pointer}
+.btn-primary{
+  width:100%;min-height:44px;padding:1.25rem 2rem;border:0;border-radius:9999px;cursor:pointer;
+  background:var(--deep-petrol);color:#fff;
+  font-family:'Geist',sans-serif;font-weight:700;font-size:12px;
+  text-transform:uppercase;letter-spacing:.2em;
+  transition:background-color 300ms var(--ease),color 300ms var(--ease),box-shadow 300ms var(--ease);
+}
+.btn-primary:hover{background:var(--cyan-on-dark);color:var(--deep-petrol);
+  box-shadow:0 20px 25px -5px rgba(14,167,199,.2)}
+.form-note{margin-top:2rem;font-family:'Geist',sans-serif;font-weight:700;font-size:10px;
+  text-transform:uppercase;letter-spacing:.2em;color:var(--ink-60);line-height:2}
+@media (max-width:768px){fieldset{grid-template-columns:1fr}#onboarding{padding-block:5rem}}
+
+/* ── Footer ─────────────────────────────────────────────────── */
+.site-footer{background:var(--document-grey);border-top:1px solid var(--hairline-light);padding-block:5rem}
+.footer-top{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4rem}
+.footer-brand{max-width:24rem}
+.footer-brand .logo{color:var(--ink);font-size:1.875rem;display:block;margin-bottom:2rem}
+.footer-brand .logo .period{color:var(--cyan-on-grey)}
+.footer-brand p{margin:0;color:var(--ink-70)}
+.footer-cols{display:flex;flex-wrap:wrap;gap:4rem 8rem}
+.footer-cols h4{margin:0 0 2rem;font-family:'Geist',sans-serif;font-weight:700;font-size:12px;
+  text-transform:uppercase;letter-spacing:.2em;color:var(--ink-60)}
+.footer-cols ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1rem}
+.footer-cols a{color:var(--ink-70);text-decoration:none;transition:color 300ms var(--ease)}
+.footer-cols a:hover{color:var(--cyan-on-grey)}
+.footer-cols .mail{display:block;margin-bottom:1.5rem;font-size:.875rem}
+.footer-cols .disclaimer{margin:0;font-size:.75rem;color:var(--ink-60);max-width:19rem;line-height:1.6}
+.footer-bottom{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:2rem;
+  margin-top:4rem;padding-top:4rem;border-top:1px solid var(--hairline-light);opacity:.5}
+.footer-bottom p{margin:0;font-family:'Geist',sans-serif;font-weight:700;font-size:10px;
+  text-transform:uppercase;letter-spacing:.2em}
+.footer-bottom a{display:inline-flex;align-items:center;justify-content:center;
+  width:44px;height:44px;border-radius:9999px;color:var(--ink)}
+
+.console-footer{background:var(--deep-petrol);border-top:1px solid var(--hairline-dark);
+  color:rgba(255,255,255,.45);font-family:'Geist Mono',ui-monospace,monospace;font-size:9px;
+  text-transform:uppercase;letter-spacing:.2em;overflow-x:auto}
+.console-footer .row{max-width:var(--container);margin-inline:auto;padding:.75rem var(--gutter);
+  display:flex;align-items:center;gap:1rem;white-space:nowrap}
+.console-footer .stamp{color:rgba(255,255,255,.35);flex:none}
+.console-footer .sep{color:rgba(255,255,255,.25)}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .reveal,.reveal-hero{opacity:1!important;transform:none!important}
+  .principle .bar{transform:scaleY(1)}
+}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#conteudo">Pular para conteúdo</a>
+
+<div class="shell" id="shell" data-past-hero="false">
+  <div class="topbar">
+    <div class="row">
+      <span class="dot" aria-hidden="true"></span>
+      <span class="txt">Captação aberta para investidores institucionais qualificados</span>
+      <span class="sep" aria-hidden="true">·</span>
+      <a href="#onboarding">Registrar interesse &rarr;</a>
+    </div>
+  </div>
+  <nav class="nav" aria-label="Principal">
+    <div class="row">
+      <a class="logo" href="#topo" aria-label="Plina · Início">Plina<span class="period">.</span></a>
+      <div class="links">
+        <a href="#produto">Produto</a>
+        <a href="#tese">Tese</a>
+        <a href="#compliance">Compliance</a>
+        <a href="#equipe">Equipe</a>
+      </div>
+      <div class="right">
+        <div class="lang">
+          <button type="button" aria-current="true">PT</button>
+          <span class="slash" aria-hidden="true">/</span>
+          <button type="button" aria-current="false">EN</button>
+        </div>
+        <a class="btn-ghost" href="#onboarding">Registrar interesse</a>
+      </div>
+    </div>
+  </nav>
+</div>
+
+<header class="hero" id="topo">
+  <div class="blobs" aria-hidden="true">
+    <span class="blob a"></span><span class="blob b"></span>
+    <span class="blob c"></span><span class="blob d"></span>
+  </div>
+  <div class="wrap reveal-hero">
+    <h1>
+      Liquidez para o cotista.<br />
+      Desconto para o comprador.<br />
+      <span class="accent">Yield institucional</span> para o mundo.
+    </h1>
+    <p>
+      Pool tokenizado de cotas de consórcio contempladas, estruturado como FIDC sob
+      <span class="mono">CVM 175</span> e emitido na Stellar como <span class="mono">PLINA-RF</span>.
+    </p>
+    <p class="hero-meta">
+      <span class="mono">FIDC · CVM 175</span>
+      <span class="sep" aria-hidden="true">·</span>
+      <span class="mono">Lei 11.795/2008</span>
+      <span class="sep" aria-hidden="true">·</span>
+      <span class="mono">SEP-24</span>
+      <span class="sep" aria-hidden="true">·</span>
+      <span class="mono">AUTH_CLAWBACK_ENABLED</span>
+    </p>
+  </div>
+</header>
+
+<main id="conteudo">
+
+  <!-- 01 · Produto -->
+  <section id="produto" class="surface-white">
+    <div class="wrap">
+      <p class="eyebrow"><span class="n mono">01</span><span class="sep">/</span><span class="t">Produto</span></p>
+      <div class="split reveal">
+        <h2 class="display h-produto">PLINA<span class="deep">-RF</span><span class="deep">.</span></h2>
+        <p class="lede">
+          Cota de FIDC representada por um instrumento digital regulado, emitido sob a CVM 175.
+          Não é uma corretora. Não é um fundo aberto de varejo. É o próprio instrumento financeiro
+          tokenizado, com originação, custódia regulada e controles de conformidade integrados.
+        </p>
+      </div>
+      <div class="specs reveal d1">
+        <div>
+          <h3>Lastro</h3>
+          <p class="val"><span class="mono">1 PLINA-RF = R$ 1,00</span></p>
+          <p>Lastro em direito creditório com valor ajustado diariamente.</p>
+        </div>
+        <div>
+          <h3>Veículo</h3>
+          <p class="val"><span class="mono">FIDC · CVM 175</span></p>
+          <p>Classes sênior e subordinada, prestadores registrados, auditoria Big Four.</p>
+        </div>
+        <div>
+          <h3>Custódia</h3>
+          <p class="val">Custodiante regulado</p>
+          <p>Registro digital auditável com bloqueio, autorização e reversibilidade institucional.</p>
+        </div>
+        <div>
+          <h3>Aporte</h3>
+          <p class="val"><span class="mono">USD · EUR · BRL</span></p>
+          <p>Investidores internacionais e domésticos, com liquidação em USDC, EURC e moeda local.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 · Tese -->
+  <section id="tese" class="surface-grey">
+    <div class="wrap">
+      <p class="eyebrow"><span class="n mono">02</span><span class="sep">/</span><span class="t">Tese</span></p>
+      <div class="split reveal">
+        <h2 class="display h-tese">Três caminhos.<br />Um pool.</h2>
+        <p class="lede">
+          Modelo híbrido de realização de valor. Geridos ativamente pelo gestor do FIDC e auditados
+          trimestralmente. É onde a Plina constrói vantagem competitiva durável sobre incumbentes
+          restritos ao Caminho B.
+        </p>
+      </div>
+
+      <div class="table-scroll reveal d1">
+        <table>
+          <caption>Comparação dos três caminhos de realização de valor — duration, yield, mix-alvo e curva projetada</caption>
+          <thead>
+            <tr>
+              <th scope="col"><span class="col-label">Caminho</span></th>
+              <th scope="col">
+                <span class="col-letter">A</span>
+                <span class="col-title">Revenda ao<br />Comprador-Usuário</span>
+              </th>
+              <th scope="col">
+                <span class="col-letter">B</span>
+                <span class="col-title">Liquidação por<br />Administradora</span>
+              </th>
+              <th scope="col">
+                <span class="col-letter">C</span>
+                <span class="col-title">Liquidação por<br />Prazo de Grupo</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row"><span class="col-label">Duration</span></th>
+              <td><span class="mono">30-90 dias</span></td>
+              <td><span class="mono">90-180 dias</span></td>
+              <td><span class="mono">12-36 meses</span></td>
+            </tr>
+            <tr>
+              <th scope="row"><span class="col-label">Yield</span></th>
+              <td><span class="mono">Alto</span></td>
+              <td><span class="mono">Médio</span></td>
+              <td><span class="mono">Contratado</span></td>
+            </tr>
+            <tr>
+              <th scope="row"><span class="col-label">Mix-Alvo</span></th>
+              <td><span class="mono">40-60%</span></td>
+              <td><span class="mono">30-50%</span></td>
+              <td><span class="mono">10-20%</span></td>
+            </tr>
+            <tr>
+              <th scope="row"><span class="col-label">Curva projetada</span></th>
+              <td>
+                <svg class="spark" viewBox="0 0 11 20" preserveAspectRatio="none" aria-hidden="true">
+                  <polyline points="0,20 1,18 2,19 3,16 4,14 5,15 6,12 7,9 8,10 9,6 10,3 11,0"
+                    fill="none" stroke="#046C88" stroke-width="1" vector-effect="non-scaling-stroke"
+                    stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </td>
+              <td>
+                <svg class="spark" viewBox="0 0 11 11" preserveAspectRatio="none" aria-hidden="true">
+                  <polyline points="0,11 1,10 2,9 3,8 4,7 5,6 6,5 7,4 8,3 9,2 10,1 11,0"
+                    fill="none" stroke="#046C88" stroke-width="1" vector-effect="non-scaling-stroke"
+                    stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </td>
+              <td>
+                <svg class="spark" viewBox="0 0 11 4" preserveAspectRatio="none" aria-hidden="true">
+                  <polyline points="0,4 1,4 2,4 3,3 4,3 5,3 6,2 7,2 8,2 9,1 10,1 11,0"
+                    fill="none" stroke="#046C88" stroke-width="1" vector-effect="non-scaling-stroke"
+                    stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="paths">
+        <article class="reveal d1">
+          <header>
+            <span class="grp"><span class="letter">A</span><h3>Revenda ao Comprador-Usuário</h3></span>
+          </header>
+          <p>
+            A diferença entre o preço pago ao vendedor original e o preço cobrado do comprador-usuário
+            do bem é a fonte primária de yield. Operamos canal comercial dedicado para revenda de cotas
+            a quem efetivamente vai usar a carta de crédito — pessoa física, construtora, transportadora,
+            empresário.
+          </p>
+        </article>
+        <article class="reveal d2">
+          <header>
+            <span class="grp"><span class="letter">B</span><h3>Liquidação por Administradora</h3></span>
+          </header>
+          <p>
+            Para cotas elegíveis sob a Circular BACEN 3.432/2009, a administradora converte a contemplação
+            em pagamento em dinheiro em até 180 dias. Caminho predominante dos incumbentes — operado pela
+            Plina dentro da estrutura formal do FIDC, sem exposição regulatória de zona cinza.
+          </p>
+        </article>
+        <article class="reveal d3">
+          <header>
+            <span class="grp"><span class="letter">C</span><h3>Liquidação por Prazo de Grupo</h3></span>
+          </header>
+          <p>
+            Para cotas não realizadas pelos caminhos A ou B, o direito creditório é realizado ao final do
+            prazo regulado pelo BACEN com correção monetária contratual. Funciona como reserva técnica e
+            piso de yield do pool.
+          </p>
+        </article>
+      </div>
+
+      <p class="footnote">
+        Composição inicial-alvo documentada no regulamento do FIDC. Mix ajustado continuamente pelo
+        gestor com base em condições de mercado.
+      </p>
+    </div>
+  </section>
+
+  <!-- 03 · Marco regulatório -->
+  <section id="marco-regulatorio" class="surface-petrol" aria-labelledby="marco-heading">
+    <div class="wrap">
+      <p class="eyebrow"><span class="n mono">03</span><span class="sep">/</span><span class="t">Marco Regulatório</span></p>
+      <div class="split reveal">
+        <h2 id="marco-heading" class="h-marco">
+          <span class="mono num">2008</span>
+          <span class="arrow mono num">&rarr; 2026.</span>
+        </h2>
+        <div class="lede marco-copy">
+          <p>
+            A Lei 11.795 regulamentou o mercado brasileiro de consórcios em 2008. Há quase duas décadas
+            o direito creditório de cotas contempladas é juridicamente constituído, mas nunca chegou ao
+            capital institucional global.
+          </p>
+          <p>A Plina é a primeira tokenizadora institucional sob CVM 175 desde a origem.</p>
+        </div>
+      </div>
+      <ol class="milestones reveal d1">
+        <li>
+          <span class="delta">Δ01</span>
+          <span class="year">2008</span>
+          <span class="lbl">Lei 11.795 regulamenta consórcios brasileiros</span>
+        </li>
+        <li>
+          <span class="delta">Δ02</span>
+          <span class="year">2023</span>
+          <span class="lbl">CVM 175 estrutura tokenização institucional</span>
+        </li>
+        <li>
+          <span class="delta">Δ03</span>
+          <span class="year">2026</span>
+          <span class="lbl">Plina · primeira tokenizadora de direito creditório de consórcio</span>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- 04 · Compliance -->
+  <section id="compliance" class="surface-white">
+    <div class="wrap">
+      <p class="eyebrow"><span class="n mono">04</span><span class="sep">/</span><span class="t">Compliance</span></p>
+      <div class="split reveal">
+        <h2 class="display h-compliance">Compliance<br />nativo.</h2>
+        <p class="lede">
+          Para mesa de risco institucional, reversibilidade não é limitação. É requisito. Family offices
+          e gestoras reguladas não alocam em ativo digital sem mecanismo formal de bloqueio e recuperação.
+          Sem isso, o produto não passa em compliance.
+        </p>
+      </div>
+
+      <div class="principles">
+        <article class="principle reveal" tabindex="0">
+          <span class="bar" aria-hidden="true"></span>
+          <span class="num" aria-hidden="true">01</span>
+          <div class="body">
+            <span class="tag">Verificável publicamente · Registro imutável</span>
+            <h3>Auditável</h3>
+            <p>
+              Cada cota incorporada ao pool tem registro digital verificável publicamente, com lastro
+              jurídico formal e imutável.
+            </p>
+          </div>
+        </article>
+        <article class="principle mirrored reveal d1" tabindex="0">
+          <span class="bar" aria-hidden="true"></span>
+          <span class="num" aria-hidden="true">02</span>
+          <div class="body">
+            <span class="tag">CVM 175 · Lei 11.795/2008</span>
+            <h3>Regulada</h3>
+            <p>
+              CVM 175 e Lei 11.795/2008 desde a origem. FIDC formal, prestadores registrados,
+              auditoria Big Four.
+            </p>
+          </div>
+        </article>
+        <article class="principle reveal d2" tabindex="0">
+          <span class="bar" aria-hidden="true"></span>
+          <span class="num" aria-hidden="true">03</span>
+          <div class="body">
+            <span class="tag">Clawback · Autorização · Revogabilidade</span>
+            <h3>Reversível</h3>
+            <p>
+              Política de clawback pública, restrita a quatro hipóteses jurídicas explícitas.
+              Reversibilidade institucional como diferencial competitivo, não como limitação técnica.
+            </p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 · Equipe -->
+  <section id="equipe" class="surface-grey">
+    <div class="wrap">
+      <p class="eyebrow"><span class="n mono">05</span><span class="sep">/</span><span class="t">Equipe Fundadora</span></p>
+      <div class="team">
+        <article class="member reveal">
+          <span class="op" aria-hidden="true">[operator/01] · CEO &amp; Founder</span>
+          <div class="who">
+            <h3>Fabrício Santos</h3>
+            <span class="role">CEO &amp; Founder</span>
+          </div>
+          <p class="bio">
+            Sócio fundador da Citrino, assessoria financeira de planejamento e gestão patrimonial.
+            Atuou em estratégias de receita, custo e experiência do cliente na plataforma digital de
+            crédito Simplic, e liderou na TOTVS a implementação do sistema corporativo de KPIs para a
+            Diretoria e o Conselho Administrativo.
+          </p>
+        </article>
+        <article class="member reveal d1">
+          <span class="op" aria-hidden="true">[operator/02] · CTO &amp; Protocol Lead</span>
+          <div class="who">
+            <h3>Thais Reis</h3>
+            <span class="role">CTO &amp; Protocol Lead</span>
+          </div>
+          <p class="bio">
+            Engenheira full-stack com cinco anos em infraestrutura blockchain — engenharia de dados,
+            backend, contratos automatizados em Rust e interfaces em React/TypeScript. Fundadora e Lead
+            Engineer do Karn Ecosystem, plataforma de governança de código aberto. Premiada em competições
+            nacionais e internacionais de tecnologia descentralizada e inteligência artificial.
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- 06 · Onboarding -->
+  <section id="onboarding" class="surface-white">
+    <div class="wrap reveal">
+      <p class="eyebrow"><span class="n mono">06</span><span class="sep">/</span><span class="t">Onboarding</span></p>
+      <div class="split">
+        <h2 class="display h-lead">Registre seu<br />interesse.</h2>
+        <p class="lede">
+          Preencha os campos abaixo para manifestar interesse no PLINA-RF. Nossa equipe entrará em
+          contato em até 48 horas para apresentação detalhada do instrumento.
+        </p>
+      </div>
+
+      <form action="#" method="post">
+        <fieldset>
+          <legend>Identificação</legend>
+          <div class="field">
+            <label for="lc-name">Nome completo *</label>
+            <input id="lc-name" name="name" type="text" autocomplete="name" placeholder="Nome e sobrenome" required />
+          </div>
+          <div class="field">
+            <label for="lc-org">Organização *</label>
+            <input id="lc-org" name="org" type="text" autocomplete="organization" placeholder="Family office, gestora, fundo..." required />
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Contato</legend>
+          <div class="field">
+            <label for="lc-email">E-mail corporativo *</label>
+            <input id="lc-email" name="email" type="email" autocomplete="email" placeholder="nome@organização.com" required />
+          </div>
+          <div class="field">
+            <label for="lc-phone">Telefone / WhatsApp</label>
+            <input id="lc-phone" name="phone" type="tel" autocomplete="tel" placeholder="+55 11 99999-9999" />
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Perfil</legend>
+          <div class="field">
+            <label for="lc-profile">Perfil do investidor *</label>
+            <div class="select-wrap">
+              <select id="lc-profile" name="profile" required>
+                <option value="" disabled selected>Selecione</option>
+                <option>Family office brasileiro</option>
+                <option>Family office internacional</option>
+                <option>Gestora de fundos (BR)</option>
+                <option>Gestora multi-mercado (Internacional)</option>
+                <option>Fintech de investimento LATAM</option>
+                <option>Outro — descrever nas observações</option>
+              </select>
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 8 10 13 15 8" /></svg>
+            </div>
+          </div>
+          <div class="field">
+            <label for="lc-jurisdiction">Jurisdição principal</label>
+            <input id="lc-jurisdiction" name="jurisdiction" type="text" placeholder="Brasil, EUA, Cingapura..." />
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Alocação</legend>
+          <div class="field">
+            <label for="lc-ticket">Tíquete indicativo *</label>
+            <div class="select-wrap">
+              <select id="lc-ticket" name="ticket" required>
+                <option value="" disabled selected>Selecione</option>
+                <option>US$ 100k – 500k</option>
+                <option>US$ 500k – 1M</option>
+                <option>US$ 1M – 5M</option>
+                <option>US$ 5M+</option>
+                <option>R$ 500k – 2M</option>
+                <option>R$ 2M – 10M</option>
+                <option>R$ 10M+</option>
+              </select>
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 8 10 13 15 8" /></svg>
+            </div>
+          </div>
+          <div class="field">
+            <label for="lc-currency">Moeda de preferência</label>
+            <div class="select-wrap">
+              <select id="lc-currency" name="currency">
+                <option value="" disabled selected>Selecione (opcional)</option>
+                <option>USDC</option>
+                <option>EURC</option>
+                <option>BRL stablecoin (BRZ / BRLA)</option>
+                <option>BRL fiat</option>
+                <option>Ainda indefinido</option>
+              </select>
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 8 10 13 15 8" /></svg>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Estrutura</legend>
+          <div class="field">
+            <label for="lc-classe">Classe de interesse</label>
+            <div class="select-wrap">
+              <select id="lc-classe" name="classe">
+                <option value="" disabled selected>Selecione (opcional)</option>
+                <option>Sênior (menor risco, retorno prioritário)</option>
+                <option>Subordinada (primeiras perdas, maior retorno potencial)</option>
+                <option>Ambas — sujeito a modelagem</option>
+                <option>Indefinido</option>
+              </select>
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 8 10 13 15 8" /></svg>
+            </div>
+          </div>
+          <div class="field">
+            <label for="lc-timeline">Prazo de decisão</label>
+            <div class="select-wrap">
+              <select id="lc-timeline" name="timeline">
+                <option value="" disabled selected>Selecione (opcional)</option>
+                <option>Até 30 dias</option>
+                <option>1 a 3 meses</option>
+                <option>3 a 6 meses</option>
+                <option>Mais de 6 meses</option>
+                <option>Fase exploratória</option>
+              </select>
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 8 10 13 15 8" /></svg>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="single">
+          <legend>Observações</legend>
+          <div class="field">
+            <label for="lc-notes">Observações / perguntas</label>
+            <textarea id="lc-notes" name="notes" rows="4" placeholder="Restrições de compliance, exigências específicas de estrutura, perguntas iniciais..."></textarea>
+          </div>
+        </fieldset>
+
+        <div class="lgpd">
+          <input type="checkbox" id="lc-lgpd" name="lgpd" required />
+          <label for="lc-lgpd">
+            Autorizo o uso dos dados fornecidos para contato sobre o PLINA-RF. As informações são tratadas
+            com confidencialidade, em conformidade com a LGPD, e não são compartilhadas com terceiros sem
+            consentimento.
+          </label>
+        </div>
+
+        <button type="submit" class="btn-primary">Registrar interesse</button>
+      </form>
+
+      <p class="form-note">
+        Processo confidencial · Não caracteriza oferta pública · Oferta restrita ·
+        Investidor qualificado · CVM 175
+      </p>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-top reveal">
+      <div class="footer-brand">
+        <span class="logo">Plina<span class="period">.</span></span>
+        <p>Conectando o crédito brasileiro ao capital global por meio de infraestrutura digital regulada.</p>
+      </div>
+      <div class="footer-cols">
+        <div>
+          <h4>Navegação</h4>
+          <ul>
+            <li><a href="#produto">Produto</a></li>
+            <li><a href="#tese">Tese</a></li>
+            <li><a href="#compliance">Compliance</a></li>
+            <li><a href="#equipe">Equipe</a></li>
+            <li><a href="#onboarding">Registrar interesse</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Contato</h4>
+          <a class="mail mono" href="mailto:contato@plina.finance">contato@plina.finance</a>
+          <p class="disclaimer">
+            A Plina Finance não é uma corretora. Atua como estruturadora de ativos digitais regulados
+            sob o framework da CVM 175.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© 2026 Plina Finance. Todos os direitos reservados.</p>
+      <a href="https://www.linkedin.com/company/plina-finance/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
+      </a>
+    </div>
+  </div>
+</footer>
+
+<div class="console-footer" role="contentinfo" aria-label="Build &amp; system flags">
+  <div class="row">
+    <span class="stamp" id="stamp">----.--.-- --:--:-- UTC</span>
+    <span class="sep" aria-hidden="true">·</span><span>Plina-RF v1</span>
+    <span class="sep" aria-hidden="true">·</span><span>FIDC CVM 175</span>
+    <span class="sep" aria-hidden="true">·</span><span>Lei 11.795/2008</span>
+    <span class="sep" aria-hidden="true">·</span><span>Auditoria Big Four</span>
+    <span class="sep" aria-hidden="true">·</span><span>Custódia Regulada</span>
+    <span class="sep" aria-hidden="true">·</span><span>Reversibilidade Institucional</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Reveals
+  var items = document.querySelectorAll('.reveal');
+  if (reduced || !('IntersectionObserver' in window)) {
+    items.forEach(function (el) { el.classList.add('active'); });
+  } else {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('active'); io.unobserve(e.target); }
+      });
+    }, { rootMargin: '0px 0px -12% 0px', threshold: 0.1 });
+    items.forEach(function (el) { io.observe(el); });
+  }
+
+  // TopBar colapsa após o hero
+  var shell = document.getElementById('shell');
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      shell.dataset.pastHero = String(window.scrollY > window.innerHeight - 80);
+      ticking = false;
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // Console footer stamp — UTC
+  var stamp = document.getElementById('stamp');
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function tick() {
+    var d = new Date();
+    stamp.textContent = d.getUTCFullYear() + '.' + pad(d.getUTCMonth() + 1) + '.' + pad(d.getUTCDate())
+      + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds()) + ' UTC';
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

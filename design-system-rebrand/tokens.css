@@ -1,0 +1,295 @@
+/* ============================================================================
+   Plina Rebrand Design System v2.0 — CANDIDATE
+   Plain CSS custom properties. No build step, any framework.
+
+   STATUS: candidate. `design-system/tokens.css` remains the official system.
+   Load this file only in surfaces explicitly opted into the rebrand.
+
+   Derived from "Plina Landing v3 - Rebrand.dc.html".
+   Every colour pairing below is verified by ./check-contrast.mjs.
+   ========================================================================= */
+
+@import url('https://api.fontshare.com/v2/css?f[]=chillax@400,500,600&f[]=satoshi@300,400,500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@300;400;500&display=swap');
+
+:root {
+  /* --- Surfaces ---------------------------------------------------------
+     Dark-first. `deep` is the default page surface; light is the closing
+     exception, not the ground. There is no sixth surface. */
+  --plina-surface-deep:   #0C1719;  /* Petrol Deep   — base canvas          */
+  --plina-surface-raised: #122224;  /* Petrol Raised — cards on dark        */
+  --plina-surface-recess: #0A1214;  /* Petrol Recess — announcement, wells  */
+  --plina-surface-pale:   #EDF3F2;  /* Mist White    — closing sections     */
+  --plina-surface-sheet:  #ffffff;  /* Sheet White   — forms on pale        */
+
+  /* --- Ink --------------------------------------------------------------
+     The dark scale bottoms out at 0.55 alpha (5.33:1 even on `raised`).
+     The light scale bottoms out at 0.65 — 0.60 fails AA on pale (4.06:1). */
+  --plina-ink-on-dark:        #EDF3F2;
+  --plina-ink-on-dark-body:   rgba(237, 243, 242, 0.65);
+  --plina-ink-on-dark-muted:  rgba(237, 243, 242, 0.55);
+  --plina-ink-on-dark-faint:  rgba(237, 243, 242, 0.25);  /* decorative only */
+  --plina-ink-on-light:       #132728;
+  --plina-ink-on-light-body:  rgba(19, 39, 40, 0.7);
+  --plina-ink-on-light-muted: rgba(19, 39, 40, 0.65);
+  --plina-ink-on-light-faint: rgba(19, 39, 40, 0.2);      /* decorative only */
+  --plina-ink-on-signal:      var(--plina-ink-on-light);  /* MANDATORY on cyan */
+
+  /* --- Signal -----------------------------------------------------------
+     Surface-aware: 500 on dark, 700 on light. Never swapped. */
+  --plina-signal-500: #0EA7C7;
+  --plina-signal-700: #046C88;
+
+  /* --- Support ---------------------------------------------------------- */
+  --plina-glacier: #A0CFE7;  /* dark surfaces only */
+
+  /* --- Hairlines — the only structural separator ------------------------ */
+  --plina-hairline-section:  rgba(237, 243, 242, 0.08);
+  --plina-hairline-frame:    rgba(237, 243, 242, 0.1);
+  --plina-hairline-divider:  rgba(237, 243, 242, 0.12);
+  --plina-hairline-quiet:    rgba(237, 243, 242, 0.15);
+  --plina-hairline-glacier:  rgba(160, 207, 231, 0.3);
+  --plina-hairline-signal:   rgba(14, 167, 199, 0.45);
+  --plina-hairline-on-light: rgba(19, 39, 40, 0.12);
+  --plina-hairline-field:    rgba(19, 39, 40, 0.2);
+
+  /* --- State ------------------------------------------------------------ */
+  --plina-focus-on-dark:  var(--plina-signal-500);
+  --plina-focus-on-light: var(--plina-signal-700);
+  --plina-danger:         #B3261E;
+  --plina-danger-on-dark: #F2B8B5;
+
+  /* --- Type ------------------------------------------------------------- */
+  --plina-font-display: Chillax, sans-serif;
+  --plina-font-body:    Satoshi, system-ui, sans-serif;
+  --plina-font-label:   Geist, sans-serif;
+  --plina-font-mono:    'Geist Mono', monospace;
+
+  --plina-size-display-xl: clamp(2.75rem, 6.5vw, 5.5rem);
+  --plina-size-display-l:  clamp(2rem, 4vw, 3.25rem);
+  --plina-size-numeric-xl: clamp(2.75rem, 5vw, 4.25rem);
+  --plina-size-numeric-l:  clamp(2.5rem, 4vw, 3.5rem);
+  --plina-size-title-m:    1.375rem;
+  --plina-size-title-s:    1.3125rem;
+  --plina-size-body-l:     1.0625rem;
+  --plina-size-body-m:     0.9375rem;
+  --plina-size-body-s:     0.8125rem;
+  --plina-size-label-m:    0.875rem;
+  --plina-size-label-s:    0.75rem;
+  --plina-size-label-xs:   0.6875rem;
+
+  --plina-track-display-xl: -0.03em;
+  --plina-track-display-l:  -0.025em;
+  --plina-track-numeric-l:  -0.02em;
+  --plina-track-numeric-xl: -0.01em;
+  --plina-track-eyebrow:    0.18em;
+  --plina-track-numeral:    0.14em;
+  --plina-track-chip:       0.1em;
+  --plina-track-data:       0.04em;
+
+  --plina-leading-display-xl: 1.04;
+  --plina-leading-display-l:  1.08;
+  --plina-leading-prose:      1.65;
+  --plina-leading-compact:    1.6;
+
+  --plina-measure-title: 22ch;
+  --plina-measure-lead:  46ch;
+  --plina-measure-body:  56ch;
+  --plina-measure-long:  66ch;
+
+  /* --- Layout ----------------------------------------------------------- */
+  --plina-container:       1240px;
+  --plina-container-media: 1100px;
+  --plina-gutter:          clamp(24px, 5vw, 48px);
+  --plina-rhythm-hero:     9rem;
+  --plina-rhythm-section:  7rem;
+  --plina-rhythm-dense:    6.5rem;
+  --plina-rhythm-footer:   4.5rem;
+
+  --plina-grid-product: repeat(auto-fit, minmax(320px, 1fr));
+  --plina-grid-media:   repeat(auto-fit, minmax(300px, 1fr));
+  --plina-grid-thesis:  repeat(auto-fit, minmax(280px, 1fr));
+  --plina-grid-metric:  repeat(auto-fit, minmax(220px, 1fr));
+
+  --plina-bp-palm: 560px;
+  --plina-bp-lap:  760px;
+  --plina-bp-desk: 960px;
+
+  /* --- Radius — the brand has no edges (see §6 of the spec) -------------
+     Source of truth is brand_guidelines.html: "sem arestas, sem rigidez".
+     DESIGN.md's radius-0 doctrine inverted that and does not win here. */
+  --plina-radius-media: 12px;    /* photographs                           */
+  --plina-radius-panel: 24px;    /* a panel carrying its own fill         */
+  --plina-radius-pill:  9999px;  /* buttons and chips                     */
+  --plina-radius-none:  0;       /* tables, rows, rules, underline fields */
+
+  /* --- Motion — exactly one easing -------------------------------------- */
+  --plina-ease:              cubic-bezier(0.22, 1, 0.36, 1);
+  --plina-duration-control:  250ms;
+  --plina-duration-icon:     300ms;
+  --plina-duration-rise:     750ms;
+  --plina-duration-unmask:   900ms;
+  --plina-duration-aperture: 1100ms;
+  --plina-duration-count:    1400ms;
+  --plina-stagger:           90ms;
+  --plina-marquee:           40s;
+}
+
+/* ============================================================================
+   Component primitives
+   ========================================================================= */
+
+.plina-page {
+  margin: 0;
+  background: var(--plina-surface-deep);
+  color: var(--plina-ink-on-dark);
+  font-family: var(--plina-font-body);
+  font-weight: 400;
+  font-size: var(--plina-size-body-l);
+  line-height: var(--plina-leading-prose);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+.plina-shell {
+  max-width: var(--plina-container);
+  margin-inline: auto;
+}
+
+.plina-section {
+  padding: var(--plina-rhythm-section) var(--plina-gutter);
+  border-top: 1px solid var(--plina-hairline-section);
+}
+
+.plina-section--light {
+  background: var(--plina-surface-pale);
+  color: var(--plina-ink-on-light);
+  border-top: 0;
+}
+
+/* The eyebrow opens every section. Not optional. */
+.plina-eyebrow {
+  font-family: var(--plina-font-mono);
+  font-size: var(--plina-size-label-s);
+  letter-spacing: var(--plina-track-eyebrow);
+  text-transform: uppercase;
+  color: var(--plina-ink-on-dark-muted);
+  margin: 0;
+}
+.plina-section--light .plina-eyebrow { color: var(--plina-ink-on-light-muted); }
+
+.plina-display {
+  font-family: var(--plina-font-display);
+  font-weight: 500;
+  font-size: var(--plina-size-display-l);
+  line-height: var(--plina-leading-display-l);
+  letter-spacing: var(--plina-track-display-l);
+  max-width: var(--plina-measure-title);
+  margin: 1.25rem 0 0;
+}
+
+/* Every meaningful number is mono. No exceptions. */
+.plina-metric {
+  font-family: var(--plina-font-mono);
+  font-weight: 400;
+  font-size: var(--plina-size-numeric-xl);
+  letter-spacing: var(--plina-track-numeric-xl);
+  line-height: 1;
+  color: var(--plina-signal-500);
+  margin: 0;
+}
+
+.plina-card {
+  background: var(--plina-surface-raised);
+  border: 1px solid var(--plina-hairline-frame);
+  border-radius: var(--plina-radius-panel);
+  padding: clamp(28px, 3.5vw, 44px);
+}
+
+.plina-chip {
+  font-family: var(--plina-font-mono);
+  font-size: var(--plina-size-label-xs);
+  letter-spacing: var(--plina-track-chip);
+  border-radius: var(--plina-radius-pill);
+  padding: 4px 12px;
+  white-space: nowrap;
+  color: var(--plina-glacier);
+  border: 1px solid var(--plina-hairline-glacier);
+}
+.plina-chip--signal {
+  color: var(--plina-signal-500);
+  border-color: var(--plina-hairline-signal);
+}
+
+.plina-btn {
+  font-family: var(--plina-font-label);
+  font-weight: 600;
+  font-size: var(--plina-size-body-m);
+  border: 0;
+  cursor: pointer;
+  padding: 15px 32px;
+  border-radius: var(--plina-radius-pill);
+  background: var(--plina-ink-on-dark);
+  color: var(--plina-surface-deep);
+  transition: background-color var(--plina-duration-control) var(--plina-ease),
+              color var(--plina-duration-control) var(--plina-ease);
+}
+.plina-btn:hover {
+  background: var(--plina-signal-500);
+  color: var(--plina-ink-on-signal);
+}
+
+.plina-btn--quiet {
+  background: transparent;
+  color: var(--plina-ink-on-dark);
+  border: 1px solid var(--plina-hairline-quiet);
+  transition: border-color var(--plina-duration-control) var(--plina-ease),
+              color var(--plina-duration-control) var(--plina-ease);
+}
+.plina-btn--quiet:hover {
+  border-color: var(--plina-signal-500);
+  color: var(--plina-signal-500);
+}
+
+.plina-field {
+  font-family: var(--plina-font-body);
+  font-size: 1rem;
+  color: var(--plina-ink-on-light);
+  background: var(--plina-surface-sheet);
+  border: 1px solid var(--plina-hairline-field);
+  border-radius: var(--plina-radius-pill);
+  padding: 13px 16px;
+  width: 100%;
+  transition: border-color var(--plina-duration-control) var(--plina-ease);
+}
+.plina-field:focus {
+  border-color: var(--plina-signal-700);
+  outline: none;
+}
+
+/* The step row — collapses instead of crushing its description column. */
+.plina-step {
+  display: grid;
+  grid-template-columns: 52px 190px 1fr;
+  gap: 1rem 1.25rem;
+  padding: 1.375rem 0;
+  border-bottom: 1px solid var(--plina-hairline-frame);
+}
+@media (max-width: 760px) {
+  .plina-step { grid-template-columns: 52px 1fr; }
+  .plina-step > :last-child { grid-column: 2; }
+}
+
+/* Focus is surface-aware, like every other cyan decision. */
+:focus-visible { outline: 2px solid var(--plina-focus-on-dark); outline-offset: 3px; }
+.plina-section--light :focus-visible { outline-color: var(--plina-focus-on-light); }
+
+@keyframes plina-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation: none !important; }
+  html { scroll-behavior: auto; }
+}

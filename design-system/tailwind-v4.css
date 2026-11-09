@@ -1,0 +1,160 @@
+/* ============================================================================
+   Plina Finance Design System v1.1 — Tailwind CSS v4 `@theme` block.
+   For this repo's stack (Next.js 16 + Tailwind v4, no tailwind.config).
+   Merge into app/globals.css. Generated from tokens.json.
+
+   Tailwind v3 / shadcn (Lovable, v0) consumers: see docs/Plina_Lovable_Design_System.md.
+   ========================================================================= */
+
+@import "tailwindcss";
+
+@theme {
+  /* ---- Surfaces: the three-surface sandwich. Never add a fourth. -------- */
+  --color-sheet-white: #ffffff;
+  --color-document-grey: #e4e4e4;
+  --color-deep-petrol: #132728;
+
+  /* ---- Backdrop: décor canvas for the blob motif, not a content surface.  */
+  --color-abyss: #080f10;
+
+  /* ---- Signal: pick the step by surface. -------------------------------- */
+  --color-signal-500: #0EA7C7; /* dark surfaces + fills only */
+  --color-signal-600: #057A99; /* AA on sheet-white only (4.94:1) */
+  --color-signal-700: #046C88; /* AA on BOTH light surfaces — safe default */
+
+  /* ---- Support: dark surfaces only. ------------------------------------- */
+  --color-stellar-mid: #4A9ED4;
+  --color-glacier-tint: #A0CFE7;
+
+  /* ---- State ----------------------------------------------------------- */
+  --color-danger: #B3261E;
+  --color-danger-on-dark: #F2B8B5;
+
+  /* ---- Hairlines: usable as border-hairline / bg-hairline --------------- */
+  --color-hairline: rgba(19, 39, 40, 0.12);
+  --color-hairline-dark: rgba(255, 255, 255, 0.1);
+  --color-hairline-dark-tinted: rgba(160, 207, 231, 0.1);
+
+  /* ---- Type families --------------------------------------------------- */
+  --font-display: 'Chillax', 'Satoshi', sans-serif;
+  --font-body: 'Satoshi', system-ui, sans-serif;
+  --font-label: 'Geist', sans-serif;
+  --font-mono: 'Geist Mono', monospace;
+
+  /* ---- Type scale: text-display, text-eyebrow, text-data, ... ----------- */
+  --text-display: clamp(2rem, 5vw, 3.75rem);
+  --text-display--line-height: 1.05;
+  --text-display--letter-spacing: -0.02em;
+  --text-display--font-weight: 600;
+
+  --text-headline: clamp(1.875rem, 3.5vw, 3rem);
+  --text-headline--line-height: 1.1;
+  --text-headline--letter-spacing: -0.015em;
+  --text-headline--font-weight: 600;
+
+  --text-title: 1.5rem;
+  --text-title--line-height: 1.2;
+  --text-title--letter-spacing: -0.01em;
+  --text-title--font-weight: 600;
+
+  --text-body-lead: 1.25rem;
+  --text-body-lead--line-height: 1.6;
+  --text-body-lead--font-weight: 300;
+
+  --text-body: 1.125rem;
+  --text-body--line-height: 1.6;
+  --text-body--font-weight: 300;
+
+  --text-eyebrow: 0.625rem;
+  --text-eyebrow--line-height: 1.4;
+  --text-eyebrow--letter-spacing: 0.2em;
+  --text-eyebrow--font-weight: 700;
+
+  --text-label: 0.6875rem;
+  --text-label--line-height: 1.4;
+  --text-label--letter-spacing: 0.2em;
+  --text-label--font-weight: 700;
+
+  --text-data: 0.875rem;
+  --text-data--line-height: 1.4;
+  --text-data--letter-spacing: 0.05em;
+  --text-data--font-weight: 500;
+
+  --text-data-micro: 0.75rem;
+  --text-data-micro--line-height: 1.4;
+  --text-data-micro--letter-spacing: 0.2em;
+  --text-data-micro--font-weight: 400;
+
+  --tracking-label: 0.2em;
+  --tracking-wide-label: 0.4em;
+  --tracking-data: 0.05em;
+
+  /* ---- Radius: binary by doctrine. rounded-deck is presentation-only. ---- */
+  --radius-none: 0px;
+  --radius-full: 9999px;
+  --radius-deck: 24px;
+
+  /* ---- Space: p-md, py-xl, gap-hairline, ... ---------------------------- */
+  --spacing-hairline: 1px;
+  --spacing-xs: 8px;
+  --spacing-sm: 16px;
+  --spacing-md: 32px;
+  --spacing-lg: 64px;
+  --spacing-xl: 128px;
+  --spacing-xxl: 160px;
+
+  --container-content: 1280px;
+
+  /* ---- Motion: ease-terminal is the only easing in the system. ---------- */
+  --ease-terminal: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ---- Elevation: shadow-cta is the system's only shadow. ---------------- */
+  --shadow-cta: 0 20px 25px -5px rgba(14, 167, 199, 0.2);
+}
+
+/* ---- Utilities not expressible as theme values -------------------------- */
+
+@utility gutter {
+  padding-inline: clamp(24px, 8vw, 120px);
+}
+
+@utility measure {
+  max-width: 70ch;
+}
+
+/* Ambient Light Blobs — décor only: dark surfaces, behind content.
+   Compose as: <div class="relative overflow-hidden bg-abyss">
+                 <div class="blob blob-primary -top-20 -left-16"></div> ... */
+@utility blob {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
+}
+@utility blob-primary {
+  width: 480px; height: 480px; filter: blur(40px);
+  background: radial-gradient(ellipse at center,
+    rgba(14, 167, 199, 0.22) 0%, rgba(14, 167, 199, 0.06) 45%, transparent 70%);
+}
+@utility blob-secondary {
+  width: 320px; height: 520px; filter: blur(50px);
+  background: radial-gradient(ellipse at center, rgba(14, 167, 199, 0.13) 0%, transparent 65%);
+}
+@utility blob-support {
+  width: 200px; height: 380px; filter: blur(45px);
+  background: radial-gradient(ellipse at center, rgba(74, 158, 212, 0.1) 0%, transparent 60%);
+}
+@utility blob-whisper {
+  width: 160px; height: 300px; filter: blur(55px);
+  background: radial-gradient(ellipse at center, rgba(14, 167, 199, 0.07) 0%, transparent 60%);
+}
+
+/* Cover art and full-bleed hero imagery only. Never over readable text. */
+@utility fractal-overlay {
+  position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  background-image: repeating-linear-gradient(90deg,
+    rgba(0, 0, 0, 0.3) 0px, rgba(255, 255, 255, 0.02) 1px,
+    rgba(255, 255, 255, 0.005) 12px, rgba(0, 0, 0, 0.3) 13px);
+  mix-blend-mode: overlay;
+}
