@@ -37,7 +37,7 @@ import { distributorSigner } from '../stellar/signer';
 import { getDynamicFee } from '../stellar/fee';
 import { privySignatureToBase64 } from '../wallet/privy';
 import { parseStellarAmount } from '../format/parse-stellar-amount';
-import { fetchSupplyOnChainFromEnv } from '../stellar/supply';
+import { NavIndisponivelError, lerSupplyDoNav } from './nav-supply';
 import { extractLiquidacaoAmount } from '../stellar/parse-liquidacao-xdr';
 import { classeFromAssetCode } from '../stellar/classes';
 import { decrementarHolding } from './holdings';
@@ -81,7 +81,9 @@ export async function calcularValorLiquidacao(
   if (!isFinite(amount) || amount <= 0) {
     throw new Error('amountPlinarf inválido');
   }
-  const [cotas, realizacoes, supply] = await Promise.all([
+  // Trava D3 + fonte única de asset code: o denominador vem de `lerSupplyDoNav`
+  // (mesma leitura da tela). `fresh`: cotação de resgate move dinheiro, não usa TTL.
+  const [cotas, realizacoes, { senior: supply }] = await Promise.all([
     db.cota.findMany({
       where: { status: { in: ['DISPONIVEL', 'RESERVADA'] } },
       select: {
@@ -94,7 +96,7 @@ export async function calcularValorLiquidacao(
     db.realizacaoCaminho.findMany({
       select: { valorRealizado: true, spread: true },
     }),
-    fetchSupplyOnChainFromEnv(),
+    lerSupplyDoNav({ fresh: true }),
   ]);
   const navTotal = navTotalDoPool(cotas, realizacoes);
   const tokensVivos = tokensEmitidosVivos(cotas);
@@ -103,9 +105,8 @@ export async function calcularValorLiquidacao(
   // tesouraria, ou que nada foi emitido a investidor. Nos dois casos não
   // existe cotação honesta — e um BRL negativo chegaria na tela.
   if (unitDec.lte(0)) {
-    throw new Error(
-      'NAV/token indisponível: ativo atribuível não positivo contra o supply do ledger — operador precisa reconciliar antes de liquidar',
-    );
+    // Mensagem pública constante (a rota devolve 503 fixo); o motivo vai ao log.
+    throw new NavIndisponivelError('NAV_NAO_POSITIVO');
   }
   const brlEquivalenteDec = unitDec
     .mul(new Prisma.Decimal(input.amountPlinarf))
