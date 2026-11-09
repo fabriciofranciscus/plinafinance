@@ -21,7 +21,13 @@ import {
   spreadRealizadoAcumulado,
   tokensEmitidosVivos,
 } from '@/lib/services/pool';
-import { fetchSupplyOnChainFromEnv } from '@/lib/stellar/supply';
+import { assetCodeForClasse } from '@/lib/stellar/classes';
+import {
+  NAV_INDISPONIVEL_MENSAGEM,
+  NavIndisponivelError,
+  lerSupplyDoNav,
+} from '@/lib/services/nav-supply';
+import { clientIp, publicLimiter } from '@/lib/rate-limit/config';
 import { withApi } from '@/lib/api/with-api';
 import { ok } from '@/lib/api/response';
 import { ApiError } from '@/lib/api/errors';
@@ -29,7 +35,27 @@ import { isSorobanWaterfallEnabled } from '@/lib/env/feature-gates';
 
 export const dynamic = 'force-dynamic';
 
-export const GET = withApi(async (_req, { requestId }) => {
+export const GET = withApi(async (req, { requestId }) => {
+  // Rota pública: rate-limit antes de qualquer leitura (DB ou ledger).
+  if (!(await publicLimiter.consume(clientIp(req)))) {
+    throw new ApiError('RATE_LIMITED', 429, 'Too Many Requests');
+  }
+
+  // Ledger primeiro: sem supply não há NAV (fail-closed) e não vale gastar DB.
+  // Leitura com TTL + single-flight e trava D3 (PLINARFB circulando → 503), em
+  // `lerSupplyDoNav`. Corpo do 503 é constante; a causa vai só ao log, com o
+  // requestId, e nunca `err.message` ao cliente.
+  let supply;
+  try {
+    supply = (await lerSupplyDoNav()).senior;
+  } catch (err) {
+    console.error('[pool/summary] NAV indisponível', {
+      requestId,
+      motivo: err instanceof NavIndisponivelError ? err.motivo : 'DESCONHECIDO',
+    });
+    throw new ApiError('LEDGER_UNAVAILABLE', 503, NAV_INDISPONIVEL_MENSAGEM);
+  }
+
   // F-M0-6 / M7: fonte do denominador do NAV. O supply vem do ledger
   // (`lib/stellar/supply.ts`); quando SOROBAN_WATERFALL estiver on, o M7
   // passa a ler o NAV do nav_oracle on-chain em vez de calcular aqui.
@@ -55,20 +81,6 @@ export const GET = withApi(async (_req, { requestId }) => {
     }),
   ]);
 
-  // Separado do Promise.all acima: se o ledger não responde, o NAV não
-  // existe, e devolver 503 com código próprio é melhor que publicar um
-  // número derivado do estado da aplicação.
-  let supply;
-  try {
-    supply = await fetchSupplyOnChainFromEnv(parametros?.assetCode);
-  } catch (err) {
-    throw new ApiError(
-      'LEDGER_UNAVAILABLE',
-      503,
-      `supply on-chain indisponível: ${err instanceof Error ? err.message : 'erro desconhecido'}`,
-    );
-  }
-
   const navTotal = navTotalDoPool(cotas, realizacoes);
   const tokensVivos = tokensEmitidosVivos(cotas);
   const navUnit = navPorToken(cotas, realizacoes, supply);
@@ -91,7 +103,8 @@ export const GET = withApi(async (_req, { requestId }) => {
 
   return ok(
     {
-      assetCode: parametros?.assetCode ?? 'PLINARF',
+      // Fonte única do asset code (a mesma do supply e do resgate).
+      assetCode: assetCodeForClasse('SENIOR'),
       network: parametros?.network ?? 'TESTNET',
       issuerPubkey: parametros?.issuerPubkey ?? '',
       distributorPubkey: parametros?.distributorPubkey ?? '',
