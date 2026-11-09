@@ -22,15 +22,43 @@
  * e ainda não queimado.
  */
 
-import { Prisma } from '@prisma/client';
+import { Prisma, type ClassePLINARF } from '@prisma/client';
 import { getAssetBalance, horizon } from './account';
-import { STELLAR_NETWORK, assetCode } from './config';
+import { assetCodeForClasse } from './classes';
+import { STELLAR_NETWORK } from './config';
 import { withSpan } from '../observability/tracer';
 
 const ZERO = new Prisma.Decimal(0);
 
 function dec(value: string | number): Prisma.Decimal {
   return new Prisma.Decimal(value);
+}
+
+export type SupplyErrorCode = 'SUPPLY_CONFIG_MISSING' | 'SUPPLY_ASSET_UNKNOWN';
+
+/**
+ * Erro de configuração da leitura de supply. A mensagem é **constante** e não
+ * cita variáveis de ambiente: ela pode subir até uma resposta HTTP pública, e
+ * nome de env é mapa da infraestrutura. O detalhe fica em `code`.
+ */
+export class SupplyConfigError extends Error {
+  readonly code: SupplyErrorCode;
+
+  constructor(code: SupplyErrorCode) {
+    super(
+      code === 'SUPPLY_ASSET_UNKNOWN'
+        ? 'Leitura de supply recusada: asset não pertence à Plina.'
+        : 'Leitura de supply indisponível: configuração do ledger incompleta.',
+    );
+    this.name = 'SupplyConfigError';
+    this.code = code;
+  }
+}
+
+/** Supply das duas classes, lido no mesmo instante lógico. */
+export interface SupplyDasClasses {
+  senior: SupplyOnChain;
+  subordinada: SupplyOnChain;
 }
 
 export interface SupplyOnChain {
@@ -94,9 +122,14 @@ export interface SupplyOnChain {
 export async function fetchSupplyOnChain(input: {
   issuerPubkey: string;
   distributorPubkey: string;
-  code?: string;
+  /**
+   * Obrigatório: sem default. O default implícito em PLINARF fazia o resgate
+   * dividir pelo supply da Sênior mesmo quando a cotação era de outra classe.
+   */
+  code: string;
 }): Promise<SupplyOnChain> {
-  const code = input.code ?? assetCode;
+  const { code } = input;
+  if (!code) throw new SupplyConfigError('SUPPLY_ASSET_UNKNOWN');
 
   return withSpan(
     'stellar.supply',
@@ -180,19 +213,58 @@ export async function fetchSupplyOnChain(input: {
   );
 }
 
+function chavesDoAmbiente(): { issuerPubkey: string; distributorPubkey: string } {
+  const issuerPubkey = process.env.STELLAR_ISSUER_PUBLIC;
+  const distributorPubkey = process.env.STELLAR_DISTRIBUTOR_PUBLIC;
+  if (!issuerPubkey || !distributorPubkey) {
+    throw new SupplyConfigError('SUPPLY_CONFIG_MISSING');
+  }
+  return { issuerPubkey, distributorPubkey };
+}
+
+/** Codes que a Plina emite, na fonte única (`classes.ts`). */
+function codesDaPlina(): string[] {
+  return [assetCodeForClasse('SENIOR'), assetCodeForClasse('SUBORDINADA')];
+}
+
 /**
- * Lê o supply usando issuer e distributor do ambiente. Conveniência pros
- * callers que não têm as chaves em mão (rotas e páginas).
+ * Supply de um asset da Plina, com issuer e distributor do ambiente. Recusa
+ * code que não seja de uma classe da Plina antes de ir ao Horizon.
+ */
+export async function fetchSupplyDoAsset(code: string): Promise<SupplyOnChain> {
+  if (!codesDaPlina().includes(code)) {
+    throw new SupplyConfigError('SUPPLY_ASSET_UNKNOWN');
+  }
+  return fetchSupplyOnChain({ ...chavesDoAmbiente(), code });
+}
+
+/** Supply da classe; o asset code vem de `assetCodeForClasse` (fonte única). */
+export async function fetchSupplyDaClasse(
+  classe: ClassePLINARF,
+): Promise<SupplyOnChain> {
+  return fetchSupplyDoAsset(assetCodeForClasse(classe));
+}
+
+/**
+ * Supply das duas classes em paralelo. Falha fechada: se qualquer leitura
+ * falhar, a chamada inteira falha — nunca devolve só uma classe.
+ */
+export async function fetchSupplyDasClasses(): Promise<SupplyDasClasses> {
+  const [senior, subordinada] = await Promise.all([
+    fetchSupplyDaClasse('SENIOR'),
+    fetchSupplyDaClasse('SUBORDINADA'),
+  ]);
+  return { senior, subordinada };
+}
+
+/**
+ * @deprecated Use `fetchSupplyDoAsset`, `fetchSupplyDaClasse` ou
+ * `fetchSupplyDasClasses`. Mantida só para os callers atuais compilarem
+ * durante a migração (M1-2); sem `code` lê a Sênior, como antes; code fora da
+ * Plina é recusado.
  */
 export async function fetchSupplyOnChainFromEnv(
   code?: string,
 ): Promise<SupplyOnChain> {
-  const issuerPubkey = process.env.STELLAR_ISSUER_PUBLIC;
-  const distributorPubkey = process.env.STELLAR_DISTRIBUTOR_PUBLIC;
-  if (!issuerPubkey || !distributorPubkey) {
-    throw new Error(
-      'STELLAR_ISSUER_PUBLIC + STELLAR_DISTRIBUTOR_PUBLIC obrigatórios pra ler o supply on-chain.',
-    );
-  }
-  return fetchSupplyOnChain({ issuerPubkey, distributorPubkey, code });
+  return fetchSupplyDoAsset(code ?? assetCodeForClasse('SENIOR'));
 }
