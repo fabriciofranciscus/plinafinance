@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const { assetsCall, forIssuer, forCode, assets, getAssetBalance } = vi.hoisted(
   () => {
@@ -21,7 +21,14 @@ vi.mock('@/lib/stellar/account', () => ({
   getAssetBalance,
 }));
 
-import { fetchSupplyOnChain } from '@/lib/stellar/supply';
+import {
+  SupplyConfigError,
+  fetchSupplyDaClasse,
+  fetchSupplyDasClasses,
+  fetchSupplyDoAsset,
+  fetchSupplyOnChain,
+  fetchSupplyOnChainFromEnv,
+} from '@/lib/stellar/supply';
 
 const ISSUER = 'GISSUER';
 const DISTRIBUTOR = 'GDISTRIBUTOR';
@@ -73,6 +80,7 @@ describe('fetchSupplyOnChain', () => {
     const s = await fetchSupplyOnChain({
       issuerPubkey: ISSUER,
       distributorPubkey: DISTRIBUTOR,
+      code: 'PLINARF',
     });
 
     // 700 + 50 + 30 + 15 + 4 + 1
@@ -87,6 +95,7 @@ describe('fetchSupplyOnChain', () => {
     const s = await fetchSupplyOnChain({
       issuerPubkey: ISSUER,
       distributorPubkey: DISTRIBUTOR,
+      code: 'PLINARF',
     });
 
     expect(s.totalEmitido.toFixed(7)).toBe('1000.0000000');
@@ -103,6 +112,7 @@ describe('fetchSupplyOnChain', () => {
     const s = await fetchSupplyOnChain({
       issuerPubkey: ISSUER,
       distributorPubkey: DISTRIBUTOR,
+      code: 'PLINARF',
     });
 
     expect(s.circulante.toFixed(7)).toBe('0.0000000');
@@ -129,6 +139,7 @@ describe('fetchSupplyOnChain', () => {
     const s = await fetchSupplyOnChain({
       issuerPubkey: ISSUER,
       distributorPubkey: DISTRIBUTOR,
+      code: 'PLINARF',
     });
 
     expect(s.temSaldoCongelado).toBe(true);
@@ -143,6 +154,7 @@ describe('fetchSupplyOnChain', () => {
     const s = await fetchSupplyOnChain({
       issuerPubkey: ISSUER,
       distributorPubkey: DISTRIBUTOR,
+      code: 'PLINARF',
     });
 
     expect(s.totalEmitido.isZero()).toBe(true);
@@ -157,6 +169,7 @@ describe('fetchSupplyOnChain', () => {
       fetchSupplyOnChain({
         issuerPubkey: ISSUER,
         distributorPubkey: DISTRIBUTOR,
+        code: 'PLINARF',
       }),
     ).rejects.toThrow('horizon 504');
   });
@@ -172,5 +185,154 @@ describe('fetchSupplyOnChain', () => {
 
     expect(forCode).toHaveBeenCalledWith('PLINARFB');
     expect(forIssuer).toHaveBeenCalledWith(ISSUER);
+  });
+
+  it('PLINARFB circulando: emitido, tesouraria e circulante do próprio asset', async () => {
+    assetsCall.mockResolvedValueOnce({
+      records: [
+        assetRecord({
+          asset_code: 'PLINARFB',
+          balances: {
+            authorized: '480.0000000',
+            authorized_to_maintain_liabilities: '0.0000000',
+            unauthorized: '0.0000000',
+          },
+          claimable_balances_amount: '20.0000000',
+        }),
+      ],
+    });
+    getAssetBalance.mockResolvedValueOnce('150.0000000');
+
+    const s = await fetchSupplyOnChain({
+      issuerPubkey: ISSUER,
+      distributorPubkey: DISTRIBUTOR,
+      code: 'PLINARFB',
+    });
+
+    // A tesouraria tem que ser lida no MESMO asset, não no PLINARF.
+    expect(getAssetBalance).toHaveBeenCalledWith(DISTRIBUTOR, 'PLINARFB', ISSUER);
+    expect(s.code).toBe('PLINARFB');
+    expect(s.totalEmitido.toFixed(7)).toBe('500.0000000');
+    expect(s.tesouraria.toFixed(7)).toBe('150.0000000');
+    expect(s.circulante.toFixed(7)).toBe('350.0000000');
+  });
+
+  it('recusa code vazio sem consultar o Horizon', async () => {
+    await expect(
+      fetchSupplyOnChain({
+        issuerPubkey: ISSUER,
+        distributorPubkey: DISTRIBUTOR,
+        code: '',
+      }),
+    ).rejects.toBeInstanceOf(SupplyConfigError);
+    expect(assetsCall).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Horizon fake por asset code: cada code tem seu registro em `/assets` e seu
+ * saldo no distributor. Assim um teste que mistura as classes falha se o
+ * módulo ler o asset errado.
+ */
+function mockLedger(
+  porCode: Record<string, { record?: ReturnType<typeof assetRecord>; tesouraria: string }>,
+) {
+  forCode.mockImplementation(((code: string) => ({
+    forIssuer: () => ({
+      call: () => {
+        const entry = porCode[code];
+        return Promise.resolve({ records: entry?.record ? [entry.record] : [] });
+      },
+    }),
+  })) as never);
+  getAssetBalance.mockImplementation(async (_pk: string, code: string) =>
+    porCode[code]?.tesouraria ?? '0',
+  );
+}
+
+describe('leitura por asset code com chaves do ambiente', () => {
+  beforeEach(() => {
+    vi.stubEnv('STELLAR_ISSUER_PUBLIC', ISSUER);
+    vi.stubEnv('STELLAR_DISTRIBUTOR_PUBLIC', DISTRIBUTOR);
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('fetchSupplyDasClasses lê Sênior e Subordinada cada uma no seu asset', async () => {
+    mockLedger({
+      PLINARF: { record: assetRecord(), tesouraria: '400.0000000' },
+      PLINARFB: {
+        record: assetRecord({
+          asset_code: 'PLINARFB',
+          balances: {
+            authorized: '300.0000000',
+            authorized_to_maintain_liabilities: '0.0000000',
+            unauthorized: '0.0000000',
+          },
+        }),
+        tesouraria: '100.0000000',
+      },
+    });
+
+    const { senior, subordinada } = await fetchSupplyDasClasses();
+
+    expect(senior.code).toBe('PLINARF');
+    expect(senior.totalEmitido.toFixed(7)).toBe('1000.0000000');
+    expect(senior.circulante.toFixed(7)).toBe('600.0000000');
+    expect(subordinada.code).toBe('PLINARFB');
+    expect(subordinada.totalEmitido.toFixed(7)).toBe('300.0000000');
+    expect(subordinada.tesouraria.toFixed(7)).toBe('100.0000000');
+    expect(subordinada.circulante.toFixed(7)).toBe('200.0000000');
+  });
+
+  it('fetchSupplyDasClasses falha fechado se uma das classes não responde', async () => {
+    mockLedger({ PLINARF: { record: assetRecord(), tesouraria: '0' } });
+    getAssetBalance.mockImplementation(async (_pk: string, code: string) => {
+      if (code === 'PLINARFB') throw new Error('horizon 504');
+      return '0';
+    });
+
+    await expect(fetchSupplyDasClasses()).rejects.toThrow('horizon 504');
+  });
+
+  it('fetchSupplyDaClasse resolve o code pela classe (fonte única)', async () => {
+    mockLedger({
+      PLINARFB: { record: assetRecord({ asset_code: 'PLINARFB' }), tesouraria: '0' },
+    });
+
+    const s = await fetchSupplyDaClasse('SUBORDINADA');
+
+    expect(forCode).toHaveBeenCalledWith('PLINARFB');
+    expect(s.code).toBe('PLINARFB');
+  });
+
+  it('fetchSupplyDoAsset recusa code que não é da Plina sem ir ao Horizon', async () => {
+    const err = await fetchSupplyDoAsset('USDC').catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(SupplyConfigError);
+    expect((err as SupplyConfigError).code).toBe('SUPPLY_ASSET_UNKNOWN');
+    expect(forCode).not.toHaveBeenCalled();
+  });
+
+  it('chaves ausentes: erro tipado e mensagem sem nome de variável de ambiente', async () => {
+    vi.stubEnv('STELLAR_ISSUER_PUBLIC', '');
+
+    const err = await fetchSupplyDoAsset('PLINARF').catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(SupplyConfigError);
+    expect((err as SupplyConfigError).code).toBe('SUPPLY_CONFIG_MISSING');
+    const msg = (err as Error).message;
+    expect(msg).not.toMatch(/STELLAR_|_PUBLIC|_SECRET|process\.env/);
+    expect(forCode).not.toHaveBeenCalled();
+  });
+
+  it('fetchSupplyOnChainFromEnv (deprecated) mantém o erro sem nome de env', async () => {
+    vi.stubEnv('STELLAR_DISTRIBUTOR_PUBLIC', '');
+
+    const err = await fetchSupplyOnChainFromEnv().catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(SupplyConfigError);
+    expect((err as Error).message).not.toMatch(/STELLAR_|_PUBLIC/);
   });
 });
