@@ -14,6 +14,7 @@ vi.mock('@/lib/db', () => ({
     parametrosPool: { findUnique: m.parametros },
     cota: { findMany: m.cotas },
     realizacaoCaminho: { findMany: m.realizacoes },
+    movimentoFundo: { aggregate: async () => ({ _sum: { deltaCaixa: null } }), createMany: async () => ({ count: 1 }) },
   },
 }));
 vi.mock('@/lib/env/feature-gates', () => ({ isSorobanWaterfallEnabled: async () => false }));

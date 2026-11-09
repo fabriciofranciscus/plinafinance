@@ -739,6 +739,43 @@ model RealizacaoCaminho {
 // Audit log
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Razão mínimo do fundo (E2-5). O caixa do NAV é a soma de `deltaCaixa`;
+/// o ativo continua vindo das cotas ativas. Append-only: linha nunca é editada
+/// nem apagada. `chave` é a idempotência (mesmo evento = mesma chave).
+///   SUBSCRICAO   caixa +valorBrl (quote.fromAmount), tokens +q
+///   APORTE_COTA  caixa 0, ativo +custo (a cota), tokens +q  (a Plina aporta; nunca AQUISICAO)
+///   AQUISICAO    caixa −valorBrl, sem emissão (fundo paga a cota com caixa próprio)
+///   REALIZACAO   caixa +valorRealizado (a cota sai do ativo)
+///   RESGATE_PAGO caixa −valorBrl, tokens −q (queima, D2)
+/// O Pix da Plina ao cedente NÃO entra aqui. Supply real vem do ledger, não daqui.
+model MovimentoFundo {
+  id          String             @id @default(cuid())
+  tipo        TipoMovimentoFundo
+  /// Valor do evento em BRL (≥ 0).
+  valorBrl    Decimal            @db.Decimal(20, 7)
+  /// Efeito no caixa (BRL, com sinal).
+  deltaCaixa  Decimal            @db.Decimal(20, 7)
+  /// Efeito na quantidade de tokens (informativo).
+  deltaTokens Decimal            @default(0) @db.Decimal(20, 7)
+  /// Idempotência: `subscricao:<quoteId>`, `realizacao:<id>`, `aporte-cota:<cotaId>`, `resgate:<xdrHash>`.
+  chave       String             @unique
+  cotaId      String?
+  quoteId     String?
+  /// Hash do Pix / tx on-chain / hashValidacao que sustenta o evento.
+  refHash     String?
+  criadoEm    DateTime           @default(now())
+
+  @@index([tipo])
+}
+
+enum TipoMovimentoFundo {
+  SUBSCRICAO
+  APORTE_COTA
+  AQUISICAO
+  REALIZACAO
+  RESGATE_PAGO
+}
+
 /// Append-only (CLAUDE.md). Toda mudança de estado relevante registra.
 /// `payloadHash` é o SHA-256 que foi pra blockchain como memo. Vendedor/
 /// comprador podem cross-verificar: hash do documento off-chain == memo

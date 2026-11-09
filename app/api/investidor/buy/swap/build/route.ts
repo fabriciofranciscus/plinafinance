@@ -33,6 +33,7 @@ import { mainnetCutoverGuard } from '@/lib/env/feature-gates';
 import { buildAsset, loadAccount } from '@/lib/stellar/account';
 import { logStellarError } from '@/lib/stellar/log-error';
 import { assetCodeForClasse, classeOrDefault } from '@/lib/stellar/classes';
+import { registrarMovimentoFundo } from '@/lib/services/razao-fundo';
 import { incrementarHolding } from '@/lib/services/holdings';
 import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
@@ -219,6 +220,14 @@ export const POST = withApi(async (req, { requestId }) => {
         classe,
         amount: stellarAmount,
         txHash: distRes.hash,
+      });
+      await registrarMovimentoFundo(tx, {
+        tipo: 'SUBSCRICAO',
+        valorBrl: quote.fromAmount,
+        tokens: stellarAmount,
+        chave: `subscricao:${quote.id}`,
+        quoteId: quote.id,
+        refHash: distRes.hash,
       });
       await tx.eventoAudit.create({
         data: {

@@ -33,6 +33,7 @@ import {
   stellarXdr,
 } from '@/lib/http/zod-stellar';
 import { parseStellarAmount } from '@/lib/format/parse-stellar-amount';
+import { registrarMovimentoFundo } from '@/lib/services/razao-fundo';
 import { assertSwapXdrMatchesQuote } from '@/lib/stellar/parse-swap-xdr';
 import { assetCodeForClasse, classeOrDefault } from '@/lib/stellar/classes';
 import { incrementarHolding } from '@/lib/services/holdings';
@@ -264,6 +265,16 @@ export const POST = withAuth(async (req, { user }) => {
         classe,
         amount: stellarAmount,
         txHash: finalHash,
+      });
+      // E2-5: o BRL integralizado entra no caixa do fundo (numerador do NAV)
+      // junto com os q tokens emitidos — senão a subscrição dilui todos.
+      await registrarMovimentoFundo(tx, {
+        tipo: 'SUBSCRICAO',
+        valorBrl: quote.fromAmount,
+        tokens: stellarAmount,
+        chave: `subscricao:${quote.id}`,
+        quoteId: quote.id,
+        refHash: finalHash,
       });
       await tx.eventoAudit.create({
         data: {

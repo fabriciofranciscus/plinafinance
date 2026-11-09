@@ -10,6 +10,7 @@ const {
   quoteUpdateMany,
   investidorUpdate,
   eventoAuditCreate,
+  movimentoCreateMany,
   holdingUpsert,
   buildSwapBridgeForPlinarfXdr,
   preSignWithSigner,
@@ -23,6 +24,7 @@ const {
   quoteUpdateMany: vi.fn(),
   investidorUpdate: vi.fn(),
   eventoAuditCreate: vi.fn(),
+  movimentoCreateMany: vi.fn(),
   holdingUpsert: vi.fn(),
   buildSwapBridgeForPlinarfXdr: vi.fn(),
   preSignWithSigner: vi.fn(),
@@ -59,6 +61,7 @@ vi.mock('@/lib/db', () => ({
         quote: { updateMany: typeof quoteUpdateMany };
         investidor: { update: typeof investidorUpdate };
         eventoAudit: { create: typeof eventoAuditCreate };
+        movimentoFundo: { createMany: typeof movimentoCreateMany };
         holdingPLINARF: { upsert: typeof holdingUpsert };
       }) => Promise<unknown>,
     ) =>
@@ -66,6 +69,7 @@ vi.mock('@/lib/db', () => ({
         quote: { updateMany: quoteUpdateMany },
         investidor: { update: investidorUpdate },
         eventoAudit: { create: eventoAuditCreate },
+        movimentoFundo: { createMany: movimentoCreateMany },
         holdingPLINARF: { upsert: holdingUpsert },
       }),
   },
@@ -100,6 +104,7 @@ function baseQuote(overrides: Partial<Record<string, unknown>> = {}) {
     investidorId: 'inv_1',
     consumedAt: null,
     expiresAt: new Date(Date.now() + 60_000),
+    fromAmount: new Prisma.Decimal('100'),
     toAmount: new Prisma.Decimal('99.5'),
     navPorTokenNaCotacao: new Prisma.Decimal('1'),
     plinarfAmount: new Prisma.Decimal('99.5'),
@@ -118,6 +123,7 @@ beforeEach(() => {
   quoteUpdateMany.mockReset().mockResolvedValue({ count: 1 });
   investidorUpdate.mockReset().mockResolvedValue({});
   eventoAuditCreate.mockReset().mockResolvedValue({});
+  movimentoCreateMany.mockReset().mockResolvedValue({ count: 1 });
   holdingUpsert.mockReset().mockResolvedValue({});
   distribute.mockReset().mockResolvedValue({ hash: 'tx_mock_hash' });
   buildSwapBridgeForPlinarfXdr.mockReset();
@@ -184,6 +190,7 @@ describe('POST /api/investidor/buy/swap/build', () => {
   it('mock path emite o PLINARF do quote, não o TESOURO (NAV 1,0625)', async () => {
     quoteFindUnique.mockResolvedValueOnce(
       baseQuote({
+        fromAmount: new Prisma.Decimal('400'),
         toAmount: new Prisma.Decimal('344'),
         navPorTokenNaCotacao: new Prisma.Decimal('1.0625'),
         plinarfAmount: new Prisma.Decimal('376.4705882'),
@@ -191,6 +198,13 @@ describe('POST /api/investidor/buy/swap/build', () => {
     );
     const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
     expect(r.status).toBe(200);
+    // E2-5: o BRL integralizado (fromAmount) entra no caixa com os q tokens emitidos.
+    const mov = movimentoCreateMany.mock.calls[0][0].data[0];
+    expect(mov.tipo).toBe('SUBSCRICAO');
+    expect(mov.valorBrl.toFixed(2)).toBe('400.00');
+    expect(mov.deltaCaixa.toFixed(2)).toBe('400.00');
+    expect(mov.deltaTokens.toFixed(7)).toBe('376.4705882');
+    expect(mov.chave).toBe('subscricao:q_1');
     expect(distribute.mock.calls[0][3]).toBe('376.4705882');
     expect(eventoAuditCreate.mock.calls[0][0].data.payloadJson.amount).toBe('376.4705882');
     expect(eventoAuditCreate.mock.calls[0][0].data.payloadJson.navPorTokenNaCotacao).toBe('1.06250000');
