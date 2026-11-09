@@ -66,7 +66,7 @@ function Inner() {
     setErro(null);
     try {
       const data = await postJson<ReservaResult>(
-        '/api/comprar/reservar',
+        '/api/comprar/reserva',
         { cotaId },
         getAccessToken,
       );
