@@ -13,6 +13,7 @@
     "postinstall": "prisma generate",
     "prebuild": "pnpm lint:auth-guard",
     "smoke:stellar": "tsx scripts/smoke-stellar.ts",
+    "smoke:investidor": "tsx scripts/smoke-investidor.ts",
     "smoke:etherfuse": "tsx scripts/smoke-etherfuse.ts",
     "smoke:audit": "tsx scripts/smoke-audit.ts",
     "evidencia:plina-rf": "tsx scripts/gerar-evidencia-plina-rf.ts",
