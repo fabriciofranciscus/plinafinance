@@ -35,8 +35,8 @@ yarn-error.log*
 !.env.example
 
 # smoke test output — contém secret keys, NUNCA commitar
-smoke-stellar-output.json
-smoke-etherfuse-output.json
+# padrão em vez de lista: um smoke novo já nasce ignorado
+smoke-*-output.json
 scripts/video/state.json
 
 # vercel
