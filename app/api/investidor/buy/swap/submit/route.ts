@@ -167,9 +167,8 @@ export const POST = withAuth(async (req, { user }) => {
         distributorPubkey,
         issuerPubkey,
         bridgeAsset: { code: tesouro.code, issuer: tesouro.issuer },
-        // TODO(M1-3 chain, Estela): trocar por expectedBridgeAmount +
-        // expectedPlinarfAmount quando feat/m1-swap-two-amounts entrar.
-        expectedAmount: expectedBridgeAmount,
+        expectedBridgeAmount,
+        expectedPlinarfAmount,
         plinarfCode,
       });
     } catch (err) {
