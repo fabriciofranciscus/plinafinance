@@ -24,6 +24,10 @@ export interface MovimentoFundoInput {
   cotaId?: string;
   quoteId?: string;
   refHash?: string;
+  /** NAV/token antes do evento (aporte/subscrição). */
+  navPorToken?: Prisma.Decimal | string | number;
+  txHash?: string;
+  hashValidacao?: string;
 }
 
 const D = (v: Prisma.Decimal | string | number) => new Prisma.Decimal(v);
@@ -80,6 +84,9 @@ export async function registrarMovimentoFundo(
         cotaId: input.cotaId ?? null,
         quoteId: input.quoteId ?? null,
         refHash: input.refHash ?? null,
+        navPorToken: input.navPorToken === undefined ? null : D(input.navPorToken),
+        txHash: input.txHash ?? null,
+        hashValidacao: input.hashValidacao ?? null,
       },
     ],
     skipDuplicates: true,

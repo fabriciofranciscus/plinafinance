@@ -21,6 +21,7 @@ import {
   registerOnChainHash,
   sha256OfPayload,
 } from '../stellar/audit';
+import { STELLAR_NETWORK } from '../stellar/config';
 import { incorporarCota } from './tokenizacao';
 import { tokensParaEmitir } from './pool';
 import { taxaAnuenciaBpsFor } from '../config/administradoras';
@@ -548,7 +549,21 @@ export async function incorporarCotaDoFunil(input: {
   if (cessao.pagamento?.status !== PagamentoStatus.EXECUTADO) {
     throw new Error('Pix precisa estar EXECUTADO antes de incorporar');
   }
-  if (cessao.cota) throw new Error('Cota já incorporada pra esta cessão');
+  if (cessao.cota) {
+    throw new Error(
+      cessao.cota.status === 'EMISSAO_PENDENTE'
+        ? 'Emissão desta cessão está EMISSAO_PENDENTE — reconciliar no explorer antes de qualquer retry'
+        : 'Cota já incorporada pra esta cessão',
+    );
+  }
+
+  // E1-4: o laudo é registrado ANTES da emissão (por cessão). Sem ele — ou sem
+  // anuência — `incorporarCota` recusa.
+  const laudo = await db.eventoAudit.findFirst({
+    where: { acao: 'COTA_VALIDADA', cessaoId: cessao.id },
+    orderBy: { criadoEm: 'desc' },
+    select: { payloadHash: true },
+  });
 
   // Re-usa tokenizacao.incorporarCota (já emite on-chain + audit COTA_INCORPORADA).
   const result = await incorporarCota({
@@ -562,6 +577,9 @@ export async function incorporarCotaDoFunil(input: {
     operador: input.operador,
     notas: `funil-vendedor:${cessao.oferta.leadVendedorId}`,
     cessaoId: cessao.id,
+    hashValidacao: laudo?.payloadHash ?? undefined,
+    pixValorBrl: cessao.pagamento.valor.toString(),
+    pixHash: cessao.pagamento.onChainTxHash ?? undefined,
   });
 
   await db.$transaction(async (tx) => {
@@ -655,4 +673,90 @@ export async function registrarValidacaoLegal(
     payloadHash: onChain.payloadHash,
     txHash: onChain.txHash,
   };
+}
+
+
+// ─── 8. Laudo e anuência ANTES da emissão (E1-4) ───────────────────────────
+
+/**
+ * Registra o laudo legal de uma cessão **antes** de a cota existir (a ordem
+ * mudou: laudo → anuência → emissão). Memo.hash on-chain + `EventoAudit`
+ * COTA_VALIDADA ligado à cessão. O `payloadHash` devolvido é o
+ * `hashValidacao` que `incorporarCota` exige e copia para a `Cota`.
+ */
+export async function registrarLaudoDaCessao(input: {
+  cessaoId: string;
+  laudoUrl: string;
+  operador: string;
+}): Promise<{ cessaoId: string; hashValidacao: string; txHash: string }> {
+  if (!input.laudoUrl || !/^https?:\/\//.test(input.laudoUrl)) {
+    throw new Error('laudoUrl obrigatória (URL pública do documento).');
+  }
+  const cessao = await db.cessao.findUnique({
+    where: { id: input.cessaoId },
+    include: { oferta: true, cota: { select: { id: true } } },
+  });
+  if (!cessao) throw new Error('Cessão não encontrada');
+  if (cessao.cota) throw new Error('Cessão já tem cota incorporada');
+
+  const payload = buildAuditPayload('cota_validacao', cessao.id, {
+    cessaoId: cessao.id,
+    laudoUrl: input.laudoUrl,
+    administradora: cessao.oferta.administradora,
+    tipoBem: cessao.oferta.tipoBem,
+    operador: input.operador,
+  });
+  const onChain = await registerOnChainHash(payload);
+
+  await db.eventoAudit.create({
+    data: {
+      acao: 'COTA_VALIDADA',
+      operador: input.operador,
+      cessaoId: cessao.id,
+      payloadJson: payload as unknown as Prisma.InputJsonValue,
+      payloadHash: onChain.payloadHash,
+      stellarTxHash: onChain.txHash,
+    },
+  });
+  return { cessaoId: cessao.id, hashValidacao: onChain.payloadHash, txHash: onChain.txHash };
+}
+
+/**
+ * Registra a anuência da administradora (Lei 11.795, art. 13) para um laudo.
+ * `CONFIRMADA` exige referência (protocolo/documento). `DECLARADA_PENDENTE` só
+ * vale fora de mainnet: registra, sem fingir, que a anuência real ainda não
+ * ocorreu. A prova é `EventoAudit` ANUENCIA_REGISTRADA (o último vence).
+ */
+export async function registrarAnuencia(input: {
+  hashValidacao: string;
+  status: 'CONFIRMADA' | 'DECLARADA_PENDENTE';
+  referencia?: string;
+  operador: string;
+}): Promise<{ hashValidacao: string; status: string }> {
+  if (input.status === 'CONFIRMADA' && !input.referencia) {
+    throw new Error('Anuência CONFIRMADA exige referência (protocolo ou documento).');
+  }
+  if (input.status === 'DECLARADA_PENDENTE' && STELLAR_NETWORK === 'PUBLIC') {
+    throw new Error('Em mainnet a anuência precisa ser CONFIRMADA; "declarada pendente" só em testnet.');
+  }
+  const laudo = await db.eventoAudit.findFirst({
+    where: { acao: 'COTA_VALIDADA', payloadHash: input.hashValidacao },
+    select: { id: true, cessaoId: true, cotaId: true },
+  });
+  if (!laudo) throw new Error('Laudo não registrado para este hashValidacao.');
+
+  await db.eventoAudit.create({
+    data: {
+      acao: 'ANUENCIA_REGISTRADA',
+      operador: input.operador,
+      cessaoId: laudo.cessaoId,
+      cotaId: laudo.cotaId,
+      payloadJson: {
+        hashValidacao: input.hashValidacao,
+        status: input.status,
+        referencia: input.referencia ?? null,
+      } as Prisma.InputJsonValue,
+    },
+  });
+  return { hashValidacao: input.hashValidacao, status: input.status };
 }
