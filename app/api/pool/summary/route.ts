@@ -21,6 +21,7 @@ import {
   spreadRealizadoAcumulado,
   tokensEmitidosVivos,
 } from '@/lib/services/pool';
+import { caixaParaNav } from '@/lib/services/razao-fundo';
 import { assetCodeForClasse } from '@/lib/stellar/classes';
 import {
   NAV_INDISPONIVEL_MENSAGEM,
@@ -61,7 +62,7 @@ export const GET = withApi(async (req, { requestId }) => {
   // passa a ler o NAV do nav_oracle on-chain em vez de calcular aqui.
   const sorobanWaterfall = await isSorobanWaterfallEnabled();
   const navSource = sorobanWaterfall ? 'soroban' : 'ledger';
-  const [parametros, cotas, realizacoes] = await Promise.all([
+  const [parametros, cotas, realizacoes, caixaNav] = await Promise.all([
     db.parametrosPool.findUnique({ where: { id: 'singleton' } }),
     db.cota.findMany({
       where: { status: { in: ['DISPONIVEL', 'RESERVADA'] } },
@@ -79,13 +80,15 @@ export const GET = withApi(async (req, { requestId }) => {
     db.realizacaoCaminho.findMany({
       select: { valorRealizado: true, spread: true },
     }),
+    // E2-5: o caixa do NAV vem do razão do fundo, não das realizações.
+    caixaParaNav(),
   ]);
 
-  const navTotal = navTotalDoPool(cotas, realizacoes);
+  const navTotal = navTotalDoPool(cotas, caixaNav);
   const tokensVivos = tokensEmitidosVivos(cotas);
-  const navUnit = navPorToken(cotas, realizacoes, supply);
-  const atribuivel = navAtribuivel(cotas, realizacoes, supply);
-  const caixa = caixaRealizado(realizacoes);
+  const navUnit = navPorToken(cotas, caixaNav, supply);
+  const atribuivel = navAtribuivel(cotas, caixaNav, supply);
+  const caixa = caixaRealizado(caixaNav);
   const spreadAcumulado = spreadRealizadoAcumulado(realizacoes);
 
   const tipoBemCount: Record<string, number> = {};

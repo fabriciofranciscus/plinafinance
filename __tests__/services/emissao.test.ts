@@ -4,7 +4,8 @@ import { Prisma } from '@prisma/client';
 const m = vi.hoisted(() => ({ fetchSupplyDasClasses: vi.fn(), cotas: vi.fn(), realizacoes: vi.fn() }));
 vi.mock('@/lib/stellar/supply', () => ({ fetchSupplyDasClasses: m.fetchSupplyDasClasses }));
 vi.mock('@/lib/db', () => ({
-  db: { cota: { findMany: m.cotas }, realizacaoCaminho: { findMany: m.realizacoes } },
+  db: { cota: { findMany: m.cotas }, realizacaoCaminho: { findMany: m.realizacoes },
+    movimentoFundo: { aggregate: async () => ({ _sum: { deltaCaixa: null } }), createMany: async () => ({ count: 1 }) } },
 }));
 
 import { calcularPrecoDeEmissao } from '@/lib/services/emissao';

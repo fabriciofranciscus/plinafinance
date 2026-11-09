@@ -37,6 +37,7 @@ import { distributorSigner } from '../stellar/signer';
 import { getDynamicFee } from '../stellar/fee';
 import { privySignatureToBase64 } from '../wallet/privy';
 import { parseStellarAmount } from '../format/parse-stellar-amount';
+import { caixaParaNav } from './razao-fundo';
 import { NavIndisponivelError, lerSupplyDoNav } from './nav-supply';
 import { extractLiquidacaoAmount } from '../stellar/parse-liquidacao-xdr';
 import { classeFromAssetCode } from '../stellar/classes';
@@ -93,9 +94,7 @@ export async function calcularValorLiquidacao(
         status: true,
       },
     }),
-    db.realizacaoCaminho.findMany({
-      select: { valorRealizado: true, spread: true },
-    }),
+    caixaParaNav(), // E2-5: caixa do NAV vem do razão
     lerSupplyDoNav({ fresh: true }),
   ]);
   const navTotal = navTotalDoPool(cotas, realizacoes);

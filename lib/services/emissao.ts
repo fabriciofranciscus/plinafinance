@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { ApiError } from '../api/errors';
 import { NavIndisponivelError, lerSupplyDoNav } from './nav-supply';
+import { caixaParaNav } from './razao-fundo';
 import { navParaEmissao, quantidadeEmitida } from './pool';
 
 export interface PrecoDeEmissao {
@@ -32,7 +33,7 @@ export async function calcularPrecoDeEmissao(input: {
         status: true,
       },
     }),
-    db.realizacaoCaminho.findMany({ select: { valorRealizado: true, spread: true } }),
+    caixaParaNav(),
     lerSupplyDoNav({ fresh: true }),
   ]);
 
