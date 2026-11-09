@@ -415,6 +415,12 @@ model Quote {
   /// pra quotes legados/off-ramp; ausência = SENIOR (PLINARF) por default.
   classe         ClassePLINARF?
   consumedAt     DateTime?
+  /// NAV/token congelado na cotação (M1-3). Nullable: quotes legados e off-ramp.
+  /// Swap/build e submit recusam (409) quote de onramp sem este campo.
+  navPorTokenNaCotacao Decimal?     @db.Decimal(20, 8)
+  /// PLINARF a emitir = quantidadeEmitida(fromAmount, navPorTokenNaCotacao).
+  /// Separado de `toAmount` (que é o TESOURO/ponte pago na perna 1).
+  plinarfAmount        Decimal?     @db.Decimal(20, 7)
   /// Hash da tx Stellar que consumiu o quote (swap envelope na Phase 2,
   /// distribute single-shot na Phase 1).
   consumedTxHash String?

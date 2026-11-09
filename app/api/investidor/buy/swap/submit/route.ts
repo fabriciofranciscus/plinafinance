@@ -147,7 +147,16 @@ export const POST = withAuth(async (req, { user }) => {
         { status: 500 },
       );
     }
-    const expectedAmount = parseStellarAmount(quote.toAmount).toFixed(7);
+    // M1-3: duas pernas com amounts distintos. Quote sem preço de emissão
+    // (legado/anterior ao M1-3) é recusado — nunca cai em 1:1.
+    if (!quote.plinarfAmount || !quote.navPorTokenNaCotacao) {
+      return NextResponse.json(
+        { error: 'cotação sem preço de emissão ao NAV — refaça a cotação' },
+        { status: 409 },
+      );
+    }
+    const expectedBridgeAmount = parseStellarAmount(quote.toAmount).toFixed(7);
+    const expectedPlinarfAmount = parseStellarAmount(quote.plinarfAmount).toFixed(7);
     const classe = classeOrDefault(quote.classe);
     const plinarfCode = assetCodeForClasse(classe);
     const tesouro = await resolveTesouroAsset(investorPubkey);
@@ -157,7 +166,9 @@ export const POST = withAuth(async (req, { user }) => {
         distributorPubkey,
         issuerPubkey,
         bridgeAsset: { code: tesouro.code, issuer: tesouro.issuer },
-        expectedAmount,
+        // TODO(M1-3 chain, Estela): trocar por expectedBridgeAmount +
+        // expectedPlinarfAmount quando feat/m1-swap-two-amounts entrar.
+        expectedAmount: expectedBridgeAmount,
         plinarfCode,
       });
     } catch (err) {
@@ -227,7 +238,7 @@ export const POST = withAuth(async (req, { user }) => {
       finalHash = submitRes.hash;
     }
 
-    const stellarAmount = expectedAmount;
+    const stellarAmount = expectedPlinarfAmount;
 
     await db.$transaction(async (tx) => {
       const consumed = await tx.quote.updateMany({

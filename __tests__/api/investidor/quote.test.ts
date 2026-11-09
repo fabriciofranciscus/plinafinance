@@ -32,6 +32,16 @@ vi.mock('@/lib/db', () => ({
   db: { quote: { create: quoteCreate } },
 }));
 
+vi.mock('@/lib/services/emissao', async () => {
+  const { Prisma } = await import('@prisma/client');
+  return {
+    calcularPrecoDeEmissao: vi.fn().mockResolvedValue({
+      navPorTokenNaCotacao: new Prisma.Decimal('1'),
+      plinarfAmount: new Prisma.Decimal('100'),
+    }),
+  };
+});
+
 vi.mock('@/lib/anchors/etherfuse', () => ({
   EtherfuseClient: class {
     getQuote = getQuote;
