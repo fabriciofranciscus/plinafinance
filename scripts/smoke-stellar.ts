@@ -91,6 +91,7 @@ async function main() {
     new KeypairSigner(issuer.secret()),
     distributor.publicKey(),
     '100000',
+    assetCode,
   );
   ok(`emissão tx = ${txExplorerUrl(issueRes.hash)}`);
 

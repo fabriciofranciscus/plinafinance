@@ -16,6 +16,7 @@ import {
   assetCode,
   networkPassphrase,
 } from './config';
+import { assetCodeForClasse } from './classes';
 import { getDynamicFee } from './fee';
 import type { StellarSigner } from './signer';
 import { withSpan } from '../observability/tracer';
@@ -128,17 +129,63 @@ export async function revokeTrustline(
   return sign(builder, [source]);
 }
 
+export type IssueAssetErrorCode = 'ISSUE_CODE_UNKNOWN' | 'ISSUE_AMOUNT_INVALID';
+
+/** Entrada recusada por `issueAsset` antes de qualquer rede ou assinatura. */
+export class IssueAssetInputError extends Error {
+  readonly code: IssueAssetErrorCode;
+
+  constructor(code: IssueAssetErrorCode) {
+    super(
+      code === 'ISSUE_CODE_UNKNOWN'
+        ? 'Emissão recusada: asset code ausente ou fora da Plina.'
+        : 'Emissão recusada: amount precisa ser string > 0 com até 7 casas.',
+    );
+    this.name = 'IssueAssetInputError';
+    this.code = code;
+  }
+}
+
+/** Amount Stellar: inteiro de até 12 dígitos, opcionalmente com 1–7 casas. */
+const ISSUE_AMOUNT = /^\d{1,12}(\.\d{1,7})?$/;
+const STELLAR_MAX_STROOPS = BigInt('9223372036854775807');
+
+function amountEmStroops(amount: string): bigint {
+  const [inteiro, frac = ''] = amount.split('.');
+  return BigInt(inteiro) * BigInt(10_000_000) + BigInt(frac.padEnd(7, '0'));
+}
+
+function assertIssueInput(amount: unknown, code: unknown): void {
+  const codesDaPlina = [assetCodeForClasse('SENIOR'), assetCodeForClasse('SUBORDINADA')];
+  if (typeof code !== 'string' || !codesDaPlina.includes(code)) {
+    throw new IssueAssetInputError('ISSUE_CODE_UNKNOWN');
+  }
+  if (typeof amount !== 'string' || !ISSUE_AMOUNT.test(amount)) {
+    throw new IssueAssetInputError('ISSUE_AMOUNT_INVALID');
+  }
+  const stroops = amountEmStroops(amount);
+  if (stroops <= BigInt(0) || stroops > STELLAR_MAX_STROOPS) {
+    throw new IssueAssetInputError('ISSUE_AMOUNT_INVALID');
+  }
+}
+
 /**
  * Emite tokens do issuer para uma conta autorizada (tipicamente distributor).
  * Idempotência: o caller deve garantir antes de chamar (lookup no banco por
  * `Cota.emissaoTxHash`).
+ *
+ * `code` é obrigatório (sem default): emitir a classe errada é erro de
+ * dinheiro. Code fora da Plina, ou amount que não seja string > 0 com até 7
+ * casas, é recusado com `IssueAssetInputError` antes de carregar a conta ou
+ * assinar (fail-closed).
  */
 export async function issueAsset(
   issuer: StellarSigner,
   destinationPubkey: string,
   amount: string,
-  code: string = assetCode,
+  code: string,
 ): Promise<SubmitResult> {
+  assertIssueInput(amount, code);
   const { source, builder } = await buildSourceTx(issuer, {
     xlm: ISSUER_BALANCE_FLOOR,
     label: 'issuer',
