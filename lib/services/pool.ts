@@ -219,6 +219,46 @@ export function navPorToken(
   return navPorTokenAsDecimal(cotas, realizacoes, supply).toNumber();
 }
 
+/** NAV/token inicial: com supply circulante zero o token vale R$ 1,00 (ADR 2026-11-09, cond. 5). */
+export const NAV_INICIAL_POR_TOKEN = new Prisma.Decimal(1);
+
+/**
+ * NAV/token a usar na emissão. Supply circulante zero → R$ 1,00 (a 1ª emissão
+ * reproduz a prova do SOW: R$ 400 → 400 tokens). Com circulante > 0 vale o NAV
+ * do ledger (mesma função da tela e do resgate); NAV não positivo lança —
+ * sem preço honesto não se emite.
+ */
+export function navParaEmissao(
+  cotas: CotaForNav[],
+  realizacoes: RealizacaoForNav[],
+  supply: SupplyParaNav,
+): Prisma.Decimal {
+  if (toDecimal(supply.circulante).lte(0)) return NAV_INICIAL_POR_TOKEN;
+  const nav = navPorTokenAsDecimal(cotas, realizacoes, supply);
+  if (nav.lte(0)) {
+    throw new RangeError('NAV/token não positivo: emissão recusada');
+  }
+  return nav;
+}
+
+/**
+ * Quantidade de PLINA-RF emitida para `valorBrl` integralizado ao NAV/token
+ * dado: `valorBrl ÷ navPorToken`, **truncada** (ROUND_DOWN) a 7 casas — a
+ * precisão do Stellar. Nunca emite mais do que o BRL pago compra, e o NAV de
+ * quem já é holder não cai com a emissão (R$ 400 a NAV 1,0625 → 376,4705882).
+ * Fórmula única para incorporação e subscrição. NAV ≤ 0 ou valor < 0 lança.
+ */
+export function quantidadeEmitida(
+  valorBrl: Numericable,
+  navPorToken: Numericable,
+): Prisma.Decimal {
+  const valor = toDecimal(valorBrl);
+  const nav = toDecimal(navPorToken);
+  if (!nav.gt(0)) throw new RangeError('navPorToken deve ser > 0');
+  if (valor.lt(0)) throw new RangeError('valorBrl não pode ser negativo');
+  return valor.div(nav).toDecimalPlaces(7, Prisma.Decimal.ROUND_DOWN);
+}
+
 /**
  * Concentração por administradora (apenas cotas ativas). Útil pro painel
  * operacional flagrar exposição > 40% (limite POC; whitepaper §5 exige

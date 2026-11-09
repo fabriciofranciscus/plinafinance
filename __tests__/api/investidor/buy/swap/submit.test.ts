@@ -116,6 +116,8 @@ function baseQuote(overrides: Partial<Record<string, unknown>> = {}) {
     consumedAt: null,
     expiresAt: new Date(Date.now() + 60_000),
     toAmount: new Prisma.Decimal('99.5'),
+    navPorTokenNaCotacao: new Prisma.Decimal('1'),
+    plinarfAmount: new Prisma.Decimal('99.5'),
     investidor: { publicKey: 'GABC' },
     onRampOrder: {
       id: 'ord_1',
