@@ -34,6 +34,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# docs — material de negocio e documentacao de trabalho ficam fora do repo
+docs/
+
 # smoke test output — contém secret keys, NUNCA commitar
 # padrão em vez de lista: um smoke novo já nasce ignorado
 smoke-*-output.json
