@@ -25,6 +25,7 @@ import {
   registrarLaudoDaCessao,
   registrarCessao,
 } from '@/lib/services/originacao';
+import { registrarTesourariaLegada } from '@/lib/services/tesouraria-legada';
 import { TipoBem } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
@@ -56,6 +57,7 @@ const Schema = z.discriminatedUnion('action', [
       cessaoId: z.string().min(1).max(60),
     })
     .strict(),
+  z.object({ action: z.literal('registrar-tesouraria-legada') }).strict(),
   z
     .object({
       action: z.literal('registrar-laudo'),
@@ -117,6 +119,10 @@ export async function POST(req: Request) {
           cessaoId: body.cessaoId,
           operador: 'admin-panel',
         });
+        return NextResponse.json(result);
+      }
+      case 'registrar-tesouraria-legada': {
+        const result = await registrarTesourariaLegada({ operador: 'admin-panel' });
         return NextResponse.json(result);
       }
       case 'registrar-laudo': {
