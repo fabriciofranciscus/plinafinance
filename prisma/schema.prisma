@@ -46,6 +46,18 @@ enum StatusCota {
   RESERVADA
   REALIZADA
   REVERTIDA
+  /// Cota reservada para a incorporação ao NAV (E1-4): a emissão on-chain está
+  /// em andamento ou falhou de forma ambígua. Fora do pool/NAV; só um operador
+  /// reconcilia (nunca re-emitir às cegas).
+  EMISSAO_PENDENTE
+}
+
+/// Anuência da administradora à transferência da cota (Lei 11.795, art. 13).
+/// Em testnet a anuência é stub: `DECLARADA_PENDENTE` registra, sem fingir, que
+/// ela ainda não ocorreu. Em mainnet só `CONFIRMADA` libera a emissão.
+enum AnuenciaStatus {
+  DECLARADA_PENDENTE
+  CONFIRMADA
 }
 
 /// Hipóteses exclusivas de clawback (whitepaper §6.5).
@@ -157,6 +169,10 @@ enum AcaoAudit {
   ENTIDADE_PREENCHIDA
   // KYC completo (sandbox/produção) — upload real de documento/selfie
   KYC_DOCUMENTOS_ENVIADOS
+  // Anuência da administradora registrada (real ou declarada pendente) — E1-4
+  ANUENCIA_REGISTRADA
+  // Posição legada do distributor registrada como posição da Plina — TES-1
+  TESOURARIA_LEGADA_REGISTRADA
 }
 
 // Funil vendedor
@@ -266,6 +282,8 @@ model Cota {
   status             StatusCota        @default(DISPONIVEL)
   tokensEmitidos     Decimal           @default(0) @db.Decimal(20, 7)
   emissaoTxHash      String?
+  /// Estado da anuência no momento da emissão (E1-4). Null em cotas legadas.
+  anuenciaStatus     AnuenciaStatus?
   hashCessao         String?
   /// SHA-256 do laudo de validação legal (contemplação, adimplência,
   /// titularidade) — whitepaper §6.1. Registrado on-chain via Memo.hash
@@ -763,6 +781,12 @@ model MovimentoFundo {
   quoteId     String?
   /// Hash do Pix / tx on-chain / hashValidacao que sustenta o evento.
   refHash     String?
+  /// NAV/token antes do evento (APORTE_COTA / SUBSCRICAO).
+  navPorToken Decimal?           @db.Decimal(20, 8)
+  /// Tx on-chain da emissão/queima.
+  txHash      String?
+  /// Hash do laudo (`Cota.hashValidacao`) que sustentou o aporte.
+  hashValidacao String?
   criadoEm    DateTime           @default(now())
 
   @@index([tipo])
