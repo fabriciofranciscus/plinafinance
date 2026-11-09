@@ -63,7 +63,8 @@ describe('assertSwapXdrMatchesQuote · F-M3-3', () => {
         distributorPubkey: DIST.publicKey(),
         issuerPubkey: ISSUER.publicKey(),
         bridgeAsset: { code: 'TESOURO', issuer: BRIDGE_ISSUER.publicKey() },
-        expectedAmount: '100.0000000',
+        expectedBridgeAmount: '100.0000000',
+        expectedPlinarfAmount: '100.0000000',
         plinarfCode: 'PLINARFB',
       }),
     ).not.toThrow();
@@ -77,7 +78,8 @@ describe('assertSwapXdrMatchesQuote · F-M3-3', () => {
         distributorPubkey: DIST.publicKey(),
         issuerPubkey: ISSUER.publicKey(),
         bridgeAsset: { code: 'TESOURO', issuer: BRIDGE_ISSUER.publicKey() },
-        expectedAmount: '100.0000000',
+        expectedBridgeAmount: '100.0000000',
+        expectedPlinarfAmount: '100.0000000',
         plinarfCode: 'PLINARF',
       }),
     ).toThrow(/leg2 asset/);
@@ -91,7 +93,8 @@ describe('assertSwapXdrMatchesQuote · F-M3-3', () => {
         distributorPubkey: DIST.publicKey(),
         issuerPubkey: ISSUER.publicKey(),
         bridgeAsset: { code: 'TESOURO', issuer: BRIDGE_ISSUER.publicKey() },
-        expectedAmount: '100.0000000',
+        expectedBridgeAmount: '100.0000000',
+        expectedPlinarfAmount: '100.0000000',
       }),
     ).not.toThrow();
   });
