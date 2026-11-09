@@ -21,6 +21,7 @@ export const API_ERROR_CODES = [
   'GONE',                  // 410 — recurso expirado (quote vencido)
   'RATE_LIMITED',          // 429 — rate-limit estourado
   'STELLAR_SUBMIT_FAILED', // 502 — Horizon retornou erro
+  'LEDGER_UNAVAILABLE',    // 503 — leitura do ledger falhou; NAV indisponível
   'ETHERFUSE_ERROR',       // 502 — anchor retornou erro
   'INTERNAL',              // 500 — erro inesperado (não vaza mensagem original)
 ] as const;

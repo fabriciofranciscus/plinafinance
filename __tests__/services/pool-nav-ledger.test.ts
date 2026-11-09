@@ -1,0 +1,149 @@
+import { describe, it, expect } from 'vitest';
+import { StatusCota } from '@prisma/client';
+import {
+  navAtribuivelAsDecimal,
+  navPorTokenAsDecimal,
+  navTotalDoPoolAsDecimal,
+  tokensEmitidosVivos,
+} from '@/lib/services/pool';
+
+/**
+ * O NAV/token passou a ser precificado contra o supply circulante lido do
+ * ledger, não contra `tokensEmitidos` das cotas ativas. Estes testes fixam os
+ * dois defeitos que a mudança corrige, nos cenários em que eles apareciam.
+ *
+ * Cenário-base, que vale pra quase todos os casos abaixo: uma cota de
+ * R$ 100.000 com 20% de deságio → NAV R$ 80.000, 80.000 tokens cunhados em
+ * paridade.
+ */
+
+const cotaAtiva = {
+  valorCarta: '100000',
+  desagioAquisicao: '0.20',
+  tokensEmitidos: '80000',
+  status: StatusCota.DISPONIVEL,
+};
+
+/** Supply com tudo vendido: nada em tesouraria. */
+function todoVendido(circulante: string) {
+  return { circulante, tesouraria: '0' };
+}
+
+describe('NAV/token contra o supply do ledger', () => {
+  it('cota realizada mantém seus tokens no denominador', () => {
+    // A cota saiu do pool e virou caixa de R$ 95.000 (spread de R$ 15.000).
+    // Os 80.000 tokens continuam on-chain na carteira do investidor.
+    const cotas: typeof cotaAtiva[] = [];
+    const realizacoes = [{ valorRealizado: '95000', spread: '15000' }];
+
+    const unit = navPorTokenAsDecimal(
+      cotas,
+      realizacoes,
+      todoVendido('80000'),
+    );
+
+    // 95.000 / 80.000 = 1,1875 — o spread virou yield de quem detém token.
+    expect(unit.toFixed(8)).toBe('1.18750000');
+  });
+
+  it('não colapsa em runoff — era o bug que zerava o preço do resgate', () => {
+    // Runoff: nenhuma cota ativa, só caixa. O denominador antigo
+    // (`tokensEmitidosVivos`) ia a zero e o NAV/token com ele.
+    const cotas: typeof cotaAtiva[] = [];
+    const realizacoes = [{ valorRealizado: '95000', spread: '15000' }];
+
+    expect(tokensEmitidosVivos(cotas)).toBe(0);
+
+    const unit = navPorTokenAsDecimal(
+      cotas,
+      realizacoes,
+      todoVendido('80000'),
+    );
+    expect(unit.gt(0)).toBe(true);
+  });
+
+  it('tokens em tesouraria não movem o NAV de quem já é holder', () => {
+    // Pool com uma cota vendida (80.000 em circulação) e uma cota recém
+    // incorporada cujos 80.000 tokens ainda estão no distributor.
+    const umaVendida = navPorTokenAsDecimal([cotaAtiva], [], {
+      circulante: '80000',
+      tesouraria: '0',
+    });
+
+    const duasCotasUmaEmTesouraria = navPorTokenAsDecimal(
+      [cotaAtiva, cotaAtiva],
+      [],
+      { circulante: '80000', tesouraria: '80000' },
+    );
+
+    // Incorporar não diluiu nem inflou: os R$ 80.000 de ativo novo entram no
+    // numerador e saem na dedução da tesouraria ao par.
+    expect(duasCotasUmaEmTesouraria.toFixed(8)).toBe(umaVendida.toFixed(8));
+    expect(umaVendida.toFixed(8)).toBe('1.00000000');
+  });
+
+  it('venda da cota em tesouraria não muda o NAV/token', () => {
+    const antes = navPorTokenAsDecimal([cotaAtiva, cotaAtiva], [], {
+      circulante: '80000',
+      tesouraria: '80000',
+    });
+    const depois = navPorTokenAsDecimal([cotaAtiva, cotaAtiva], [], {
+      circulante: '160000',
+      tesouraria: '0',
+    });
+    expect(depois.toFixed(8)).toBe(antes.toFixed(8));
+  });
+
+  it('circulante zero devolve zero — não há passivo a precificar', () => {
+    // Diferente do runoff: aqui nada foi vendido a investidor.
+    const unit = navPorTokenAsDecimal([cotaAtiva], [], {
+      circulante: '0',
+      tesouraria: '80000',
+    });
+    expect(unit.isZero()).toBe(true);
+  });
+
+  it('ativo atribuível é o NAV total menos a tesouraria ao par', () => {
+    const total = navTotalDoPoolAsDecimal([cotaAtiva], []);
+    expect(total.toFixed(2)).toBe('80000.00');
+
+    const atribuivel = navAtribuivelAsDecimal([cotaAtiva], [], {
+      circulante: '30000',
+      tesouraria: '50000',
+    });
+    expect(atribuivel.toFixed(2)).toBe('30000.00');
+  });
+
+  it('saldo congelado continua no denominador', () => {
+    // Trustline desautorizada (clawback em curso) ainda é passivo do fundo:
+    // o supply do ledger inclui o saldo, então o NAV é diluído por ele — o
+    // que é o comportamento correto até o clawback de fato executar.
+    const comCongelado = navPorTokenAsDecimal(
+      [],
+      [{ valorRealizado: '95000', spread: '15000' }],
+      todoVendido('80000'),
+    );
+    const semCongelado = navPorTokenAsDecimal(
+      [],
+      [{ valorRealizado: '95000', spread: '15000' }],
+      todoVendido('76000'),
+    );
+    expect(comCongelado.lt(semCongelado)).toBe(true);
+  });
+
+  it('preserva precisão Decimal no quociente', () => {
+    const unit = navPorTokenAsDecimal(
+      [
+        {
+          valorCarta: '1000000',
+          desagioAquisicao: '0',
+          tokensEmitidos: '999999',
+          status: StatusCota.DISPONIVEL,
+        },
+      ],
+      [],
+      todoVendido('999999'),
+    );
+    expect(unit.toFixed(8)).toBe('1.00000100');
+  });
+});

@@ -10,10 +10,17 @@
  *     (Caminho A/B/C executados). Esse caixa **pertence ao fundo** — o spread
  *     fica como yield acumulado, materializando o §6.2 (Caminho A como fonte
  *     primária de yield).
- *   - NAV total do pool = NAV das cotas ativas + caixa realizado.
- *   - Tokens vivos = tokens emitidos das cotas ativas (denominador inalterado
- *     pra refletir lastro corrente; quando uma cota é realizada, seus tokens
- *     "saem" mas o caixa toma o lugar — NAV/token sobe pelo spread).
+ *   - NAV total do pool = NAV das cotas ativas + caixa realizado. É o lado do
+ *     **ativo**, e não depende do ledger.
+ *   - Denominador do NAV/token = supply **circulante lido do ledger**
+ *     (`lib/stellar/supply.ts`), nunca o estado da aplicação. Até 2026-11 o
+ *     denominador eram os `tokensEmitidos` das cotas ativas, o que fazia a
+ *     cota realizada sair do denominador enquanto seu caixa entrava no
+ *     numerador — dupla contagem — e colapsava o NAV a zero em runoff.
+ *   - Tesouraria (token cunhado e ainda no distributor) é **deduzida ao par**
+ *     do ativo. Token em tesouraria não é passivo com investidor, mas foi
+ *     cunhado em paridade contra ativo que já está no numerador; sem a
+ *     dedução, incorporar uma cota inflaria o NAV de quem já é holder.
  *
  * Aritmética interna em `Prisma.Decimal` (audit F-10): valores R$10M+ com
  * desagio fracionário perdem centavos em IEEE-754. Funções públicas retornam
@@ -128,33 +135,88 @@ export function tokensEmitidosVivosAsDecimal(
     );
 }
 
-/** Soma de PLINA-RF emitidos vivos (cotas ativas). */
+/**
+ * Soma de PLINA-RF emitidos contra cotas ativas.
+ *
+ * **Não é o denominador do NAV** — ver a convenção no topo do arquivo. Segue
+ * exposto porque é a métrica honesta de "quanto token tem lastro de cota viva
+ * agora", útil no painel operacional ao lado do supply do ledger: a diferença
+ * entre os dois é exatamente o quanto do passivo já está coberto por caixa em
+ * vez de cota.
+ */
 export function tokensEmitidosVivos(cotas: CotaForNav[]): number {
   return tokensEmitidosVivosAsDecimal(cotas).toNumber();
 }
 
+/**
+ * Supply lido do ledger, na forma mínima que o cálculo precisa.
+ *
+ * Tipo estrutural de propósito: `pool.ts` é aritmética pura e não importa
+ * nada de `lib/stellar/`. O `SupplyOnChain` de `lib/stellar/supply.ts`
+ * satisfaz esta interface, e os testes passam números literais.
+ */
+export interface SupplyParaNav {
+  /** Token em mãos de investidor. Denominador do NAV. */
+  circulante: Numericable;
+  /** Token cunhado e ainda no distributor. */
+  tesouraria: Numericable;
+}
+
+/**
+ * Ativo do fundo atribuível a quem detém token: NAV total menos a tesouraria
+ * ao par. Ver a convenção no topo do arquivo para o porquê da dedução.
+ */
+export function navAtribuivelAsDecimal(
+  cotas: CotaForNav[],
+  realizacoes: RealizacaoForNav[],
+  supply: SupplyParaNav,
+): Prisma.Decimal {
+  return navTotalDoPoolAsDecimal(cotas, realizacoes).minus(
+    toDecimal(supply.tesouraria),
+  );
+}
+
+/** Ativo atribuível em BRL. */
+export function navAtribuivel(
+  cotas: CotaForNav[],
+  realizacoes: RealizacaoForNav[],
+  supply: SupplyParaNav,
+): number {
+  return navAtribuivelAsDecimal(cotas, realizacoes, supply).toNumber();
+}
+
 export function navPorTokenAsDecimal(
   cotas: CotaForNav[],
-  realizacoes: RealizacaoForNav[] = [],
+  realizacoes: RealizacaoForNav[],
+  supply: SupplyParaNav,
 ): Prisma.Decimal {
-  const tokens = tokensEmitidosVivosAsDecimal(cotas);
-  if (tokens.isZero()) return new Prisma.Decimal(0);
-  return navTotalDoPoolAsDecimal(cotas, realizacoes)
-    .div(tokens)
+  const circulante = toDecimal(supply.circulante);
+  // Nada em mãos de investidor: não há passivo a precificar. Diferente do
+  // runoff — lá o circulante é > 0 e o NAV vem do caixa.
+  if (circulante.lte(0)) return new Prisma.Decimal(0);
+  return navAtribuivelAsDecimal(cotas, realizacoes, supply)
+    .div(circulante)
     .toDecimalPlaces(8, Prisma.Decimal.ROUND_HALF_EVEN);
 }
 
 /**
- * NAV por token. Incluindo caixa realizado, NAV/token > 1 sinaliza yield
- * acumulado pelo fundo. Sem cotas vivas mas com caixa, retorna 0 (pool
- * em runoff — todas as cotas foram realizadas e os investidores devem
- * liquidar).
+ * NAV por token, precificado contra o supply circulante do ledger.
+ *
+ * NAV/token > 1 sinaliza yield acumulado pelo fundo. Em runoff — todas as
+ * cotas realizadas, caixa no lugar delas — o número **continua válido**:
+ * passa a ser caixa / circulante, que é exatamente o que um investidor
+ * liquidando deve receber.
+ *
+ * `supply` é obrigatório por decisão de tipo: o denominador errado é o bug
+ * que este cálculo existe pra eliminar, e um parâmetro opcional deixaria a
+ * regressão voltar em silêncio.
  */
 export function navPorToken(
   cotas: CotaForNav[],
-  realizacoes: RealizacaoForNav[] = [],
+  realizacoes: RealizacaoForNav[],
+  supply: SupplyParaNav,
 ): number {
-  return navPorTokenAsDecimal(cotas, realizacoes).toNumber();
+  return navPorTokenAsDecimal(cotas, realizacoes, supply).toNumber();
 }
 
 /**

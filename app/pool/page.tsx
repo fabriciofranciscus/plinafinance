@@ -19,6 +19,7 @@ import {
   spreadRealizadoAcumulado,
   tokensEmitidosVivos,
 } from '@/lib/services/pool';
+import { fetchSupplyOnChainFromEnv } from '@/lib/stellar/supply';
 import { accountExplorerUrl, assetExplorerUrl } from '@/lib/stellar/config';
 
 // SSR sempre — dados de pool mudam quando admin incorpora cota.
@@ -78,8 +79,19 @@ export default async function PoolPage() {
 
   const navTotal = navTotalDoPool(cotas, realizacoes);
   const tokensVivos = tokensEmitidosVivos(cotas);
-  const navUnit = navPorToken(cotas, realizacoes);
   const caixa = caixaRealizado(realizacoes);
+
+  // O denominador do NAV vem do ledger. Se o Horizon não responde a página
+  // pública não quebra — mostra o NAV como indisponível, porque publicar um
+  // número derivado do estado da aplicação é o bug que a leitura substituiu.
+  const supply = await fetchSupplyOnChainFromEnv(parametros.assetCode).catch(
+    () => null,
+  );
+  const navUnit = supply ? navPorToken(cotas, realizacoes, supply) : null;
+  const navUnitLabel = navUnit === null ? '—' : brl(navUnit);
+  const circulanteLabel = supply
+    ? `${tokenFmt(Number(supply.circulante))} em circulação no ledger`
+    : 'supply do ledger indisponível';
   const spreadAcumulado = spreadRealizadoAcumulado(realizacoes);
 
   return (
@@ -118,7 +130,7 @@ export default async function PoolPage() {
         <Metric
           label={`${parametros.assetCode} emitido`}
           value={tokenFmt(tokensVivos)}
-          sublabel={`NAV por token · ${brl(navUnit)}`}
+          sublabel={`NAV por token · ${navUnitLabel}`}
         />
         <Metric
           label="Rede"
@@ -151,8 +163,8 @@ export default async function PoolPage() {
             />
             <Metric
               label="NAV por token"
-              value={brl(navUnit)}
-              sublabel="Inclui caixa realizado — > R$ 1,00 sinaliza yield acumulado"
+              value={navUnitLabel}
+              sublabel={`Ativo atribuível ÷ ${circulanteLabel}`}
             />
           </div>
         </section>
