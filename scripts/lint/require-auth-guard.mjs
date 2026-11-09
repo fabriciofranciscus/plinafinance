@@ -34,6 +34,7 @@ const PUBLIC_ROUTES = new Map([
   ['investidor/onboard', 'signup — valida token Privy no handler'],
   ['comprar/lead', 'captação de lead — BotID + rate-limit'],
   ['vender/simular', 'simulador read-only, sem persistência'],
+  ['webhooks/anchor', 'webhook — autenticado por assinatura HMAC (X-Signature), dedupe por eventoId'],
   ['pool/summary', 'agregados públicos read-only'],
   ['comprovante/[cessaoId]', 'recibo — cessaoId é bearer token na URL'],
 ]);

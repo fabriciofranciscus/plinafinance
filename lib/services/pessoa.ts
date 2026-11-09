@@ -21,7 +21,7 @@ import { ensureStellarWallet } from '../wallet/privy';
 import { fundAccountIfNeeded } from '../stellar/account';
 import { STELLAR_NETWORK } from '../stellar/config';
 import { logStellarError } from '../stellar/log-error';
-import { EtherfuseClient } from '../anchors/etherfuse';
+import { kycAnchorFromEnv } from '../anchors/kyc';
 import { parseCpf } from '../format/parse-cpf';
 import { ApiError } from '../api/errors';
 import { etherfuseIsProduction } from '../env/etherfuse';
@@ -36,16 +36,6 @@ function documentosCompletos(docs?: DocumentosKycInput): docs is DocumentosKycIn
 /** SHA-256 hex da imagem — auditoria sem persistir a imagem/base64 crua (LGPD). */
 function hashDataUrl(dataUrl: string): string {
   return createHash('sha256').update(dataUrl).digest('hex');
-}
-
-export function etherfuseFromEnv(): EtherfuseClient {
-  const apiKey = process.env.ETHERFUSE_API_KEY;
-  const baseUrl =
-    process.env.ETHERFUSE_BASE_URL ?? 'https://api.sand.etherfuse.com';
-  if (!apiKey) {
-    throw new Error('ETHERFUSE_API_KEY ausente.');
-  }
-  return new EtherfuseClient({ apiKey, baseUrl });
 }
 
 /** Conta bancária Pix do off-ramp (destino do pagamento). */
@@ -161,14 +151,16 @@ function resolveCpf(cpf?: string): { cpfNormalizado: string; isSyntheticCpf: boo
 export async function registerPixForPessoa(args: {
   etherfuseCustomerId: string;
   publicKey: string;
+  email: string;
   account: PixBankAccountInput;
 }): Promise<string> {
-  const anchor = etherfuseFromEnv();
+  const anchor = kycAnchorFromEnv();
   const bankAccountStubId = crypto.randomUUID();
   const presignedUrl = await anchor.getKycUrl(
     args.etherfuseCustomerId,
     args.publicKey,
     bankAccountStubId,
+    { email: args.email },
   );
   const resp = await anchor.registerPixBankAccount(presignedUrl, args.account);
   const accountId =
@@ -208,6 +200,7 @@ export async function ensureKycForPessoa(
         bankAccountId = await registerPixForPessoa({
           etherfuseCustomerId: existing.etherfuseCustomerId,
           publicKey: existing.publicKey,
+          email: existing.email,
           account: input.bankAccount,
         });
       } catch (err) {
@@ -277,7 +270,7 @@ export async function ensureKycForPessoa(
   const publicKey = await ensureStellarWallet(input.privyId);
   const fund = await fundAccountIfNeeded(publicKey);
 
-  const anchor = etherfuseFromEnv();
+  const anchor = kycAnchorFromEnv();
   const customer = await anchor.createCustomer({
     email: input.email,
     publicKey,
@@ -376,7 +369,10 @@ export async function ensureKycForPessoa(
       });
     }
   }
-  const kycUrl = await anchor.getKycUrl(customer.id, publicKey, customer.bankAccountId);
+  const kycUrl = await anchor.getKycUrl(customer.id, publicKey, customer.bankAccountId, {
+    email: input.email,
+    displayName: input.nome,
+  });
   try {
     await anchor.acceptElectronicSignature(kycUrl);
     await anchor.acceptTermsAndConditions(kycUrl);
@@ -400,6 +396,7 @@ export async function ensureKycForPessoa(
       bankAccountId = await registerPixForPessoa({
         etherfuseCustomerId: customer.id,
         publicKey,
+        email: input.email,
         account: input.bankAccount,
       });
     } catch (err) {
