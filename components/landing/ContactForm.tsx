@@ -26,6 +26,10 @@ export function ContactForm({ dict }: { dict: Dict }) {
   const preRef = useRef<HTMLPreElement | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [status, setStatus] = useState('');
+  // Antes da hidratação o formulário não pode ser enviado: sem JavaScript o navegador
+  // faria GET e deixaria nome, e-mail e mensagem na URL (logs, histórico, analytics).
+  const [ready, setReady] = useState(false);
+  useEffect(() => setReady(true), []);
 
   // Linhas de "Para quem" e botões do hero pré-selecionam o interesse.
   useEffect(() => {
@@ -101,6 +105,7 @@ export function ContactForm({ dict }: { dict: Dict }) {
       ref={formRef}
       className="contact-form"
       id="contact-form"
+      method="post"
       aria-label={f.titulo}
       data-r="rise"
       onSubmit={onSubmit}
@@ -155,7 +160,7 @@ export function ContactForm({ dict }: { dict: Dict }) {
         <textarea id="mensagem" name="mensagem" maxLength={1500} placeholder={f.mensagemPlaceholder} />
       </div>
       <div className="form-bottom">
-        <button className="btn-form" type="submit">
+        <button className="btn-form" type="submit" disabled={!ready}>
           {f.preparar} <Icon name="arrow-up-right" />
         </button>
         <p>{f.avisoMailto}</p>

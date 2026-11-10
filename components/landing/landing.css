@@ -809,6 +809,10 @@ body:has(.ld) > .skip-link {
 .ld .btn-form:hover {
   background: var(--color-document-grey);
 }
+.ld .btn-form:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 .ld .btn-form.quiet {
   background: transparent;
   color: var(--on-dark);
