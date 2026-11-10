@@ -111,6 +111,13 @@ export interface SwapEnvelope {
    * ou um NOVO se o quote anterior expirou. O submit usa SEMPRE este id.
    */
   quoteId: string;
+  /**
+   * Tokens a emitir e NAV por token do quote VIGENTE usado neste envelope
+   * (strings decimais). O build renova o preço: estes valores valem mais que
+   * os do /quote inicial. Contrato do Atlas (N1).
+   */
+  plinarfAmount: string;
+  navPorTokenNaCotacao: string;
   mock: false;
 }
 

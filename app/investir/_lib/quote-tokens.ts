@@ -1,4 +1,4 @@
-import type { QuoteData } from '../_types';
+import type { QuoteData, SwapBuild } from '../_types';
 
 /**
  * Quantidade de tokens que a tela mostra como "a receber".
@@ -8,6 +8,20 @@ import type { QuoteData } from '../_types';
  * O cliente só exibe: não calcula. Cotação antiga (sem preço de emissão, POC
  * 1:1) cai para `toAmount`, como antes.
  */
+/**
+ * Cotação como a confirmação e o recibo a mostram: depois do build valem os
+ * valores renovados do envelope (`plinarfAmount`, `navPorTokenNaCotacao`), não
+ * os do /quote inicial. Sem build real (ou mock), a cotação segue como veio.
+ */
+export function quoteComBuild(quote: QuoteData, build: SwapBuild | null): QuoteData {
+  if (!build || build.mock) return quote;
+  return {
+    ...quote,
+    plinarfAmount: build.plinarfAmount,
+    navPorTokenNaCotacao: build.navPorTokenNaCotacao,
+  };
+}
+
 export function tokensDaCotacao(quote: QuoteData): string {
   return quote.plinarfAmount ?? quote.toAmount;
 }
