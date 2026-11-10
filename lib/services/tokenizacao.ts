@@ -281,7 +281,7 @@ async function obterEmissaoOnChain(input: {
   /**
    * EMISSAO_SEQUENCIA_CONSUMIDA: a sequence foi consumida e a substituição não entrou. Prova
    * POSITIVA de quem a consumiu decide (contrato 2026-11-10-substituicao-mesma-sequence):
-   * a nossa e ok → confirma; a nossa e falhou ou outra tx do issuer → libera sequence nova;
+   * a nossa e ok → confirma; outra tx do issuer → libera sequence nova; a nossa e falhou ou
    * indeterminado → mantém PENDENTE, nada reemitido.
    */
   const resolverConsumoDaSequence = async (
@@ -300,8 +300,10 @@ async function obterEmissaoOnChain(input: {
       return confirmada(t, c.hash);
     }
     if (c.status === 'ANTIGA_ENTROU') {
-      await marcar('FALHOU'); // prova on-chain de que a sequence não emitiu
-      return 'LIBERADA';
+      // Entrou e falhou (nada emitido). O contrato manda EXPIRADA (sequence nova), mas o Atlas
+      // ainda pode trocar para PENDENTE: até ele decidir, o lado seguro — mantém PENDENTE, sem
+      // sequence nova e sem gravar domínio (o operador decide).
+      throw emAndamento(t);
     }
     if (c.status === 'OUTRA_TX') {
       await marcar('EXPIRADA'); // outra tx do issuer consumiu a sequence: a nossa não emitiu

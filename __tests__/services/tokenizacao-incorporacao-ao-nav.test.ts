@@ -820,16 +820,15 @@ describe('incorporarCota — substituição com a MESMA sequence (contrato da Es
     expect(st.cotas.size).toBe(1);
   });
 
-  it('SEQUENCIA_CONSUMIDA + a nossa entrou e FALHOU: libera tx com sequence NOVA, uma emissão', async () => {
+  it('SEQUENCIA_CONSUMIDA + a nossa entrou e FALHOU: lado seguro — fica PENDENTE, sem sequence nova nem domínio', async () => {
     await expirada();
-    st.submitScript = ['SEQ_CONSUMIDA', 'SUCCESS'];
+    st.submitScript = ['SEQ_CONSUMIDA'];
     st.consumo = { status: 'ANTIGA_ENTROU', hash: 'hash1', successful: false, ledger: 9 };
-    const r = await incorporarCota(base);
-    expect(st.built).toHaveLength(3);
-    expect(st.built[2].sequenceDe).toBeUndefined();
-    expect(st.built[2].sequence).not.toBe(st.built[0].sequence); // sequence nova
-    expect(r.txHash).toBe('hash3');
-    expect(emissoes()).toBe(1);
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    expect(st.built).toHaveLength(2); // nenhuma tx com sequence nova
+    expect(st.tentativas.get(memoDe('ces_1'))!.status).toBe('PENDENTE');
+    expect(st.cotas.size).toBe(0);
+    expect(emissoes()).toBe(0);
   });
 
   it('SEQUENCIA_CONSUMIDA + OUTRA tx do issuer consumiu: EXPIRADA e tx com sequence NOVA', async () => {
