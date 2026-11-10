@@ -1,18 +1,11 @@
 import SectionMarker from './SectionMarker';
-import Sparkline from './Sparkline';
 import type { Dictionary } from '@/lib/i18n/types';
-
-const sparklines: Record<string, number[]> = {
-  A: [3, 5, 4, 7, 9, 8, 11, 14, 13, 17, 20, 23],
-  B: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-  C: [5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 9],
-};
 
 export default function TeseSection({ dict }: { dict: Dictionary['tese'] }) {
   const caminhos = dict.caminhos;
   const metricas = [
     { chave: 'duration', label: dict.rowDuration },
-    { chave: 'yieldLabel', label: dict.rowYield },
+    { chave: 'estagio', label: dict.rowEstagio },
     { chave: 'mix', label: dict.rowMix },
   ] as const;
 
@@ -95,21 +88,6 @@ export default function TeseSection({ dict }: { dict: Dictionary['tese'] }) {
                   ))}
                 </tr>
               ))}
-              <tr>
-                <th scope="row" className="text-left py-5 pr-6 align-middle">
-                  <span className="font-details text-[10px] font-bold uppercase tracking-widest text-base/60">
-                    {dict.rowCurva}
-                  </span>
-                </th>
-                {caminhos.map((c) => (
-                  <td
-                    key={c.letra}
-                    className="py-5 px-4 align-middle border-l border-light-hairline"
-                  >
-                    <Sparkline points={sparklines[c.letra]} width={120} height={28} tone="light" />
-                  </td>
-                ))}
-              </tr>
             </tbody>
           </table>
         </div>
@@ -132,7 +110,6 @@ export default function TeseSection({ dict }: { dict: Dictionary['tese'] }) {
                     {c.titulo.join(' ')}
                   </h3>
                 </div>
-                <Sparkline points={sparklines[c.letra]} width={64} height={20} tone="light" />
               </header>
               <p className="font-text text-base/70 text-base font-light leading-relaxed">
                 {c.body}

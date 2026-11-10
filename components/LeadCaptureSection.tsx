@@ -190,67 +190,7 @@ export default function LeadCaptureSection({ dict }: Props) {
               </div>
             </fieldset>
 
-            {/* Linha 4: tíquete + moeda */}
-            <fieldset
-              disabled={pending}
-              className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6 mb-6 border-0 p-0"
-            >
-              <legend className="sr-only">{dict.fields.ticket}</legend>
-
-              <div className="space-y-1.5">
-                <label htmlFor="lc-ticket" className={labelBaseClass}>
-                  {dict.fields.ticket}
-                </label>
-                <SelectField id="lc-ticket" name="ticket" required selectLabel={dict.fields.selecione}>
-                  {Object.entries(dict.selectOptions.ticket).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </SelectField>
-              </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="lc-currency" className={labelBaseClass}>
-                  {dict.fields.moeda}
-                </label>
-                <SelectField id="lc-currency" name="currency" required={false} selectLabel={dict.fields.selecioneOpcional}>
-                  {Object.entries(dict.selectOptions.currency).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </SelectField>
-              </div>
-            </fieldset>
-
-            {/* Linha 5: classe + prazo */}
-            <fieldset
-              disabled={pending}
-              className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6 mb-6 border-0 p-0"
-            >
-              <legend className="sr-only">{dict.fields.classe}</legend>
-
-              <div className="space-y-1.5">
-                <label htmlFor="lc-classe" className={labelBaseClass}>
-                  {dict.fields.classe}
-                </label>
-                <SelectField id="lc-classe" name="classe" required={false} selectLabel={dict.fields.selecioneOpcional}>
-                  {Object.entries(dict.selectOptions.classe).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </SelectField>
-              </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="lc-timeline" className={labelBaseClass}>
-                  {dict.fields.prazo}
-                </label>
-                <SelectField id="lc-timeline" name="timeline" required={false} selectLabel={dict.fields.selecioneOpcional}>
-                  {Object.entries(dict.selectOptions.timeline).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </SelectField>
-              </div>
-            </fieldset>
-
-            {/* Linha 6: observações */}
+            {/* Linha 4: observações */}
             <fieldset
               disabled={pending}
               className="mb-6 border-0 p-0"
