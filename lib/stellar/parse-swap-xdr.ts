@@ -4,8 +4,8 @@
  * Parseia a XDR enviada pelo cliente em `/buy/swap/submit` e valida que as
  * 2 ops `payment` batem exatamente com o que o backend espera: leg 1 leva
  * `bridgeAsset` (TESOURO) do investor pro distributor no valor
- * `expectedBridgeAmount` (= `quote.toAmount`); leg 2 leva PLINARF do
- * distributor pro investor no valor `expectedPlinarfAmount`
+ * `expectedBridgeAmount` (= `quote.toAmount`); leg 2 leva PLINARF emitido pelo
+ * issuer pro investor (N1) no valor `expectedPlinarfAmount`
  * (= `quote.plinarfAmount`, BRL ÷ NAV — M1-3, emissão ao NAV). As duas
  * pernas têm amounts distintos; cada uma é conferida contra o seu.
  *
@@ -117,14 +117,17 @@ export function assertSwapXdrMatchesQuote(
     );
   }
 
-  // Leg 2: distributor → investor, PLINARF (Sênior) ou PLINARFB (Subordinada).
+  // Leg 2: issuer → investor, PLINARF (Sênior) ou PLINARFB (Subordinada).
+  // N1: a subscrição EMITE token novo. Perna 2 vinda do distributor (venda da
+  // tesouraria, que inflava o NAV) ou de qualquer outra conta é recusada —
+  // inclusive sem source explícito, que herdaria o investidor.
   const plinarf = new Asset(
     expected.plinarfCode ?? assetCode,
     expected.issuerPubkey,
   );
   const op2Source = op2.source ?? tx.source;
-  if (op2Source !== expected.distributorPubkey) {
-    throw new Error(`leg2 source=${op2Source} ≠ distributor`);
+  if (op2Source !== expected.issuerPubkey) {
+    throw new Error(`leg2 source=${op2Source} ≠ issuer`);
   }
   if (op2.destination !== expected.investorPubkey) {
     throw new Error(`leg2 destination=${op2.destination} ≠ investor`);
