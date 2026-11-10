@@ -196,15 +196,9 @@ export async function submitLead(
     // Só o código do erro: a mensagem do Prisma carrega e-mail, nome e telefone (PII).
     const codigo = (err as { code?: unknown } | null)?.code;
     if (codigo === 'P2002') {
-      // Lead já existente: dados NÃO alterados; só o carimbo de último contato. O e-mail
-      // interno marca o reenvio (os dados novos chegam lá, para o time decidir).
+      // E-mail já cadastrado: o banco só cria, nunca altera (nem parcial, nem carimbo). O e-mail
+      // interno marca o reenvio e leva o conteúdo novo como NÃO verificado; sem auto-resposta.
       lead.reenvio = true;
-      try {
-        await db.leadEoi.update({ where: { email: lead.email }, data: { atualizadoEm: new Date() } });
-      } catch (err2) {
-        const c2 = (err2 as { code?: unknown } | null)?.code;
-        console.error('[submitLead] DB stamp error', typeof c2 === 'string' ? c2 : 'desconhecido');
-      }
     } else {
       console.error('[submitLead] DB create error', typeof codigo === 'string' ? codigo : 'desconhecido');
     }

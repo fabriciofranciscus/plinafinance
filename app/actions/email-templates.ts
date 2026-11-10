@@ -272,6 +272,9 @@ Contato exploratório · Sem oferta · Em desenvolvimento
 // Notificação interna pra equipe
 // ----------------------------------------------------------------
 
+const AVISO_NAO_VERIFICADO =
+  'Os dados abaixo foram informados agora por quem enviou o formulário e NÃO foram verificados.';
+
 const AVISO_REENVIO =
   'Reenvio de e-mail já cadastrado — dados do banco NÃO alterados; só corrigir após confirmar a identidade pelo e-mail do titular.';
 
@@ -279,7 +282,7 @@ export function renderInternalNotification(d: LeadData) {
   const subject = `[Plina · Contato${d.reenvio ? ' · reenvio' : ''}] ${d.org}`;
 
   const lines = [
-    ...(d.reenvio ? [AVISO_REENVIO, ``] : []),
+    ...(d.reenvio ? [AVISO_REENVIO, AVISO_NAO_VERIFICADO, ``] : []),
     `Novo contato recebido via plina.finance`,
     ``,
     `Nome: ${d.name}`,
@@ -299,7 +302,12 @@ export function renderInternalNotification(d: LeadData) {
   const text = lines.join('\n');
 
   const dataRows: Array<[string, string, boolean]> = [
-    ...(d.reenvio ? [['Aviso', AVISO_REENVIO, false] as [string, string, boolean]] : []),
+    ...(d.reenvio
+      ? [
+          ['Aviso', AVISO_REENVIO, false] as [string, string, boolean],
+          ['Atenção', AVISO_NAO_VERIFICADO, false] as [string, string, boolean],
+        ]
+      : []),
     ['Nome', d.name, false],
     ['E-mail', d.email, true],
     ['Organização', d.org, false],

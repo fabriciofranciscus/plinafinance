@@ -145,17 +145,15 @@ describe('submitLead — rota pública (F1/F2 do Argus)', () => {
     expect(sendMail).not.toHaveBeenCalled();
   });
 
-  it('reenvio de e-mail já cadastrado: dados NÃO alterados (só o carimbo), interno marcado, SEM auto-resposta, log sem PII', async () => {
+  it('reenvio de e-mail já cadastrado: banco igual, interno marcado (conteúdo não verificado), SEM auto-resposta, log sem PII', async () => {
     create.mockRejectedValue(Object.assign(new Error('Unique constraint failed on email fulana@example.com'), { code: 'P2002' }));
     const erro = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const r = await submitLead(INICIAL, form({ ...OBRIGATORIOS, notes: 'dados novos' }));
     expect(r).toEqual({ status: 'success' });
 
-    // nada de nome/org/telefone/perfil no banco: só o carimbo de último contato
-    expect(update).toHaveBeenCalledTimes(1);
-    const { where, data } = update.mock.calls[0][0];
-    expect(where).toEqual({ email: 'fulana@example.com' });
-    expect(Object.keys(data)).toEqual(['atualizadoEm']);
+    // banco igual: só cria, sem nenhuma atualização (nem parcial, nem carimbo)
+    expect(update).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalledTimes(1);
 
     // o time vê o reenvio e os dados novos no e-mail interno
     const interno = sendMail.mock.calls[0][0];
@@ -166,14 +164,16 @@ describe('submitLead — rota pública (F1/F2 do Argus)', () => {
     // sem auto-resposta ao e-mail de terceiros: só o e-mail interno sai
     expect(sendMail).toHaveBeenCalledTimes(1);
     expect(sendMail.mock.calls[0][0].to).not.toBe('fulana@example.com');
-    expect(interno.text).toContain('dados novos');
+    expect(interno.text).toContain('dados novos'); // o conteúdo novo vai no interno…
+    expect(interno.text).toContain('NÃO foram verificados'); // …marcado como não verificado
+    expect(interno.html).toContain('NÃO foram verificados');
 
     // F2: o log leva só o código, nunca e-mail, nome ou telefone
     const logado = JSON.stringify(erro.mock.calls);
     expect(logado).not.toMatch(/fulana|Fulana|example\.com/);
   });
 
-  it('outro erro do banco (não P2002) NÃO é reenvio: segue o fluxo normal, com auto-resposta e sem carimbo', async () => {
+  it('outro erro do banco (não P2002) NÃO é reenvio: segue o fluxo normal, com auto-resposta', async () => {
     create.mockRejectedValue(Object.assign(new Error('conexão caiu'), { code: 'P1001' }));
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const r = await submitLead(INICIAL, form(OBRIGATORIOS));
@@ -183,7 +183,7 @@ describe('submitLead — rota pública (F1/F2 do Argus)', () => {
     expect(sendMail.mock.calls[0][0].subject).not.toContain('reenvio');
   });
 
-  it('lead novo não é marcado como reenvio e não carimba nada', async () => {
+  it('lead novo não é marcado como reenvio', async () => {
     await submitLead(INICIAL, form(OBRIGATORIOS));
     expect(update).not.toHaveBeenCalled();
     expect(sendMail.mock.calls[0][0].subject).toBe('[Plina · Contato] Family Office Exemplo');
