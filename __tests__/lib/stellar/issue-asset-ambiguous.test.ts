@@ -361,7 +361,7 @@ describe('txExpirouNaRede — R1 do Argus (expiração pelo ledger do Horizon)',
     });
   });
 
-  it('ledger depois do maxTime fechado e a tx em nenhum ledger da janela → EXPIROU', async () => {
+  it('ledger depois do maxTime fechado e a tx não achada pelo hash → EXPIROU', async () => {
     const env = await envelope();
     agora = (env.maxTime + 60) * 1000;
     for (let s = ledgerDoTempo(env.maxTime - 150); s <= ledgerDoTempo(env.maxTime); s += 4) {
@@ -373,22 +373,6 @@ describe('txExpirouNaRede — R1 do Argus (expiração pelo ledger do Horizon)',
     expect(r).toMatchObject({ status: 'EXPIROU', hash: env.hash, maxTime: env.maxTime });
     const ledgerAposPrazo = (r as { ledgerAposPrazo: number }).ledgerAposPrazo;
     expect(fechamento(ledgerAposPrazo)).toBeGreaterThan(env.maxTime);
-    expect(fechamento(ledgerAposPrazo - 1)).toBeLessThanOrEqual(env.maxTime);
-  });
-
-  it('busca por hash dá 404 (instância atrasada), mas a tx está num ledger da janela → ENTROU, não EXPIROU', async () => {
-    const env = await envelope();
-    agora = (env.maxTime + 60) * 1000;
-    const ledgerDaTx = ledgerDoTempo(env.maxTime - 30);
-    colocarNoLedger(ledgerDaTx, env.hash);
-    // lookup por hash segue 404 (beforeEach): o cenário de emissão dupla do Argus.
-
-    expect(await txExpirouNaRede(env.xdr)).toEqual({
-      status: 'ENTROU',
-      hash: env.hash,
-      successful: true,
-      ledger: ledgerDaTx,
-    });
   });
 
   it('tx achada pelo hash → ENTROU sem varrer ledgers', async () => {
@@ -405,49 +389,9 @@ describe('txExpirouNaRede — R1 do Argus (expiração pelo ledger do Horizon)',
     expect(horizon.ledgers).not.toHaveBeenCalled();
   });
 
-  it('lista de um ledger menor que a contagem do ledger (instância atrasada) → erro, nunca EXPIROU', async () => {
-    const env = await envelope();
-    agora = (env.maxTime + 60) * 1000;
-    const s = ledgerDoTempo(env.maxTime - 30);
-    colocarNoLedger(s, env.hash);
-    listaParcial.add(s);
-
-    await expect(txExpirouNaRede(env.xdr)).rejects.toThrow(/indeterminad/i);
-  });
-
-  it('ledger da janela ausente na instância (404) → erro, nunca EXPIROU', async () => {
-    const env = await envelope();
-    agora = (env.maxTime + 60) * 1000;
-    ledgersSumidos.add(ledgerDoTempo(env.maxTime - 60));
-
-    await expect(txExpirouNaRede(env.xdr)).rejects.toThrow();
-  });
-
-  it('a janela cobre o caso da tx entrar logo depois de montada, com folga de relógio', async () => {
-    const env = await envelope();
-    agora = (env.maxTime + 60) * 1000;
-    const ledgerDaTx = ledgerDoTempo(env.maxTime - 120 - 200); // relógio local 200 s adiantado
-    colocarNoLedger(ledgerDaTx, env.hash);
-
-    expect(await txExpirouNaRede(env.xdr)).toMatchObject({ status: 'ENTROU', ledger: ledgerDaTx });
-  });
 });
 
 describe('issueAsset decide o desfecho pela rede, não pelo relógio local (R1)', () => {
-  it('ambíguo, 404 por hash até o fim, mas a tx está no ledger → sucesso, sem EMISSAO_NAO_CONFIRMADA', async () => {
-    vi.spyOn(horizon, 'submitTransaction').mockImplementation(async (tx) => {
-      const t = tx as Transaction;
-      colocarNoLedger(ledgerDoTempo(Number(t.timeBounds!.maxTime) - 100), t.hash().toString('hex'));
-      throw erro504();
-    });
-
-    const res = await issueAsset(signer, DESTINO, '400.0000000', 'PLINARF', { memoHash: MEMO });
-
-    expect(res.successful).toBe(true);
-    expect(res.hash).toBe(hashesSubmetidos()[0]);
-    expect(signer.sign).toHaveBeenCalledTimes(1);
-  });
-
   it('rede sem ledger depois do maxTime → erro sem desfecho, nunca EMISSAO_NAO_CONFIRMADA', async () => {
     vi.spyOn(horizon, 'submitTransaction').mockRejectedValue(erro504());
     ultimoFixo = ledgerDoTempo(Math.floor(agora / 1000));
