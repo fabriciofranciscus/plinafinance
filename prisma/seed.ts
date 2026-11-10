@@ -147,6 +147,7 @@ async function seedCota(cota: CotaSeed) {
     new KeypairSigner(issuerSecret),
     distributorPubkey,
     quantityStr,
+    assetCode,
   );
   console.log(`       tx: ${txExplorerUrl(emissionRes.hash)}`);
 

@@ -25,6 +25,7 @@ import {
   spreadRealizadoAcumulado,
   tokensEmitidosVivos,
 } from '@/lib/services/pool';
+import { fetchSupplyOnChainFromEnv } from '@/lib/stellar/supply';
 import { LoginForm } from './login-form';
 import { IncorporarCotaForm } from './incorporar-cota-form';
 import { ClawbackForm } from './clawback-form';
@@ -34,6 +35,11 @@ import { CompradorPipeline } from './comprador-pipeline';
 import { logoutAction } from './actions';
 
 export const dynamic = 'force-dynamic';
+// incorporarCotaAction (usada nesta página) pode segurar uma $transaction de até
+// 120 s (E1-4, M3 do Argus). Server Actions herdam o limite da PÁGINA
+// (Next: route segment config `maxDuration`); 150 s dá folga sobre os 120 s.
+// Exceção só de testnet: antes do M6 o Bento refaz a transação curta, sem rede.
+export const maxDuration = 150;
 
 function brl(value: number): string {
   return new Intl.NumberFormat('pt-BR', {
@@ -103,8 +109,14 @@ export default async function AdminPage() {
 
   const navTotal = navTotalDoPool(cotas, realizacoes);
   const tokensVivos = tokensEmitidosVivos(cotas);
-  const navUnit = navPorToken(cotas, realizacoes);
   const caixa = caixaRealizado(realizacoes);
+
+  // Denominador do ledger. O painel operacional é onde a divergência entre
+  // `tokensVivos` (lastro de cota viva) e o supply circulante tem de ficar
+  // visível: a diferença é o quanto do passivo já está coberto por caixa.
+  const supply = await fetchSupplyOnChainFromEnv().catch(() => null);
+  const navUnit = supply ? navPorToken(cotas, realizacoes, supply) : null;
+  const navUnitLabel = navUnit === null ? '—' : brl(navUnit);
   const spreadAcumulado = spreadRealizadoAcumulado(realizacoes);
   const concentracao = concentracaoPorAdministradora(cotas);
 
@@ -169,7 +181,11 @@ export default async function AdminPage() {
             />
           </section>
           <section className="mb-12 grid grid-cols-1 md:grid-cols-3 gap-px bg-base/15 border border-light-hairline">
-            <Metric label="NAV / token" value={brl(navUnit)} />
+            <Metric label="NAV / token" value={navUnitLabel} />
+            <Metric
+              label="Supply circulante (ledger)"
+              value={supply ? tokenFmt(Number(supply.circulante)) : '—'}
+            />
             <Metric label="Caixa realizado" value={brl(caixa)} />
             <Metric
               label="Yield realizado acumulado"

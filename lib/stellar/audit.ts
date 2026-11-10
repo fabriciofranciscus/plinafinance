@@ -59,7 +59,11 @@ export function stableSerialize(value: unknown): string {
   );
 }
 
-/** SHA-256 hex (64 chars) do payload canonicalizado. */
+/**
+ * SHA-256 hex (64 chars) do payload canonicalizado (trilha de auditoria). Nunca usar o
+ * prefixo "plina:incorporacao:", que é exclusivo do Memo.hash de emissão
+ * (invariante de quemConsumiuSequence em lib/stellar/issuer.ts).
+ */
 export function sha256OfPayload(payload: unknown): string {
   return createHash('sha256').update(stableSerialize(payload)).digest('hex');
 }

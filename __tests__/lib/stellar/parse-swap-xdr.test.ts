@@ -69,7 +69,8 @@ const VALID_EXPECT = {
   distributorPubkey: DISTRIBUTOR,
   issuerPubkey: ISSUER,
   bridgeAsset: BRIDGE,
-  expectedAmount: '99.5000000',
+  expectedBridgeAmount: '99.5000000',
+  expectedPlinarfAmount: '99.5000000',
 };
 
 describe('assertSwapXdrMatchesQuote — C-01', () => {

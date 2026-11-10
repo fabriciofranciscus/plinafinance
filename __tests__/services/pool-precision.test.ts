@@ -49,7 +49,13 @@ describe('pool precision — F-10', () => {
         status: StatusCota.DISPONIVEL,
       },
     ];
-    const unit = navPorTokenAsDecimal(cotas, []);
+    // O denominador agora vem do ledger, não de `tokensEmitidos`. Aqui os dois
+    // coincidem (tudo vendido, nada em tesouraria) pra isolar a precisão, que
+    // é o que este arquivo cobre. A semântica está em pool-nav-ledger.test.ts.
+    const unit = navPorTokenAsDecimal(cotas, [], {
+      circulante: '999999',
+      tesouraria: '0',
+    });
     expect(unit.toFixed(8)).toBe('1.00000100');
   });
 
