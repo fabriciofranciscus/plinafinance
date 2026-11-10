@@ -27,6 +27,7 @@ import {
   buildIssueAssetTx,
   buscarEmissaoPorMemo,
   buscarTxPorHash,
+  txExpirouNaRede,
   executeClawback,
   submitEnvelope,
 } from '../stellar/issuer';
@@ -143,9 +144,6 @@ export async function verificarPreCondicoesDeEmissao(hashValidacao: string | und
   };
 }
 
-/** Mais um pouco além do `maxTime` antes de dar a tx por morta (fechamento de ledger). */
-export const FOLGA_MAXTIME_MS = 10_000;
-
 export type IncorporacaoEmissaoCodigo = 'EMISSAO_EM_ANDAMENTO' | 'EMISSAO_FALHOU';
 
 /**
@@ -160,7 +158,9 @@ export class IncorporacaoEmissaoError extends Error {
   ) {
     super(
       code === 'EMISSAO_EM_ANDAMENTO'
-        ? `Emissão em andamento; nada foi gravado. Tente de novo depois de ${(detalhes.maxTime ?? new Date()).toISOString()}.`
+        ? detalhes.maxTime && detalhes.maxTime.getTime() > Date.now()
+          ? `Emissão em andamento; nada foi gravado. Tente de novo depois de ${detalhes.maxTime.toISOString()}.`
+          : 'Emissão em andamento; nada foi gravado e nenhuma tx nova foi criada. Tente de novo em instantes.'
         : 'Emissão recusada pela rede; nada foi gravado. Uma nova tentativa já pode ser feita.',
     );
     this.name = 'IncorporacaoEmissaoError';
@@ -228,7 +228,7 @@ async function obterEmissaoOnChain(input: {
       // Entrou e falhou on-chain: não aplicou nada; libera nova tentativa.
       await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'FALHOU' } });
       encerradaComo = 'FALHOU';
-    } else if (Date.now() < tentativa.maxTime.getTime() + FOLGA_MAXTIME_MS) {
+    } else if (Date.now() < tentativa.maxTime.getTime()) {
       // Ainda pode entrar: reenvia o MESMO envelope; nunca cria tx nova agora.
       exigirMesmoValor(tentativa); // antes de reenviar: reenviar já poria q de outro V na chain
       const reenvio = await submitEnvelope(tentativa.envelopeXdr);
@@ -242,9 +242,33 @@ async function obterEmissaoOnChain(input: {
       }
       throw new IncorporacaoEmissaoError('EMISSAO_EM_ANDAMENTO', { maxTime: tentativa.maxTime });
     } else {
-      // Expirou e não foi achada pelo hash: morreu. Pode construir tx nova.
-      await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'EXPIRADA' } });
-      encerradaComo = 'EXPIRADA';
+      // Passou do maxTime pelo relógio local. O relógio só diz que vale PERGUNTAR à rede; quem
+      // decide a expiração é o Horizon (último ledger fechado depois do maxTime e a tx fora de
+      // todos os ledgers da janela — R1 do Argus, contrato txExpirouNaRede). Sem reassinar.
+      let veredito: Awaited<ReturnType<typeof txExpirouNaRede>>;
+      try {
+        veredito = await txExpirouNaRede(tentativa.envelopeXdr);
+      } catch (err) {
+        // Indeterminado (Horizon fora, ledger ausente, histórico curto): NÃO reemite; mantém a tentativa.
+        logStellarError('[incorporarCota] expiração indeterminada', err);
+        throw new IncorporacaoEmissaoError('EMISSAO_EM_ANDAMENTO', { maxTime: tentativa.maxTime });
+      }
+      if (veredito.status === 'ENTROU') {
+        if (veredito.successful) {
+          exigirMesmoValor(tentativa);
+          return confirmada(tentativa);
+        }
+        // Entrou e falhou on-chain: não emitiu; libera nova tentativa.
+        await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'FALHOU' } });
+        encerradaComo = 'FALHOU';
+      } else if (veredito.status === 'EM_ABERTO') {
+        // A rede ainda não fechou ledger depois do maxTime: a tx ainda pode entrar. Consultar depois.
+        throw new IncorporacaoEmissaoError('EMISSAO_EM_ANDAMENTO', { maxTime: tentativa.maxTime });
+      } else {
+        // EXPIROU: nunca mais entra. Só agora pode haver tx nova (mesma conta-fonte do issuer).
+        await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'EXPIRADA' } });
+        encerradaComo = 'EXPIRADA';
+      }
     }
   } else if (!tentativa) {
     // Rede de segurança: emissões anteriores a esta tabela (achadas só pelo memo).
@@ -389,7 +413,8 @@ export async function incorporarCota(
   return db.$transaction(
     async (tx) => {
       // 2) Lock de concorrência: não grava nada, só serializa a mesma incorporação.
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`plina:incorporacao:${chaveIncorporacao}`}))`;
+      // $executeRaw, não $queryRaw: a função devolve `void` e o Prisma não desserializa essa coluna (P2010).
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`plina:incorporacao:${chaveIncorporacao}`}))`;
 
       // 3) Já incorporada (reexecução ou chamada concorrente que perdeu o lock).
       const existente = await tx.cota.findUnique({
