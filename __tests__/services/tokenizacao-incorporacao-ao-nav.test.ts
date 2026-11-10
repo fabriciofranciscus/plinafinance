@@ -466,13 +466,16 @@ describe('incorporarCota — erro ambíguo (timeout/5xx/rede): o teste da Vera',
     expect(st.tentativas.get(memoDe('ces_1'))!.status).toBe('CONFIRMADA');
   });
 
-  it('reenvio com FAILED e a tx não está no ledger → EMISSAO_FALHOU e libera tx nova', async () => {
+  it('reenvio com FAILED e a tx não está no ledger → AMBÍGUO (Argus): PENDENTE, nunca FALHOU nem sequence nova; depois do prazo a substituição usa a MESMA sequence', async () => {
     st.submitScript = ['AMBIGUOUS', 'FAILED', 'SUCCESS'];
     await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
     avancar(10_000);
-    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_FALHOU' });
-    expect(st.tentativas.get(memoDe('ces_1'))!.status).toBe('FALHOU');
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' }); // não FALHOU
+    expect(st.tentativas.get(memoDe('ces_1'))!.status).toBe('PENDENTE');
+    expect(st.built).toHaveLength(1); // nenhuma tx nova
+    avancar(130_000); // prazo vencido; o Horizon (mock) diz EXPIROU
     const r = await incorporarCota(base);
+    expect(st.built[1].sequence).toBe(st.built[0].sequence); // MESMA sequence, não sequence nova
     expect(r.txHash).toBe('hash2');
     expect(emissoes()).toBe(1);
   });
@@ -945,6 +948,28 @@ describe('incorporarCota — tx_too_late não é falha definitiva (F1 da Vera)',
     st.submitScript = ['FAILED', 'SUCCESS'];
     await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_FALHOU' });
     expect(st.tentativas.get(memoDe('ces_1'))!.status).toBe('FALHOU');
+  });
+});
+
+describe('incorporarCota — FAILED de envelope salvo é ambíguo (parecer do Argus)', () => {
+  it('FAILED no submit da SUBSTITUIÇÃO (não é tx_bad_seq) também fica PENDENTE: sem FALHOU nem sequence nova', async () => {
+    st.submitScript = ['AMBIGUOUS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    avancar(130_000); // EXPIROU → substituição
+    st.submitScript = ['FAILED'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    expect(st.built).toHaveLength(2); // só a substituição, nenhuma terceira
+    expect(st.built[1].sequence).toBe(st.built[0].sequence);
+    expect(st.tentativas.get(memoDe('ces_1'))!.status).toBe('PENDENTE');
+    expect(st.cotas.size).toBe(0);
+  });
+
+  it('o FAILED do 1º submit de tx nova continua definitivo (FALHOU, nova tentativa)', async () => {
+    st.submitScript = ['FAILED', 'SUCCESS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_FALHOU' });
+    const r = await incorporarCota(base);
+    expect(r.txHash).toBe('hash2');
+    expect(emissoes()).toBe(1);
   });
 });
 
