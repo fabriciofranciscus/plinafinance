@@ -242,20 +242,26 @@ export async function submitLead(
     };
   }
 
-  // Auto-reply pro investidor. Se falhar, o lead já foi recebido — não devolvemos erro.
-  const reply = renderInvestorReply(lead);
-  try {
-    await tx.sendMail({
-      from: `"Plina Finance" <${process.env.SMTP_USER}>`,
-      to: email,
-      replyTo: process.env.SMTP_USER!,
-      subject: reply.subject,
-      text: reply.text,
-      html: reply.html,
-    });
-  } catch (err) {
-    console.error('[submitLead] SMTP error (auto-reply)', err);
-    // Não devolvemos erro pro usuário — a notificação interna já foi enviada.
+  // Auto-reply ao lead. NÃO sai no reenvio de e-mail já cadastrado: o lead já recebeu uma, e
+  // quem digita o e-mail de outra pessoa não pode usar o form para escrever a ela nem ver o
+  // resumo ecoado (decisão da Norma). Outros erros do banco seguem o fluxo normal.
+  if (!lead.reenvio) {
+    // Auto-reply pro investidor. Se falhar, o lead já foi recebido — não devolvemos erro.
+    const reply = renderInvestorReply(lead);
+    try {
+      await tx.sendMail({
+        from: `"Plina Finance" <${process.env.SMTP_USER}>`,
+        to: email,
+        replyTo: process.env.SMTP_USER!,
+        subject: reply.subject,
+        text: reply.text,
+        html: reply.html,
+      });
+    } catch (err) {
+      console.error('[submitLead] SMTP error (auto-reply)', err);
+      // Não devolvemos erro pro usuário — a notificação interna já foi enviada.
+    }
+
   }
 
   return { status: 'success' };

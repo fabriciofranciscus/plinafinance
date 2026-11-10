@@ -272,14 +272,15 @@ Contato exploratório · Sem oferta · Em desenvolvimento
 // Notificação interna pra equipe
 // ----------------------------------------------------------------
 
-const AVISO_REENVIO = 'Reenvio de lead existente — dados não alterados (o cadastro original foi mantido).';
+const AVISO_REENVIO =
+  'Reenvio de e-mail já cadastrado — dados do banco NÃO alterados; só corrigir após confirmar a identidade pelo e-mail do titular.';
 
 export function renderInternalNotification(d: LeadData) {
   const subject = `[Plina · Contato${d.reenvio ? ' · reenvio' : ''}] ${d.org}`;
 
   const lines = [
+    ...(d.reenvio ? [AVISO_REENVIO, ``] : []),
     `Novo contato recebido via plina.finance`,
-    ...(d.reenvio ? [``, AVISO_REENVIO] : []),
     ``,
     `Nome: ${d.name}`,
     `E-mail: ${d.email}`,

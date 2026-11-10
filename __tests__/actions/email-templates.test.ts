@@ -35,6 +35,7 @@ const legado: LeadData = {
 };
 
 const casos: Array<[string, LeadData]> = [
+  ['reenvio de e-mail já cadastrado', { ...base, reenvio: true }],
   ['só os campos obrigatórios', base],
   ['com jurisdição', { ...base, jurisdiction: 'Brasil' }],
   ['lead legado (tíquete, moeda, classe e prazo)', legado],
@@ -75,12 +76,14 @@ describe('auto-resposta ao lead (LD0)', () => {
 });
 
 describe('e-mail interno ao time (LD0)', () => {
-  it.each(casos.slice(0, 2))('sem termos de oferta e sem tíquete — %s', (_nome, lead) => {
+  it.each(casos.slice(0, 3))('sem termos de oferta e sem tíquete — %s', (_nome, lead) => {
     const r = renderInternalNotification(lead);
     const tudo = norm([r.subject, r.text, r.html].join('\n'));
     for (const termo of PROIBIDOS_INTERNO) expect(tudo, termo).not.toContain(termo);
     expect(tudo).not.toMatch(/\beoi\b/);
-    expect(r.subject).toBe('[Plina · Contato] Organização Exemplo');
+    expect(r.subject).toBe(
+      lead.reenvio ? '[Plina · Contato · reenvio] Organização Exemplo' : '[Plina · Contato] Organização Exemplo',
+    );
   });
 
   it('lead legado: o tíquete aparece só como dado do lead, sem vocabulário de oferta no resto', () => {

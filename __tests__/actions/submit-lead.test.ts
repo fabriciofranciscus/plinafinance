@@ -145,7 +145,7 @@ describe('submitLead — rota pública (F1/F2 do Argus)', () => {
     expect(sendMail).not.toHaveBeenCalled();
   });
 
-  it('reenvio de lead existente: dados NÃO alterados (só o carimbo), e-mail interno marca o reenvio, log sem PII', async () => {
+  it('reenvio de e-mail já cadastrado: dados NÃO alterados (só o carimbo), interno marcado, SEM auto-resposta, log sem PII', async () => {
     create.mockRejectedValue(Object.assign(new Error('Unique constraint failed on email fulana@example.com'), { code: 'P2002' }));
     const erro = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const r = await submitLead(INICIAL, form({ ...OBRIGATORIOS, notes: 'dados novos' }));
@@ -160,8 +160,12 @@ describe('submitLead — rota pública (F1/F2 do Argus)', () => {
     // o time vê o reenvio e os dados novos no e-mail interno
     const interno = sendMail.mock.calls[0][0];
     expect(interno.subject).toBe('[Plina · Contato · reenvio] Family Office Exemplo');
-    expect(interno.text).toContain('Reenvio de lead existente — dados não alterados');
-    expect(interno.html).toContain('Reenvio de lead existente — dados não alterados');
+    const AVISO = 'Reenvio de e-mail já cadastrado — dados do banco NÃO alterados; só corrigir após confirmar a identidade pelo e-mail do titular.';
+    expect(interno.text.split('\n')[0]).toBe(AVISO); // 1ª linha
+    expect(interno.html).toContain('NÃO alterados');
+    // sem auto-resposta ao e-mail de terceiros: só o e-mail interno sai
+    expect(sendMail).toHaveBeenCalledTimes(1);
+    expect(sendMail.mock.calls[0][0].to).not.toBe('fulana@example.com');
     expect(interno.text).toContain('dados novos');
 
     // F2: o log leva só o código, nunca e-mail, nome ou telefone
@@ -169,11 +173,22 @@ describe('submitLead — rota pública (F1/F2 do Argus)', () => {
     expect(logado).not.toMatch(/fulana|Fulana|example\.com/);
   });
 
+  it('outro erro do banco (não P2002) NÃO é reenvio: segue o fluxo normal, com auto-resposta e sem carimbo', async () => {
+    create.mockRejectedValue(Object.assign(new Error('conexão caiu'), { code: 'P1001' }));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const r = await submitLead(INICIAL, form(OBRIGATORIOS));
+    expect(r).toEqual({ status: 'success' });
+    expect(update).not.toHaveBeenCalled();
+    expect(sendMail).toHaveBeenCalledTimes(2);
+    expect(sendMail.mock.calls[0][0].subject).not.toContain('reenvio');
+  });
+
   it('lead novo não é marcado como reenvio e não carimba nada', async () => {
     await submitLead(INICIAL, form(OBRIGATORIOS));
     expect(update).not.toHaveBeenCalled();
     expect(sendMail.mock.calls[0][0].subject).toBe('[Plina · Contato] Family Office Exemplo');
-    expect(sendMail.mock.calls[0][0].text).not.toContain('Reenvio de lead existente');
+    expect(sendMail.mock.calls[0][0].text).not.toContain('Reenvio de e-mail');
+    expect(sendMail).toHaveBeenCalledTimes(2); // interno + auto-resposta
   });
 
   it('campo extra no FormData é recusado pelo Zod strict; as chaves internas $ACTION_* do Next passam', async () => {
