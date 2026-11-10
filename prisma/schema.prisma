@@ -46,9 +46,9 @@ enum StatusCota {
   RESERVADA
   REALIZADA
   REVERTIDA
-  /// Cota reservada para a incorporação ao NAV (E1-4): a emissão on-chain está
-  /// em andamento ou falhou de forma ambígua. Fora do pool/NAV; só um operador
-  /// reconcilia (nunca re-emitir às cegas).
+  /// EM DESUSO. Existiu numa versão do E1-4 que gravava a cota antes da chain;
+  /// o E1-4 agora emite com Memo.hash e grava só depois (nenhum código escreve
+  /// este valor). Mantido porque a migration já foi aplicada.
   EMISSAO_PENDENTE
 }
 

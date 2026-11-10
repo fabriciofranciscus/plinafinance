@@ -549,13 +549,7 @@ export async function incorporarCotaDoFunil(input: {
   if (cessao.pagamento?.status !== PagamentoStatus.EXECUTADO) {
     throw new Error('Pix precisa estar EXECUTADO antes de incorporar');
   }
-  if (cessao.cota) {
-    throw new Error(
-      cessao.cota.status === 'EMISSAO_PENDENTE'
-        ? 'Emissão desta cessão está EMISSAO_PENDENTE — reconciliar no explorer antes de qualquer retry'
-        : 'Cota já incorporada pra esta cessão',
-    );
-  }
+  if (cessao.cota) throw new Error('Cota já incorporada pra esta cessão');
 
   // E1-4: o laudo é registrado ANTES da emissão (por cessão). Sem ele — ou sem
   // anuência — `incorporarCota` recusa.
