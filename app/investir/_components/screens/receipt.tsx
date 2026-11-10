@@ -3,6 +3,7 @@
 import type { BuyResult, OnboardData, QuoteData } from '../../_types';
 import { NUMBER_BR, explorerAccount } from '../../_lib/format';
 import { TxRow } from '../shared/tx-row';
+import { tokensDaCotacao } from '../../_lib/quote-tokens';
 
 export function ReceiptScreen({
   onboard,
@@ -22,7 +23,7 @@ export function ReceiptScreen({
         07 // {buyResult.mock ? 'Distribuição (mock sandbox) concluída' : 'Swap atômico concluído'}
       </p>
       <h1 className="font-title text-4xl md:text-5xl font-semibold mt-4 tracking-tight leading-[1.05] text-base">
-        {NUMBER_BR.format(Number(quote.toAmount))}
+        {NUMBER_BR.format(Number(tokensDaCotacao(quote)))}
         <span className="font-mono text-2xl md:text-3xl text-base/55 ml-3">PLINA-RF</span>
       </h1>
       <p className="font-text text-base mt-6 text-base/80 leading-relaxed max-w-prose">

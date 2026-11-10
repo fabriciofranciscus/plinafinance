@@ -15,6 +15,7 @@ import { TestnetBanner } from '../shell/testnet-banner';
 import { Term } from '../shared/term';
 import { DataRow } from '../shared/data-row';
 import { COTACAO_EXPIRADA_MESSAGE, NAV_MUDOU_MESSAGE } from '../../_lib/swap-submit';
+import { tokensDaCotacao } from '../../_lib/quote-tokens';
 
 const CUSTODY_OPTIONS: { id: CustodyProvider; label: string }[] = [
   { id: 'SELF', label: 'Self-custody' },
@@ -83,7 +84,7 @@ export function ConfirmScreen({
             Você receberá
           </p>
           <p className="font-mono text-5xl md:text-6xl mt-4 text-base font-medium tracking-tight">
-            {NUMBER_BR.format(Number(quote.toAmount))}
+            {NUMBER_BR.format(Number(tokensDaCotacao(quote)))}
             <span className="font-mono text-2xl md:text-3xl text-base/45 ml-3">PLINA-RF</span>
           </p>
           <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65 mt-3">
