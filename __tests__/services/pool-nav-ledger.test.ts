@@ -77,7 +77,8 @@ describe('NAV/token contra o supply do ledger', () => {
     );
 
     // Incorporar não diluiu nem inflou: os R$ 80.000 de ativo novo entram no
-    // numerador e saem na dedução da tesouraria ao par.
+    // numerador e os 80.000 tokens novos entram no denominador (a tesouraria é
+    // posição da Plina e conta em N — não há dedução ao par).
     expect(duasCotasUmaEmTesouraria.toFixed(8)).toBe(umaVendida.toFixed(8));
     expect(umaVendida.toFixed(8)).toBe('1.00000000');
   });
@@ -94,16 +95,25 @@ describe('NAV/token contra o supply do ledger', () => {
     expect(depois.toFixed(8)).toBe(antes.toFixed(8));
   });
 
-  it('circulante zero devolve zero — não há passivo a precificar', () => {
-    // Diferente do runoff: aqui nada foi vendido a investidor.
+  it('tudo na posição da Plina (circulante zero, tesouraria legada > 0): NAV = ativo ÷ supply emitido', () => {
+    // Antes: devolvia 0 (a tesouraria saía do denominador). Agora a tesouraria
+    // legada é posição da Plina e conta em N: 80.000 de ativo ÷ 80.000 tokens.
     const unit = navPorTokenAsDecimal([cotaAtiva], [], {
       circulante: '0',
       tesouraria: '80000',
     });
+    expect(unit.toFixed(8)).toBe('1.00000000');
+  });
+
+  it('supply emitido zero devolve zero — não há passivo a precificar', () => {
+    const unit = navPorTokenAsDecimal([cotaAtiva], [], {
+      circulante: '0',
+      tesouraria: '0',
+    });
     expect(unit.isZero()).toBe(true);
   });
 
-  it('ativo atribuível é o NAV total menos a tesouraria ao par', () => {
+  it('ativo atribuível é o NAV total — sem dedução da tesouraria', () => {
     const total = navTotalDoPoolAsDecimal([cotaAtiva], []);
     expect(total.toFixed(2)).toBe('80000.00');
 
@@ -111,7 +121,27 @@ describe('NAV/token contra o supply do ledger', () => {
       circulante: '30000',
       tesouraria: '50000',
     });
-    expect(atribuivel.toFixed(2)).toBe('30000.00');
+    expect(atribuivel.toFixed(2)).toBe('80000.00');
+  });
+
+  it('mover a tesouraria legada para a posição da Plina não muda o NAV/token', () => {
+    // Mesmo ativo, mesmos tokens emitidos; só muda a conta que os detém.
+    const noDistributor = navPorTokenAsDecimal([cotaAtiva, cotaAtiva], [], {
+      circulante: '60000',
+      tesouraria: '100000',
+    });
+    const naPosicaoDaPlina = navPorTokenAsDecimal([cotaAtiva, cotaAtiva], [], {
+      circulante: '160000',
+      tesouraria: '0',
+    });
+    expect(naPosicaoDaPlina.toFixed(8)).toBe(noDistributor.toFixed(8));
+  });
+
+  it('resgate sem queima (token volta ao distributor) não muda o NAV/token', () => {
+    // Antes a dedução da tesouraria contava duas vezes o token devolvido.
+    const antes = navPorTokenAsDecimal([cotaAtiva], [], { circulante: '80000', tesouraria: '0' });
+    const depois = navPorTokenAsDecimal([cotaAtiva], [], { circulante: '60000', tesouraria: '20000' });
+    expect(depois.toFixed(8)).toBe(antes.toFixed(8));
   });
 
   it('saldo congelado continua no denominador', () => {
