@@ -17,10 +17,17 @@ const st = vi.hoisted(() => ({
   /** Txs "no ledger": hash → { successful, amount, memoHex }. */
   chain: new Map<string, { successful: boolean; amount: string; memoHex: string }>(),
   /** Txs construídas (pelo build) e já enviadas ao menos uma vez. */
-  built: [] as Array<{ hash: string; xdr: string; amount: string; memoHex: string; maxTime: number }>,
+  built: [] as Array<{ hash: string; xdr: string; amount: string; memoHex: string; maxTime: number; sequence: string; sequenceDe?: string }>,
   submits: [] as string[],
+  /** `substitui` de cada submitEnvelope (undefined = envio normal). */
+  substitui: [] as Array<string | undefined>,
+  /** Erro forçado do buildIssueAssetTx de substituição (ex.: ISSUE_SUBSTITUICAO_INVALIDA). */
+  buildErro: null as Error | null,
+  /** Resposta forçada de quemConsumiuSequence (Error = Horizon fora). */
+  consumo: null as null | Error | { status: string; hash?: string; successful?: boolean; ledger?: number; motivo?: string },
+  consumoArgs: [] as string[][],
   /** Resultado de cada chamada de submitEnvelope, em ordem (padrão SUCCESS). */
-  submitScript: [] as Array<'SUCCESS' | 'FAILED' | 'AMBIGUOUS' | 'AMBIGUOUS_LANDS'>,
+  submitScript: [] as Array<'SUCCESS' | 'FAILED' | 'AMBIGUOUS' | 'AMBIGUOUS_LANDS' | 'SEQ_CONSUMIDA' | 'ANTERIOR_EMITIU' | 'ERRO_COMUM'>,
   failAuditOnce: false,
   /** Respostas forçadas de buscarTxPorHash, em ordem (esgotadas, volta ao ledger simulado). */
   hashScript: [] as Array<{ found: boolean; successful?: boolean; ledgerCloseTime?: string }>,
@@ -42,21 +49,35 @@ vi.mock('@/lib/stellar/config', async (importOriginal) => {
 });
 vi.mock('@/lib/stellar/issuer', () => ({
   executeClawback: vi.fn(),
-  buildIssueAssetTx: vi.fn(async (_s: unknown, _d: string, amount: string, _code: string, opts?: { memoHash?: Buffer }) => {
+  buildIssueAssetTx: vi.fn(async (_s: unknown, _d: string, amount: string, _code: string, opts?: { memoHash?: Buffer; sequenceDe?: string }) => {
+    if (opts?.sequenceDe && st.buildErro) { const e = st.buildErro; st.buildErro = null; throw e; }
     const n = st.built.length + 1;
     const hash = `hash${n}`;
     const maxTime = Math.floor(Date.now() / 1000) + 120;
-    const t = { hash, xdr: `XDR${n}`, amount, memoHex: opts?.memoHash?.toString('hex') ?? '', maxTime };
+    // Substituição (sequenceDe) reaproveita a MESMA sequence; tx normal pega uma sequence nova.
+    const anterior = opts?.sequenceDe ? st.built.find((b) => b.xdr === opts.sequenceDe) : undefined;
+    const sequence = anterior ? anterior.sequence : `seq${n}`;
+    const t = { hash, xdr: `XDR${n}`, amount, memoHex: opts?.memoHash?.toString('hex') ?? '', maxTime, sequence, sequenceDe: opts?.sequenceDe };
     st.built.push(t);
     st.calls.push('build');
-    return { xdr: t.xdr, hash, maxTime };
+    return { xdr: t.xdr, hash, maxTime, sequence };
   }),
-  submitEnvelope: vi.fn(async (xdr: string) => {
+  submitEnvelope: vi.fn(async (xdr: string, opts?: { substitui?: string }) => {
     st.calls.push('submit');
     st.submits.push(xdr);
+    st.substitui.push(opts?.substitui);
     await Promise.resolve();
     const t = st.built.find((b) => b.xdr === xdr)!;
     const outcome = st.submitScript.shift() ?? 'SUCCESS';
+    if (outcome === 'ERRO_COMUM') throw new Error('falha de rede qualquer');
+    if (outcome === 'SEQ_CONSUMIDA') {
+      throw Object.assign(new Error('sequence consumida'), { code: 'EMISSAO_SEQUENCIA_CONSUMIDA', hash: 'hashAnterior' });
+    }
+    if (outcome === 'ANTERIOR_EMITIU') {
+      const ant = st.built.find((b) => b.xdr === opts?.substitui)!; // a ANTERIOR emitiu, não a nova
+      st.chain.set(ant.hash, { successful: true, amount: ant.amount, memoHex: ant.memoHex });
+      return { status: 'SUCCESS', hash: ant.hash };
+    }
     if (outcome === 'SUCCESS') {
       st.chain.set(t.hash, { successful: true, amount: t.amount, memoHex: t.memoHex });
       return { status: 'SUCCESS', hash: t.hash };
@@ -64,6 +85,12 @@ vi.mock('@/lib/stellar/issuer', () => ({
     if (outcome === 'FAILED') return { status: 'FAILED', hash: t.hash, resultCodes: { transaction: 'tx_failed' } };
     if (outcome === 'AMBIGUOUS_LANDS') st.chain.set(t.hash, { successful: true, amount: t.amount, memoHex: t.memoHex });
     return { status: 'AMBIGUOUS', hash: t.hash, reason: 'timeout' };
+  }),
+  quemConsumiuSequence: vi.fn(async (xdrs: string[]) => {
+    st.calls.push('consumo');
+    st.consumoArgs.push(xdrs);
+    if (st.consumo instanceof Error) throw st.consumo;
+    return st.consumo ?? { status: 'INDETERMINADO', motivo: 'sem forçar' };
   }),
   buscarTxPorHash: vi.fn(async (hash: string) => {
     st.calls.push('buscarHash');
@@ -229,7 +256,7 @@ beforeEach(() => {
   process.env.STELLAR_PLINA_POSITION_PUBLIC = POSICAO;
   st.cfg.network = 'TESTNET';
   st.cotas = new Map(); st.audits = []; st.movs = []; st.tentativas = new Map(); st.chain = new Map();
-  st.built = []; st.submits = []; st.submitScript = []; st.calls = [];
+  st.built = []; st.submits = []; st.submitScript = []; st.substitui = []; st.buildErro = null; st.consumo = null; st.consumoArgs = []; st.calls = [];
   st.failAuditOnce = false; st.hashScript = []; st.failBuscarHash = null; st.failBuscarMemo = null; st.expiry = null; st.tail = Promise.resolve();
   resetNavSupplyCache();
   evidencias();
@@ -743,6 +770,132 @@ describe('incorporarCota — expiração decidida pelo Horizon (R1 do Argus, txE
     const t = st.tentativas.get(memoDe('ces_1'))!;
     expect(t.historico).toHaveLength(1);
     expect(t.historico[0]).toMatchObject({ txHash: 'hash1', status: 'EXPIRADA' });
+  });
+});
+
+describe('incorporarCota — substituição com a MESMA sequence (contrato da Estela, decisão do Atlas)', () => {
+  /** 1º envio ambíguo e o relógio passa do maxTime (a rede ainda não confirmou nada). */
+  async function expirada() {
+    st.submitScript = ['AMBIGUOUS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    avancar(130_000); // txExpirouNaRede (mock) responde EXPIROU
+  }
+
+  it('EXPIROU: a substituição usa sequenceDe = envelope anterior, mesmo valor, e o submit leva { substitui }', async () => {
+    await expirada();
+    const r = await incorporarCota(base);
+    expect(st.built).toHaveLength(2);
+    expect(st.built[1].sequenceDe).toBe('XDR1');
+    expect(st.built[1].sequence).toBe(st.built[0].sequence); // MESMA sequence
+    expect(st.built[1].amount).toBe(st.built[0].amount); // mesmo valor
+    expect(st.built[1].memoHex).toBe(st.built[0].memoHex); // mesmo memo
+    expect(st.submits).toEqual(['XDR1', 'XDR2']);
+    expect(st.substitui).toEqual([undefined, 'XDR1']);
+    expect(r.txHash).toBe('hash2');
+    expect(emissoes()).toBe(1);
+    const t = st.tentativas.get(memoDe('ces_1'))!;
+    expect(t.sequence).toBe(st.built[0].sequence);
+    expect(t.historico).toHaveLength(1);
+    expect(t.historico[0]).toMatchObject({ txHash: 'hash1', envelopeXdr: 'XDR1', status: 'EXPIRADA', sequence: st.built[0].sequence });
+  });
+
+  it('a ANTERIOR emitiu (SUCCESS com o hash anterior): o domínio grava o hash da anterior', async () => {
+    await expirada();
+    st.submitScript = ['ANTERIOR_EMITIU'];
+    const r = await incorporarCota(base);
+    expect(r.txHash).toBe('hash1');
+    expect([...st.cotas.values()][0].emissaoTxHash).toBe('hash1');
+    expect(st.tentativas.get(memoDe('ces_1'))!.txHash).toBe('hash1');
+    expect(emissoes()).toBe(1);
+  });
+
+  it('SEQUENCIA_CONSUMIDA + a nossa entrou com sucesso: confirma com esse hash, sem tx nova', async () => {
+    await expirada();
+    st.submitScript = ['SEQ_CONSUMIDA'];
+    st.consumo = { status: 'ANTIGA_ENTROU', hash: 'hash1', successful: true, ledger: 9 };
+    const r = await incorporarCota(base);
+    expect(r.txHash).toBe('hash1');
+    expect(st.built).toHaveLength(2); // só a substituição, nenhuma terceira
+    expect(st.consumoArgs[0]).toEqual(['XDR1', 'XDR2']); // as duas que usaram a mesma sequence
+    expect(st.cotas.size).toBe(1);
+  });
+
+  it('SEQUENCIA_CONSUMIDA + a nossa entrou e FALHOU: libera tx com sequence NOVA, uma emissão', async () => {
+    await expirada();
+    st.submitScript = ['SEQ_CONSUMIDA', 'SUCCESS'];
+    st.consumo = { status: 'ANTIGA_ENTROU', hash: 'hash1', successful: false, ledger: 9 };
+    const r = await incorporarCota(base);
+    expect(st.built).toHaveLength(3);
+    expect(st.built[2].sequenceDe).toBeUndefined();
+    expect(st.built[2].sequence).not.toBe(st.built[0].sequence); // sequence nova
+    expect(r.txHash).toBe('hash3');
+    expect(emissoes()).toBe(1);
+  });
+
+  it('SEQUENCIA_CONSUMIDA + OUTRA tx do issuer consumiu: EXPIRADA e tx com sequence NOVA', async () => {
+    await expirada();
+    st.submitScript = ['SEQ_CONSUMIDA', 'SUCCESS'];
+    st.consumo = { status: 'OUTRA_TX', hash: 'hashOutra' };
+    const r = await incorporarCota(base);
+    expect(st.built[2].sequenceDe).toBeUndefined();
+    expect(st.built[2].sequence).not.toBe(st.built[0].sequence);
+    expect(r.txHash).toBe('hash3');
+    expect(emissoes()).toBe(1);
+    expect(st.tentativas.get(memoDe('ces_1'))!.historico.map((h: { status: string }) => h.status)).toEqual(['EXPIRADA', 'EXPIRADA']);
+  });
+
+  it('SEQUENCIA_CONSUMIDA + indeterminado (ou Horizon fora): mantém PENDENTE, nada reemitido', async () => {
+    await expirada();
+    st.submitScript = ['SEQ_CONSUMIDA'];
+    st.consumo = { status: 'INDETERMINADO', motivo: 'sequence não aparece na página' };
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    expect(st.built).toHaveLength(2);
+    expect(st.tentativas.get(memoDe('ces_1'))!.status).toBe('PENDENTE');
+    expect(st.cotas.size).toBe(0);
+
+    st.submitScript = ['SEQ_CONSUMIDA'];
+    st.consumo = new Error('horizon fora');
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    expect(st.built).toHaveLength(2);
+    expect(st.tentativas.get(memoDe('ces_1'))!.status).toBe('PENDENTE');
+  });
+
+  it('a primitiva recusa a substituição (ISSUE_SUBSTITUICAO_INVALIDA / Horizon fora): não substitui nem reemite', async () => {
+    await expirada();
+    st.buildErro = Object.assign(new Error('não expirou'), { code: 'ISSUE_SUBSTITUICAO_INVALIDA' });
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    expect(st.built).toHaveLength(1);
+    expect(st.submits).toEqual(['XDR1']);
+    const t = st.tentativas.get(memoDe('ces_1'))!;
+    expect(t.status).toBe('PENDENTE');
+    expect(t.txHash).toBe('hash1'); // a tentativa original continua como está
+    expect(t.historico).toHaveLength(0);
+  });
+
+  it('valor de aporte diferente do guardado: a substituição (mesmo valor) não é montada', async () => {
+    await expirada();
+    await expect(incorporarCota({ ...base, valorCarta: '600' })).rejects.toMatchObject({ code: 'VALOR_DIVERGE_DA_TENTATIVA' });
+    expect(st.built).toHaveLength(1);
+  });
+
+  it('reenvio de uma substituição ambígua (dentro do novo maxTime) leva { substitui } do envelope anterior', async () => {
+    await expirada();
+    st.submitScript = ['AMBIGUOUS', 'AMBIGUOUS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' }); // substituição ambígua
+    avancar(30_000);
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' }); // reenvio do XDR2
+    expect(st.built).toHaveLength(2);
+    expect(st.submits).toEqual(['XDR1', 'XDR2', 'XDR2']);
+    expect(st.substitui).toEqual([undefined, 'XDR1', 'XDR1']);
+  });
+
+  it('erro comum (não EmissaoError) no submit da substituição mantém PENDENTE: nunca FALHOU/EXPIRADA', async () => {
+    await expirada();
+    st.submitScript = ['ERRO_COMUM'];
+    await expect(incorporarCota(base)).rejects.toThrow('falha de rede qualquer');
+    const t = st.tentativas.get(memoDe('ces_1'))!;
+    expect(t.status).toBe('PENDENTE');
+    expect(st.cotas.size).toBe(0);
   });
 });
 
