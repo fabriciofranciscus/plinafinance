@@ -30,6 +30,7 @@ import {
 } from '@/lib/stellar/transactions';
 import { issuerSigner } from '@/lib/stellar/signer';
 import { NavMudouError, revalidarNavDaCotacao } from '@/lib/services/emissao';
+import { assertClasseDisponivel, valorLiquidoDaCotacao } from '@/lib/services/regras-swap';
 import { ApiError } from '@/lib/api/errors';
 import { navUnavailableResponse } from '@/lib/api/nav-unavailable';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
@@ -174,6 +175,7 @@ export const POST = withAuth(async (req, { user }) => {
     const expectedBridgeAmount = parseStellarAmount(quote.toAmount).toFixed(7);
     const expectedPlinarfAmount = parseStellarAmount(quote.plinarfAmount).toFixed(7);
     const classe = classeOrDefault(quote.classe);
+    assertClasseDisponivel(classe); // N1: cotação antiga de Subordinada também é recusada
     const plinarfCode = assetCodeForClasse(classe);
     const tesouro = await resolveTesouroAsset(investorPubkey);
     try {
@@ -202,6 +204,7 @@ export const POST = withAuth(async (req, { user }) => {
       try {
         await revalidarNavDaCotacao({
           fromAmount: quote.fromAmount,
+          fee: quote.fee,
           navPorTokenNaCotacao: quote.navPorTokenNaCotacao,
         });
       } catch (err) {
@@ -312,7 +315,8 @@ export const POST = withAuth(async (req, { user }) => {
       // junto com os q tokens emitidos — senão a subscrição dilui todos.
       await registrarMovimentoFundo(tx, {
         tipo: 'SUBSCRICAO',
-        valorBrl: quote.fromAmount,
+        // N1: o caixa recebe o valor LÍQUIDO (BRL − fee da Etherfuse), o mesmo V que gerou q.
+        valorBrl: valorLiquidoDaCotacao(quote),
         tokens: stellarAmount,
         chave: `subscricao:${quote.id}`,
         quoteId: quote.id,
@@ -339,8 +343,11 @@ export const POST = withAuth(async (req, { user }) => {
 
     return NextResponse.json({ swapTxHash: finalHash });
   } catch (err) {
-    // Erro de negócio (ex.: 403 KYC, 409): deixa o withAuth devolver o status e o código certos.
-    if (err instanceof ApiError) throw err;
+    // Erro de negócio (ex.: 403 KYC, 409, 422 classe): responde com o status e o código dele. O
+    // withAuth só mapeia AuthError, então relançar aqui viraria 500 sem tratamento.
+    if (err instanceof ApiError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     logStellarError('[swap/submit]', err);
     // 500 FIXO: err.message pode carregar caminho de arquivo, URL do banco ou o envelope
     // co-assinado. Do Horizon vão só `title` e os `result_codes` (op_underfunded, tx_bad_auth…),

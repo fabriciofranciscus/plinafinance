@@ -15,7 +15,7 @@ vi.mock('@/lib/db', () => {
     db: {
       cota: { findMany: m.cotas },
       movimentoFundo: { aggregate: async () => ({ _sum: { deltaCaixa: null } }) },
-      quote: { updateMany: m.quoteUpdateMany },
+      quote: { updateMany: m.quoteUpdateMany, findFirst: async () => null }, // findFirst: nenhum swap em voo
       $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
     },
   };
@@ -49,6 +49,20 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('renovarCotacaoParaSwap (recotar)', () => {
+  it('N1: q usa o valor LÍQUIDO do fee — R$ 450 com fee R$ 50 compra o mesmo que R$ 400 sem fee', async () => {
+    const r = await renovarCotacaoParaSwap(
+      quote({ fromAmount: D('450'), fee: '50', navPorTokenNaCotacao: D('1.0000'), plinarfAmount: D('450') }),
+      AGORA,
+    );
+    expect(r.plinarfAmount.toFixed(7)).toBe('376.4705882'); // 400 ÷ 1,0625 (e não 450 ÷ 1,0625 = 423,5294117)
+  });
+
+  it('N1: fee que zera o valor ou inválido → 409, sem tocar no quote', async () => {
+    await expect(renovarCotacaoParaSwap(quote({ fee: '400' }), AGORA)).rejects.toMatchObject({ status: 409 });
+    await expect(renovarCotacaoParaSwap(quote({ fee: 'abc' }), AGORA)).rejects.toMatchObject({ status: 409 });
+    expect(m.quoteUpdateMany).not.toHaveBeenCalled();
+  });
+
   it('cotação vigente: relê o NAV e atualiza nav + plinarfAmount no próprio quote', async () => {
     const r = await renovarCotacaoParaSwap(quote({ navPorTokenNaCotacao: D('1.0000'), plinarfAmount: D('400') }), AGORA);
     expect(r).toMatchObject({ id: 'q_1', renovada: false });

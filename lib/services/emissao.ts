@@ -11,6 +11,7 @@ import { ApiError } from '../api/errors';
 import { NavIndisponivelError, lerSupplyDoNav } from './nav-supply';
 import { caixaParaNav } from './razao-fundo';
 import { navMudou, navParaEmissao, quantidadeEmitida } from './pool';
+import { valorLiquidoDaCotacao } from './regras-swap';
 
 export interface PrecoDeEmissao {
   /** NAV/token usado, 8 casas (precisão do NAV em pool.ts). */
@@ -67,9 +68,11 @@ export class NavMudouError extends Error {
  */
 export async function revalidarNavDaCotacao(quote: {
   fromAmount: Prisma.Decimal | string | number;
+  /** Fee da Etherfuse (BRL): o NAV é revalidado sobre o valor LÍQUIDO, como na cotação. */
+  fee?: string | null;
   navPorTokenNaCotacao: Prisma.Decimal | string | number;
 }): Promise<Prisma.Decimal> {
-  const atual = await calcularPrecoDeEmissao({ valorBrl: quote.fromAmount });
+  const atual = await calcularPrecoDeEmissao({ valorBrl: valorLiquidoDaCotacao(quote) });
   if (navMudou(quote.navPorTokenNaCotacao, atual.navPorTokenNaCotacao)) {
     throw new NavMudouError();
   }

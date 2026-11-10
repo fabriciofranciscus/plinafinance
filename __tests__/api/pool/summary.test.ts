@@ -12,6 +12,7 @@ vi.mock('@/lib/stellar/supply', () => ({ fetchSupplyDasClasses: m.fetchSupplyDas
 vi.mock('@/lib/db', () => ({
   db: {
     parametrosPool: { findUnique: m.parametros },
+    quote: { findFirst: async () => null },
     cota: { findMany: m.cotas },
     realizacaoCaminho: { findMany: m.realizacoes },
     movimentoFundo: { aggregate: async () => ({ _sum: { deltaCaixa: null } }), createMany: async () => ({ count: 1 }) },

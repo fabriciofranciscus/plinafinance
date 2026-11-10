@@ -59,6 +59,32 @@ describe('POST /api/investidor/quote — preço de emissão ao NAV', () => {
     expect(json.navPorTokenNaCotacao).toBe('1.06250000');
   });
 
+  it('N1: o preço (q) usa o valor LÍQUIDO do fee — BRL 400 com fee 50 → calcularPrecoDeEmissao recebe 350', async () => {
+    getQuote.mockResolvedValueOnce({
+      id: 'q_3', fromCurrency: 'BRL', fromAmount: '400', toCurrency: 'TESOURO', toAmount: '299.4',
+      exchangeRate: '0.8554', fee: '50', expiresAt: new Date(Date.now() + 60_000).toISOString(), createdAt: new Date().toISOString(),
+    });
+    const r = await POST(req(onramp));
+    expect(r.status).toBe(200);
+    expect(calcularPrecoDeEmissao.mock.calls[0][0].valorBrl.toFixed(2)).toBe('350.00');
+    expect(quoteCreate.mock.calls[0][0].data.fromAmount.toFixed(2)).toBe('400.00'); // o quote guarda o bruto pago
+  });
+
+  it('N1: classe SUBORDINADA é recusada (422 CLASSE_INDISPONIVEL) antes de chamar a Etherfuse e sem persistir', async () => {
+    const r = await POST(req({ ...onramp, classe: 'SUBORDINADA' }));
+    expect(r.status).toBe(422);
+    expect((await r.json()).code).toBe('CLASSE_INDISPONIVEL');
+    expect(getQuote).not.toHaveBeenCalled();
+    expect(calcularPrecoDeEmissao).not.toHaveBeenCalled();
+    expect(quoteCreate).not.toHaveBeenCalled();
+  });
+
+  it('N1: classe SENIOR explícita segue normal', async () => {
+    const r = await POST(req({ ...onramp, classe: 'SENIOR' }));
+    expect(r.status).toBe(200);
+    expect(quoteCreate.mock.calls[0][0].data.classe).toBe('SENIOR');
+  });
+
   it('off-ramp não calcula preço de emissão', async () => {
     getQuote.mockResolvedValueOnce({
       id: 'q_2', fromCurrency: 'TESOURO', fromAmount: '10', toCurrency: 'BRL', toAmount: '11',
