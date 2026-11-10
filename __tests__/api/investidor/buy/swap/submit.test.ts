@@ -466,4 +466,72 @@ describe('POST /api/investidor/buy/swap/submit', () => {
     expect(revalidarNav).not.toHaveBeenCalled();
     expect(submitWithPrivySignature).not.toHaveBeenCalled();
   });
+
+  // N1-S1 (Argus): reserva órfã só pode ser re-assinada enquanto o envelope vale.
+  describe('reserva órfã × prazo do envelope (N1-S1)', () => {
+    const txComPrazo = (maxTimeSec: number | 'sem') => {
+      const b = new TransactionBuilder(new Account(USER_PK, '1'), { fee: '100', networkPassphrase })
+        .addOperation(Operation.payment({ source: USER_PK, destination: DIST_PK, asset: Asset.native(), amount: '1' }));
+      const tx = maxTimeSec === 'sem' ? b.setTimeout(0).build() : b.setTimebounds(0, maxTimeSec).build();
+      tx.sign(USER);
+      return { xdr: tx.toXDR(), hash: createHash('sha256').update(tx.hash()).digest('hex') };
+    };
+    const agoraSec = () => Math.floor(Date.now() / 1000);
+
+    async function orfa(maxTimeSec: number | 'sem') {
+      const { xdr, hash } = txComPrazo(maxTimeSec);
+      quoteFindUnique
+        .mockResolvedValueOnce(baseQuote({ submitXdrHash: hash }))
+        .mockResolvedValueOnce({ submitXdrHash: hash, consumedTxHash: null, consumedAt: null });
+      quoteUpdateMany.mockResolvedValueOnce({ count: 0 }); // a reserva já existe: órfã
+      fetchTransactionByHash.mockResolvedValueOnce(null); // a tx NÃO está na chain (404)
+      const r = await POST(req({ quoteId: 'q_1', signedXdr: xdr }));
+      return { r, hash };
+    }
+
+    it('antes do maxTime: re-assina e reenvia o mesmo envelope', async () => {
+      const { r } = await orfa(agoraSec() + 100);
+      expect(r.status).toBe(200);
+      expect(submitWithPrivySignature).toHaveBeenCalledOnce();
+    });
+
+    it('depois do maxTime + margem e 404: 410, NÃO assina e LIBERA a reserva', async () => {
+      const { r, hash } = await orfa(agoraSec() - 600);
+      expect(r.status).toBe(410);
+      expect(submitWithPrivySignature).not.toHaveBeenCalled();
+      expect(quoteUpdateMany).toHaveBeenCalledTimes(2); // tentativa de reserva + liberação
+      expect(quoteUpdateMany.mock.calls[1][0]).toEqual({
+        where: { id: 'q_1', submitXdrHash: hash, consumedAt: null },
+        data: { submitXdrHash: null },
+      });
+    });
+
+    it('depois do maxTime mas dentro da margem do ledger: 409, NÃO assina e mantém a reserva', async () => {
+      const { r } = await orfa(agoraSec() - 10);
+      expect(r.status).toBe(409);
+      expect(submitWithPrivySignature).not.toHaveBeenCalled();
+      expect(quoteUpdateMany).toHaveBeenCalledTimes(1); // só a tentativa de reserva: nada liberado
+    });
+
+    it('envelope SEM maxTime em reserva órfã: nunca re-assina (410 + libera)', async () => {
+      const { r } = await orfa('sem');
+      expect(r.status).toBe(410);
+      expect(submitWithPrivySignature).not.toHaveBeenCalled();
+      expect(quoteUpdateMany).toHaveBeenCalledTimes(2);
+    });
+
+    it('órfã + a tx falhou on-chain (prova positiva): 409 e LIBERA a reserva', async () => {
+      const { xdr, hash } = txComPrazo(agoraSec() + 100);
+      quoteFindUnique
+        .mockResolvedValueOnce(baseQuote({ submitXdrHash: hash }))
+        .mockResolvedValueOnce({ submitXdrHash: hash, consumedTxHash: null, consumedAt: null });
+      quoteUpdateMany.mockResolvedValueOnce({ count: 0 });
+      fetchTransactionByHash.mockResolvedValueOnce({ hash: 'tx_falhou', successful: false });
+      const r = await POST(req({ quoteId: 'q_1', signedXdr: xdr }));
+      expect(r.status).toBe(409);
+      expect(submitWithPrivySignature).not.toHaveBeenCalled();
+      expect(quoteUpdateMany.mock.calls[1][0].data).toEqual({ submitXdrHash: null });
+    });
+  });
 });
+
