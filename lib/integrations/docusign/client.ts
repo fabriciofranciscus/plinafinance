@@ -59,8 +59,11 @@ const entradaEnvelope = z
     emailSubject: z.string().trim().min(1).max(100),
     /**
      * Chave de idempotência da operação (GUID estável, ex.: `transactionIdDeterministico(cessaoId)`).
-     * A DocuSign devolve o MESMO envelope para a mesma transactionId, então repetir a chamada após
-     * um resultado incerto (timeout, 5xx) nunca cria outro envelope nem outro e-mail.
+     * Medido no sandbox (2026-11-10): POSTs SEQUENCIAIS com a mesma transactionId devolvem o mesmo
+     * envelope (201, sem 2º e-mail). Dois POSTs SIMULTÂNEOS não têm resposta garantida (um deles pode
+     * voltar sem envelopeId), mas não duplicaram; por isso, sem envelopeId na resposta, consultamos
+     * `GET /envelopes?transaction_ids=` (`buscarEnvelopePorTransactionId`). Não dispare dois
+     * criarEnvelope em paralelo para a mesma operação.
      */
     transactionId: z.string().regex(GUID),
     /** Posição do campo de assinatura (pontos, origem no canto superior esquerdo). */
@@ -227,6 +230,29 @@ export function criarClienteDocusign(opcoes: ClienteDocusignOpcoes = {}) {
     }
   }
 
+  async function buscarPorTransactionId(transactionId: string): Promise<string | null> {
+    if (!GUID.test(transactionId)) {
+      throw new DocusignError('ENTRADA_INVALIDA', 'DocuSign: transactionId inválida.');
+    }
+    return withSpan('docusign.buscar_por_transaction_id', { 'docusign.operacao': 'buscar_por_transaction_id' }, async (span) => {
+      const desde = new Date(agora() - 7 * 24 * 3600_000).toISOString().slice(0, 10);
+      const res = await api(
+        `/envelopes?transaction_ids=${transactionId}&from_date=${desde}`,
+        { method: 'GET', headers: { Accept: 'application/json' } },
+        'consulta por transactionId',
+      );
+      span.setAttribute('http.status_code', res.status);
+      const dados = (await res.json().catch(() => null)) as { envelopes?: Array<{ envelopeId?: unknown }> } | null;
+      const ids = (dados?.envelopes ?? [])
+        .map((e) => e?.envelopeId)
+        .filter((id): id is string => typeof id === 'string' && GUID.test(id));
+      if (ids.length > 1) {
+        throw new DocusignError('RESPOSTA_INVALIDA', 'DocuSign: mais de um envelope para a mesma transactionId.');
+      }
+      return ids[0] ?? null;
+    });
+  }
+
   return {
     /** Pede (ou reaproveita) o token de acesso. Útil para o smoke provar o consentimento. */
     obterToken,
@@ -286,12 +312,12 @@ export function criarClienteDocusign(opcoes: ClienteDocusignOpcoes = {}) {
           },
           'criação do envelope',
         ).catch((e: unknown) => {
-          // Rede/timeout/5xx/429 no POST: a DocuSign pode ter criado o envelope. Repetir com a
-          // mesma transactionId recupera o envelope existente em vez de criar outro.
+          // Rede/timeout/5xx/429 no POST: a DocuSign pode ter criado o envelope. O chamador consulta
+          // por transactionId e, se não existir, reenvia com a mesma transactionId.
           if (e instanceof DocusignError && e.codigo === 'INDISPONIVEL') {
             throw new DocusignError(
               'RESULTADO_INCERTO',
-              'DocuSign: não foi possível confirmar se o envelope foi criado. Repita a operação com a MESMA transactionId; ela devolve o envelope já criado, sem duplicar o envio.',
+              'DocuSign: não foi possível confirmar se o envelope foi criado. Antes de reenviar, consulte buscarEnvelopePorTransactionId com a MESMA transactionId; se ele não existir, repita criarEnvelope com a mesma transactionId (reenvios sequenciais não duplicam).',
               e.httpStatus,
             );
           }
@@ -299,11 +325,19 @@ export function criarClienteDocusign(opcoes: ClienteDocusignOpcoes = {}) {
         });
         span.setAttribute('http.status_code', res.status);
         const dados = (await res.json().catch(() => null)) as { envelopeId?: unknown } | null;
-        if (!dados || typeof dados.envelopeId !== 'string' || !GUID.test(dados.envelopeId)) {
-          throw new DocusignError('RESPOSTA_INVALIDA', 'DocuSign: resposta de criação de envelope inesperada.');
+        if (dados && typeof dados.envelopeId === 'string' && GUID.test(dados.envelopeId)) {
+          return { envelopeId: dados.envelopeId };
         }
-        return { envelopeId: dados.envelopeId };
+        // 2xx sem envelopeId (visto em POSTs simultâneos): recupera pela transactionId.
+        const existente = await buscarPorTransactionId(transactionId);
+        if (existente) return { envelopeId: existente };
+        throw new DocusignError('RESPOSTA_INVALIDA', 'DocuSign: resposta de criação de envelope inesperada.');
       });
+    },
+
+    /** Envelope já criado para esta transactionId (ou null). Use antes de reenviar após RESULTADO_INCERTO. */
+    async buscarEnvelopePorTransactionId(transactionId: string): Promise<string | null> {
+      return buscarPorTransactionId(transactionId);
     },
 
     async obterStatusEnvelope(envelopeId: string): Promise<StatusEnvelope> {
