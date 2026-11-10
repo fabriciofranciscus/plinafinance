@@ -2,14 +2,16 @@
  * POST /api/investidor/buy/swap/submit
  *
  * Recebe a signature do investor sobre o envelope swap (TESOURO → distributor
- * + PLINARF → investor) e a signature pré-assinada do distributor; submete
+ * + PLINARF → investor) e a signature pré-assinada do ISSUER (N1: a perna 2 é
+ * emissão nova); submete
  * a tx atômica. Atomicidade: ambas legs commitam juntas — se TESOURO leg
  * underfundar, PLINARF leg não executa.
  *
  * Marca o quote como consumido dentro da mesma db.$transaction do audit log.
  * Modo mock é tratado em /swap/build — esta rota só aceita real.
  *
- * Body: { quoteId, investorPubkey, signatureHex, xdr, distributorSigBase64, distributorPubkey, investidorId? }
+ * Body: { quoteId, investorPubkey, signatureHex, xdr, issuerSigBase64, investidorId? }
+ * As chaves públicas (issuer, distributor) vêm só do env — nunca do body.
  * Returns: { swapTxHash }
  */
 
@@ -17,6 +19,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
+import { Keypair, Transaction } from '@stellar/stellar-sdk';
+import { networkPassphrase } from '@/lib/stellar/config';
 import { db } from '@/lib/db';
 import {
   submitWithPrivySignature,
@@ -41,14 +45,23 @@ import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 
 export const dynamic = 'force-dynamic';
 
+/** `true` só se `sigBase64` é assinatura válida de `issuerPubkey` sobre o hash da XDR. */
+function issuerSignatureValid(xdr: string, issuerPubkey: string, sigBase64: string): boolean {
+  try {
+    const hash = new Transaction(xdr, networkPassphrase).hash();
+    return Keypair.fromPublicKey(issuerPubkey).verify(hash, Buffer.from(sigBase64, 'base64'));
+  } catch {
+    return false;
+  }
+}
+
 const Schema = z
   .object({
     quoteId: z.string().min(1).max(60),
     investorPubkey: stellarPubkey(),
     signatureHex: stellarSignatureHex(),
     xdr: stellarXdr(),
-    distributorSigBase64: z.string().min(1).max(256),
-    distributorPubkey: stellarPubkey(),
+    issuerSigBase64: z.string().min(1).max(256),
     investidorId: z.string().min(1).max(60).optional(),
   })
   .strict();
@@ -61,8 +74,7 @@ export const POST = withAuth(async (req, { user }) => {
     investorPubkey,
     signatureHex,
     xdr,
-    distributorSigBase64,
-    distributorPubkey,
+    issuerSigBase64,
     investidorId,
   } = parsed.data;
   try {
@@ -141,10 +153,12 @@ export const POST = withAuth(async (req, { user }) => {
 
     // C-01: valida que a XDR assinada bate com o quote server-side.
     // Sem isso, signature em rawSign não amarra amount/asset/destinos.
+    // As chaves vêm só do env: o body não escolhe quem emite nem quem recebe o ponte.
     const issuerPubkey = process.env.STELLAR_ISSUER_PUBLIC;
-    if (!issuerPubkey) {
+    const distributorPubkey = process.env.STELLAR_DISTRIBUTOR_PUBLIC;
+    if (!issuerPubkey || !distributorPubkey) {
       return NextResponse.json(
-        { error: 'STELLAR_ISSUER_PUBLIC ausente' },
+        { error: 'configuração Stellar ausente' },
         { status: 500 },
       );
     }
@@ -176,6 +190,15 @@ export const POST = withAuth(async (req, { user }) => {
         {
           error: `xdr divergente do quote: ${err instanceof Error ? err.message : 'unknown'}`,
         },
+        { status: 400 },
+      );
+    }
+
+    // N1: a assinatura pré-assinada tem de ser do ISSUER do env sobre o hash desta
+    // XDR. Conferida aqui, antes de reservar o quote e de gastar fee.
+    if (!issuerSignatureValid(xdr, issuerPubkey, issuerSigBase64)) {
+      return NextResponse.json(
+        { error: 'assinatura do issuer inválida para esta XDR' },
         { status: 400 },
       );
     }
@@ -232,7 +255,7 @@ export const POST = withAuth(async (req, { user }) => {
         investorPubkey,
         investorSignatureHex: signatureHex,
         extraSignatures: [
-          { pubkey: distributorPubkey, sigBase64: distributorSigBase64 },
+          { pubkey: issuerPubkey, sigBase64: issuerSigBase64 },
         ],
       });
       finalHash = submitRes.hash;
