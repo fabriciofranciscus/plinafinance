@@ -222,7 +222,8 @@ export async function issueAsset(
 
 /**
  * - EMISSAO_FALHOU: a rede recusou a tx; nada foi emitido.
- * - EMISSAO_NAO_CONFIRMADA: a tx expirou na rede sem entrar (txExpirouNaRede = EXPIROU).
+ * - EMISSAO_NAO_CONFIRMADA: não achada pelo hash e a rede passou do maxTime (txExpirouNaRede =
+ *   EXPIROU). NÃO prova que não entrou (nó do Horizon atrasado).
  *   Reexecutar só é seguro SUBSTITUINDO com `sequenceDe` = envelope desta tentativa (mesma
  *   sequence): se ela tiver entrado sem o Horizon mostrar, a substituição volta tx_bad_seq.
  *   Reexecutar sem `sequenceDe` (sequence nova) NÃO é seguro.
@@ -237,7 +238,7 @@ export type EmissaoErrorCode =
 const MENSAGENS_EMISSAO: Record<EmissaoErrorCode, string> = {
   EMISSAO_FALHOU: 'Emissão recusada pela rede; nada foi emitido. Reexecutar é seguro.',
   EMISSAO_NAO_CONFIRMADA:
-    'Emissão não entrou no ledger até o prazo da transação; nada foi emitido. Reexecutar só substituindo com a mesma sequence (sequenceDe).',
+    'Emissão não confirmada até o prazo da transação: pode ter entrado sem o Horizon mostrar. Reexecutar só substituindo com a mesma sequence (sequenceDe).',
   EMISSAO_SEQUENCIA_CONSUMIDA:
     'A sequence da tentativa anterior já foi consumida e ela não aparece como emitida. Não reemitir: o operador confere no explorer.',
 };
@@ -513,17 +514,30 @@ export type ConsumoDaSequencia =
   | { status: 'OUTRA_TX'; hash: string }
   | { status: 'INDETERMINADO'; motivo: string };
 
-type RegistroTxDaConta = RegistroTx & { source_account: string; source_account_sequence: string };
+type RegistroTxDaConta = RegistroTx & {
+  source_account: string;
+  source_account_sequence: string;
+  memo_type?: string;
+  memo?: string;
+};
+
+const MAX_PAGINAS_CONTA = 10;
 
 /**
  * Prova POSITIVA de qual tx consumiu a sequence S das tentativas (todas com a
- * mesma conta-fonte e a mesma S): lê 1 página das txs da conta do issuer e
- * procura `source_account_sequence === S`. Um 404 por hash nunca é prova:
- * se S não aparece, INDETERMINADO. Erro do Horizon propaga.
+ * mesma conta-fonte e a mesma S): pagina as txs da conta do issuer (desc) e
+ * procura `source_account_sequence === S`. A consumidora é NOSSA se o hash
+ * está nas tentativas ou em `hashesConhecidos` (histórico), ou se tem o mesmo
+ * Memo.hash da emissão (chave de idempotência). Um 404 por hash nunca é prova:
+ * se S não aparece (passou abaixo de S, fim da lista ou teto de páginas),
+ * INDETERMINADO. Erro do Horizon propaga.
  * Uso depois de EMISSAO_SEQUENCIA_CONSUMIDA
- * (contratos/2026-11-10-substituicao-mesma-sequence.md, adendo).
+ * (contratos/2026-11-10-substituicao-mesma-sequence.md, adendos).
  */
-export async function quemConsumiuSequence(xdrs: string[]): Promise<ConsumoDaSequencia> {
+export async function quemConsumiuSequence(
+  xdrs: string[],
+  opts?: { hashesConhecidos?: string[] },
+): Promise<ConsumoDaSequencia> {
   if (xdrs.length === 0) throw new Error('quemConsumiuSequence: nenhuma tentativa informada.');
   const txs = xdrs.map((x) => new Transaction(x, networkPassphrase));
   const fonte = txs[0].source;
@@ -531,30 +545,42 @@ export async function quemConsumiuSequence(xdrs: string[]): Promise<ConsumoDaSeq
   if (txs.some((t) => t.source !== fonte || t.sequence !== seq)) {
     throw new Error('quemConsumiuSequence: tentativas com conta-fonte ou sequence diferentes.');
   }
-  const nossas = new Set(txs.map((t) => t.hash().toString('hex')));
-
-  const { records } = (await horizon
-    .transactions()
-    .forAccount(fonte)
-    .order('desc')
-    .includeFailed(true)
-    .limit(PAGINA_HORIZON)
-    .call()) as unknown as { records: RegistroTxDaConta[] };
-  const consumidora = records.find(
-    (r) => r.source_account === fonte && r.source_account_sequence === seq,
+  const nossas = new Set([
+    ...txs.map((t) => t.hash().toString('hex')),
+    ...(opts?.hashesConhecidos ?? []),
+  ]);
+  const memosNossos = new Set(
+    txs
+      .filter((t) => t.memo.type === 'hash')
+      .map((t) => Buffer.from(t.memo.value as Buffer).toString('base64')),
   );
-  if (!consumidora) {
-    return { status: 'INDETERMINADO', motivo: `sequence ${seq} não aparece na página da conta` };
+  const alvo = BigInt(seq);
+
+  let cursor: string | undefined;
+  for (let pagina = 0; pagina < MAX_PAGINAS_CONTA; pagina++) {
+    let q = horizon.transactions().forAccount(fonte).order('desc').includeFailed(true).limit(PAGINA_HORIZON);
+    if (cursor) q = q.cursor(cursor);
+    const { records } = (await q.call()) as unknown as { records: RegistroTxDaConta[] };
+    for (const r of records) {
+      if (r.source_account !== fonte) continue;
+      const s = BigInt(r.source_account_sequence);
+      if (s < alvo) {
+        return { status: 'INDETERMINADO', motivo: `sequence ${seq} não aparece nas txs da conta` };
+      }
+      if (s !== alvo) continue;
+      const ehNossa =
+        nossas.has(r.hash) || (r.memo_type === 'hash' && !!r.memo && memosNossos.has(r.memo));
+      if (ehNossa) {
+        return { status: 'ANTIGA_ENTROU', hash: r.hash, successful: r.successful, ledger: r.ledger_attr ?? 0 };
+      }
+      return { status: 'OUTRA_TX', hash: r.hash };
+    }
+    if (records.length < PAGINA_HORIZON) {
+      return { status: 'INDETERMINADO', motivo: `sequence ${seq} não aparece nas txs da conta` };
+    }
+    cursor = records[records.length - 1].paging_token;
   }
-  if (nossas.has(consumidora.hash)) {
-    return {
-      status: 'ANTIGA_ENTROU',
-      hash: consumidora.hash,
-      successful: consumidora.successful,
-      ledger: consumidora.ledger_attr ?? 0,
-    };
-  }
-  return { status: 'OUTRA_TX', hash: consumidora.hash };
+  return { status: 'INDETERMINADO', motivo: `sequence ${seq} além de ${MAX_PAGINAS_CONTA} páginas da conta` };
 }
 
 /**
