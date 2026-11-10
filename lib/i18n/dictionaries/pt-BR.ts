@@ -29,7 +29,7 @@ export const ptBR: Dictionary = {
       resumoAtivo: 'Resumo do ativo',
       menu: 'Menu',
       pausarMovimento: 'Pausar movimento',
-      ativarMovimento: 'Ativar movimento',
+      ativarMovimento: 'Retomar movimento',
       idioma: 'Idioma',
     },
     languageSwitcher: { pt: 'PT', en: 'EN' },
@@ -162,7 +162,7 @@ export const ptBR: Dictionary = {
         mensagemPlaceholder: 'Como podemos ajudar?',
         preparar: 'Preparar meu contato',
         avisoMailto:
-          'Você revisa e envia pelo seu e-mail. Esta página não envia nem armazena seus dados.',
+          'Você revisa e envia pelo seu e-mail. Esta página não envia nem armazena o que você digita no formulário.',
       },
       rascunho: {
         titulo: 'Seu contato está pronto.',

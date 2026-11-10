@@ -3,7 +3,7 @@
 import { Icon } from './icons';
 import { useMotion } from './LandingRoot';
 
-/** "Pausar movimento" / "Ativar movimento" (SPEC §5.6). */
+/** "Pausar movimento" / "Retomar movimento" (SPEC §5.6). */
 export function MotionToggle({ pauseLabel, playLabel }: { pauseLabel: string; playLabel: string }) {
   const { paused, toggle } = useMotion();
   return (

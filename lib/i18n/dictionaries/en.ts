@@ -161,7 +161,7 @@ export const en: Dictionary = {
         mensagemPlaceholder: 'How can we help?',
         preparar: 'Prepare my message',
         avisoMailto:
-          'You review and send it from your own e-mail. This page does not send or store your data.',
+          'You review and send it from your own e-mail. This page does not send or store what you type in the form.',
       },
       rascunho: {
         titulo: 'Your message is ready.',
