@@ -37,6 +37,8 @@ import { distributorSigner } from '../stellar/signer';
 import { getDynamicFee } from '../stellar/fee';
 import { privySignatureToBase64 } from '../wallet/privy';
 import { parseStellarAmount } from '../format/parse-stellar-amount';
+import { caixaParaNav } from './razao-fundo';
+import { NavIndisponivelError, lerSupplyDoNav } from './nav-supply';
 import { extractLiquidacaoAmount } from '../stellar/parse-liquidacao-xdr';
 import { classeFromAssetCode } from '../stellar/classes';
 import { decrementarHolding } from './holdings';
@@ -65,8 +67,13 @@ export interface CalcularLiquidacaoResult {
 }
 
 /**
- * Calcula BRL simulado equivalente a uma quantidade de PLINA-RF a NAV
- * atual. NAV/token = NAV total / tokens vivos.
+ * Calcula BRL simulado equivalente a uma quantidade de PLINA-RF a NAV atual.
+ *
+ * NAV/token = ativo atribuível / supply circulante **lido do ledger**. A
+ * leitura do Horizon falha fechada de propósito: precificar um resgate com o
+ * denominador antigo (estado da aplicação) era a dupla contagem que este
+ * cálculo passou a evitar, e recusar a cotação é melhor que entregar um
+ * número errado.
  */
 export async function calcularValorLiquidacao(
   input: CalcularLiquidacaoInput,
@@ -75,7 +82,9 @@ export async function calcularValorLiquidacao(
   if (!isFinite(amount) || amount <= 0) {
     throw new Error('amountPlinarf inválido');
   }
-  const [cotas, realizacoes] = await Promise.all([
+  // Trava D3 + fonte única de asset code: o denominador vem de `lerSupplyDoNav`
+  // (mesma leitura da tela). `fresh`: cotação de resgate move dinheiro, não usa TTL.
+  const [cotas, realizacoes, { senior: supply }] = await Promise.all([
     db.cota.findMany({
       where: { status: { in: ['DISPONIVEL', 'RESERVADA'] } },
       select: {
@@ -85,13 +94,19 @@ export async function calcularValorLiquidacao(
         status: true,
       },
     }),
-    db.realizacaoCaminho.findMany({
-      select: { valorRealizado: true, spread: true },
-    }),
+    caixaParaNav(), // E2-5: caixa do NAV vem do razão
+    lerSupplyDoNav({ fresh: true }),
   ]);
   const navTotal = navTotalDoPool(cotas, realizacoes);
   const tokensVivos = tokensEmitidosVivos(cotas);
-  const unitDec = navPorTokenAsDecimal(cotas, realizacoes);
+  const unitDec = navPorTokenAsDecimal(cotas, realizacoes, supply);
+  // Fail-closed: NAV <= 0 significa que o ativo atribuível não cobre a
+  // tesouraria, ou que nada foi emitido a investidor. Nos dois casos não
+  // existe cotação honesta — e um BRL negativo chegaria na tela.
+  if (unitDec.lte(0)) {
+    // Mensagem pública constante (a rota devolve 503 fixo); o motivo vai ao log.
+    throw new NavIndisponivelError('NAV_NAO_POSITIVO');
+  }
   const brlEquivalenteDec = unitDec
     .mul(new Prisma.Decimal(input.amountPlinarf))
     .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_EVEN);
