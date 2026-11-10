@@ -276,10 +276,31 @@ const AVISO_REENVIO =
   'Reenvio de e-mail já cadastrado — dados do banco NÃO alterados; só corrigir após confirmar a identidade pelo e-mail do titular.';
 
 export function renderInternalNotification(d: LeadData) {
-  const subject = `[Plina · Contato${d.reenvio ? ' · reenvio' : ''}] ${d.org}`;
+  // Reenvio de e-mail já cadastrado: NÃO ecoa nenhum dado novo (nome, organização, telefone,
+  // mensagem…) — pode ser de uma pessoa que não é a dona do e-mail. Só o aviso, o e-mail (que já
+  // é o do cadastro) e a data (decisão do Atlas e da Norma).
+  if (d.reenvio) {
+    const subject = '[Plina · Contato · reenvio]';
+    const recebido = fmtDateBR(d.recebido);
+    const text = [AVISO_REENVIO, ``, `E-mail: ${d.email}`, `Recebido: ${d.recebido}`].join('\n');
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>${esc(subject)}</title>
+</head>
+<body style="margin:0;padding:24px;background:${COLORS.pageGrey};font-family:${SANS};color:${COLORS.petrol};">
+  <p style="margin:0 0 16px 0;font-size:15px;line-height:1.5;font-weight:600;">${esc(AVISO_REENVIO)}</p>
+  <p style="margin:0 0 4px 0;font-size:14px;line-height:1.5;">E-mail: ${esc(d.email)}</p>
+  <p style="margin:0;font-size:14px;line-height:1.5;color:${COLORS.petrol70};">Recebido: ${esc(recebido)}</p>
+</body>
+</html>`;
+    return { subject, text, html };
+  }
+
+  const subject = `[Plina · Contato] ${d.org}`;
 
   const lines = [
-    ...(d.reenvio ? [AVISO_REENVIO, ``] : []),
     `Novo contato recebido via plina.finance`,
     ``,
     `Nome: ${d.name}`,
@@ -299,7 +320,6 @@ export function renderInternalNotification(d: LeadData) {
   const text = lines.join('\n');
 
   const dataRows: Array<[string, string, boolean]> = [
-    ...(d.reenvio ? [['Aviso', AVISO_REENVIO, false] as [string, string, boolean]] : []),
     ['Nome', d.name, false],
     ['E-mail', d.email, true],
     ['Organização', d.org, false],

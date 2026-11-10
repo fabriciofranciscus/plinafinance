@@ -148,7 +148,10 @@ describe('submitLead — rota pública (F1/F2 do Argus)', () => {
   it('reenvio de e-mail já cadastrado: dados NÃO alterados (só o carimbo), interno marcado, SEM auto-resposta, log sem PII', async () => {
     create.mockRejectedValue(Object.assign(new Error('Unique constraint failed on email fulana@example.com'), { code: 'P2002' }));
     const erro = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const r = await submitLead(INICIAL, form({ ...OBRIGATORIOS, notes: 'dados novos' }));
+    const r = await submitLead(
+      INICIAL,
+      form({ ...OBRIGATORIOS, name: 'Intruso Digitado', org: 'Org Digitada', phone: '+55 11 90000-0000', notes: 'dados novos' }),
+    );
     expect(r).toEqual({ status: 'success' });
 
     // nada de nome/org/telefone/perfil no banco: só o carimbo de último contato
@@ -159,14 +162,20 @@ describe('submitLead — rota pública (F1/F2 do Argus)', () => {
 
     // o time vê o reenvio e os dados novos no e-mail interno
     const interno = sendMail.mock.calls[0][0];
-    expect(interno.subject).toBe('[Plina · Contato · reenvio] Family Office Exemplo');
+    expect(interno.subject).toBe('[Plina · Contato · reenvio]');
     const AVISO = 'Reenvio de e-mail já cadastrado — dados do banco NÃO alterados; só corrigir após confirmar a identidade pelo e-mail do titular.';
     expect(interno.text.split('\n')[0]).toBe(AVISO); // 1ª linha
     expect(interno.html).toContain('NÃO alterados');
     // sem auto-resposta ao e-mail de terceiros: só o e-mail interno sai
     expect(sendMail).toHaveBeenCalledTimes(1);
     expect(sendMail.mock.calls[0][0].to).not.toBe('fulana@example.com');
-    expect(interno.text).toContain('dados novos');
+    // NENHUM dado novo é ecoado (nome, organização, telefone, mensagem), nem no assunto
+    const tudo = [interno.subject, interno.text, interno.html].join('\n');
+    for (const novo of ['Intruso Digitado', 'Org Digitada', '90000-0000', 'dados novos', 'Family Office Exemplo']) {
+      expect(tudo).not.toContain(novo);
+    }
+    expect(interno.text).toContain('E-mail: fulana@example.com'); // o do cadastro
+    expect(interno.text).toMatch(/Recebido: 20\d\d-\d\d-\d\dT/); // data
 
     // F2: o log leva só o código, nunca e-mail, nome ou telefone
     const logado = JSON.stringify(erro.mock.calls);

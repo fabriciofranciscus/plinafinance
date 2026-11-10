@@ -76,14 +76,30 @@ describe('auto-resposta ao lead (LD0)', () => {
 });
 
 describe('e-mail interno ao time (LD0)', () => {
+  it('reenvio: não ecoa nenhum dado novo (nome, organização, telefone, mensagem, perfil)', () => {
+    const r = renderInternalNotification({
+      ...legado,
+      name: 'Intruso Digitado',
+      org: 'Org Digitada',
+      phone: '+55 11 90000-0000',
+      notes: 'mensagem digitada',
+      reenvio: true,
+    });
+    const tudo = [r.subject, r.text, r.html].join('\n');
+    for (const novo of ['Intruso', 'Org Digitada', '90000-0000', 'mensagem digitada', 'Family office', 'Brasil', 'US$', 'USD']) {
+      expect(tudo, novo).not.toContain(novo);
+    }
+    expect(r.text.split('\n')[0]).toContain('dados do banco NÃO alterados');
+    expect(r.text).toContain('E-mail: fulana@example.com');
+    expect(r.text).toContain('Recebido: 2026-11-10T12:00:00.000Z');
+  });
+
   it.each(casos.slice(0, 3))('sem termos de oferta e sem tíquete — %s', (_nome, lead) => {
     const r = renderInternalNotification(lead);
     const tudo = norm([r.subject, r.text, r.html].join('\n'));
     for (const termo of PROIBIDOS_INTERNO) expect(tudo, termo).not.toContain(termo);
     expect(tudo).not.toMatch(/\beoi\b/);
-    expect(r.subject).toBe(
-      lead.reenvio ? '[Plina · Contato · reenvio] Organização Exemplo' : '[Plina · Contato] Organização Exemplo',
-    );
+    expect(r.subject).toBe(lead.reenvio ? '[Plina · Contato · reenvio]' : '[Plina · Contato] Organização Exemplo');
   });
 
   it('lead legado: o tíquete aparece só como dado do lead, sem vocabulário de oferta no resto', () => {
