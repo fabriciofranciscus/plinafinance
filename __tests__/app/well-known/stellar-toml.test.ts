@@ -31,6 +31,8 @@ function moeda(doc: Record<string, unknown>) {
 }
 
 beforeEach(() => {
+  vi.unstubAllEnvs();
+  vi.stubEnv('STELLAR_ISSUER_PUBLIC', ISSUER);
   findUnique.mockReset().mockResolvedValue({ issuerPubkey: ISSUER });
 });
 
@@ -86,5 +88,35 @@ describe('GET /.well-known/stellar.toml', () => {
     vi.stubEnv('STELLAR_ISSUER_PUBLIC', ISSUER);
     expect(moeda((await servir()).doc).issuer).toBe(ISSUER);
     vi.unstubAllEnvs();
+  });
+});
+
+describe('issuer de fonte única e falha fechada (Argus, Z16)', () => {
+  const OUTRO = 'GBRG4JZ3ZB2T6P5AVL6K3PQLWQ3T2V7QOPZJ3XWKMTPKVPN7ZQ2CZKCF';
+
+  it('o issuer vem só do env do deploy, mesmo que o banco diga outro', async () => {
+    findUnique.mockResolvedValue({ issuerPubkey: OUTRO });
+    expect(moeda((await servir()).doc).issuer).toBe(ISSUER);
+    expect(findUnique).not.toHaveBeenCalled(); // GET público não consulta o banco
+  });
+
+  it.each([
+    ['ausente', undefined],
+    ['vazio', ''],
+    ['inválido', 'GISSUER'],
+  ])('env %s → 500 sem toml, nunca CURRENCIES com issuer vazio', async (_nome, valor) => {
+    if (valor === undefined) vi.stubEnv('STELLAR_ISSUER_PUBLIC', undefined as unknown as string);
+    else vi.stubEnv('STELLAR_ISSUER_PUBLIC', valor);
+    findUnique.mockResolvedValue({ issuerPubkey: ISSUER });
+
+    const res = await GET();
+    const body = await res.text();
+    expect(res.status).toBe(500);
+    expect(body).not.toMatch(/CURRENCIES|issuer\s*=/);
+  });
+
+  it('cache: navegador e CDN por até 5 min (explorers têm cache próprio, fora do nosso controle)', async () => {
+    const { res } = await servir();
+    expect(res.headers.get('cache-control')).toBe('public, max-age=300, s-maxage=300');
   });
 });

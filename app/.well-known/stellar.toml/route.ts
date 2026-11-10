@@ -7,11 +7,12 @@
  * their toml file with CORS headers").
  *
  * Asset code on-chain `PLINARF` (sem hífen — restrição Stellar AlphaNum12).
- * Issuer + policy URL vêm do ParametrosPool no banco — fonte de verdade
- * única, não precisa duplicar em config.
+ * Issuer: SÓ do env do deploy (STELLAR_ISSUER_PUBLIC), a mesma fonte das rotas
+ * que movem dinheiro. É o que liga o domínio ao ativo para carteiras: não lê o
+ * banco (editável) e falha fechado (500, sem toml) se faltar ou for inválido.
  */
 
-import { db } from '@/lib/db';
+import { StrKey } from '@stellar/stellar-sdk';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,13 +76,13 @@ keybase = ""
 `;
 
 export async function GET() {
-  const params = await db.parametrosPool.findUnique({
-    where: { id: 'singleton' },
-  });
-
-  // Fallback pra env caso seed ainda não tenha rodado.
-  const issuer =
-    params?.issuerPubkey ?? process.env.STELLAR_ISSUER_PUBLIC ?? '';
+  const issuer = process.env.STELLAR_ISSUER_PUBLIC ?? '';
+  if (!StrKey.isValidEd25519PublicKey(issuer)) {
+    return new Response('stellar.toml indisponível: issuer não configurado.', {
+      status: 500,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+    });
+  }
 
   return new Response(TOML_TEMPLATE(issuer), {
     status: 200,
@@ -90,7 +91,8 @@ export async function GET() {
       'Access-Control-Allow-Origin': '*',
       // Sem MIME type oficial pra toml; text/plain é o padrão consensual.
       'Content-Type': 'text/plain; charset=utf-8',
-      'Cache-Control': 'public, max-age=300',
+      // Navegador e CDN por até 5 min. Explorers têm cache próprio (fora do nosso controle).
+      'Cache-Control': 'public, max-age=300, s-maxage=300',
     },
   });
 }
