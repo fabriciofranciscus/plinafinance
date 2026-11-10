@@ -193,6 +193,9 @@ export default function InvestirPage() {
                     setSignConfirmed={flow.swap.setSignConfirmed}
                     buying={flow.swap.buying}
                     onConfirm={flow.swap.buy}
+                    navMudou={flow.swap.navMudou}
+                    onRequote={flow.swap.requote}
+                    requoting={flow.swap.swapLoading}
                     custodyProvider={flow.custodyProvider}
                     onCustodyChange={flow.setCustodyProvider}
                     institutionalProfile={flow.institutionalProfile}

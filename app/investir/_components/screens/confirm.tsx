@@ -14,6 +14,7 @@ import { CUSTODY_PROVIDERS_ENABLED } from '../../_lib/flags-client';
 import { TestnetBanner } from '../shell/testnet-banner';
 import { Term } from '../shared/term';
 import { DataRow } from '../shared/data-row';
+import { NAV_MUDOU_MESSAGE } from '../../_lib/swap-submit';
 
 const CUSTODY_OPTIONS: { id: CustodyProvider; label: string }[] = [
   { id: 'SELF', label: 'Self-custody' },
@@ -34,6 +35,9 @@ export function ConfirmScreen({
   onCustodyChange,
   institutionalProfile,
   depositCurrency,
+  navMudou,
+  onRequote,
+  requoting,
 }: {
   onboard: OnboardData;
   quote: QuoteData;
@@ -46,6 +50,10 @@ export function ConfirmScreen({
   onCustodyChange: (c: CustodyProvider) => void;
   institutionalProfile: InstitutionalProfile | null;
   depositCurrency: DepositCurrency;
+  /** 409 NAV_MUDOU no submit: a cotação ficou velha. */
+  navMudou: boolean;
+  onRequote: () => void;
+  requoting: boolean;
 }) {
   const [showXdr, setShowXdr] = useState(false);
 
@@ -61,9 +69,9 @@ export function ConfirmScreen({
       </h1>
       <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
         Você assina um envelope <Term>swap atômico</Term> com 2 legs: você
-        paga TESOURO ao distributor, distributor te paga PLINA-RF. As duas
-        operações commitam juntas — sem TESOURO, sem PLINA-RF. Distributor já
-        co-assinou server-side.
+        paga TESOURO ao distributor e o emissor emite PLINA-RF para a sua
+        wallet. As duas operações commitam juntas — sem TESOURO, sem PLINA-RF.
+        A Plina co-assina ao submeter, depois de conferir o envelope.
       </p>
 
       <div className="mt-12 border-t border-light-hairline">
@@ -117,10 +125,10 @@ export function ConfirmScreen({
             }
           />
           <DataRow
-            k="Distributor"
+            k="Co-assinatura"
             v={
-              <span className="font-mono text-xs" title={swap.distributorPubkey}>
-                {maskPubkey(swap.distributorPubkey)} · co-assinado
+              <span className="font-mono text-xs">
+                Plina (emissor) · ao submeter
               </span>
             }
           />
@@ -238,10 +246,35 @@ export function ConfirmScreen({
         </span>
       </label>
 
+      {navMudou && (
+        <div
+          role="alert"
+          data-testid="nav-mudou"
+          className="mt-10 bg-white border border-base/20"
+        >
+          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base px-5 py-4 border-b border-light-hairline">
+            NAV alterado
+          </p>
+          <p className="font-text text-sm text-base/85 leading-relaxed px-5 py-5">
+            {NAV_MUDOU_MESSAGE}
+          </p>
+          <div className="border-t border-light-hairline px-5 py-3">
+            <button
+              type="button"
+              onClick={onRequote}
+              disabled={requoting}
+              className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep hover:text-base disabled:opacity-40"
+            >
+              {requoting ? 'Gerando cotação…' : 'Gerar nova cotação →'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="mt-10">
         <button
           onClick={onConfirm}
-          disabled={buying || !signConfirmed}
+          disabled={buying || !signConfirmed || navMudou}
           className="bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-10 py-4 rounded-full hover:bg-primary-deep transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-3"
         >
           {buying ? (

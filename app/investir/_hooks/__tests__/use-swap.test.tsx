@@ -10,6 +10,17 @@ import type {
 } from '../../_types';
 import { useSwap } from '../use-swap';
 
+// N1: o envelope assinado é montado por `attachInvestorSignature` (testado à
+// parte, com chaves reais em `signed-xdr.test.ts`). Aqui os XDRs são strings
+// de fixture, então o helper é substituído por um stub que registra a chamada.
+const signedXdrCalls = vi.hoisted(() => [] as unknown[][]);
+vi.mock('../../_lib/signed-xdr', () => ({
+  attachInvestorSignature: (...args: unknown[]) => {
+    signedXdrCalls.push(args);
+    return 'signed-xdr-1';
+  },
+}));
+
 const onboard: OnboardData = {
   investidorId: 'inv-1',
   publicKey: 'GA'.padEnd(56, 'A'),
@@ -123,8 +134,6 @@ describe('useSwap — goToConfirm: onRampReady gate', () => {
       jsonResponse({
         xdr: 'xdr-1',
         hashHex: '0xabc',
-        distributorSigBase64: 'sig',
-        distributorPubkey: 'GD',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -171,8 +180,6 @@ describe('useSwap — goToConfirm: mock branch', () => {
       jsonResponse({
         xdr: 'xdr-1',
         hashHex: '0xabc',
-        distributorSigBase64: 'sig',
-        distributorPubkey: 'GD',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -214,8 +221,6 @@ describe('useSwap — goToConfirm: claiming detour', () => {
       jsonResponse({
         xdr: 'xdr-1',
         hashHex: '0xabc',
-        distributorSigBase64: 'sig',
-        distributorPubkey: 'GD',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -247,8 +252,6 @@ describe('useSwap — buy', () => {
       jsonResponse({
         xdr: 'xdr-1',
         hashHex: '0xdeadbeef',
-        distributorSigBase64: 'dsig',
-        distributorPubkey: 'GD',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -306,8 +309,6 @@ describe('useSwap — buy', () => {
       jsonResponse({
         xdr: 'xdr-1',
         hashHex: '0xabc',
-        distributorSigBase64: 'sig',
-        distributorPubkey: 'GD',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -324,6 +325,88 @@ describe('useSwap — buy', () => {
 
     expect(onError).toHaveBeenCalled();
     expect(result.current.buyResult).toBeNull();
+  });
+});
+
+describe('useSwap — buy: corpo do submit (N1)', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    signedXdrCalls.length = 0;
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const envelope = {
+    xdr: 'xdr-1',
+    hashHex: '0xdeadbeef',
+    mock: false,
+  } satisfies SwapEnvelope;
+
+  it('envia só { quoteId, signedXdr }, sem assinatura nem chave da Plina', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(envelope));
+    const { result } = setup({ signature: '0xfeed' });
+    await act(async () => {
+      await result.current.goToConfirm();
+    });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ swapTxHash: 'real-tx' }));
+    await act(async () => {
+      await result.current.buy();
+    });
+    await flushAsync();
+
+    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url).toBe('/api/investidor/buy/swap/submit');
+    expect(JSON.parse(String(init.body))).toEqual({
+      quoteId: 'q-1',
+      signedXdr: 'signed-xdr-1',
+    });
+    // A assinatura do investidor foi anexada ao XDR do build.
+    expect(signedXdrCalls).toEqual([['xdr-1', onboard.publicKey, '0xfeed']]);
+  });
+
+  it('409 NAV_MUDOU: mensagem fixa, sem incidente, e recotar refaz o build', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(envelope));
+    const { result, onError, onNextScreen } = setup();
+    await act(async () => {
+      await result.current.goToConfirm();
+    });
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ error: 'NAV mudou', code: 'NAV_MUDOU' }, 409),
+    );
+    await act(async () => {
+      await result.current.buy();
+    });
+    await flushAsync();
+
+    expect(result.current.navMudou).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
+    expect(result.current.buyResult).toBeNull();
+
+    // Recotar: novo build (sem novo on-ramp) e o aviso some.
+    fetchMock.mockResolvedValueOnce(jsonResponse(envelope));
+    await act(async () => {
+      await result.current.requote();
+    });
+    await flushAsync();
+    expect(fetchMock.mock.calls[2]![0]).toBe('/api/investidor/buy/swap/build');
+    expect(result.current.navMudou).toBe(false);
+    expect(onNextScreen).toHaveBeenLastCalledWith('confirm');
+  });
+
+  it('409 de outro motivo segue o caminho de erro normal', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(envelope));
+    const { result, onError } = setup();
+    await act(async () => {
+      await result.current.goToConfirm();
+    });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: 'quote já consumido' }, 409));
+    await act(async () => {
+      await result.current.buy();
+    });
+    await flushAsync();
+    expect(result.current.navMudou).toBe(false);
+    expect(onError).toHaveBeenCalled();
   });
 });
 
