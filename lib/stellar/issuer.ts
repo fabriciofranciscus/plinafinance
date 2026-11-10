@@ -6,6 +6,7 @@ import {
   Horizon,
   Memo,
   Operation,
+  Transaction,
   TransactionBuilder,
 } from '@stellar/stellar-sdk';
 import { Prisma } from '@prisma/client';
@@ -209,6 +210,53 @@ export async function issueAsset(
   code: string,
   opts?: { memoHash?: Buffer },
 ): Promise<SubmitResult> {
+  const envelope = await buildIssueAssetTx(issuer, destinationPubkey, amount, code, opts);
+  return confirmarEmissao(envelope);
+}
+
+// ── Erro ambíguo na emissão (E1-4; contrato 2026-11-10-reemissao-erro-ambiguo) ──
+
+export type EmissaoErrorCode = 'EMISSAO_FALHOU' | 'EMISSAO_NAO_CONFIRMADA';
+
+const MENSAGENS_EMISSAO: Record<EmissaoErrorCode, string> = {
+  EMISSAO_FALHOU: 'Emissão recusada pela rede; nada foi emitido. Reexecutar é seguro.',
+  EMISSAO_NAO_CONFIRMADA:
+    'Emissão não entrou no ledger até o prazo da transação; nada foi emitido. Reexecutar é seguro.',
+};
+
+/** Resultado conclusivo da emissão: em ambos os casos a tx NÃO está no ledger. */
+export class EmissaoError extends Error {
+  readonly code: EmissaoErrorCode;
+  readonly hash: string;
+  readonly resultCodes?: unknown;
+  readonly maxTime?: number;
+
+  constructor(
+    code: EmissaoErrorCode,
+    hash: string,
+    extra: { resultCodes?: unknown; maxTime?: number } = {},
+  ) {
+    super(MENSAGENS_EMISSAO[code]);
+    this.name = 'EmissaoError';
+    this.code = code;
+    this.hash = hash;
+    this.resultCodes = extra.resultCodes;
+    this.maxTime = extra.maxTime;
+  }
+}
+
+/**
+ * Monta e assina (com o issuer) a tx de emissão, sem submeter. Devolve o
+ * envelope, o hash e o `maxTime`: quem persiste a tentativa antes do submit
+ * (Bento, `TentativaEmissao`) reenvia exatamente este envelope.
+ */
+export async function buildIssueAssetTx(
+  issuer: StellarSigner,
+  destinationPubkey: string,
+  amount: string,
+  code: string,
+  opts?: { memoHash?: Buffer },
+): Promise<{ xdr: string; hash: string; maxTime: number }> {
   assertIssueInput(amount, code);
   if (opts && 'memoHash' in opts) assertMemoHash(opts.memoHash);
   const { source, builder } = await buildSourceTx(issuer, {
@@ -223,7 +271,186 @@ export async function issueAsset(
     }),
   );
   if (opts?.memoHash) builder.addMemo(Memo.hash(opts.memoHash));
-  return sign(builder, [source]);
+  const tx = builder.setTimeout(STELLAR_TX_TIMEOUT_SEC).build();
+  source.sign(tx);
+  return {
+    xdr: tx.toXDR(),
+    hash: tx.hash().toString('hex'),
+    maxTime: Number(tx.timeBounds?.maxTime ?? 0),
+  };
+}
+
+export type EnvelopeResult =
+  | { status: 'SUCCESS'; hash: string; response: SubmitResult }
+  | { status: 'FAILED'; hash: string; resultCodes: unknown }
+  | { status: 'AMBIGUOUS'; hash: string; reason: string };
+
+type ErroHorizon = {
+  code?: string;
+  name?: string;
+  response?: {
+    status?: number;
+    data?: { status?: number; extras?: { result_codes?: unknown } };
+    extras?: { result_codes?: unknown };
+  };
+};
+
+function resultCodesDe(err: unknown): { transaction?: string } | undefined {
+  const e = err as ErroHorizon;
+  return (e?.response?.data?.extras?.result_codes ?? e?.response?.extras?.result_codes) as
+    | { transaction?: string }
+    | undefined;
+}
+
+function statusHttpDe(err: unknown): number | undefined {
+  const e = err as ErroHorizon;
+  return e?.response?.status ?? e?.response?.data?.status;
+}
+
+type RegistroTx = {
+  hash: string;
+  successful: boolean;
+  ledger_attr?: number;
+  created_at: string;
+  envelope_xdr: string;
+  result_xdr: string;
+  result_meta_xdr: string;
+  paging_token: string;
+};
+
+async function buscarRegistroTx(hash: string): Promise<RegistroTx | null> {
+  try {
+    return (await horizon.transactions().transaction(hash).call()) as unknown as RegistroTx;
+  } catch (err) {
+    if (statusHttpDe(err) === 404) return null;
+    throw err;
+  }
+}
+
+function respostaDoRegistro(r: RegistroTx): SubmitResult {
+  return {
+    hash: r.hash,
+    ledger: r.ledger_attr ?? 0,
+    successful: r.successful,
+    envelope_xdr: r.envelope_xdr,
+    result_xdr: r.result_xdr,
+    result_meta_xdr: r.result_meta_xdr,
+    paging_token: r.paging_token,
+  } as SubmitResult;
+}
+
+/**
+ * Busca a tx pelo hash. 404 → `{ found: false }`; qualquer outro erro do
+ * Horizon PROPAGA — nunca vira "não achou".
+ */
+export async function buscarTxPorHash(
+  hash: string,
+): Promise<{ found: true; successful: boolean; ledgerCloseTime: string } | { found: false }> {
+  const r = await buscarRegistroTx(hash);
+  return r ? { found: true, successful: r.successful, ledgerCloseTime: r.created_at } : { found: false };
+}
+
+/**
+ * Submete um envelope já assinado e classifica o resultado:
+ * - SUCCESS: entrou;
+ * - FAILED: o Horizon devolveu `result_codes` (definitivo: não entrou);
+ * - AMBIGUOUS: timeout, 5xx, 429, rede ou 400 sem códigos — pode ter entrado.
+ * `tx_bad_seq` é conferido pelo hash: a própria tx pode ter acabado de entrar
+ * (reenvio); se não aparece, fica AMBIGUOUS até o prazo.
+ */
+export async function submitEnvelope(xdr: string): Promise<EnvelopeResult> {
+  const tx = new Transaction(xdr, networkPassphrase);
+  const hash = tx.hash().toString('hex');
+  try {
+    const response = await withSpan(
+      'stellar.submit',
+      { 'stellar.flow': 'issuer', 'stellar.network': STELLAR_NETWORK },
+      async (span) => {
+        const res = await horizon.submitTransaction(tx);
+        span.setAttribute('stellar.tx_hash', res.hash);
+        return res;
+      },
+    );
+    return { status: 'SUCCESS', hash, response };
+  } catch (err) {
+    const codes = resultCodesDe(err);
+    if (statusHttpDe(err) === 400 && codes) {
+      if (codes.transaction === 'tx_bad_seq') {
+        const r = await buscarRegistroTx(hash);
+        if (r?.successful) return { status: 'SUCCESS', hash, response: respostaDoRegistro(r) };
+        if (r) return { status: 'FAILED', hash, resultCodes: { transaction: 'tx_failed' } };
+        return { status: 'AMBIGUOUS', hash, reason: 'tx_bad_seq' };
+      }
+      return { status: 'FAILED', hash, resultCodes: codes };
+    }
+    const http = statusHttpDe(err);
+    const e = err as ErroHorizon;
+    return {
+      status: 'AMBIGUOUS',
+      hash,
+      reason: http ? `http_${http}` : (e?.code ?? e?.name ?? 'rede'),
+    };
+  }
+}
+
+type Relogio = { agora: () => number; dormir: (ms: number) => Promise<void> };
+const RELOGIO_REAL: Relogio = {
+  agora: () => Date.now(),
+  dormir: (ms) => new Promise((r) => setTimeout(r, ms)),
+};
+let relogio: Relogio = RELOGIO_REAL;
+
+/** Só para testes: injeta o relógio (sem argumento, volta ao real). */
+export function _setRelogioForTests(r?: Partial<Relogio>): void {
+  relogio = { ...RELOGIO_REAL, ...r };
+}
+
+const INTERVALO_REENVIO_MS = 5_000;
+const FOLGA_PRAZO_SEC = 10;
+
+/**
+ * Leva a emissão a um desfecho conclusivo. No erro ambíguo reenvia o MESMO
+ * envelope (mesmo hash e sequence: a rede não aplica duas vezes) e consulta
+ * por hash até `maxTime` + 10 s. Bloqueia até ~130 s nesse caso; quem não
+ * pode esperar usa as primitivas e persiste a tentativa (contrato 10:37).
+ */
+async function confirmarEmissao(env: {
+  xdr: string;
+  hash: string;
+  maxTime: number;
+}): Promise<SubmitResult> {
+  const primeiro = await submitEnvelope(env.xdr);
+  if (primeiro.status === 'SUCCESS') return primeiro.response;
+  if (primeiro.status === 'FAILED') {
+    throw new EmissaoError('EMISSAO_FALHOU', env.hash, { resultCodes: primeiro.resultCodes });
+  }
+
+  const prazoMs = (env.maxTime + FOLGA_PRAZO_SEC) * 1000;
+  while (relogio.agora() < prazoMs) {
+    await relogio.dormir(INTERVALO_REENVIO_MS);
+    let r: RegistroTx | null = null;
+    try {
+      r = await buscarRegistroTx(env.hash);
+    } catch {
+      continue; // Horizon instável no meio da espera: a consulta final decide.
+    }
+    if (r?.successful) return respostaDoRegistro(r);
+    if (r) throw new EmissaoError('EMISSAO_FALHOU', env.hash, { resultCodes: { transaction: 'tx_failed' } });
+    if (relogio.agora() < env.maxTime * 1000) {
+      const reenvio = await submitEnvelope(env.xdr);
+      if (reenvio.status === 'SUCCESS') return reenvio.response;
+      const codigo = (reenvio as { resultCodes?: { transaction?: string } }).resultCodes?.transaction;
+      if (reenvio.status === 'FAILED' && codigo !== 'tx_too_late') {
+        throw new EmissaoError('EMISSAO_FALHOU', env.hash, { resultCodes: reenvio.resultCodes });
+      }
+    }
+  }
+
+  // Consulta final obrigatória: erro aqui propaga (não afirma "não entrou").
+  const final = await buscarRegistroTx(env.hash);
+  if (final?.successful) return respostaDoRegistro(final);
+  if (final) throw new EmissaoError('EMISSAO_FALHOU', env.hash, { resultCodes: { transaction: 'tx_failed' } });
+  throw new EmissaoError('EMISSAO_NAO_CONFIRMADA', env.hash, { maxTime: env.maxTime });
 }
 
 export type EmissaoPorMemoErrorCode =
