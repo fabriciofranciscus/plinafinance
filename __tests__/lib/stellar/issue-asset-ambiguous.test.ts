@@ -801,3 +801,32 @@ describe('quemConsumiuSequence — ressalvas do Argus (Q1, Q4)', () => {
     expect(paginasDaConta).toBe(5);
   });
 });
+
+describe('reenvio FAILED fica ambíguo (nota prévia do Argus ao E1-4 backend)', () => {
+  // Um Horizon atrasado repassa ao core o reenvio de uma tx que JÁ entrou; o core
+  // pode recusar por outro motivo (prazo, taxa). Isso não prova que nada saiu.
+  it('1º envio ambíguo, reenvio recusado (tx_insufficient_fee) e a tx aparece depois → sucesso, não EMISSAO_FALHOU', async () => {
+    vi.spyOn(horizon, 'submitTransaction')
+      .mockRejectedValueOnce(erro504())
+      .mockRejectedValue(erro400({ transaction: 'tx_insufficient_fee' }));
+    let chamadas = 0;
+    lookup.mockImplementation(async (hash: string) => {
+      chamadas += 1;
+      if (chamadas < 4) throw erro404();
+      return registro(hash);
+    });
+
+    const res = await issueAsset(signer, DESTINO, '400.0000000', 'PLINARF', { memoHash: MEMO });
+    expect(res.successful).toBe(true);
+  });
+
+  it('reenvio sempre recusado e a tx nunca aparece → EMISSAO_NAO_CONFIRMADA (reexecutar só com sequenceDe), nunca EMISSAO_FALHOU', async () => {
+    vi.spyOn(horizon, 'submitTransaction')
+      .mockRejectedValueOnce(erro504())
+      .mockRejectedValue(erro400({ transaction: 'tx_insufficient_fee' }));
+
+    const err = await issueAsset(signer, DESTINO, '400.0000000', 'PLINARF').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(EmissaoError);
+    expect((err as EmissaoError).code).toBe('EMISSAO_NAO_CONFIRMADA');
+  });
+});

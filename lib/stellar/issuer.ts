@@ -675,12 +675,12 @@ async function confirmarEmissao(
     if (r?.successful) return respostaDoRegistro(r);
     if (r) throw new EmissaoError('EMISSAO_FALHOU', env.hash, { resultCodes: { transaction: 'tx_failed' } });
     if (relogio.agora() < env.maxTime * 1000) {
+      // FAILED num REENVIO não prova nada: um Horizon atrasado repassa ao core uma
+      // tx que já entrou, e o core recusa por prazo/taxa antes da sequence. Segue
+      // ambíguo; quem decide é o hash ou a rede (txExpirouNaRede). Só o FAILED do
+      // 1º envio é EMISSAO_FALHOU.
       const reenvio = await submitEnvelope(env.xdr, subOpts);
       if (reenvio.status === 'SUCCESS') return reenvio.response;
-      const codigo = (reenvio as { resultCodes?: { transaction?: string } }).resultCodes?.transaction;
-      if (reenvio.status === 'FAILED' && codigo !== 'tx_too_late') {
-        throw new EmissaoError('EMISSAO_FALHOU', env.hash, { resultCodes: reenvio.resultCodes });
-      }
     }
   }
 
