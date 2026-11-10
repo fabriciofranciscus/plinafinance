@@ -27,6 +27,7 @@ import { issuerSigner } from '../stellar/signer';
 import { navDaCotaAsDecimal } from './pool';
 import { calcularPrecoDeEmissao } from './emissao';
 import { registrarMovimentoFundo } from './razao-fundo';
+import { getStellarPlinaPositionPublic } from '../env/ops';
 import { logStellarError } from '../stellar/log-error';
 import { STELLAR_NETWORK, assetCode } from '../stellar/config';
 import { assetCodeForClasse, classeFromAssetCode } from '../stellar/classes';
@@ -79,7 +80,7 @@ const BLOQUEIO_MENSAGEM: Record<IncorporacaoBloqueioCodigo, string> = {
   ANUENCIA_PENDENTE_EM_MAINNET:
     'Emissão recusada: em mainnet a anuência precisa estar CONFIRMADA; "declarada pendente" só vale em testnet.',
   POSICAO_PLINA_AUSENTE:
-    'Emissão recusada: conta de posição da Plina não configurada (STELLAR_PLINA_POSITION_PUBLIC).',
+    'Emissão recusada: conta de posição da Plina não configurada.',
   CUSTO_INVALIDO: 'Emissão recusada: custo de aquisição não positivo.',
   PIX_DIVERGE_DO_CUSTO: 'Emissão recusada: valor do Pix difere do custo de aquisição.',
 };
@@ -156,8 +157,14 @@ export async function incorporarCota(
   if (!issuerSecret) {
     throw new Error('STELLAR_ISSUER_SECRET obrigatório.');
   }
-  const posicaoPlina = process.env.STELLAR_PLINA_POSITION_PUBLIC;
-  if (!posicaoPlina) throw new IncorporacaoBloqueadaError('POSICAO_PLINA_AUSENTE');
+  // Conta de posição da Plina pelo getter de `lib/env` (fail-closed, mensagem
+  // fixa): ausente ou inválida → emissão recusada, sem vazar nome de env.
+  let posicaoPlina: string;
+  try {
+    posicaoPlina = getStellarPlinaPositionPublic();
+  } catch {
+    throw new IncorporacaoBloqueadaError('POSICAO_PLINA_AUSENTE');
+  }
 
   const pre = await verificarPreCondicoesDeEmissao(input.hashValidacao);
 
