@@ -13,6 +13,7 @@
  * Whitepaper §6.4 (PLINA-RF lastro), §6.5 (política clawback).
  */
 
+import { createHash } from 'node:crypto';
 import {
   AnuenciaStatus,
   CaminhoRealizacao,
@@ -22,7 +23,7 @@ import {
   TipoBem,
 } from '@prisma/client';
 import { db } from '../db';
-import { executeClawback, issueAsset } from '../stellar/issuer';
+import { buscarEmissaoPorMemo, executeClawback, issueAsset } from '../stellar/issuer';
 import { issuerSigner } from '../stellar/signer';
 import { navDaCotaAsDecimal } from './pool';
 import { calcularPrecoDeEmissao } from './emissao';
@@ -126,9 +127,6 @@ export async function verificarPreCondicoesDeEmissao(hashValidacao: string | und
     throw new IncorporacaoBloqueadaError('ANUENCIA_PENDENTE_EM_MAINNET');
   }
 
-  const jaUsado = await db.cota.findFirst({ where: { hashValidacao }, select: { id: true } });
-  if (jaUsado) throw new IncorporacaoBloqueadaError('LAUDO_JA_USADO');
-
   return {
     hashValidacao,
     validacaoTxHash: laudo.stellarTxHash ?? null,
@@ -136,19 +134,35 @@ export async function verificarPreCondicoesDeEmissao(hashValidacao: string | und
   };
 }
 
+/** Memo.hash determinístico da emissão: um por cessão (ou, sem cessão, por laudo). */
+export function memoHashDaIncorporacao(chave: string): Buffer {
+  return createHash('sha256').update(`plina:incorporacao:${chave}`).digest();
+}
+
+/** Id determinístico da Cota: a PK vira a unicidade da incorporação (cessão/laudo). */
+function cotaIdDaIncorporacao(memoHash: Buffer): string {
+  return `inc_${memoHash.toString('hex').slice(0, 32)}`;
+}
+
 /**
  * Incorpora cota ao pool como APORTE da Plina ao NAV (ADR 2026-11-09, opção B):
  * `q = quantidadeEmitida(V, NAV antes)`, com V = custo de aquisição (= Pix ao
- * cedente). O token nasce na posição da Plina (não na tesouraria do
- * distributor) e a cota entra no ativo por V — o NAV por token não muda.
+ * cedente). O token nasce na posição da Plina e a cota entra no ativo por V —
+ * o NAV por token não muda.
  *
- * Ordem: pré-condições (laudo + anuência) → preço ao NAV (fail-closed, trava
- * D3) → reserva da Cota `EMISSAO_PENDENTE` (lock; fora do NAV) → emissão
- * on-chain → DB (cota DISPONIVEL + audit + `MovimentoFundo` APORTE_COTA).
- *
- * Falha on-chain NÃO desfaz a reserva: o erro pode ser ambíguo (tx pode ter
- * entrado) e re-emitir às cegas pagaria duas vezes. A cota fica
- * `EMISSAO_PENDENTE` para reconciliação manual no explorer.
+ * "DB depois da chain" e idempotência (contrato E1-4, 2026-11-10):
+ *  1. pré-condições (laudo + anuência, conta de posição, custo/Pix) — só leitura;
+ *  2. numa `$transaction`, lock de concorrência SEM linha de domínio
+ *     (`pg_advisory_xact_lock` pela chave da incorporação);
+ *  3. a cota já existe? (mesmo id determinístico) → devolve o resultado, sem
+ *     reemitir; laudo usado por outra cota → recusa;
+ *  4. `buscarEmissaoPorMemo`: se a emissão daquela incorporação já está na
+ *     chain (crash entre submit e commit), reaproveita o `txHash` e a quantidade
+ *     emitida — não reemite;
+ *  5. senão preço ao NAV (fail-closed, D3) e `issueAsset(..., { memoHash })`;
+ *  6. só depois do sucesso on-chain, na mesma transação: `Cota`, `EventoAudit`
+ *     e `MovimentoFundo` APORTE_COTA. Falha em qualquer ponto desfaz a
+ *     transação: nenhuma linha de domínio existe sem a tx on-chain.
  */
 export async function incorporarCota(
   input: IncorporarCotaInput,
@@ -181,105 +195,140 @@ export async function incorporarCota(
     throw new IncorporacaoBloqueadaError('PIX_DIVERGE_DO_CUSTO');
   }
 
-  // NAV antes do aporte (supply zero → 1,00) e quantidade; lança se o ledger
-  // não responde ou se PLINARFB circula (D3).
-  const preco = await calcularPrecoDeEmissao({ valorBrl: valorAporte });
-  const quantityStr = preco.plinarfAmount.toFixed(7);
   const code = assetCodeForClasse('SENIOR');
+  const chaveIncorporacao = input.cessaoId ?? pre.hashValidacao;
+  const memoHash = memoHashDaIncorporacao(chaveIncorporacao);
+  const cotaId = cotaIdDaIncorporacao(memoHash);
 
-  // 1) Reserva a cota (lock por cessaoId @unique / laudo já usado). Fora do NAV.
-  const cotaId = crypto.randomUUID();
-  await db.cota.create({
-    data: {
-      id: cotaId,
-      tipoBem: input.tipoBem,
-      administradora: input.administradora,
-      valorCarta: input.valorCarta,
-      desagioAquisicao: input.desagioAquisicao,
-      desagioRevenda: input.desagioRevenda ?? null,
-      localizacaoAprox: input.localizacaoAprox ?? null,
-      prazoRestanteMeses: input.prazoRestanteMeses ?? null,
-      caminhoPrevisto: input.caminhoPrevisto ?? 'A_REVENDA',
-      status: StatusCota.EMISSAO_PENDENTE,
-      hashValidacao: pre.hashValidacao,
-      validacaoTxHash: pre.validacaoTxHash,
-      anuenciaStatus: pre.anuenciaStatus,
-      notas: input.notas ?? null,
-      cessaoId: input.cessaoId ?? null,
-    },
-  });
+  return db.$transaction(
+    async (tx) => {
+      // 2) Lock de concorrência: não grava nada, só serializa a mesma incorporação.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`plina:incorporacao:${chaveIncorporacao}`}))`;
 
-  // 2) On-chain (issuer → posição da Plina). "DB depois da chain".
-  let emissionRes;
-  try {
-    emissionRes = await issueAsset(issuerSigner(), posicaoPlina, quantityStr, code);
-  } catch (err) {
-    logStellarError('[incorporarCota] emissão', err);
-    throw new Error(
-      `Emissão on-chain falhou; cota ${cotaId} ficou EMISSAO_PENDENTE para reconciliação (não re-emitir sem conferir o explorer).`,
-    );
-  }
+      // 3) Já incorporada (reexecução ou chamada concorrente que perdeu o lock).
+      const existente = await tx.cota.findUnique({
+        where: { id: cotaId },
+        select: { id: true, emissaoTxHash: true, tokensEmitidos: true },
+      });
+      if (existente) {
+        return {
+          cotaId: existente.id,
+          txHash: existente.emissaoTxHash ?? '',
+          tokensEmitidos: new Prisma.Decimal(existente.tokensEmitidos).toNumber(),
+        };
+      }
+      const laudoUsado = await tx.cota.findFirst({
+        where: { hashValidacao: pre.hashValidacao },
+        select: { id: true },
+      });
+      if (laudoUsado) throw new IncorporacaoBloqueadaError('LAUDO_JA_USADO');
 
-  // 3) Finaliza DB + audit + razão numa transação.
-  await db.$transaction(async (tx) => {
-    await tx.cota.update({
-      where: { id: cotaId },
-      data: {
-        status: StatusCota.DISPONIVEL,
-        tokensEmitidos: quantityStr,
-        emissaoTxHash: emissionRes.hash,
-      },
-    });
-    await tx.eventoAudit.create({
-      data: {
-        acao: 'COTA_INCORPORADA',
-        operador: input.operador,
-        cotaId,
-        stellarTxHash: emissionRes.hash,
-        payloadJson: {
-          quantity: quantityStr,
+      // 4) A emissão desta incorporação já está na chain? (crash pós-submit)
+      const achada = await buscarEmissaoPorMemo({ code, destination: posicaoPlina, memoHash });
+
+      let txHash: string;
+      let quantidade: Prisma.Decimal;
+      let navAntes: Prisma.Decimal;
+      let recuperada = false;
+      if (achada) {
+        recuperada = true;
+        txHash = achada.txHash;
+        quantidade = new Prisma.Decimal(achada.amount);
+        if (!quantidade.gt(0)) throw new IncorporacaoBloqueadaError('CUSTO_INVALIDO');
+        // NAV "antes" reconstruído do que foi de fato emitido (o supply do
+        // ledger já inclui esta emissão, então não dá para recalcular).
+        navAntes = valorAporte.div(quantidade).toDecimalPlaces(8, Prisma.Decimal.ROUND_HALF_EVEN);
+      } else {
+        // 5) NAV antes do aporte (supply zero → 1,00); lança se o ledger não
+        // responde ou se PLINARFB circula (D3). Depois emite com o memo.
+        const preco = await calcularPrecoDeEmissao({ valorBrl: valorAporte });
+        quantidade = preco.plinarfAmount;
+        navAntes = preco.navPorTokenNaCotacao;
+        try {
+          const res = await issueAsset(issuerSigner(), posicaoPlina, quantidade.toFixed(7), code, { memoHash });
+          txHash = res.hash;
+        } catch (err) {
+          logStellarError('[incorporarCota] emissão', err);
+          // Nada foi gravado (a transação desfaz). Se a tx chegou a entrar, a
+          // próxima chamada a acha pelo memo e não reemite.
+          throw new Error('Emissão on-chain falhou; nada foi gravado. Reexecutar é seguro (idempotente por memo).');
+        }
+      }
+      const quantityStr = quantidade.toFixed(7);
+
+      // 6) DB depois da chain, na mesma transação.
+      await tx.cota.create({
+        data: {
+          id: cotaId,
+          tipoBem: input.tipoBem,
+          administradora: input.administradora,
           valorCarta: input.valorCarta,
           desagioAquisicao: input.desagioAquisicao,
-          valorAporteBrl: valorAporte.toFixed(2),
-          navPorTokenAntes: preco.navPorTokenNaCotacao.toFixed(8),
+          desagioRevenda: input.desagioRevenda ?? null,
+          localizacaoAprox: input.localizacaoAprox ?? null,
+          prazoRestanteMeses: input.prazoRestanteMeses ?? null,
+          caminhoPrevisto: input.caminhoPrevisto ?? 'A_REVENDA',
+          status: StatusCota.DISPONIVEL,
+          tokensEmitidos: quantityStr,
+          emissaoTxHash: txHash,
           hashValidacao: pre.hashValidacao,
+          validacaoTxHash: pre.validacaoTxHash,
           anuenciaStatus: pre.anuenciaStatus,
-        } as Prisma.InputJsonValue,
-      },
-    });
-    await tx.eventoAudit.create({
-      data: {
-        acao: 'TOKEN_EMITIDO',
-        operador: input.operador,
+          notas: input.notas ?? null,
+          cessaoId: input.cessaoId ?? null,
+        },
+      });
+      await tx.eventoAudit.create({
+        data: {
+          acao: 'COTA_INCORPORADA',
+          operador: input.operador,
+          cotaId,
+          stellarTxHash: txHash,
+          payloadJson: {
+            quantity: quantityStr,
+            valorCarta: input.valorCarta,
+            desagioAquisicao: input.desagioAquisicao,
+            valorAporteBrl: valorAporte.toFixed(2),
+            navPorTokenAntes: navAntes.toFixed(8),
+            hashValidacao: pre.hashValidacao,
+            anuenciaStatus: pre.anuenciaStatus,
+            recuperadaPorMemo: recuperada,
+          } as Prisma.InputJsonValue,
+        },
+      });
+      await tx.eventoAudit.create({
+        data: {
+          acao: 'TOKEN_EMITIDO',
+          operador: input.operador,
+          cotaId,
+          stellarTxHash: txHash,
+          payloadJson: {
+            quantity: quantityStr,
+            destination: posicaoPlina,
+            asset: code,
+          } as Prisma.InputJsonValue,
+        },
+      });
+      // A Plina aporta a cota (nunca AQUISICAO: o fundo não pagou): ativo +V,
+      // caixa 0, tokens +q. O Pix ao cedente não entra no caixa do fundo.
+      const mov = await registrarMovimentoFundo(tx, {
+        tipo: 'APORTE_COTA',
+        valorBrl: valorAporte,
+        tokens: quantityStr,
+        chave: `aporte-cota:${cotaId}`,
         cotaId,
-        stellarTxHash: emissionRes.hash,
-        payloadJson: {
-          quantity: quantityStr,
-          destination: posicaoPlina,
-          asset: code,
-        } as Prisma.InputJsonValue,
-      },
-    });
-    // A Plina aporta a cota (nunca AQUISICAO: o fundo não pagou): ativo +V,
-    // caixa 0, tokens +q. O Pix ao cedente não entra no caixa do fundo.
-    await registrarMovimentoFundo(tx, {
-      tipo: 'APORTE_COTA',
-      valorBrl: valorAporte,
-      tokens: quantityStr,
-      chave: `aporte-cota:${cotaId}`,
-      cotaId,
-      navPorToken: preco.navPorTokenNaCotacao,
-      txHash: emissionRes.hash,
-      refHash: input.pixHash,
-      hashValidacao: pre.hashValidacao,
-    });
-  });
+        navPorToken: navAntes,
+        txHash,
+        refHash: input.pixHash,
+        hashValidacao: pre.hashValidacao,
+      });
+      if (!mov.criado) throw new Error('Aporte já registrado para esta incorporação.');
 
-  return {
-    cotaId,
-    txHash: emissionRes.hash,
-    tokensEmitidos: preco.plinarfAmount.toNumber(),
-  };
+      return { cotaId, txHash, tokensEmitidos: quantidade.toNumber() };
+    },
+    // A transação cobre a chamada à chain (segundos): timeout acima do padrão de 5 s.
+    { timeout: 120_000, maxWait: 15_000 },
+  );
 }
 
 export interface ExecutarClawbackInput {
