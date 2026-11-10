@@ -27,7 +27,7 @@ export type LeadData = {
   phone?: string;
   profile: string;       // já com label legível
   jurisdiction?: string;
-  ticket: string;        // já com label legível
+  ticket?: string;       // já com label legível; opcional (sondagem sem oferta)
   currency?: string;
   classe?: string;
   timeline?: string;
@@ -75,8 +75,7 @@ Próximos passos:
 Resumo da sua manifestação:
 
   Organização: ${d.org}
-  Perfil: ${d.profile}
-  Tíquete indicativo: ${d.ticket}${d.jurisdiction ? `\n  Jurisdição: ${d.jurisdiction}` : ''}
+  Perfil: ${d.profile}${d.ticket ? `\n  Tíquete indicativo: ${d.ticket}` : ''}${d.jurisdiction ? `\n  Jurisdição: ${d.jurisdiction}` : ''}
 
 Em caso de dúvidas, basta responder este e-mail ou escrever para contato@plina.finance.
 
@@ -107,7 +106,7 @@ Oferta restrita · Investidor qualificado
   const resumo: Array<[string, string]> = [
     ['Organização', d.org],
     ['Perfil', d.profile],
-    ['Tíquete', d.ticket],
+    ...(d.ticket ? [['Tíquete', d.ticket] as [string, string]] : []),
     ...(d.jurisdiction ? [['Jurisdição', d.jurisdiction] as [string, string]] : []),
   ];
 
@@ -285,7 +284,7 @@ export function renderInternalNotification(d: LeadData) {
     `E-mail: ${d.email}`,
     `Organização: ${d.org}`,
     `Perfil: ${d.profile}`,
-    `Tíquete: ${d.ticket}`,
+    `Tíquete: ${d.ticket ?? 'não informado'}`,
     ...(d.phone ? [`Telefone: ${d.phone}`] : []),
     ...(d.jurisdiction ? [`Jurisdição: ${d.jurisdiction}`] : []),
     ...(d.currency ? [`Moeda de preferência: ${d.currency}`] : []),
@@ -302,7 +301,7 @@ export function renderInternalNotification(d: LeadData) {
     ['E-mail', d.email, true],
     ['Organização', d.org, false],
     ['Perfil', d.profile, false],
-    ['Tíquete', d.ticket, false],
+    ['Tíquete', d.ticket ?? 'não informado', false],
     ...(d.phone ? [['Telefone', d.phone, false] as [string, string, boolean]] : []),
     ...(d.jurisdiction ? [['Jurisdição', d.jurisdiction, false] as [string, string, boolean]] : []),
     ...(d.currency ? [['Moeda', d.currency, false] as [string, string, boolean]] : []),
@@ -351,7 +350,7 @@ export function renderInternalNotification(d: LeadData) {
 </head>
 <body style="margin:0;padding:0;background:${COLORS.pageGrey};font-family:${SANS};color:${COLORS.petrol};-webkit-font-smoothing:antialiased;">
   <span style="display:none !important;visibility:hidden;mso-hide:all;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
-    Nova EOI de ${esc(d.org)} (${esc(d.profile)}, ${esc(d.ticket)}).
+    Nova EOI de ${esc(d.org)} (${esc(d.profile)}${d.ticket ? `, ${esc(d.ticket)}` : ''}).
   </span>
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${COLORS.pageGrey};">
     <tr>

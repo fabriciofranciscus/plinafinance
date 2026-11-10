@@ -102,7 +102,7 @@ export async function submitLead(
   const notes = sanitize(formData.get('notes'), 1000);
   const lgpd = formData.get('lgpd');
 
-  if (!name || !org || !email || !profile || !ticket) {
+  if (!name || !org || !email || !profile) {
     return { status: 'error', message: 'Preencha todos os campos obrigatórios.' };
   }
 
@@ -114,7 +114,8 @@ export async function submitLead(
     return { status: 'error', message: 'Selecione um perfil de investidor válido.' };
   }
 
-  if (!TICKETS_VALIDOS.has(ticket)) {
+  // Tíquete é opcional (sondagem de demanda, sem oferta). Se vier, tem de ser um valor da lista.
+  if (ticket && !TICKETS_VALIDOS.has(ticket)) {
     return { status: 'error', message: 'Selecione um tíquete indicativo válido.' };
   }
 
@@ -129,7 +130,7 @@ export async function submitLead(
     phone: phone || undefined,
     profile: PROFILE_LABELS[profile] ?? profile,
     jurisdiction: jurisdiction || undefined,
-    ticket: TICKET_LABELS[ticket] ?? ticket,
+    ticket: ticket ? (TICKET_LABELS[ticket] ?? ticket) : undefined,
     currency: currency || undefined,
     classe: classe || undefined,
     timeline: timeline || undefined,
@@ -147,7 +148,7 @@ export async function submitLead(
         telefone: lead.phone ?? null,
         perfil: lead.profile,
         jurisdiction: lead.jurisdiction ?? null,
-        ticket: lead.ticket,
+        ticket: lead.ticket ?? null,
         currency: lead.currency ?? null,
         classe: lead.classe ?? null,
         timeline: lead.timeline ?? null,
@@ -160,7 +161,7 @@ export async function submitLead(
         telefone: lead.phone ?? null,
         perfil: lead.profile,
         jurisdiction: lead.jurisdiction ?? null,
-        ticket: lead.ticket,
+        ticket: lead.ticket ?? null,
         currency: lead.currency ?? null,
         classe: lead.classe ?? null,
         timeline: lead.timeline ?? null,
