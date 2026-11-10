@@ -610,6 +610,55 @@ export async function submitEnvelope(
   return r;
 }
 
+export type ConsumoDaSequencia =
+  | { status: 'ANTIGA_ENTROU'; hash: string; successful: boolean; ledger: number }
+  | { status: 'OUTRA_TX'; hash: string }
+  | { status: 'INDETERMINADO'; motivo: string };
+
+type RegistroTxDaConta = RegistroTx & { source_account: string; source_account_sequence: string };
+
+/**
+ * Prova POSITIVA de qual tx consumiu a sequence S das tentativas (todas com a
+ * mesma conta-fonte e a mesma S): lê 1 página das txs da conta do issuer e
+ * procura `source_account_sequence === S`. Um 404 por hash nunca é prova:
+ * se S não aparece, INDETERMINADO. Erro do Horizon propaga.
+ * Uso depois de EMISSAO_SEQUENCIA_CONSUMIDA
+ * (contratos/2026-11-10-substituicao-mesma-sequence.md, adendo).
+ */
+export async function quemConsumiuSequence(xdrs: string[]): Promise<ConsumoDaSequencia> {
+  if (xdrs.length === 0) throw new Error('quemConsumiuSequence: nenhuma tentativa informada.');
+  const txs = xdrs.map((x) => new Transaction(x, networkPassphrase));
+  const fonte = txs[0].source;
+  const seq = txs[0].sequence;
+  if (txs.some((t) => t.source !== fonte || t.sequence !== seq)) {
+    throw new Error('quemConsumiuSequence: tentativas com conta-fonte ou sequence diferentes.');
+  }
+  const nossas = new Set(txs.map((t) => t.hash().toString('hex')));
+
+  const { records } = (await horizon
+    .transactions()
+    .forAccount(fonte)
+    .order('desc')
+    .includeFailed(true)
+    .limit(PAGINA_HORIZON)
+    .call()) as unknown as { records: RegistroTxDaConta[] };
+  const consumidora = records.find(
+    (r) => r.source_account === fonte && r.source_account_sequence === seq,
+  );
+  if (!consumidora) {
+    return { status: 'INDETERMINADO', motivo: `sequence ${seq} não aparece na página da conta` };
+  }
+  if (nossas.has(consumidora.hash)) {
+    return {
+      status: 'ANTIGA_ENTROU',
+      hash: consumidora.hash,
+      successful: consumidora.successful,
+      ledger: consumidora.ledger_attr ?? 0,
+    };
+  }
+  return { status: 'OUTRA_TX', hash: consumidora.hash };
+}
+
 /**
  * Substituição voltou tx_bad_seq: a sequence foi consumida. Se foi a tentativa
  * anterior que emitiu, o desfecho é o dela; senão, erro definitivo (falha fechado).

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Account, Keypair, Transaction } from '@stellar/stellar-sdk';
+import { Account, Keypair, Operation, Transaction, TransactionBuilder } from '@stellar/stellar-sdk';
 
 import { horizon } from '@/lib/stellar/account';
 import { networkPassphrase } from '@/lib/stellar/config';
@@ -13,6 +13,7 @@ import {
   issueAsset,
   submitEnvelope,
   txExpirouNaRede,
+  quemConsumiuSequence,
 } from '@/lib/stellar/issuer';
 import type { StellarSigner } from '@/lib/stellar/signer';
 
@@ -69,6 +70,9 @@ let txsPorLedger = new Map<number, Array<ReturnType<typeof registro>>>();
 let contagemDeclarada = new Map<number, number>(); // contagem do registro do ledger
 let listaParcial = new Set<number>(); // instância atrasada: lista vazia com 200
 let ledgersSumidos = new Set<number>(); // instância que ainda não tem o ledger
+// accounts/{issuer}/transactions (desc): o que a instância do Horizon mostra da conta.
+let txsDaConta: Array<Record<string, unknown>> = [];
+let contaConsultada: string | undefined;
 const fechamento = (s: number) => REDE_BASE + 5 * (s - PRIMEIRO);
 const ultimoLedger = () =>
   ultimoFixo ?? PRIMEIRO + Math.floor((agora / 1000 - REDE_BASE) / 5);
@@ -115,12 +119,14 @@ function txsBuilder() {
   const b = {
     transaction: (hash: string) => ({ call: () => lookup(hash) }),
     forLedger: (s: number | string) => ((q.ledger = Number(s)), b),
+    forAccount: (conta: string) => ((contaConsultada = conta), (q.ledger = -1), b),
     includeFailed: () => b,
     order: () => b,
     limit: (n: number) => ((q.limit = n), b),
     cursor: (c: string) => ((q.cursor = c), b),
     call: async () => {
       const s = q.ledger!;
+      if (s === -1) return { records: txsDaConta.slice(0, q.limit) };
       registroLedger(s); // 404 se a instância não tem o ledger
       if (listaParcial.has(s)) return { records: [] };
       const todos = txsPorLedger.get(s) ?? [];
@@ -162,6 +168,8 @@ beforeEach(() => {
   contagemDeclarada = new Map();
   listaParcial = new Set();
   ledgersSumidos = new Set();
+  txsDaConta = [];
+  contaConsultada = undefined;
   vi.spyOn(horizon, 'transactions').mockImplementation(() => txsBuilder() as never);
   vi.spyOn(horizon, 'ledgers').mockImplementation(() => ledgersBuilder() as never);
 });
@@ -661,5 +669,95 @@ describe('substituição com a MESMA sequence (decisão do Atlas; contratos/2026
     });
     expect(res.hash).toBe(antiga.hash);
     expect(aplicadas).toEqual([antiga.hash]);
+  });
+});
+
+describe('quemConsumiuSequence — prova positiva de quem consumiu a sequence (Argus/Atlas 12:38)', () => {
+  function txDaConta(hash: string, seq: string, successful = true, source = issuerKp.publicKey()) {
+    return { ...registro(hash, successful), ledger_attr: 777, source_account: source, source_account_sequence: seq };
+  }
+
+  async function tentativas() {
+    const antiga = await buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', { memoHash: MEMO });
+    // substituição com a mesma sequence (montada à mão: a regra de expiração não é o foco aqui)
+    const t = new Transaction(antiga.xdr, networkPassphrase);
+    const conta = new Account(issuerKp.publicKey(), (BigInt(t.sequence) - BigInt(1)).toString());
+    const nova = new TransactionBuilder(conta, { fee: '100', networkPassphrase })
+      .addOperation(Operation.payment(t.operations[0] as Operation.Payment))
+      .addMemo(t.memo)
+      .setTimeout(300)
+      .build();
+    nova.sign(issuerKp);
+    return { antiga, novaXdr: nova.toXDR(), novaHash: nova.hash().toString('hex'), seq: t.sequence };
+  }
+
+  it('a antiga consumiu S → ANTIGA_ENTROU, mesmo com 404 por hash', async () => {
+    const { antiga, novaXdr, seq } = await tentativas();
+    txsDaConta = [txDaConta('depois', String(BigInt(seq) + BigInt(1))), txDaConta(antiga.hash, seq), txDaConta('antes', String(BigInt(seq) - BigInt(1)))];
+
+    expect(await quemConsumiuSequence([antiga.xdr, novaXdr])).toEqual({
+      status: 'ANTIGA_ENTROU',
+      hash: antiga.hash,
+      successful: true,
+      ledger: 777,
+    });
+    expect(contaConsultada).toBe(issuerKp.publicKey());
+  });
+
+  it('a substituição consumiu S → ANTIGA_ENTROU com o hash dela', async () => {
+    const { antiga, novaXdr, novaHash, seq } = await tentativas();
+    txsDaConta = [txDaConta(novaHash, seq)];
+    expect(await quemConsumiuSequence([antiga.xdr, novaXdr])).toMatchObject({ status: 'ANTIGA_ENTROU', hash: novaHash });
+  });
+
+  it('a nossa entrou com falha → ANTIGA_ENTROU com successful=false (nada emitido)', async () => {
+    const { antiga, seq } = await tentativas();
+    txsDaConta = [txDaConta(antiga.hash, seq, false)];
+    expect(await quemConsumiuSequence([antiga.xdr])).toMatchObject({ status: 'ANTIGA_ENTROU', successful: false });
+  });
+
+  it('outra tx do issuer consumiu S → OUTRA_TX', async () => {
+    const { antiga, novaXdr, seq } = await tentativas();
+    txsDaConta = [txDaConta('outra-do-issuer', seq)];
+    expect(await quemConsumiuSequence([antiga.xdr, novaXdr])).toEqual({ status: 'OUTRA_TX', hash: 'outra-do-issuer' });
+  });
+
+  it('S não aparece (instância atrasada; 404 do hash não é prova) → INDETERMINADO, nunca OUTRA_TX', async () => {
+    const { antiga, novaXdr, seq } = await tentativas();
+    txsDaConta = [txDaConta('anterior', String(BigInt(seq) - BigInt(1)))];
+    expect(await quemConsumiuSequence([antiga.xdr, novaXdr])).toMatchObject({ status: 'INDETERMINADO' });
+
+    txsDaConta = [];
+    expect(await quemConsumiuSequence([antiga.xdr])).toMatchObject({ status: 'INDETERMINADO' });
+  });
+
+  it('tx de OUTRA conta com a mesma sequence não conta', async () => {
+    const { antiga, seq } = await tentativas();
+    txsDaConta = [txDaConta('de-outra-conta', seq, true, Keypair.random().publicKey())];
+    expect(await quemConsumiuSequence([antiga.xdr])).toMatchObject({ status: 'INDETERMINADO' });
+  });
+
+  it('tentativas com sequences ou fontes diferentes → lança, sem consultar', async () => {
+    const a = await buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', { memoHash: MEMO });
+    vi.mocked(horizon.loadAccount).mockImplementationOnce(
+      async () => Object.assign(new Account(issuerKp.publicKey(), '20'), { balances: [] }) as never,
+    );
+    const b = await buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', { memoHash: MEMO });
+    await expect(quemConsumiuSequence([a.xdr, b.xdr])).rejects.toThrow();
+    await expect(quemConsumiuSequence([])).rejects.toThrow();
+    expect(contaConsultada).toBeUndefined();
+  });
+
+  it('erro do Horizon propaga', async () => {
+    const { antiga } = await tentativas();
+    vi.mocked(horizon.transactions).mockImplementationOnce(
+      () =>
+        ({
+          forAccount: () => ({
+            order: () => ({ includeFailed: () => ({ limit: () => ({ call: async () => { throw new Error('horizon 503'); } }) }) }),
+          }),
+        }) as never,
+    );
+    await expect(quemConsumiuSequence([antiga.xdr])).rejects.toThrow('horizon 503');
   });
 });
