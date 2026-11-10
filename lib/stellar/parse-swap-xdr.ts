@@ -16,7 +16,7 @@
  * passar pelo submit.
  */
 import { Asset, Transaction, type Operation } from '@stellar/stellar-sdk';
-import { networkPassphrase, assetCode } from './config';
+import { networkPassphrase, assetCode, STELLAR_TX_TIMEOUT_SEC } from './config';
 
 type AnyOp = Transaction['operations'][number];
 
@@ -52,6 +52,33 @@ function assertExpectedAmount(nome: string, valor: unknown): void {
   }
 }
 
+/** Folga de relógio entre o servidor e quem montou o envelope (s). */
+const FOLGA_RELOGIO_MAX_SEC = 60;
+const FOLGA_RELOGIO_MIN_SEC = 5;
+
+/**
+ * Janela de validade (N1 C1): o investidor monta e assina o envelope e o issuer
+ * co-assina, então ela tem de ser curta e já aberta. Exige timeBounds;
+ * 0 < maxTime ≤ agora + 120 s (build) + 60 s; minTime ≤ agora + 5 s. Tx já
+ * expirada passa: quem barra é a rede. Relógio do servidor (não do Horizon).
+ */
+function assertJanelaDeValidade(tx: Transaction, agoraSec: number): void {
+  const tb = tx.timeBounds;
+  if (!tb) throw new Error('xdr sem timeBounds: a janela de validade é obrigatória');
+  const maxTime = Number(tb.maxTime);
+  const minTime = Number(tb.minTime);
+  const limite = agoraSec + STELLAR_TX_TIMEOUT_SEC + FOLGA_RELOGIO_MAX_SEC;
+  if (!Number.isFinite(maxTime) || maxTime <= 0) {
+    throw new Error('xdr maxTime ausente (0): a tx valeria para sempre');
+  }
+  if (maxTime > limite) {
+    throw new Error(`xdr maxTime=${maxTime} além do limite ${limite} (agora + ${STELLAR_TX_TIMEOUT_SEC + FOLGA_RELOGIO_MAX_SEC} s)`);
+  }
+  if (!Number.isFinite(minTime) || minTime > agoraSec + FOLGA_RELOGIO_MIN_SEC) {
+    throw new Error(`xdr minTime=${minTime} no futuro (agora=${agoraSec})`);
+  }
+}
+
 function fmtAsset(a: Asset): string {
   return a.isNative() ? 'native' : `${a.code}:${a.issuer}`;
 }
@@ -59,6 +86,7 @@ function fmtAsset(a: Asset): string {
 export function assertSwapXdrMatchesQuote(
   xdr: string,
   expected: SwapXdrExpectation,
+  opts?: { agoraSec?: number },
 ): void {
   // Fail-closed antes de olhar o XDR: expectativa malformada (ou chamador
   // legado com `expectedAmount`) nunca vira comparação frouxa.
@@ -73,6 +101,8 @@ export function assertSwapXdrMatchesQuote(
       `xdr inválida ou networkPassphrase divergente: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
+
+  assertJanelaDeValidade(tx, opts?.agoraSec ?? Math.floor(Date.now() / 1000));
 
   if (tx.source !== expected.investorPubkey) {
     throw new Error(
