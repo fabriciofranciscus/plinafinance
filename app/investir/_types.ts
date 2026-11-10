@@ -101,8 +101,6 @@ export interface ClaimResult {
 export interface SwapEnvelope {
   xdr: string;
   hashHex: string;
-  distributorSigBase64: string;
-  distributorPubkey: string;
   mock: false;
 }
 

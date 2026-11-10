@@ -13,6 +13,8 @@ import type {
 } from '../_types';
 import { asFlowError } from '../_lib/errors';
 import { postJson } from '@/lib/http/client';
+import { attachInvestorSignature } from '../_lib/signed-xdr';
+import { NavMudouError, submitSwap } from '../_lib/swap-submit';
 
 export interface UseSwapArgs {
   onboard: OnboardData | null;
@@ -40,6 +42,8 @@ export function useSwap({
   const [signConfirmed, setSignConfirmed] = useState(false);
   const [buying, setBuying] = useState(false);
   const [buyResult, setBuyResult] = useState<BuyResult | null>(null);
+  // 409 NAV_MUDOU no submit: a cotação ficou velha; a tela oferece recotar.
+  const [navMudou, setNavMudou] = useState(false);
 
   // Build swap envelope (real) ou executa swap direto (mock).
   const goToConfirm = useCallback(async () => {
@@ -60,6 +64,7 @@ export function useSwap({
     setSwapLoading(true);
     clearError();
     setSignConfirmed(false);
+    setNavMudou(false);
     try {
       const data = await postJson<SwapBuild>(
         '/api/investidor/buy/swap/build',
@@ -92,6 +97,7 @@ export function useSwap({
   const buy = useCallback(async () => {
     if (!onboard || !quote || !swapBuild || swapBuild.mock) return;
     clearError();
+    setNavMudou(false);
     setBuying(true);
     try {
       const { signature } = await signRawHash({
@@ -99,17 +105,16 @@ export function useSwap({
         chainType: 'stellar',
         hash: swapBuild.hashHex as `0x${string}`,
       });
-      const data = await postJson<{ swapTxHash: string }>(
-        '/api/investidor/buy/swap/submit',
-        {
-          quoteId: quote.quoteId,
-          investorPubkey: onboard.publicKey,
-          signatureHex: signature,
-          xdr: swapBuild.xdr,
-          distributorSigBase64: swapBuild.distributorSigBase64,
-          distributorPubkey: swapBuild.distributorPubkey,
-          investidorId: onboard.investidorId,
-        },
+      // N1: o investidor assina e manda só `{ quoteId, signedXdr }`. A Plina
+      // (issuer) assina no submit, depois de validar o envelope; nada de
+      // assinatura ou chave da Plina passa pelo cliente.
+      const signedXdr = attachInvestorSignature(
+        swapBuild.xdr,
+        onboard.publicKey,
+        signature,
+      );
+      const data = await submitSwap(
+        { quoteId: quote.quoteId, signedXdr },
         getAccessToken,
       );
       setBuyResult({
@@ -119,7 +124,11 @@ export function useSwap({
       });
       onNextScreen('receipt');
     } catch (err) {
-      onError(asFlowError(err));
+      if (err instanceof NavMudouError) {
+        setNavMudou(true);
+      } else {
+        onError(asFlowError(err));
+      }
     } finally {
       setBuying(false);
     }
@@ -129,7 +138,15 @@ export function useSwap({
     setBuyResult(null);
     setSwapBuild(null);
     setSignConfirmed(false);
+    setNavMudou(false);
   }, []);
+
+  // Recotar após NAV_MUDOU: refaz o build do swap (o servidor relê o NAV).
+  // Não cria novo on-ramp: nenhum BRL novo é cobrado.
+  const requote = useCallback(async () => {
+    setNavMudou(false);
+    await goToConfirm();
+  }, [goToConfirm]);
 
   return {
     swapBuild,
@@ -138,6 +155,8 @@ export function useSwap({
     setSignConfirmed,
     buying,
     buyResult,
+    navMudou,
+    requote,
     goToConfirm,
     buy,
     reset,
