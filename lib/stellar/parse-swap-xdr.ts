@@ -3,9 +3,11 @@
  *
  * Parseia a XDR enviada pelo cliente em `/buy/swap/submit` e valida que as
  * 2 ops `payment` batem exatamente com o que o backend espera: leg 1 leva
- * `bridgeAsset` (TESOURO) do investor pro distributor, leg 2 leva PLINARF
- * do distributor pro investor; ambos amounts iguais a `expectedAmount`
- * (derivado server-side de `quote.toAmount`).
+ * `bridgeAsset` (TESOURO) do investor pro distributor no valor
+ * `expectedBridgeAmount` (= `quote.toAmount`); leg 2 leva PLINARF do
+ * distributor pro investor no valor `expectedPlinarfAmount`
+ * (= `quote.plinarfAmount`, BRL ÷ NAV — M1-3, emissão ao NAV). As duas
+ * pernas têm amounts distintos; cada uma é conferida contra o seu.
  *
  * Por que: signature em rawSign cobre o `tx.hash()`. Stellar aceita
  * qualquer XDR válida com hash assinado — não há ligação cripto entre
@@ -23,13 +25,31 @@ export interface SwapXdrExpectation {
   distributorPubkey: string;
   issuerPubkey: string;
   bridgeAsset: { code: string; issuer: string };
-  expectedAmount: string;
+  /** Perna 1 (TESOURO pago) = `quote.toAmount`, 7 casas. */
+  expectedBridgeAmount: string;
+  /** Perna 2 (PLINARF emitido) = `quote.plinarfAmount`, 7 casas. */
+  expectedPlinarfAmount: string;
   /** Code do asset emitido (PLINARF Sênior / PLINARFB Subordinada). Default PLINARF. */
   plinarfCode?: string;
 }
 
 function isPayment(op: AnyOp): op is Operation.Payment {
   return op.type === 'payment';
+}
+
+/** Amount Stellar canônico: positivo, exatamente 7 casas (como `op.amount`). */
+const STELLAR_AMOUNT = /^\d{1,12}\.\d{7}$/;
+
+function assertExpectedAmount(nome: string, valor: unknown): void {
+  if (
+    typeof valor !== 'string' ||
+    !STELLAR_AMOUNT.test(valor) ||
+    /^0+\.0+$/.test(valor)
+  ) {
+    throw new Error(
+      `expectativa ${nome} inválida: precisa ser amount Stellar > 0 com 7 casas`,
+    );
+  }
 }
 
 function fmtAsset(a: Asset): string {
@@ -40,6 +60,11 @@ export function assertSwapXdrMatchesQuote(
   xdr: string,
   expected: SwapXdrExpectation,
 ): void {
+  // Fail-closed antes de olhar o XDR: expectativa malformada (ou chamador
+  // legado com `expectedAmount`) nunca vira comparação frouxa.
+  assertExpectedAmount('expectedBridgeAmount', expected.expectedBridgeAmount);
+  assertExpectedAmount('expectedPlinarfAmount', expected.expectedPlinarfAmount);
+
   let tx: Transaction;
   try {
     tx = new Transaction(xdr, networkPassphrase);
@@ -86,9 +111,9 @@ export function assertSwapXdrMatchesQuote(
       `leg1 asset=${fmtAsset(op1.asset)} ≠ ${fmtAsset(bridge)}`,
     );
   }
-  if (op1.amount !== expected.expectedAmount) {
+  if (op1.amount !== expected.expectedBridgeAmount) {
     throw new Error(
-      `leg1 amount=${op1.amount} ≠ esperado=${expected.expectedAmount}`,
+      `leg1 amount=${op1.amount} ≠ esperado=${expected.expectedBridgeAmount}`,
     );
   }
 
@@ -109,9 +134,9 @@ export function assertSwapXdrMatchesQuote(
       `leg2 asset=${fmtAsset(op2.asset)} ≠ ${fmtAsset(plinarf)}`,
     );
   }
-  if (op2.amount !== expected.expectedAmount) {
+  if (op2.amount !== expected.expectedPlinarfAmount) {
     throw new Error(
-      `leg2 amount=${op2.amount} ≠ esperado=${expected.expectedAmount}`,
+      `leg2 amount=${op2.amount} ≠ esperado=${expected.expectedPlinarfAmount}`,
     );
   }
 }

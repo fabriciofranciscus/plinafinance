@@ -33,6 +33,7 @@ import {
   stellarXdr,
 } from '@/lib/http/zod-stellar';
 import { parseStellarAmount } from '@/lib/format/parse-stellar-amount';
+import { registrarMovimentoFundo } from '@/lib/services/razao-fundo';
 import { assertSwapXdrMatchesQuote } from '@/lib/stellar/parse-swap-xdr';
 import { assetCodeForClasse, classeOrDefault } from '@/lib/stellar/classes';
 import { incrementarHolding } from '@/lib/services/holdings';
@@ -147,7 +148,16 @@ export const POST = withAuth(async (req, { user }) => {
         { status: 500 },
       );
     }
-    const expectedAmount = parseStellarAmount(quote.toAmount).toFixed(7);
+    // M1-3: duas pernas com amounts distintos. Quote sem preço de emissão
+    // (legado/anterior ao M1-3) é recusado — nunca cai em 1:1.
+    if (!quote.plinarfAmount || !quote.navPorTokenNaCotacao) {
+      return NextResponse.json(
+        { error: 'cotação sem preço de emissão ao NAV — refaça a cotação' },
+        { status: 409 },
+      );
+    }
+    const expectedBridgeAmount = parseStellarAmount(quote.toAmount).toFixed(7);
+    const expectedPlinarfAmount = parseStellarAmount(quote.plinarfAmount).toFixed(7);
     const classe = classeOrDefault(quote.classe);
     const plinarfCode = assetCodeForClasse(classe);
     const tesouro = await resolveTesouroAsset(investorPubkey);
@@ -157,7 +167,8 @@ export const POST = withAuth(async (req, { user }) => {
         distributorPubkey,
         issuerPubkey,
         bridgeAsset: { code: tesouro.code, issuer: tesouro.issuer },
-        expectedAmount,
+        expectedBridgeAmount,
+        expectedPlinarfAmount,
         plinarfCode,
       });
     } catch (err) {
@@ -227,7 +238,7 @@ export const POST = withAuth(async (req, { user }) => {
       finalHash = submitRes.hash;
     }
 
-    const stellarAmount = expectedAmount;
+    const stellarAmount = expectedPlinarfAmount;
 
     await db.$transaction(async (tx) => {
       const consumed = await tx.quote.updateMany({
@@ -253,6 +264,16 @@ export const POST = withAuth(async (req, { user }) => {
         classe,
         amount: stellarAmount,
         txHash: finalHash,
+      });
+      // E2-5: o BRL integralizado entra no caixa do fundo (numerador do NAV)
+      // junto com os q tokens emitidos — senão a subscrição dilui todos.
+      await registrarMovimentoFundo(tx, {
+        tipo: 'SUBSCRICAO',
+        valorBrl: quote.fromAmount,
+        tokens: stellarAmount,
+        chave: `subscricao:${quote.id}`,
+        quoteId: quote.id,
+        refHash: finalHash,
       });
       await tx.eventoAudit.create({
         data: {

@@ -29,6 +29,9 @@ import {
   mainnetCutoverGuard,
 } from '@/lib/env/feature-gates';
 import { ticketMinimoFor } from '@/lib/config/suitability';
+import { calcularPrecoDeEmissao } from '@/lib/services/emissao';
+import { navUnavailableResponse } from '@/lib/api/nav-unavailable';
+import { ApiError } from '@/lib/api/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -201,6 +204,14 @@ export const POST = withAuth(async (req, { user }) => {
       );
     }
 
+    // M1-3: preço de emissão ao NAV, congelado na cotação (só onramp). O BRL é
+    // `fromAmount`; o PLINARF NÃO é 1:1 com o TESOURO. Fail-closed: sem NAV
+    // honesto (ledger fora, PLINARFB circulando) não há cotação de compra.
+    const preco =
+      direction === 'offramp'
+        ? null
+        : await calcularPrecoDeEmissao({ valorBrl: fromAmount });
+
     await db.quote.create({
       data: {
         id: quote.id,
@@ -218,6 +229,8 @@ export const POST = withAuth(async (req, { user }) => {
         // F-M3-4: classe escolhida pelo investidor (só onramp). Default SENIOR
         // quando ausente — preserva o comportamento single-asset legado.
         classe: direction === 'offramp' ? null : (body.classe ?? 'SENIOR'),
+        navPorTokenNaCotacao: preco?.navPorTokenNaCotacao ?? null,
+        plinarfAmount: preco?.plinarfAmount ?? null,
       },
     });
 
@@ -228,8 +241,16 @@ export const POST = withAuth(async (req, { user }) => {
       exchangeRate: quote.exchangeRate,
       fee: quote.fee,
       expiresAt: quote.expiresAt,
+      // Aditivo: quanto PLINARF o BRL compra ao NAV congelado (null no off-ramp).
+      plinarfAmount: preco?.plinarfAmount.toFixed(7) ?? null,
+      navPorTokenNaCotacao: preco?.navPorTokenNaCotacao.toFixed(8) ?? null,
     });
   } catch (err) {
+    const indisponivel = navUnavailableResponse(err, 'quote');
+    if (indisponivel) return indisponivel;
+    if (err instanceof ApiError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'unknown' },
       { status: 500 },

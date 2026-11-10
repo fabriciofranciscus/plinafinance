@@ -21,6 +21,8 @@ import {
   executarPixSimulado,
   gerarOferta,
   incorporarCotaDoFunil,
+  registrarAnuencia,
+  registrarLaudoDaCessao,
   registrarCessao,
 } from '@/lib/services/originacao';
 import { TipoBem } from '@prisma/client';
@@ -52,6 +54,21 @@ const Schema = z.discriminatedUnion('action', [
     .object({
       action: z.literal('executar-pix-simulado'),
       cessaoId: z.string().min(1).max(60),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('registrar-laudo'),
+      cessaoId: z.string().min(1).max(60),
+      laudoUrl: z.string().url().max(500),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('registrar-anuencia'),
+      hashValidacao: z.string().regex(/^[0-9a-f]{64}$/i, 'hash sha-256 hex'),
+      status: z.enum(['CONFIRMADA', 'DECLARADA_PENDENTE']),
+      referencia: z.string().min(1).max(200).optional(),
     })
     .strict(),
   z
@@ -98,6 +115,23 @@ export async function POST(req: Request) {
       case 'executar-pix-simulado': {
         const result = await executarPixSimulado({
           cessaoId: body.cessaoId,
+          operador: 'admin-panel',
+        });
+        return NextResponse.json(result);
+      }
+      case 'registrar-laudo': {
+        const result = await registrarLaudoDaCessao({
+          cessaoId: body.cessaoId,
+          laudoUrl: body.laudoUrl,
+          operador: 'admin-panel',
+        });
+        return NextResponse.json(result);
+      }
+      case 'registrar-anuencia': {
+        const result = await registrarAnuencia({
+          hashValidacao: body.hashValidacao,
+          status: body.status,
+          referencia: body.referencia,
           operador: 'admin-panel',
         });
         return NextResponse.json(result);

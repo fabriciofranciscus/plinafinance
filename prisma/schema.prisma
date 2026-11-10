@@ -46,6 +46,18 @@ enum StatusCota {
   RESERVADA
   REALIZADA
   REVERTIDA
+  /// EM DESUSO. Existiu numa versão do E1-4 que gravava a cota antes da chain;
+  /// o E1-4 agora emite com Memo.hash e grava só depois (nenhum código escreve
+  /// este valor). Mantido porque a migration já foi aplicada.
+  EMISSAO_PENDENTE
+}
+
+/// Anuência da administradora à transferência da cota (Lei 11.795, art. 13).
+/// Em testnet a anuência é stub: `DECLARADA_PENDENTE` registra, sem fingir, que
+/// ela ainda não ocorreu. Em mainnet só `CONFIRMADA` libera a emissão.
+enum AnuenciaStatus {
+  DECLARADA_PENDENTE
+  CONFIRMADA
 }
 
 /// Hipóteses exclusivas de clawback (whitepaper §6.5).
@@ -157,6 +169,10 @@ enum AcaoAudit {
   ENTIDADE_PREENCHIDA
   // KYC completo (sandbox/produção) — upload real de documento/selfie
   KYC_DOCUMENTOS_ENVIADOS
+  // Anuência da administradora registrada (real ou declarada pendente) — E1-4
+  ANUENCIA_REGISTRADA
+  // Posição legada do distributor registrada como posição da Plina — TES-1
+  TESOURARIA_LEGADA_REGISTRADA
 }
 
 // Funil vendedor
@@ -266,6 +282,8 @@ model Cota {
   status             StatusCota        @default(DISPONIVEL)
   tokensEmitidos     Decimal           @default(0) @db.Decimal(20, 7)
   emissaoTxHash      String?
+  /// Estado da anuência no momento da emissão (E1-4). Null em cotas legadas.
+  anuenciaStatus     AnuenciaStatus?
   hashCessao         String?
   /// SHA-256 do laudo de validação legal (contemplação, adimplência,
   /// titularidade) — whitepaper §6.1. Registrado on-chain via Memo.hash
@@ -415,6 +433,12 @@ model Quote {
   /// pra quotes legados/off-ramp; ausência = SENIOR (PLINARF) por default.
   classe         ClassePLINARF?
   consumedAt     DateTime?
+  /// NAV/token congelado na cotação (M1-3). Nullable: quotes legados e off-ramp.
+  /// Swap/build e submit recusam (409) quote de onramp sem este campo.
+  navPorTokenNaCotacao Decimal?     @db.Decimal(20, 8)
+  /// PLINARF a emitir = quantidadeEmitida(fromAmount, navPorTokenNaCotacao).
+  /// Separado de `toAmount` (que é o TESOURO/ponte pago na perna 1).
+  plinarfAmount        Decimal?     @db.Decimal(20, 7)
   /// Hash da tx Stellar que consumiu o quote (swap envelope na Phase 2,
   /// distribute single-shot na Phase 1).
   consumedTxHash String?
@@ -732,6 +756,86 @@ model RealizacaoCaminho {
 // ─────────────────────────────────────────────────────────────────────────────
 // Audit log
 // ─────────────────────────────────────────────────────────────────────────────
+
+/// Razão mínimo do fundo (E2-5). O caixa do NAV é a soma de `deltaCaixa`;
+/// o ativo continua vindo das cotas ativas. Append-only: linha nunca é editada
+/// nem apagada. `chave` é a idempotência (mesmo evento = mesma chave).
+///   SUBSCRICAO   caixa +valorBrl (quote.fromAmount), tokens +q
+///   APORTE_COTA  caixa 0, ativo +custo (a cota), tokens +q  (a Plina aporta; nunca AQUISICAO)
+///   AQUISICAO    caixa −valorBrl, sem emissão (fundo paga a cota com caixa próprio)
+///   REALIZACAO   caixa +valorRealizado (a cota sai do ativo)
+///   RESGATE_PAGO caixa −valorBrl, tokens −q (queima, D2)
+/// O Pix da Plina ao cedente NÃO entra aqui. Supply real vem do ledger, não daqui.
+model MovimentoFundo {
+  id          String             @id @default(cuid())
+  tipo        TipoMovimentoFundo
+  /// Valor do evento em BRL (≥ 0).
+  valorBrl    Decimal            @db.Decimal(20, 7)
+  /// Efeito no caixa (BRL, com sinal).
+  deltaCaixa  Decimal            @db.Decimal(20, 7)
+  /// Efeito na quantidade de tokens (informativo).
+  deltaTokens Decimal            @default(0) @db.Decimal(20, 7)
+  /// Idempotência: `subscricao:<quoteId>`, `realizacao:<id>`, `aporte-cota:<cotaId>`, `resgate:<xdrHash>`.
+  chave       String             @unique
+  cotaId      String?
+  quoteId     String?
+  /// Hash do Pix / tx on-chain / hashValidacao que sustenta o evento.
+  refHash     String?
+  /// NAV/token antes do evento (APORTE_COTA / SUBSCRICAO).
+  navPorToken Decimal?           @db.Decimal(20, 8)
+  /// Tx on-chain da emissão/queima.
+  txHash      String?
+  /// Hash do laudo (`Cota.hashValidacao`) que sustentou o aporte.
+  hashValidacao String?
+  criadoEm    DateTime           @default(now())
+
+  @@index([tipo])
+}
+
+enum TipoMovimentoFundo {
+  SUBSCRICAO
+  APORTE_COTA
+  AQUISICAO
+  REALIZACAO
+  RESGATE_PAGO
+}
+
+/// Tentativa de emissão on-chain (E1-4, contrato 2026-11-10-reemissao-erro-ambiguo).
+/// NÃO é fato de domínio (não é Cota, EventoAudit nem MovimentoFundo): é o registro
+/// do envelope assinado, commitado ANTES do submit, que permite reenviar o MESMO
+/// XDR num erro ambíguo (timeout/5xx/rede) e só construir tx nova depois de a
+/// antiga expirar. `memoHash` (hex) identifica a incorporação.
+model TentativaEmissao {
+  memoHash     String                 @id
+  txHash       String
+  envelopeXdr  String                 @db.Text
+  /// Fim da validade da tx (timebounds.maxTime). Depois dele (+10 s) a tx não entra mais.
+  maxTime      DateTime
+  status       StatusTentativaEmissao @default(PENDENTE)
+  /// Preço usado na tx, para gravar o domínio idêntico ao que foi emitido na recuperação.
+  valorBrl     Decimal                @db.Decimal(20, 7)
+  quantidade   Decimal                @db.Decimal(20, 7)
+  navPorToken  Decimal                @db.Decimal(20, 8)
+  /// Tentativas anteriores desta incorporação (FALHOU/EXPIRADA), na ordem: trilha de auditoria
+  /// que o upsert não apaga. Cada item: { txHash, maxTime, status, valorBrl, quantidade, navPorToken, substituidaEm }.
+  /// Sequence da tx (string): a substituição de uma tentativa expirada reaproveita a MESMA sequence.
+  sequence     String?
+  historico    Json                   @default("[]")
+  /// Preenchido na MESMA transação que grava a Cota. PENDENTE/CONFIRMADA com `aplicadaEm` nulo
+  /// = emissão em voo (tx possivelmente na chain, domínio sem a cota): trava o NAV.
+  aplicadaEm   DateTime?
+  criadaEm     DateTime               @default(now())
+  atualizadaEm DateTime               @updatedAt
+
+  @@index([status])
+}
+
+enum StatusTentativaEmissao {
+  PENDENTE
+  CONFIRMADA
+  FALHOU
+  EXPIRADA
+}
 
 /// Append-only (CLAUDE.md). Toda mudança de estado relevante registra.
 /// `payloadHash` é o SHA-256 que foi pra blockchain como memo. Vendedor/

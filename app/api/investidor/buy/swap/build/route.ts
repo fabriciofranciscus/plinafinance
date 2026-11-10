@@ -33,6 +33,7 @@ import { mainnetCutoverGuard } from '@/lib/env/feature-gates';
 import { buildAsset, loadAccount } from '@/lib/stellar/account';
 import { logStellarError } from '@/lib/stellar/log-error';
 import { assetCodeForClasse, classeOrDefault } from '@/lib/stellar/classes';
+import { registrarMovimentoFundo } from '@/lib/services/razao-fundo';
 import { incrementarHolding } from '@/lib/services/holdings';
 import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
@@ -152,7 +153,19 @@ export const POST = withApi(async (req, { requestId }) => {
     throw new Error('Stellar issuer/distributor não configurados');
   }
 
-  const stellarAmount = quote.toAmount.toFixed(7);
+  // M1-3: o PLINARF emitido NÃO é 1:1 com o TESOURO pago. Quantidade e NAV
+  // vêm congelados do quote (BRL ÷ NAV). Quote sem preço de emissão (legado ou
+  // anterior ao M1-3) é recusado: nunca cai em 1:1.
+  if (!quote.plinarfAmount || !quote.navPorTokenNaCotacao) {
+    throw new ApiError(
+      'CONFLICT',
+      409,
+      'cotação sem preço de emissão ao NAV — refaça a cotação',
+    );
+  }
+  const navNaCotacao = quote.navPorTokenNaCotacao.toFixed(8);
+  const bridgeAmount = quote.toAmount.toFixed(7); // TESOURO pago (perna 1)
+  const stellarAmount = quote.plinarfAmount.toFixed(7); // PLINARF emitido (perna 2)
   const classe = classeOrDefault(quote.classe);
   const plinarfCode = assetCodeForClasse(classe);
 
@@ -208,6 +221,14 @@ export const POST = withApi(async (req, { requestId }) => {
         amount: stellarAmount,
         txHash: distRes.hash,
       });
+      await registrarMovimentoFundo(tx, {
+        tipo: 'SUBSCRICAO',
+        valorBrl: quote.fromAmount,
+        tokens: stellarAmount,
+        chave: `subscricao:${quote.id}`,
+        quoteId: quote.id,
+        refHash: distRes.hash,
+      });
       await tx.eventoAudit.create({
         data: {
           acao: 'SWAP_EXECUTADO',
@@ -219,6 +240,7 @@ export const POST = withApi(async (req, { requestId }) => {
             quoteId: quote.id,
             orderId: quote.onRampOrder?.id,
             amount: stellarAmount,
+            navPorTokenNaCotacao: navNaCotacao,
             classe,
             assetCode: plinarfCode,
             mock: true,
@@ -242,11 +264,8 @@ export const POST = withApi(async (req, { requestId }) => {
   // operação. Setup único e global: checa antes, só cria se faltar.
   await ensureDistributorTesouroTrustline(distributorPubkey, tesouro);
 
-  // Etherfuse devolve toAmount em TESOURO (já fixou via quote). Mesmo valor
-  // serve pra leg TESOURO. PLINARF é 1:1 NAV (whitepaper §6.5) então leg
-  // PLINARF também usa quote.toAmount.
-  const bridgeAmount = stellarAmount;
-
+  // Perna TESOURO = quote.toAmount; perna PLINARF = quote.plinarfAmount
+  // (quantidadeEmitida ao NAV da cotação). Valores distintos.
   const { xdr, hashHex } = await buildSwapBridgeForPlinarfXdr({
     investorPubkey,
     bridgeAsset,
