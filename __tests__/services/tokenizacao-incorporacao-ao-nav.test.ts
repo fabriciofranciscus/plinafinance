@@ -26,6 +26,7 @@ const st = vi.hoisted(() => ({
   /** Resposta forçada de quemConsumiuSequence (Error = Horizon fora). */
   consumo: null as null | Error | { status: string; hash?: string; successful?: boolean; ledger?: number; motivo?: string },
   consumoArgs: [] as string[][],
+  consumoHashes: [] as Array<string[] | undefined>,
   /** Resultado de cada chamada de submitEnvelope, em ordem (padrão SUCCESS). */
   submitScript: [] as Array<'SUCCESS' | 'FAILED' | 'AMBIGUOUS' | 'AMBIGUOUS_LANDS' | 'SEQ_CONSUMIDA' | 'ANTERIOR_EMITIU' | 'ERRO_COMUM' | 'FAILED_TOO_LATE'>,
   failAuditOnce: false,
@@ -87,9 +88,10 @@ vi.mock('@/lib/stellar/issuer', () => ({
     if (outcome === 'AMBIGUOUS_LANDS') st.chain.set(t.hash, { successful: true, amount: t.amount, memoHex: t.memoHex });
     return { status: 'AMBIGUOUS', hash: t.hash, reason: 'timeout' };
   }),
-  quemConsumiuSequence: vi.fn(async (xdrs: string[]) => {
+  quemConsumiuSequence: vi.fn(async (xdrs: string[], opts?: { hashesConhecidos?: string[] }) => {
     st.calls.push('consumo');
     st.consumoArgs.push(xdrs);
+    st.consumoHashes.push(opts?.hashesConhecidos);
     if (st.consumo instanceof Error) throw st.consumo;
     return st.consumo ?? { status: 'INDETERMINADO', motivo: 'sem forçar' };
   }),
@@ -257,7 +259,7 @@ beforeEach(() => {
   process.env.STELLAR_PLINA_POSITION_PUBLIC = POSICAO;
   st.cfg.network = 'TESTNET';
   st.cotas = new Map(); st.audits = []; st.movs = []; st.tentativas = new Map(); st.chain = new Map();
-  st.built = []; st.submits = []; st.submitScript = []; st.substitui = []; st.buildErro = null; st.consumo = null; st.consumoArgs = []; st.calls = [];
+  st.built = []; st.submits = []; st.submitScript = []; st.substitui = []; st.buildErro = null; st.consumo = null; st.consumoArgs = []; st.consumoHashes = []; st.calls = [];
   st.failAuditOnce = false; st.hashScript = []; st.failBuscarHash = null; st.failBuscarMemo = null; st.expiry = null; st.tail = Promise.resolve();
   resetNavSupplyCache();
   evidencias();
@@ -834,6 +836,7 @@ describe('incorporarCota — substituição com a MESMA sequence (contrato da Es
     const r = await incorporarCota(base); // R2 (XDR3): tx_bad_seq → quem consumiu a sequence?
     expect(st.built.map((b) => b.sequence)).toEqual([st.built[0].sequence, st.built[0].sequence, st.built[0].sequence]);
     expect(st.consumoArgs[0]).toEqual(['XDR1', 'XDR2', 'XDR3']); // A, R1 e R2: nenhuma fica de fora
+    expect(st.consumoHashes[0]).toEqual(['hash1', 'hash2', 'hash3']); // e o txHash de todas (hashesConhecidos)
     expect(r.txHash).toBe('hash1'); // confirma a A; nada de tx com sequence nova
     expect(st.built).toHaveLength(3);
     expect(st.cotas.size).toBe(1);

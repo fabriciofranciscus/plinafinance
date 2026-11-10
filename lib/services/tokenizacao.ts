@@ -298,7 +298,11 @@ async function obterEmissaoOnChain(input: {
   ): Promise<EmissaoOnChain | 'LIBERADA'> => {
     let c: Awaited<ReturnType<typeof quemConsumiuSequence>>;
     try {
-      c = await quemConsumiuSequence(xdrsDaSequence(t, hist));
+      // xdrs: os envelopes que temos; hashesConhecidos: o txHash de TODAS as tentativas (histórico
+      // + a atual). A primitiva também reconhece a nossa pelo Memo.hash da emissão (Q1 do Argus).
+      c = await quemConsumiuSequence(xdrsDaSequence(t, hist), {
+        hashesConhecidos: [...hist.map((h) => h.txHash), t.txHash],
+      });
     } catch (err) {
       logStellarError('[incorporarCota] consumo da sequence indeterminado', err);
       throw emAndamento(t);
