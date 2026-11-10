@@ -52,11 +52,11 @@ describe('submitLead — tíquete, moeda, classe e prazo opcionais (LD0)', () =>
     expect(dados.timeline).toBeNull();
 
     const [interno, resposta] = sendMail.mock.calls.map((c) => c[0]);
-    expect(interno.text).toContain('Tíquete: não informado');
+    expect(interno.text).not.toContain('Tíquete');
     expect(interno.text).not.toContain('Moeda de preferência');
     expect(interno.text).not.toContain('Classe de interesse');
     expect(interno.text).not.toContain('Prazo de decisão');
-    expect(interno.html).toContain('não informado');
+    expect(interno.html).not.toContain('Tíquete');
     expect(interno.html).not.toContain('undefined');
     expect(resposta.text).not.toContain('Tíquete');
     expect(resposta.html).not.toContain('Tíquete');
@@ -78,7 +78,9 @@ describe('submitLead — tíquete, moeda, classe e prazo opcionais (LD0)', () =>
     expect(interno.text).toContain('Moeda de preferência: USD');
     expect(interno.text).toContain('Classe de interesse: A');
     expect(interno.text).toContain('Prazo de decisão: 3 meses');
-    expect(resposta.text).toContain('Tíquete indicativo: US$ 1M – 5M');
+    // a auto-resposta ao lead NUNCA ecoa tíquete (contato exploratório, sem oferta)
+    expect(resposta.text).not.toContain('Tíquete');
+    expect(resposta.text).not.toContain('US$ 1M');
   });
 
   it('tíquete que vier fora da lista continua rejeitado, sem gravar nem enviar', async () => {
