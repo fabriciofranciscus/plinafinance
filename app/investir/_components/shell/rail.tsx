@@ -49,10 +49,10 @@ export function Rail({
     <div className="px-8 py-12 h-full flex flex-col">
       <div className="mb-12">
         <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
-          Investir · PLINA-RF
+          Simulação · PLINA-RF
         </p>
         <p className="font-title text-lg font-semibold mt-3 tracking-tight leading-tight text-base">
-          Acesso institucional ao pool
+          Entrada em rede de testes
         </p>
       </div>
 
@@ -141,7 +141,7 @@ export function Rail({
 
       <div className="mt-auto pt-12">
         <p className="font-mono text-[10px] text-base/55 leading-relaxed">
-          CVM 175 · FIDC<br />
+          Rede de testes · sem oferta<br />
           Stellar testnet · Etherfuse sandbox
         </p>
       </div>
