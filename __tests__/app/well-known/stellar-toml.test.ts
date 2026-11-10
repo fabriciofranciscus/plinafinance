@@ -131,3 +131,12 @@ describe('sem dados pessoais (Z16-b: Norma, LGPD; Argus, phishing; decisão da T
     expect(new Set(emails)).toEqual(new Set(['contato@plina.finance']));
   });
 });
+
+describe('supply (SEP-1: exatamente um entre is_unlimited, fixed_number, max_number)', () => {
+  it('is_unlimited = true: o issuer pode emitir mais (decisão da Thais)', async () => {
+    const c = moeda((await servir()).doc);
+    expect(c.is_unlimited).toBe(true);
+    expect(c).not.toHaveProperty('fixed_number');
+    expect(c).not.toHaveProperty('max_number');
+  });
+});

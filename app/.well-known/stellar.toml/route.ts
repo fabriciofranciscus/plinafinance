@@ -53,6 +53,9 @@ name = "Plina · token de demonstração (testnet)"
 desc = "Token de demonstração em rede de testes, sem valor financeiro real e não negociável. Política de clawback pública em https://plina.finance/politica-clawback. AUTH_REQUIRED — a conta passa pelo cadastro e KYC da Plina antes de receber trustline autorizada."
 conditions = "Demonstração em testnet. Qualquer operação com valor real depende de aprovação regulatória e de documentação própria; não há oferta em andamento."
 status = "test"
+# SEP-1: exatamente um entre is_unlimited, fixed_number e max_number. O issuer
+# emite conforme as cotas entram, sem teto fixo.
+is_unlimited = true
 # SEP-1: is_asset_anchored só é true se o token é resgatável pelo ativo
 # subjacente; em testnet não é (sem anchor_asset_type nem attestation_of_reserve).
 is_asset_anchored = false
