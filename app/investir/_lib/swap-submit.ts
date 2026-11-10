@@ -3,12 +3,23 @@
  *
  * Igual ao `postJson`, com uma diferença: o 409 `NAV_MUDOU` (o NAV mudou desde
  * a cotação, `swap/submit`) vira `NavMudouError` — a tela mostra mensagem fixa
- * e oferece recotar, em vez do texto genérico de incidente.
+ * e oferece recotar, em vez do texto genérico de incidente. O 410 (quote
+ * expirou entre o build e o submit) vira `CotacaoExpiradaError`: mesma saída,
+ * refazer o build (o servidor emite um quote novo).
  */
 
 import { unwrapEnvelope } from '@/lib/http/client';
 
 export const NAV_MUDOU_MESSAGE = 'O NAV mudou; gere uma nova cotação';
+
+export const COTACAO_EXPIRADA_MESSAGE = 'A cotação expirou; gere uma nova cotação';
+
+export class CotacaoExpiradaError extends Error {
+  constructor() {
+    super(COTACAO_EXPIRADA_MESSAGE);
+    this.name = 'CotacaoExpiradaError';
+  }
+}
 
 export class NavMudouError extends Error {
   constructor() {
@@ -36,6 +47,7 @@ export async function submitSwap(
     },
     body: JSON.stringify(body),
   });
+  if (res.status === 410) throw new CotacaoExpiradaError();
   if (res.status === 409) {
     const j = (await res
       .clone()

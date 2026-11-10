@@ -101,11 +101,17 @@ export interface ClaimResult {
 export interface SwapEnvelope {
   xdr: string;
   hashHex: string;
+  /**
+   * Quote a usar no submit. O build renova a cotação (recotar): é o mesmo id,
+   * ou um NOVO se o quote anterior expirou. O submit usa SEMPRE este id.
+   */
+  quoteId: string;
   mock: false;
 }
 
 export interface SwapMockResult {
   txHash: string;
+  quoteId?: string;
   mock: true;
   alreadyExecuted: true;
 }

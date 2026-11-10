@@ -194,6 +194,7 @@ export default function InvestirPage() {
                     buying={flow.swap.buying}
                     onConfirm={flow.swap.buy}
                     navMudou={flow.swap.navMudou}
+                    cotacaoExpirada={flow.swap.cotacaoExpirada}
                     onRequote={flow.swap.requote}
                     requoting={flow.swap.swapLoading}
                     custodyProvider={flow.custodyProvider}
