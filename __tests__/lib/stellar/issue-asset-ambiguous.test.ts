@@ -465,3 +465,202 @@ describe('reemissão sai da mesma conta-fonte (R1)', () => {
     expect(vi.mocked(horizon.loadAccount).mock.calls.every(([k]) => k === issuerKp.publicKey())).toBe(true);
   });
 });
+
+describe('substituição com a MESMA sequence (decisão do Atlas; contratos/2026-11-10-substituicao-mesma-sequence.md)', () => {
+  // Core falso: aplica a tx só se a sequence for a da conta + 1; senão tx_bad_seq.
+  let seqConta: bigint;
+  let aplicadas: string[];
+  let responderTimeoutAoAplicar: boolean;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(agora);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function ligarCoreFalso() {
+    seqConta = BigInt(10); // Account(issuer, '10') do loadAccount falso
+    aplicadas = [];
+    responderTimeoutAoAplicar = true;
+    // A conta reflete o core: depois que a antiga entra, loadAccount já vê a sequence nova.
+    vi.mocked(horizon.loadAccount).mockImplementation(
+      async () =>
+        Object.assign(new Account(issuerKp.publicKey(), seqConta.toString()), {
+          balances: [{ asset_type: 'native', balance: '100.0000000' }],
+        }) as never,
+    );
+    vi.spyOn(horizon, 'submitTransaction').mockImplementation(async (tx) => {
+      const t = tx as Transaction;
+      const hash = t.hash().toString('hex');
+      if (aplicadas.includes(hash)) throw erro400({ transaction: 'tx_bad_seq' });
+      if (BigInt(t.sequence) !== seqConta + BigInt(1)) throw erro400({ transaction: 'tx_bad_seq' });
+      seqConta += BigInt(1);
+      aplicadas.push(hash);
+      if (responderTimeoutAoAplicar) throw erro504(); // entrou, mas a resposta se perdeu
+      return { hash, successful: true } as never;
+    });
+  }
+
+  async function tentativaExpiradaQueEntrou() {
+    ligarCoreFalso();
+    const antiga = await buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', { memoHash: MEMO });
+    expect(await submitEnvelope(antiga.xdr)).toMatchObject({ status: 'AMBIGUOUS' });
+    // Horizon atrasado: 404 por hash e nenhum rastro nos ledgers; a rede passou do maxTime.
+    agora = (antiga.maxTime + 60) * 1000;
+    vi.setSystemTime(agora); // a substituição é montada depois do prazo
+    return antiga;
+  }
+
+  it('(1) antiga entrou + Horizon 404 por hash → a substituição volta tx_bad_seq e nada é emitido duas vezes', async () => {
+    const antiga = await tentativaExpiradaQueEntrou();
+    const nova = await buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', {
+      memoHash: MEMO,
+      sequenceDe: antiga.xdr,
+    });
+    expect(nova.sequence).toBe(antiga.sequence);
+    expect(nova.hash).not.toBe(antiga.hash);
+
+    const err = await submitEnvelope(nova.xdr, { substitui: antiga.xdr }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(EmissaoError);
+    expect((err as EmissaoError).code).toBe('EMISSAO_SEQUENCIA_CONSUMIDA');
+    expect((err as EmissaoError).hash).toBe(antiga.hash);
+    expect(aplicadas).toEqual([antiga.hash]); // uma emissão só
+  });
+
+  it('tx_bad_seq na substituição e a antiga aparece pelo hash → SUCCESS da antiga, sem emitir de novo', async () => {
+    const antiga = await tentativaExpiradaQueEntrou();
+    const nova = await buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', {
+      memoHash: MEMO,
+      sequenceDe: antiga.xdr,
+    });
+    lookup.mockImplementation(async (hash: string) => {
+      if (hash === antiga.hash) return registro(hash);
+      throw erro404();
+    });
+
+    expect(nova.hash).not.toBe(antiga.hash);
+    expect(await submitEnvelope(nova.xdr, { substitui: antiga.xdr })).toMatchObject({
+      status: 'SUCCESS',
+      hash: antiga.hash,
+    });
+    expect(aplicadas).toEqual([antiga.hash]);
+  });
+
+  it('(3) antiga aparece com falha → EMISSAO_SEQUENCIA_CONSUMIDA (nunca uma terceira tx)', async () => {
+    const antiga = await tentativaExpiradaQueEntrou();
+    const nova = await buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', {
+      memoHash: MEMO,
+      sequenceDe: antiga.xdr,
+    });
+    lookup.mockImplementation(async (hash: string) => {
+      if (hash === antiga.hash) return registro(hash, false);
+      throw erro404();
+    });
+    const montagens = vi.mocked(signer.sign).mock.calls.length;
+
+    const err = await submitEnvelope(nova.xdr, { substitui: antiga.xdr }).catch((e: unknown) => e);
+    expect((err as EmissaoError).code).toBe('EMISSAO_SEQUENCIA_CONSUMIDA');
+    expect(vi.mocked(signer.sign).mock.calls.length).toBe(montagens); // nada novo assinado
+  });
+
+  it('antiga não entrou → a substituição (mesma sequence) entra uma vez', async () => {
+    ligarCoreFalso();
+    vi.mocked(horizon.submitTransaction).mockRejectedValueOnce(erro504()); // não aplicou
+    const antiga = await buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', { memoHash: MEMO });
+    await submitEnvelope(antiga.xdr);
+    agora = (antiga.maxTime + 60) * 1000;
+    vi.setSystemTime(agora);
+    responderTimeoutAoAplicar = false;
+
+    const nova = await buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', {
+      memoHash: MEMO,
+      sequenceDe: antiga.xdr,
+    });
+    expect(await submitEnvelope(nova.xdr, { substitui: antiga.xdr })).toMatchObject({
+      status: 'SUCCESS',
+      hash: nova.hash,
+    });
+    expect(aplicadas).toEqual([nova.hash]);
+  });
+
+  it('(2) mesma conta-fonte e sem loadAccount na substituição', async () => {
+    const antiga = await tentativaExpiradaQueEntrou();
+    const loads = vi.mocked(horizon.loadAccount).mock.calls.length;
+
+    const nova = await buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', {
+      memoHash: MEMO,
+      sequenceDe: antiga.xdr,
+    });
+    const t = new Transaction(nova.xdr, networkPassphrase);
+
+    expect(t.source).toBe(issuerKp.publicKey());
+    expect(t.sequence).toBe(new Transaction(antiga.xdr, networkPassphrase).sequence);
+    expect(vi.mocked(horizon.loadAccount).mock.calls.length).toBe(loads);
+  });
+
+  it('recusa substituir (ISSUE_SUBSTITUICAO_INVALIDA) antes de assinar: XDR inválido, outra fonte, outro memo, outra emissão', async () => {
+    const antiga = await tentativaExpiradaQueEntrou();
+    const outroKp = Keypair.random();
+    const outroSigner: StellarSigner = {
+      publicKey: () => outroKp.publicKey(),
+      sign: vi.fn((tx: Transaction) => tx.sign(outroKp)),
+      signatureBase64: () => '',
+    };
+    const assinadas = vi.mocked(signer.sign).mock.calls.length;
+    const casos: Array<() => Promise<unknown>> = [
+      () => buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', { memoHash: MEMO, sequenceDe: 'lixo' }),
+      () => buildIssueAssetTx(outroSigner, DESTINO, '400.0000000', 'PLINARF', { memoHash: MEMO, sequenceDe: antiga.xdr }),
+      () => buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', { memoHash: Buffer.alloc(32, 1), sequenceDe: antiga.xdr }),
+      () => buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', { sequenceDe: antiga.xdr }),
+      () => buildIssueAssetTx(signer, DESTINO, '399.0000000', 'PLINARF', { memoHash: MEMO, sequenceDe: antiga.xdr }),
+      () => buildIssueAssetTx(signer, Keypair.random().publicKey(), '400.0000000', 'PLINARF', { memoHash: MEMO, sequenceDe: antiga.xdr }),
+    ];
+    for (const caso of casos) {
+      const err = await caso().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(IssueAssetInputError);
+      expect((err as IssueAssetInputError).code).toBe('ISSUE_SUBSTITUICAO_INVALIDA');
+    }
+    expect(vi.mocked(signer.sign).mock.calls.length).toBe(assinadas);
+    expect(outroSigner.sign).not.toHaveBeenCalled();
+  });
+
+  it('condição extra do Argus: antiga ainda EM_ABERTO ou ENTROU → não monta a substituição', async () => {
+    ligarCoreFalso();
+    const antiga = await buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', { memoHash: MEMO });
+    agora = (antiga.maxTime + 3_600) * 1000;
+    ultimoFixo = ledgerDoTempo(antiga.maxTime); // rede não fechou ledger depois do prazo
+    const emAberto = await buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', {
+      memoHash: MEMO,
+      sequenceDe: antiga.xdr,
+    }).catch((e: unknown) => e);
+    expect((emAberto as IssueAssetInputError).code).toBe('ISSUE_SUBSTITUICAO_INVALIDA');
+
+    ultimoFixo = null;
+    lookup.mockImplementation(async (hash: string) => registro(hash));
+    const entrou = await buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', {
+      memoHash: MEMO,
+      sequenceDe: antiga.xdr,
+    }).catch((e: unknown) => e);
+    expect((entrou as IssueAssetInputError).code).toBe('ISSUE_SUBSTITUICAO_INVALIDA');
+  });
+
+  it('issueAsset com sequenceDe: antiga já emitiu → devolve a antiga e não emite de novo', async () => {
+    const antiga = await tentativaExpiradaQueEntrou();
+    lookup.mockImplementation(async (hash: string) => {
+      if (hash === antiga.hash && aplicadas.length > 0 && vi.mocked(horizon.submitTransaction).mock.calls.length > 1) {
+        return registro(hash);
+      }
+      throw erro404();
+    });
+
+    const res = await issueAsset(signer, DESTINO, '400.0000000', 'PLINARF', {
+      memoHash: MEMO,
+      sequenceDe: antiga.xdr,
+    });
+    expect(res.hash).toBe(antiga.hash);
+    expect(aplicadas).toEqual([antiga.hash]);
+  });
+});

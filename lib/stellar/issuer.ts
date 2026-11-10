@@ -1,4 +1,5 @@
 import {
+  Account,
   AuthClawbackEnabledFlag,
   type AuthFlag,
   AuthRequiredFlag,
@@ -135,12 +136,15 @@ export async function revokeTrustline(
 export type IssueAssetErrorCode =
   | 'ISSUE_CODE_UNKNOWN'
   | 'ISSUE_AMOUNT_INVALID'
-  | 'ISSUE_MEMO_INVALID';
+  | 'ISSUE_MEMO_INVALID'
+  | 'ISSUE_SUBSTITUICAO_INVALIDA';
 
 const MENSAGENS_ISSUE: Record<IssueAssetErrorCode, string> = {
   ISSUE_CODE_UNKNOWN: 'Emissão recusada: asset code ausente ou fora da Plina.',
   ISSUE_AMOUNT_INVALID: 'Emissão recusada: amount precisa ser string > 0 com até 7 casas.',
   ISSUE_MEMO_INVALID: 'Emissão recusada: memoHash precisa ter exatamente 32 bytes.',
+  ISSUE_SUBSTITUICAO_INVALIDA:
+    'Substituição recusada: o envelope anterior é inválido, é de outra emissão ou ainda não expirou na rede.',
 };
 
 /** Entrada recusada por `issueAsset` antes de qualquer rede ou assinatura. */
@@ -208,23 +212,37 @@ export async function issueAsset(
   destinationPubkey: string,
   amount: string,
   code: string,
-  opts?: { memoHash?: Buffer },
+  opts?: { memoHash?: Buffer; sequenceDe?: string },
 ): Promise<SubmitResult> {
   const envelope = await buildIssueAssetTx(issuer, destinationPubkey, amount, code, opts);
-  return confirmarEmissao(envelope);
+  return confirmarEmissao(envelope, opts?.sequenceDe);
 }
 
 // ── Erro ambíguo na emissão (E1-4; contrato 2026-11-10-reemissao-erro-ambiguo) ──
 
-export type EmissaoErrorCode = 'EMISSAO_FALHOU' | 'EMISSAO_NAO_CONFIRMADA';
+/**
+ * - EMISSAO_FALHOU: a rede recusou a tx; nada foi emitido.
+ * - EMISSAO_NAO_CONFIRMADA: a tx expirou na rede sem entrar (txExpirouNaRede = EXPIROU).
+ *   Reexecutar só é seguro SUBSTITUINDO com `sequenceDe` = envelope desta tentativa (mesma
+ *   sequence): se ela tiver entrado sem o Horizon mostrar, a substituição volta tx_bad_seq.
+ *   Reexecutar sem `sequenceDe` (sequence nova) NÃO é seguro.
+ * - EMISSAO_SEQUENCIA_CONSUMIDA: na substituição, a sequence já foi consumida e a tentativa
+ *   anterior não aparece como emitida. Definitivo para o operador; nunca uma terceira tx automática.
+ */
+export type EmissaoErrorCode =
+  | 'EMISSAO_FALHOU'
+  | 'EMISSAO_NAO_CONFIRMADA'
+  | 'EMISSAO_SEQUENCIA_CONSUMIDA';
 
 const MENSAGENS_EMISSAO: Record<EmissaoErrorCode, string> = {
   EMISSAO_FALHOU: 'Emissão recusada pela rede; nada foi emitido. Reexecutar é seguro.',
   EMISSAO_NAO_CONFIRMADA:
-    'Emissão não entrou no ledger até o prazo da transação; nada foi emitido. Reexecutar é seguro.',
+    'Emissão não entrou no ledger até o prazo da transação; nada foi emitido. Reexecutar só substituindo com a mesma sequence (sequenceDe).',
+  EMISSAO_SEQUENCIA_CONSUMIDA:
+    'A sequence da tentativa anterior já foi consumida e ela não aparece como emitida. Não reemitir: o operador confere no explorer.',
 };
 
-/** Resultado conclusivo da emissão: em ambos os casos a tx NÃO está no ledger. */
+/** Desfecho conclusivo da emissão (ver EmissaoErrorCode). */
 export class EmissaoError extends Error {
   readonly code: EmissaoErrorCode;
   readonly hash: string;
@@ -246,23 +264,84 @@ export class EmissaoError extends Error {
 }
 
 /**
+ * Confere que `sequenceDe` é o envelope de uma tentativa da MESMA emissão (mesma conta-fonte,
+ * memo, destino, valor e asset) e devolve a tx anterior. Antes de qualquer rede ou assinatura.
+ */
+function txAnteriorDaMesmaEmissao(
+  sequenceDe: unknown,
+  issuer: StellarSigner,
+  destinationPubkey: string,
+  amount: string,
+  code: string,
+  memoHash: Buffer | undefined,
+): Transaction {
+  const invalida = () => new IssueAssetInputError('ISSUE_SUBSTITUICAO_INVALIDA');
+  if (typeof sequenceDe !== 'string') throw invalida();
+  let anterior: Transaction;
+  try {
+    anterior = new Transaction(sequenceDe, networkPassphrase);
+  } catch {
+    throw invalida();
+  }
+  if (anterior.source !== issuer.publicKey()) throw invalida();
+  const memoAnterior = anterior.memo.type === 'hash' ? Buffer.from(anterior.memo.value as Buffer) : null;
+  if ((memoAnterior === null) !== (memoHash === undefined)) throw invalida();
+  if (memoAnterior && memoHash && !memoAnterior.equals(memoHash)) throw invalida();
+  const op = anterior.operations[0] as Partial<Operation.Payment> | undefined;
+  if (
+    anterior.operations.length !== 1 ||
+    op?.type !== 'payment' ||
+    op.destination !== destinationPubkey ||
+    op.asset?.getCode() !== code ||
+    op.asset?.getIssuer() !== issuer.publicKey() ||
+    amountEmStroops(op.amount ?? '0') !== amountEmStroops(amount)
+  ) {
+    throw invalida();
+  }
+  return anterior;
+}
+
+/**
  * Monta e assina (com o issuer) a tx de emissão, sem submeter. Devolve o
- * envelope, o hash e o `maxTime`: quem persiste a tentativa antes do submit
- * (Bento, `TentativaEmissao`) reenvia exatamente este envelope.
+ * envelope, o hash, o `maxTime` e a `sequence`: quem persiste a tentativa antes
+ * do submit (Bento, `TentativaEmissao`) reenvia exatamente este envelope.
+ *
+ * Substituição (`sequenceDe` = envelope da tentativa anterior): sem loadAccount,
+ * a nova tx reutiliza a MESMA sequence. Se a anterior tiver entrado, a nova
+ * volta tx_bad_seq e nada sai duas vezes (contratos/2026-11-10-substituicao-mesma-sequence.md).
+ * Condição extra (R1 do Argus): só monta se txExpirouNaRede(anterior) = EXPIROU.
  */
 export async function buildIssueAssetTx(
   issuer: StellarSigner,
   destinationPubkey: string,
   amount: string,
   code: string,
-  opts?: { memoHash?: Buffer },
-): Promise<{ xdr: string; hash: string; maxTime: number }> {
+  opts?: { memoHash?: Buffer; sequenceDe?: string },
+): Promise<{ xdr: string; hash: string; maxTime: number; sequence: string }> {
   assertIssueInput(amount, code);
   if (opts && 'memoHash' in opts) assertMemoHash(opts.memoHash);
-  const { source, builder } = await buildSourceTx(issuer, {
-    xlm: ISSUER_BALANCE_FLOOR,
-    label: 'issuer',
-  });
+  let source: StellarSigner;
+  let builder: TransactionBuilder;
+  if (opts && 'sequenceDe' in opts) {
+    const anterior = txAnteriorDaMesmaEmissao(
+      opts.sequenceDe,
+      issuer,
+      destinationPubkey,
+      amount,
+      code,
+      opts.memoHash,
+    );
+    const situacao = await txExpirouNaRede(opts.sequenceDe as string);
+    if (situacao.status !== 'EXPIROU') throw new IssueAssetInputError('ISSUE_SUBSTITUICAO_INVALIDA');
+    const conta = new Account(issuer.publicKey(), (BigInt(anterior.sequence) - BigInt(1)).toString());
+    source = issuer;
+    builder = new TransactionBuilder(conta, { fee: await getDynamicFee(), networkPassphrase });
+  } else {
+    ({ source, builder } = await buildSourceTx(issuer, {
+      xlm: ISSUER_BALANCE_FLOOR,
+      label: 'issuer',
+    }));
+  }
   builder.addOperation(
     Operation.payment({
       destination: destinationPubkey,
@@ -277,6 +356,7 @@ export async function buildIssueAssetTx(
     xdr: tx.toXDR(),
     hash: tx.hash().toString('hex'),
     maxTime: Number(tx.timeBounds?.maxTime ?? 0),
+    sequence: tx.sequence,
   };
 }
 
@@ -519,7 +599,29 @@ async function avaliarExpiracao(
  * `tx_bad_seq` é conferido pelo hash: a própria tx pode ter acabado de entrar
  * (reenvio); se não aparece, fica AMBIGUOUS até o prazo.
  */
-export async function submitEnvelope(xdr: string): Promise<EnvelopeResult> {
+export async function submitEnvelope(
+  xdr: string,
+  opts?: { substitui?: string },
+): Promise<EnvelopeResult> {
+  const r = await submeterEClassificar(xdr);
+  if (opts?.substitui && r.status === 'AMBIGUOUS' && r.reason === 'tx_bad_seq') {
+    return desfechoDaSequenciaConsumida(opts.substitui);
+  }
+  return r;
+}
+
+/**
+ * Substituição voltou tx_bad_seq: a sequence foi consumida. Se foi a tentativa
+ * anterior que emitiu, o desfecho é o dela; senão, erro definitivo (falha fechado).
+ */
+async function desfechoDaSequenciaConsumida(xdrAnterior: string): Promise<EnvelopeResult> {
+  const hashAnterior = new Transaction(xdrAnterior, networkPassphrase).hash().toString('hex');
+  const r = await buscarRegistroTx(hashAnterior);
+  if (r?.successful) return { status: 'SUCCESS', hash: hashAnterior, response: respostaDoRegistro(r) };
+  throw new EmissaoError('EMISSAO_SEQUENCIA_CONSUMIDA', hashAnterior);
+}
+
+async function submeterEClassificar(xdr: string): Promise<EnvelopeResult> {
   const tx = new Transaction(xdr, networkPassphrase);
   const hash = tx.hash().toString('hex');
   try {
@@ -577,12 +679,12 @@ const ESPERA_REDE_SEC = 60;
  * por hash até `maxTime` + 10 s. Bloqueia até ~130 s nesse caso; quem não
  * pode esperar usa as primitivas e persiste a tentativa (contrato 10:37).
  */
-async function confirmarEmissao(env: {
-  xdr: string;
-  hash: string;
-  maxTime: number;
-}): Promise<SubmitResult> {
-  const primeiro = await submitEnvelope(env.xdr);
+async function confirmarEmissao(
+  env: { xdr: string; hash: string; maxTime: number },
+  substitui?: string,
+): Promise<SubmitResult> {
+  const subOpts = substitui ? { substitui } : undefined;
+  const primeiro = await submitEnvelope(env.xdr, subOpts);
   if (primeiro.status === 'SUCCESS') return primeiro.response;
   if (primeiro.status === 'FAILED') {
     throw new EmissaoError('EMISSAO_FALHOU', env.hash, { resultCodes: primeiro.resultCodes });
@@ -600,7 +702,7 @@ async function confirmarEmissao(env: {
     if (r?.successful) return respostaDoRegistro(r);
     if (r) throw new EmissaoError('EMISSAO_FALHOU', env.hash, { resultCodes: { transaction: 'tx_failed' } });
     if (relogio.agora() < env.maxTime * 1000) {
-      const reenvio = await submitEnvelope(env.xdr);
+      const reenvio = await submitEnvelope(env.xdr, subOpts);
       if (reenvio.status === 'SUCCESS') return reenvio.response;
       const codigo = (reenvio as { resultCodes?: { transaction?: string } }).resultCodes?.transaction;
       if (reenvio.status === 'FAILED' && codigo !== 'tx_too_late') {
