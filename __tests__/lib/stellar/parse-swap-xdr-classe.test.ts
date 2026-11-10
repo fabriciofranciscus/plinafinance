@@ -42,7 +42,8 @@ function buildSwapXdr(plinarfCode: string, amount = '100.0000000'): string {
     )
     .addOperation(
       Operation.payment({
-        source: DIST.publicKey(),
+        // N1: a perna 2 é emissão nova (issuer → investidor).
+        source: ISSUER.publicKey(),
         destination: INV.publicKey(),
         asset: new Asset(plinarfCode, ISSUER.publicKey()),
         amount,
