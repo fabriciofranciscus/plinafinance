@@ -136,8 +136,19 @@ vi.mock('@/lib/db', () => {
       st.tentativas.set(where.memoHash, { ...atual, ...data });
       return st.tentativas.get(where.memoHash);
     },
+    // lerSupplyDoNav: há emissão em voo (PENDENTE/CONFIRMADA sem domínio)?
+    findFirst: async ({ where }: { where: { status: { in: string[] }; aplicadaEm: null } }) =>
+      [...st.tentativas.values()].find((t) => where.status.in.includes(t.status as string) && !t.aplicadaEm) ?? null,
+    // marca APLICADA na mesma transação da Cota
+    updateMany: async ({ where, data }: { where: { memoHash: string; aplicadaEm: null }; data: Row }) => {
+      const atual = st.tentativas.get(where.memoHash);
+      if (!atual || atual.aplicadaEm) return { count: 0 };
+      st.calls.push('tentativa.aplicada');
+      st.tentativas.set(where.memoHash, { ...atual, ...data });
+      return { count: 1 };
+    },
   };
-  const tx = { cota, eventoAudit, movimentoFundo, $queryRaw: vi.fn(async () => { st.calls.push('lock'); return []; }) };
+  const tx = { cota, eventoAudit, movimentoFundo, tentativaEmissao, $queryRaw: vi.fn(async () => { st.calls.push('lock'); return []; }) };
   const run = async (fn: (t: typeof tx) => Promise<unknown>) => {
     const snap = { cotas: new Map([...st.cotas].map(([k, v]) => [k, { ...v }])), audits: [...st.audits], movs: [...st.movs] };
     try {
@@ -170,7 +181,7 @@ import {
   incorporarCota,
   memoHashDaIncorporacao,
 } from '@/lib/services/tokenizacao';
-import { NavIndisponivelError, resetNavSupplyCache } from '@/lib/services/nav-supply';
+import { NavIndisponivelError, lerSupplyDoNav, resetNavSupplyCache } from '@/lib/services/nav-supply';
 import { navPorTokenAsDecimal } from '@/lib/services/pool';
 
 const D = (v: string) => new Prisma.Decimal(v);
@@ -582,5 +593,78 @@ describe('atualizarStatusCota', () => {
     st.cotas.set('c', { id: 'c', status: 'DISPONIVEL' });
     await atualizarStatusCota({ cotaId: 'c', status: 'REVERTIDA' as never, operador: 'a' });
     expect(st.cotas.get('c')!.status).toBe('REVERTIDA');
+  });
+});
+
+describe('incorporarCota — parecer da Consuelo (NAV em voo, valor divergente, histórico)', () => {
+  it('ALTO: tentativa PENDENTE trava o NAV; ao gravar o domínio a tentativa fica aplicada e o NAV volta', async () => {
+    st.submitScript = ['AMBIGUOUS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    // a tx pode estar na chain (+q no supply) sem o domínio: o NAV cairia — fica indisponível
+    st.fetchSupplyDasClasses.mockResolvedValue({ senior: supply('400'), subordinada: supply('0') });
+    await expect(lerSupplyDoNav()).rejects.toMatchObject({ motivo: 'EMISSAO_PENDENTE' });
+    await expect(lerSupplyDoNav({ fresh: true })).rejects.toBeInstanceOf(NavIndisponivelError);
+
+    st.chain.set('hash1', { successful: true, amount: '400.0000000', memoHex: memoDe('ces_1') });
+    avancar(130_000);
+    await incorporarCota(base);
+    expect(st.tentativas.get(memoDe('ces_1'))!.aplicadaEm).toBeInstanceOf(Date);
+    resetNavSupplyCache();
+    await expect(lerSupplyDoNav()).resolves.toMatchObject({ senior: { circulante: expect.anything() } });
+  });
+
+  it('ALTO: CONFIRMADA sem domínio (banco caiu depois da chain) também trava o NAV até a recuperação', async () => {
+    st.failAuditOnce = true;
+    await expect(incorporarCota(base)).rejects.toThrow('db caiu');
+    const t = st.tentativas.get(memoDe('ces_1'))!;
+    expect(t.status).toBe('CONFIRMADA');
+    expect(t.aplicadaEm ?? null).toBeNull();
+    await expect(lerSupplyDoNav()).rejects.toMatchObject({ motivo: 'EMISSAO_PENDENTE' });
+
+    await incorporarCota(base); // recuperação: acha pelo hash e grava o domínio
+    expect(st.cotas.size).toBe(1);
+    resetNavSupplyCache();
+    await expect(lerSupplyDoNav()).resolves.toBeDefined();
+  });
+
+  it('MÉDIO: valor de aporte diferente do guardado recusa antes de reenviar o XDR', async () => {
+    st.submitScript = ['AMBIGUOUS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    avancar(30_000); // ainda dentro do maxTime: o caminho seria reenviar o MESMO XDR
+    const err = await incorporarCota({ ...base, valorCarta: '600' }).catch((e) => e); // V = 480 ≠ 400
+    expect(err).toBeInstanceOf(IncorporacaoBloqueadaError);
+    expect(err.code).toBe('VALOR_DIVERGE_DA_TENTATIVA');
+    expect(st.submits).toEqual(['XDR1']); // não reenviou
+    expect(st.cotas.size).toBe(0);
+  });
+
+  it('MÉDIO: tx que já entrou com valor de aporte diferente → recusa, nada gravado no domínio', async () => {
+    st.submitScript = ['AMBIGUOUS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    st.chain.set('hash1', { successful: true, amount: '400.0000000', memoHex: memoDe('ces_1') });
+    avancar(130_000);
+    await expect(incorporarCota({ ...base, valorCarta: '600' })).rejects.toMatchObject({
+      code: 'VALOR_DIVERGE_DA_TENTATIVA',
+    });
+    expect(st.cotas.size).toBe(0);
+    expect(st.movs).toHaveLength(0);
+    // com o valor original, a recuperação segue normalmente
+    await expect(incorporarCota(base)).resolves.toMatchObject({ txHash: 'hash1' });
+  });
+
+  it('BAIXO: a tentativa anterior (FALHOU/EXPIRADA) vai para o histórico em vez de ser apagada', async () => {
+    st.submitScript = ['FAILED', 'SUCCESS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_FALHOU' });
+    await incorporarCota(base);
+    const t = st.tentativas.get(memoDe('ces_1'))!;
+    expect(t.txHash).toBe('hash2');
+    expect(t.historico).toHaveLength(1);
+    expect(t.historico[0]).toMatchObject({
+      txHash: 'hash1',
+      status: 'FALHOU',
+      valorBrl: '400',
+      quantidade: '400',
+    });
+    expect(typeof t.historico[0].substituidaEm).toBe('string');
   });
 });

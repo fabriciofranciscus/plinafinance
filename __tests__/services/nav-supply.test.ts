@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Prisma } from '@prisma/client';
 
-const { fetchSupplyDasClasses } = vi.hoisted(() => ({ fetchSupplyDasClasses: vi.fn() }));
+const { fetchSupplyDasClasses, tentativaFindFirst } = vi.hoisted(() => ({
+  fetchSupplyDasClasses: vi.fn(),
+  tentativaFindFirst: vi.fn(),
+}));
 vi.mock('@/lib/stellar/supply', () => ({ fetchSupplyDasClasses }));
+vi.mock('@/lib/db', () => ({ db: { tentativaEmissao: { findFirst: tentativaFindFirst } } }));
 
 import {
   NAV_INDISPONIVEL_MENSAGEM,
@@ -25,6 +29,7 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   resetNavSupplyCache();
   fetchSupplyDasClasses.mockReset().mockResolvedValue(ledger());
+  tentativaFindFirst.mockReset().mockResolvedValue(null);
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -119,5 +124,42 @@ describe('lerSupplyDoNav — TTL e single-flight', () => {
     fetchSupplyDasClasses.mockClear();
     expect((await lerSupplyDoNav()).senior.circulante.toString()).toBe('2000');
     expect(fetchSupplyDasClasses).not.toHaveBeenCalled();
+  });
+});
+
+describe('lerSupplyDoNav — emissão em voo (TentativaEmissao PENDENTE/CONFIRMADA)', () => {
+  it('tentativa PENDENTE + supply do ledger já com +q → NAV indisponível (nada de NAV caindo 23%)', async () => {
+    // O ledger já tem o token emitido (+q), o domínio ainda não: ler o supply daria o NAV errado.
+    fetchSupplyDasClasses.mockResolvedValue(ledger('1235714'));
+    tentativaFindFirst.mockResolvedValue({ memoHash: 'abc' });
+    const err = await lerSupplyDoNav().catch((e) => e);
+    expect(err).toBeInstanceOf(NavIndisponivelError);
+    expect(err.motivo).toBe('EMISSAO_PENDENTE');
+    expect(err.message).toBe(NAV_INDISPONIVEL_MENSAGEM);
+    expect(tentativaFindFirst).toHaveBeenCalledWith({
+      where: { status: { in: ['PENDENTE', 'CONFIRMADA'] }, aplicadaEm: null },
+      select: { memoHash: true },
+    });
+  });
+
+  it('vale também com a leitura fresca (resgate/emissão) e com o supply em cache', async () => {
+    await lerSupplyDoNav(); // cacheia
+    tentativaFindFirst.mockResolvedValue({ memoHash: 'abc' });
+    await expect(lerSupplyDoNav()).rejects.toMatchObject({ motivo: 'EMISSAO_PENDENTE' });
+    await expect(lerSupplyDoNav({ fresh: true })).rejects.toMatchObject({ motivo: 'EMISSAO_PENDENTE' });
+  });
+
+  it('resolvida a tentativa, o NAV volta na chamada seguinte', async () => {
+    tentativaFindFirst.mockResolvedValueOnce({ memoHash: 'abc' });
+    await expect(lerSupplyDoNav()).rejects.toMatchObject({ motivo: 'EMISSAO_PENDENTE' });
+    await expect(lerSupplyDoNav()).resolves.toMatchObject({ senior: { code: 'PLINARF' } });
+  });
+
+  it('falha ao ler as tentativas é fail-closed, sem vazar a causa', async () => {
+    tentativaFindFirst.mockRejectedValue(new Error('connect ECONNREFUSED db.internal'));
+    const err = await lerSupplyDoNav().catch((e) => e);
+    expect(err).toBeInstanceOf(NavIndisponivelError);
+    expect(err.motivo).toBe('LEDGER_LEITURA_FALHOU');
+    expect(err.message).not.toMatch(/ECONNREFUSED|db\.internal/);
   });
 });
