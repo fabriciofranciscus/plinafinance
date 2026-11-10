@@ -818,6 +818,8 @@ model TentativaEmissao {
   navPorToken  Decimal                @db.Decimal(20, 8)
   /// Tentativas anteriores desta incorporação (FALHOU/EXPIRADA), na ordem: trilha de auditoria
   /// que o upsert não apaga. Cada item: { txHash, maxTime, status, valorBrl, quantidade, navPorToken, substituidaEm }.
+  /// Sequence da tx (string): a substituição de uma tentativa expirada reaproveita a MESMA sequence.
+  sequence     String?
   historico    Json                   @default("[]")
   /// Preenchido na MESMA transação que grava a Cota. PENDENTE/CONFIRMADA com `aplicadaEm` nulo
   /// = emissão em voo (tx possivelmente na chain, domínio sem a cota): trava o NAV.

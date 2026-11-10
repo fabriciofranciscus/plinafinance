@@ -45,8 +45,9 @@ vi.mock('@/lib/stellar/issuer', () => ({
     const t = { hash: `hash${n}`, xdr: `XDR${n}` };
     st.built.push(t);
     await new Promise((r) => setTimeout(r, 25)); // dá chance real ao outro chamador
-    return { ...t, maxTime: Math.floor(Date.now() / 1000) + 120 };
+    return { ...t, maxTime: Math.floor(Date.now() / 1000) + 120, sequence: `seq${n}` };
   }),
+  quemConsumiuSequence: vi.fn(async () => ({ status: 'INDETERMINADO', motivo: 'não usado aqui' })),
   submitEnvelope: vi.fn(async (xdr: string) => {
     st.submits.push(xdr);
     await new Promise((r) => setTimeout(r, 10));

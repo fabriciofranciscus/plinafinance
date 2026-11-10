@@ -27,6 +27,7 @@ import {
   buildIssueAssetTx,
   buscarEmissaoPorMemo,
   buscarTxPorHash,
+  quemConsumiuSequence,
   txExpirouNaRede,
   executeClawback,
   submitEnvelope,
@@ -174,14 +175,37 @@ interface EmissaoOnChain {
   recuperada: boolean;
 }
 
+/** Item do histórico de uma `TentativaEmissao` (JSON): a tentativa que foi substituída ou encerrada. */
+interface ItemHistoricoTentativa {
+  txHash: string;
+  envelopeXdr?: string;
+  sequence?: string;
+  maxTime: string;
+  status: string;
+  valorBrl: string;
+  quantidade: string;
+  navPorToken: string;
+  substituidaEm: string;
+}
+
+type LinhaTentativa = NonNullable<Awaited<ReturnType<typeof db.tentativaEmissao.findUnique>>>;
+
+/** Erro de operador da substituição (`EmissaoError` da Estela): a mesma sequence já foi consumida. */
+const ehSequenciaConsumida = (err: unknown) =>
+  (err as { code?: unknown } | null)?.code === 'EMISSAO_SEQUENCIA_CONSUMIDA';
+
 /**
  * Garante UMA emissão on-chain para esta incorporação e devolve o que foi emitido.
  *
  * A `TentativaEmissao` (fora do domínio) é gravada com `db` — numa transação
  * própria, que commita antes do submit e sobrevive ao rollback da transação de
  * domínio. Em erro ambíguo o MESMO envelope (mesmo hash, mesma sequence) é
- * reenviado: o protocolo não aplica a mesma tx duas vezes. Tx nova só depois de
- * a antiga expirar (`maxTime` + 10 s) sem ser achada pelo hash.
+ * reenviado até o `maxTime`. Depois dele, a expiração vem do Horizon
+ * (`txExpirouNaRede`), nunca do relógio local, e a substituição reaproveita a
+ * MESMA sequence (`buildIssueAssetTx({ sequenceDe })` + `submitEnvelope({ substitui })`):
+ * só uma das duas txs pode entrar, então nunca se emite duas vezes. Tx com sequence
+ * NOVA só depois de prova positiva de que a sequence antiga não emitiu
+ * (`quemConsumiuSequence`) ou de falha definitiva. Nunca reassina o envelope salvo.
  */
 async function obterEmissaoOnChain(input: {
   memoHash: Buffer;
@@ -192,8 +216,24 @@ async function obterEmissaoOnChain(input: {
   const { memoHash, code, posicaoPlina, valorAporte } = input;
   const chave = memoHash.toString('hex');
   const tentativa = await db.tentativaEmissao.findUnique({ where: { memoHash: chave } });
-  // Tentativa encerrada nesta chamada (vira item do histórico quando sai tx nova).
+  // Tentativa encerrada nesta chamada (vira item do histórico quando sai tx com sequence nova).
   let encerradaComo: 'FALHOU' | 'EXPIRADA' | undefined;
+  let historicoAtual: ItemHistoricoTentativa[] = Array.isArray(tentativa?.historico)
+    ? (tentativa.historico as unknown as ItemHistoricoTentativa[])
+    : [];
+  let anteriorParaHistorico: LinhaTentativa | null | undefined = tentativa;
+
+  const itemDe = (t: LinhaTentativa, status: string): ItemHistoricoTentativa => ({
+    txHash: t.txHash,
+    envelopeXdr: t.envelopeXdr,
+    sequence: t.sequence ?? undefined,
+    maxTime: t.maxTime.toISOString(),
+    status,
+    valorBrl: new Prisma.Decimal(t.valorBrl).toString(),
+    quantidade: new Prisma.Decimal(t.quantidade).toString(),
+    navPorToken: new Prisma.Decimal(t.navPorToken).toString(),
+    substituidaEm: new Date().toISOString(),
+  });
 
   // O domínio grava V da chamada atual com a q já emitida: se V mudou enquanto a tx pode
   // estar (ou já está) na chain, o NAV subiria/cairia sem aporte correspondente. Recusa.
@@ -203,18 +243,100 @@ async function obterEmissaoOnChain(input: {
     }
   };
 
-  const confirmada = async (t: {
-    txHash: string;
-    quantidade: Prisma.Decimal;
-    navPorToken: Prisma.Decimal;
-  }): Promise<EmissaoOnChain> => {
-    await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'CONFIRMADA' } });
+  const emAndamento = (t: { maxTime: Date }) =>
+    new IncorporacaoEmissaoError('EMISSAO_EM_ANDAMENTO', { maxTime: t.maxTime });
+
+  /** `hash` pode ser o da tentativa ANTERIOR (a substituição devolve SUCCESS com o hash de quem emitiu). */
+  const confirmada = async (
+    t: { txHash: string; quantidade: Prisma.Decimal.Value; navPorToken: Prisma.Decimal.Value },
+    hash?: string,
+  ): Promise<EmissaoOnChain> => {
+    const txHash = hash ?? t.txHash;
+    await db.tentativaEmissao.update({
+      where: { memoHash: chave },
+      data: { status: 'CONFIRMADA', ...(txHash !== t.txHash ? { txHash } : {}) },
+    });
     return {
-      txHash: t.txHash,
+      txHash,
       quantidade: new Prisma.Decimal(t.quantidade),
       navAntes: new Prisma.Decimal(t.navPorToken),
       recuperada: true,
     };
+  };
+
+  const marcar = async (status: 'FALHOU' | 'EXPIRADA') => {
+    await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status } });
+    encerradaComo = status;
+  };
+
+  /** Envelopes desta emissão que usaram a MESMA sequence (as anteriores no histórico + a atual). */
+  const xdrsDaSequence = (t: LinhaTentativa, hist: ItemHistoricoTentativa[]): string[] => {
+    if (!t.sequence) return [t.envelopeXdr];
+    return [
+      ...hist.filter((h) => h.sequence === t.sequence && h.envelopeXdr).map((h) => h.envelopeXdr as string),
+      t.envelopeXdr,
+    ];
+  };
+
+  /**
+   * EMISSAO_SEQUENCIA_CONSUMIDA: a sequence foi consumida e a substituição não entrou. Prova
+   * POSITIVA de quem a consumiu decide (contrato 2026-11-10-substituicao-mesma-sequence):
+   * a nossa e ok → confirma; a nossa e falhou ou outra tx do issuer → libera sequence nova;
+   * indeterminado → mantém PENDENTE, nada reemitido.
+   */
+  const resolverConsumoDaSequence = async (
+    t: LinhaTentativa,
+    hist: ItemHistoricoTentativa[],
+  ): Promise<EmissaoOnChain | 'LIBERADA'> => {
+    let c: Awaited<ReturnType<typeof quemConsumiuSequence>>;
+    try {
+      c = await quemConsumiuSequence(xdrsDaSequence(t, hist));
+    } catch (err) {
+      logStellarError('[incorporarCota] consumo da sequence indeterminado', err);
+      throw emAndamento(t);
+    }
+    if (c.status === 'ANTIGA_ENTROU' && c.successful) {
+      exigirMesmoValor(t);
+      return confirmada(t, c.hash);
+    }
+    if (c.status === 'ANTIGA_ENTROU') {
+      await marcar('FALHOU'); // prova on-chain de que a sequence não emitiu
+      return 'LIBERADA';
+    }
+    if (c.status === 'OUTRA_TX') {
+      await marcar('EXPIRADA'); // outra tx do issuer consumiu a sequence: a nossa não emitiu
+      return 'LIBERADA';
+    }
+    throw emAndamento(t); // INDETERMINADO: consultar depois
+  };
+
+  /** Reenvia/envia o envelope SALVO (nunca reassina) e resolve o desfecho. */
+  const enviarEnvelopeSalvo = async (
+    t: LinhaTentativa,
+    hist: ItemHistoricoTentativa[],
+    substitui?: string,
+  ): Promise<EmissaoOnChain | 'LIBERADA'> => {
+    const anterior =
+      substitui ??
+      (t.sequence
+        ? [...hist].reverse().find((h) => h.sequence === t.sequence && h.envelopeXdr)?.envelopeXdr
+        : undefined);
+    let r: Awaited<ReturnType<typeof submitEnvelope>>;
+    try {
+      r = await submitEnvelope(t.envelopeXdr, anterior ? { substitui: anterior } : undefined);
+    } catch (err) {
+      if (ehSequenciaConsumida(err)) return resolverConsumoDaSequence(t, hist);
+      throw err; // erro que não é EmissaoError: a tentativa continua PENDENTE
+    }
+    if (r.status === 'SUCCESS') return confirmada(t, r.hash);
+    if (r.status === 'FAILED') {
+      // `tx_bad_seq` & cia.: pode já ter entrado — confere pelo hash antes de afirmar falha.
+      const depois = await buscarTxPorHash(t.txHash);
+      if (depois.found && depois.successful) return confirmada(t);
+      await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'FALHOU' } });
+      throw new IncorporacaoEmissaoError('EMISSAO_FALHOU', { resultCodes: r.resultCodes });
+    }
+    throw emAndamento(t);
   };
 
   if (tentativa && (tentativa.status === 'PENDENTE' || tentativa.status === 'CONFIRMADA')) {
@@ -225,49 +347,66 @@ async function obterEmissaoOnChain(input: {
         exigirMesmoValor(tentativa);
         return confirmada(tentativa);
       }
-      // Entrou e falhou on-chain: não aplicou nada; libera nova tentativa.
-      await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'FALHOU' } });
-      encerradaComo = 'FALHOU';
+      // Entrou e falhou on-chain: a sequence foi consumida e nada foi emitido; libera tx nova.
+      await marcar('FALHOU');
     } else if (Date.now() < tentativa.maxTime.getTime()) {
       // Ainda pode entrar: reenvia o MESMO envelope; nunca cria tx nova agora.
       exigirMesmoValor(tentativa); // antes de reenviar: reenviar já poria q de outro V na chain
-      const reenvio = await submitEnvelope(tentativa.envelopeXdr);
-      if (reenvio.status === 'SUCCESS') return confirmada(tentativa);
-      if (reenvio.status === 'FAILED') {
-        // `tx_bad_seq` & cia.: pode já ter entrado — confere pelo hash antes de afirmar falha.
-        const depois = await buscarTxPorHash(tentativa.txHash);
-        if (depois.found && depois.successful) return confirmada(tentativa);
-        await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'FALHOU' } });
-        throw new IncorporacaoEmissaoError('EMISSAO_FALHOU', { resultCodes: reenvio.resultCodes });
-      }
-      throw new IncorporacaoEmissaoError('EMISSAO_EM_ANDAMENTO', { maxTime: tentativa.maxTime });
+      const r = await enviarEnvelopeSalvo(tentativa, historicoAtual);
+      if (r !== 'LIBERADA') return r;
     } else {
       // Passou do maxTime pelo relógio local. O relógio só diz que vale PERGUNTAR à rede; quem
-      // decide a expiração é o Horizon (último ledger fechado depois do maxTime e a tx fora de
-      // todos os ledgers da janela — R1 do Argus, contrato txExpirouNaRede). Sem reassinar.
+      // decide a expiração é o Horizon (contrato txExpirouNaRede). Sem reassinar.
       let veredito: Awaited<ReturnType<typeof txExpirouNaRede>>;
       try {
         veredito = await txExpirouNaRede(tentativa.envelopeXdr);
       } catch (err) {
-        // Indeterminado (Horizon fora, ledger ausente, histórico curto): NÃO reemite; mantém a tentativa.
+        // Indeterminado (Horizon fora…): NÃO reemite; mantém a tentativa PENDENTE.
         logStellarError('[incorporarCota] expiração indeterminada', err);
-        throw new IncorporacaoEmissaoError('EMISSAO_EM_ANDAMENTO', { maxTime: tentativa.maxTime });
+        throw emAndamento(tentativa);
       }
       if (veredito.status === 'ENTROU') {
         if (veredito.successful) {
           exigirMesmoValor(tentativa);
           return confirmada(tentativa);
         }
-        // Entrou e falhou on-chain: não emitiu; libera nova tentativa.
-        await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'FALHOU' } });
-        encerradaComo = 'FALHOU';
+        await marcar('FALHOU'); // entrou e falhou: nada emitido
       } else if (veredito.status === 'EM_ABERTO') {
-        // A rede ainda não fechou ledger depois do maxTime: a tx ainda pode entrar. Consultar depois.
-        throw new IncorporacaoEmissaoError('EMISSAO_EM_ANDAMENTO', { maxTime: tentativa.maxTime });
+        throw emAndamento(tentativa); // a rede ainda não fechou ledger depois do maxTime
       } else {
-        // EXPIROU: nunca mais entra. Só agora pode haver tx nova (mesma conta-fonte do issuer).
-        await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'EXPIRADA' } });
-        encerradaComo = 'EXPIRADA';
+        // EXPIROU: substitui com a MESMA sequence, mesmo memo, destino, valor e asset. O valor
+        // é o da tentativa antiga (a sequence é a trava): se V mudou, recusa (operador decide).
+        exigirMesmoValor(tentativa);
+        let sub: Awaited<ReturnType<typeof buildIssueAssetTx>>;
+        try {
+          sub = await buildIssueAssetTx(
+            issuerSigner(),
+            posicaoPlina,
+            new Prisma.Decimal(tentativa.quantidade).toFixed(7),
+            code,
+            { memoHash, sequenceDe: tentativa.envelopeXdr },
+          );
+        } catch (err) {
+          // ISSUE_SUBSTITUICAO_INVALIDA (ENTROU/EM_ABERTO na reconferência) ou Horizon fora:
+          // não substitui, não reemite, mantém a tentativa.
+          logStellarError('[incorporarCota] substituição recusada', err);
+          throw emAndamento(tentativa);
+        }
+        const histNovo = [...historicoAtual, itemDe(tentativa, 'EXPIRADA')];
+        const dadosSub = {
+          historico: histNovo as unknown as Prisma.InputJsonValue,
+          txHash: sub.hash,
+          envelopeXdr: sub.xdr,
+          maxTime: new Date(sub.maxTime * 1000),
+          sequence: sub.sequence,
+          status: 'PENDENTE' as const,
+        };
+        // Commita a substituição (com o hash anterior no histórico) ANTES de submeter.
+        const linhaSub = await db.tentativaEmissao.update({ where: { memoHash: chave }, data: dadosSub });
+        const r = await enviarEnvelopeSalvo(linhaSub, histNovo, tentativa.envelopeXdr);
+        if (r !== 'LIBERADA') return r;
+        historicoAtual = histNovo;
+        anteriorParaHistorico = linhaSub;
       }
     }
   } else if (!tentativa) {
@@ -286,8 +425,9 @@ async function obterEmissaoOnChain(input: {
     }
   }
 
-  // Tx nova: NAV antes do aporte (supply zero → 1,00); lança se o ledger não
-  // responde ou se PLINARFB circula (D3). Constrói, COMMITA a tentativa e só então envia.
+  // Tx com sequence NOVA (1ª tentativa, ou a anterior comprovadamente não emitiu): NAV antes do
+  // aporte (supply zero → 1,00); lança se o ledger não responde ou se PLINARFB circula (D3).
+  // Constrói, COMMITA a tentativa e só então envia.
   const preco = await calcularPrecoDeEmissao({ valorBrl: valorAporte });
   const built = await buildIssueAssetTx(
     issuerSigner(),
@@ -297,27 +437,18 @@ async function obterEmissaoOnChain(input: {
     { memoHash },
   );
   // Trilha: a tentativa anterior (FALHOU/EXPIRADA) vai para o histórico em vez de ser apagada.
-  const historico = [
-    ...(Array.isArray(tentativa?.historico) ? (tentativa.historico as Prisma.InputJsonValue[]) : []),
-    ...(tentativa
-      ? [
-          {
-            txHash: tentativa.txHash,
-            maxTime: tentativa.maxTime.toISOString(),
-            status: encerradaComo ?? tentativa.status,
-            valorBrl: new Prisma.Decimal(tentativa.valorBrl).toString(),
-            quantidade: new Prisma.Decimal(tentativa.quantidade).toString(),
-            navPorToken: new Prisma.Decimal(tentativa.navPorToken).toString(),
-            substituidaEm: new Date().toISOString(),
-          } as Prisma.InputJsonValue,
-        ]
+  const historico: ItemHistoricoTentativa[] = [
+    ...historicoAtual,
+    ...(anteriorParaHistorico
+      ? [itemDe(anteriorParaHistorico, encerradaComo ?? anteriorParaHistorico.status)]
       : []),
   ];
   const dados = {
-    historico,
+    historico: historico as unknown as Prisma.InputJsonValue,
     txHash: built.hash,
     envelopeXdr: built.xdr,
     maxTime: new Date(built.maxTime * 1000),
+    sequence: built.sequence,
     status: 'PENDENTE' as const,
     valorBrl: valorAporte,
     quantidade: preco.plinarfAmount,
@@ -340,7 +471,7 @@ async function obterEmissaoOnChain(input: {
     throw new IncorporacaoEmissaoError('EMISSAO_FALHOU', { resultCodes: r.resultCodes });
   }
   // AMBIGUOUS: fica PENDENTE; a próxima chamada reenvia o mesmo envelope.
-  throw new IncorporacaoEmissaoError('EMISSAO_EM_ANDAMENTO', { maxTime: dados.maxTime });
+  throw emAndamento({ maxTime: dados.maxTime });
 }
 
 /** Memo.hash determinístico da emissão: um por cessão (ou, sem cessão, por laudo). */
