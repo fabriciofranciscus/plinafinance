@@ -14,7 +14,7 @@ import { CUSTODY_PROVIDERS_ENABLED } from '../../_lib/flags-client';
 import { TestnetBanner } from '../shell/testnet-banner';
 import { Term } from '../shared/term';
 import { DataRow } from '../shared/data-row';
-import { NAV_MUDOU_MESSAGE } from '../../_lib/swap-submit';
+import { COTACAO_EXPIRADA_MESSAGE, NAV_MUDOU_MESSAGE } from '../../_lib/swap-submit';
 
 const CUSTODY_OPTIONS: { id: CustodyProvider; label: string }[] = [
   { id: 'SELF', label: 'Self-custody' },
@@ -36,6 +36,7 @@ export function ConfirmScreen({
   institutionalProfile,
   depositCurrency,
   navMudou,
+  cotacaoExpirada,
   onRequote,
   requoting,
 }: {
@@ -52,6 +53,8 @@ export function ConfirmScreen({
   depositCurrency: DepositCurrency;
   /** 409 NAV_MUDOU no submit: a cotação ficou velha. */
   navMudou: boolean;
+  /** 410 no submit: o quote expirou; recotar refaz o build. */
+  cotacaoExpirada: boolean;
   onRequote: () => void;
   requoting: boolean;
 }) {
@@ -246,17 +249,17 @@ export function ConfirmScreen({
         </span>
       </label>
 
-      {navMudou && (
+      {(navMudou || cotacaoExpirada) && (
         <div
           role="alert"
-          data-testid="nav-mudou"
+          data-testid={navMudou ? 'nav-mudou' : 'cotacao-expirada'}
           className="mt-10 bg-white border border-base/20"
         >
           <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base px-5 py-4 border-b border-light-hairline">
-            NAV alterado
+            {navMudou ? 'NAV alterado' : 'Cotação expirada'}
           </p>
           <p className="font-text text-sm text-base/85 leading-relaxed px-5 py-5">
-            {NAV_MUDOU_MESSAGE}
+            {navMudou ? NAV_MUDOU_MESSAGE : COTACAO_EXPIRADA_MESSAGE}
           </p>
           <div className="border-t border-light-hairline px-5 py-3">
             <button
@@ -274,7 +277,7 @@ export function ConfirmScreen({
       <div className="mt-10">
         <button
           onClick={onConfirm}
-          disabled={buying || !signConfirmed || navMudou}
+          disabled={buying || !signConfirmed || navMudou || cotacaoExpirada}
           className="bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-10 py-4 rounded-full hover:bg-primary-deep transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-3"
         >
           {buying ? (

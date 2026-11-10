@@ -14,7 +14,7 @@ import type {
 import { asFlowError } from '../_lib/errors';
 import { postJson } from '@/lib/http/client';
 import { attachInvestorSignature } from '../_lib/signed-xdr';
-import { NavMudouError, submitSwap } from '../_lib/swap-submit';
+import { CotacaoExpiradaError, NavMudouError, submitSwap } from '../_lib/swap-submit';
 
 export interface UseSwapArgs {
   onboard: OnboardData | null;
@@ -44,6 +44,8 @@ export function useSwap({
   const [buyResult, setBuyResult] = useState<BuyResult | null>(null);
   // 409 NAV_MUDOU no submit: a cotação ficou velha; a tela oferece recotar.
   const [navMudou, setNavMudou] = useState(false);
+  // 410 no submit: o quote expirou entre o build e o submit; recotar refaz o build.
+  const [cotacaoExpirada, setCotacaoExpirada] = useState(false);
 
   // Build swap envelope (real) ou executa swap direto (mock).
   const goToConfirm = useCallback(async () => {
@@ -65,6 +67,7 @@ export function useSwap({
     clearError();
     setSignConfirmed(false);
     setNavMudou(false);
+    setCotacaoExpirada(false);
     try {
       const data = await postJson<SwapBuild>(
         '/api/investidor/buy/swap/build',
@@ -98,6 +101,7 @@ export function useSwap({
     if (!onboard || !quote || !swapBuild || swapBuild.mock) return;
     clearError();
     setNavMudou(false);
+    setCotacaoExpirada(false);
     setBuying(true);
     try {
       const { signature } = await signRawHash({
@@ -113,8 +117,10 @@ export function useSwap({
         onboard.publicKey,
         signature,
       );
+      // O build renova a cotação e devolve o quoteId a usar (novo se o quote
+      // anterior expirou). Submeter com `quote.quoteId` falharia nesse caso.
       const data = await submitSwap(
-        { quoteId: quote.quoteId, signedXdr },
+        { quoteId: swapBuild.quoteId, signedXdr },
         getAccessToken,
       );
       setBuyResult({
@@ -126,6 +132,8 @@ export function useSwap({
     } catch (err) {
       if (err instanceof NavMudouError) {
         setNavMudou(true);
+      } else if (err instanceof CotacaoExpiradaError) {
+        setCotacaoExpirada(true);
       } else {
         onError(asFlowError(err));
       }
@@ -139,12 +147,14 @@ export function useSwap({
     setSwapBuild(null);
     setSignConfirmed(false);
     setNavMudou(false);
+    setCotacaoExpirada(false);
   }, []);
 
   // Recotar após NAV_MUDOU: refaz o build do swap (o servidor relê o NAV).
   // Não cria novo on-ramp: nenhum BRL novo é cobrado.
   const requote = useCallback(async () => {
     setNavMudou(false);
+    setCotacaoExpirada(false);
     await goToConfirm();
   }, [goToConfirm]);
 
@@ -156,6 +166,7 @@ export function useSwap({
     buying,
     buyResult,
     navMudou,
+    cotacaoExpirada,
     requote,
     goToConfirm,
     buy,

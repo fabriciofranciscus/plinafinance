@@ -134,6 +134,7 @@ describe('useSwap — goToConfirm: onRampReady gate', () => {
       jsonResponse({
         xdr: 'xdr-1',
         hashHex: '0xabc',
+        quoteId: 'q-1',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -180,6 +181,7 @@ describe('useSwap — goToConfirm: mock branch', () => {
       jsonResponse({
         xdr: 'xdr-1',
         hashHex: '0xabc',
+        quoteId: 'q-1',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -221,6 +223,7 @@ describe('useSwap — goToConfirm: claiming detour', () => {
       jsonResponse({
         xdr: 'xdr-1',
         hashHex: '0xabc',
+        quoteId: 'q-1',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -252,6 +255,7 @@ describe('useSwap — buy', () => {
       jsonResponse({
         xdr: 'xdr-1',
         hashHex: '0xdeadbeef',
+        quoteId: 'q-1',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -309,6 +313,7 @@ describe('useSwap — buy', () => {
       jsonResponse({
         xdr: 'xdr-1',
         hashHex: '0xabc',
+        quoteId: 'q-1',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -340,6 +345,7 @@ describe('useSwap — buy: corpo do submit (N1)', () => {
   const envelope = {
     xdr: 'xdr-1',
     hashHex: '0xdeadbeef',
+    quoteId: 'q-1',
     mock: false,
   } satisfies SwapEnvelope;
 
@@ -392,6 +398,58 @@ describe('useSwap — buy: corpo do submit (N1)', () => {
     expect(fetchMock.mock.calls[2]![0]).toBe('/api/investidor/buy/swap/build');
     expect(result.current.navMudou).toBe(false);
     expect(onNextScreen).toHaveBeenLastCalledWith('confirm');
+  });
+
+  it('submete com o quoteId que o build devolveu (novo quando o quote expirou)', async () => {
+    // recotar: o quote do build expirou e o servidor emitiu outro (q-2)
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ...envelope, quoteId: 'q-2' }));
+    const { result } = setup();
+    await act(async () => {
+      await result.current.goToConfirm();
+    });
+    expect(result.current.swapBuild).toMatchObject({ quoteId: 'q-2' });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ swapTxHash: 'real-tx' }));
+    await act(async () => {
+      await result.current.buy();
+    });
+    await flushAsync();
+    const [, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).quoteId).toBe('q-2');
+  });
+
+  it('410 (quote expirou depois do build): aviso próprio, sem incidente; recotar refaz o build e usa o quoteId novo', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(envelope));
+    const { result, onError, onNextScreen } = setup();
+    await act(async () => {
+      await result.current.goToConfirm();
+    });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: 'quote expirado' }, 410));
+    await act(async () => {
+      await result.current.buy();
+    });
+    await flushAsync();
+    expect(result.current.cotacaoExpirada).toBe(true);
+    expect(result.current.navMudou).toBe(false);
+    expect(onError).not.toHaveBeenCalled();
+    expect(result.current.buyResult).toBeNull();
+
+    // recotar: novo build devolve outro quote; o aviso some
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ...envelope, quoteId: 'q-3' }));
+    await act(async () => {
+      await result.current.requote();
+    });
+    await flushAsync();
+    expect(fetchMock.mock.calls[2]![0]).toBe('/api/investidor/buy/swap/build');
+    expect(result.current.cotacaoExpirada).toBe(false);
+    expect(onNextScreen).toHaveBeenLastCalledWith('confirm');
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ swapTxHash: 'real-tx' }));
+    await act(async () => {
+      await result.current.buy();
+    });
+    await flushAsync();
+    const [, init] = fetchMock.mock.calls[3] as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).quoteId).toBe('q-3');
   });
 
   it('409 de outro motivo segue o caminho de erro normal', async () => {
