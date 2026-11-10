@@ -5,11 +5,11 @@
  * continuam no numerador do NAV. Pela ADR 2026-11-09 (parecer da Consuelo, C3)
  * eles são a **posição da Plina** e contam em N — não são "tesouraria ao par".
  *
- * Este módulo faz só a parte segura: lê o saldo REAL do distributor no Horizon
- * (por code) e grava um `EventoAudit` append-only. Não é `MovimentoFundo` (o ativo
- * A não muda), não move nada on-chain e **não altera o NAV**: a dedução da
- * tesouraria em `pool.ts` continua — retirá-la muda valor esperado de teste e
- * espera o ok da Thais (protocolo §7).
+ * Este módulo lê o saldo REAL do distributor no Horizon (por code) e grava um
+ * `EventoAudit` append-only. Não é `MovimentoFundo` (o ativo A não muda) e não
+ * move nada on-chain. A dedução da tesouraria ao par saiu de `pool.ts` (ok da
+ * Thais, §7): `circulante + tesouraria` é o denominador, então registrar — ou
+ * mover o token para a conta de posição — não muda o NAV.
  *
  * Idempotente: se o último registro daquele code tem o mesmo saldo, não duplica;
  * saldo diferente vira novo evento (histórico).
@@ -51,7 +51,7 @@ async function registrarUm(s: SaldoTesouraria, operador: string): Promise<Regist
         lidoEm: s.lidoEm.toISOString(),
         classificacao: 'POSICAO_DA_PLINA',
         // Reclassificação em N (contada no denominador). Sem movimento on-chain,
-        // sem MovimentoFundo; a dedução ao par em pool.ts segue até o ok da Thais.
+        // sem MovimentoFundo.
         movimentoOnChain: false,
       } as Prisma.InputJsonValue,
     },

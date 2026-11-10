@@ -90,3 +90,45 @@ describe('navParaEmissao', () => {
     expect(() => navParaEmissao([], [], { circulante: '1000', tesouraria: '0' })).toThrow(RangeError);
   });
 });
+
+describe('com tesouraria legada no distributor (posição da Plina conta em N)', () => {
+  const cota = {
+    valorCarta: '100000',
+    desagioAquisicao: '0.15',
+    tokensEmitidos: '80000',
+    status: StatusCota.DISPONIVEL,
+  };
+  // 60.000 em investidores + 20.000 legados no distributor = 80.000 emitidos.
+  const supply = { circulante: '60000', tesouraria: '20000' };
+
+  it('subscrição: NAV antes = depois (caixa +BRL, N +q)', () => {
+    const antes = navPorTokenAsDecimal([cota], [], supply);
+    expect(antes.toFixed(4)).toBe('1.0625');
+    const q = quantidadeEmitida('400', antes);
+    const depois = navPorTokenAsDecimal([cota], [{ valorRealizado: '400', spread: '0' }], {
+      circulante: D('60000').plus(q),
+      tesouraria: '20000',
+    });
+    expect(depois.toFixed(6)).toBe(antes.toFixed(6));
+    expect(depois.gte(antes)).toBe(true);
+  });
+
+  it('aporte da cota: NAV antes = depois (ativo +V, N +q para a posição da Plina)', () => {
+    const antes = navPorTokenAsDecimal([cota], [], supply);
+    const novaCota = { valorCarta: '80000', desagioAquisicao: '0.20', tokensEmitidos: '0', status: StatusCota.DISPONIVEL }; // V = 64.000
+    const q = quantidadeEmitida('64000', antes);
+    const depois = navPorTokenAsDecimal([cota, novaCota], [], {
+      circulante: D('60000').plus(q), // posição da Plina fora do distributor
+      tesouraria: '20000',
+    });
+    expect(depois.toFixed(6)).toBe(antes.toFixed(6));
+  });
+
+  it('NAV para emissão com supply emitido zero continua 1,00, mesmo com cotas ativas', () => {
+    expect(navParaEmissao([cota], [], { circulante: '0', tesouraria: '0' }).toString()).toBe('1');
+  });
+
+  it('NAV para emissão com só tesouraria legada usa o NAV do ledger, não 1,00', () => {
+    expect(navParaEmissao([cota], [], { circulante: '0', tesouraria: '80000' }).toFixed(4)).toBe('1.0625');
+  });
+});
