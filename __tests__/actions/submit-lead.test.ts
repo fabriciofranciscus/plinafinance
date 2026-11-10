@@ -208,6 +208,7 @@ describe('submitLead — logs de SMTP sem PII (revisão do Atlas, item 3)', () =
     Object.assign(new Error('Recipient rejected: fulana@example.com (Fulana de Teste)'), {
       name: 'Error',
       code: 'EENVELOPE',
+      responseCode: 550,
       command: 'RCPT TO',
       envelope: { from: 'landing@exemplo.test', to: ['fulana@example.com'] },
     });
@@ -218,7 +219,7 @@ describe('submitLead — logs de SMTP sem PII (revisão do Atlas, item 3)', () =
     const r = await submitLead(INICIAL, form(OBRIGATORIOS));
     expect(r.status).toBe('error');
     const logado = JSON.stringify(erro.mock.calls);
-    expect(logado).toContain('EENVELOPE');
+    expect(logado).toContain('Error:EENVELOPE:550');
     expect(logado).not.toMatch(/fulana|Fulana|example\.com|RCPT|landing@/);
   });
 

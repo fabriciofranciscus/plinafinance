@@ -88,9 +88,12 @@ const TICKET_LABELS: Record<string, string> = {
  * erros do Prisma e do nodemailer carregam destinatário, nome e telefone (PII).
  */
 function causaSegura(err: unknown): string {
-  const e = err as { name?: unknown; code?: unknown } | null;
+  const e = err as { name?: unknown; code?: unknown; responseCode?: unknown } | null;
   const parte = (v: unknown) => (typeof v === 'string' && /^[\w.-]{1,40}$/.test(v) ? v : undefined);
-  return [parte(e?.name), parte(e?.code)].filter(Boolean).join(':') || 'desconhecido';
+  // responseCode do SMTP (ex.: 550) é só um número; a mensagem e o destinatário ficam de fora.
+  const resposta =
+    typeof e?.responseCode === 'number' && Number.isInteger(e.responseCode) ? String(e.responseCode) : undefined;
+  return [parte(e?.name), parte(e?.code), resposta].filter(Boolean).join(':') || 'desconhecido';
 }
 
 async function getClientIp(): Promise<string> {
