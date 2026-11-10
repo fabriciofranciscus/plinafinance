@@ -350,6 +350,167 @@ export async function buscarTxPorHash(
   return r ? { found: true, successful: r.successful, ledgerCloseTime: r.created_at } : { found: false };
 }
 
+// ── Expiração decidida pela rede (R1 do Argus, revisoes/2026-11-10-parecer-argus-e1-4-chain.md) ──
+
+export type ExpiracaoNaRede =
+  | { status: 'ENTROU'; hash: string; successful: boolean; ledger: number }
+  | { status: 'EXPIROU'; hash: string; maxTime: number; ledgerAposPrazo: number; fechadoEm: string }
+  | { status: 'EM_ABERTO'; hash: string; maxTime: number };
+
+type RegistroLedger = {
+  sequence: number;
+  closed_at: string;
+  paging_token: string;
+  successful_transaction_count: number;
+  failed_transaction_count: number;
+};
+
+/** A tx pode ter entrado até ~5 min antes do horário local de montagem (relógio adiantado). */
+const FOLGA_RELOGIO_SEC = 300;
+const PAGINA_HORIZON = 200;
+const MAX_LEDGERS_JANELA = 1_000;
+const MAX_SONDAGENS = 64;
+
+const fechouEm = (l: RegistroLedger) => Math.floor(Date.parse(l.closed_at) / 1000);
+
+function indeterminado(motivo: string): Error {
+  return new Error(`Expiração indeterminada: ${motivo}. Não reemitir; consultar de novo.`);
+}
+
+async function ledgerPorSequencia(seq: number): Promise<RegistroLedger> {
+  return (await horizon.ledgers().ledger(seq).call()) as unknown as RegistroLedger;
+}
+
+/** Primeiro ledger com closeTime > maxTime (busca galopante + binária; registros imutáveis). */
+async function primeiroLedgerAposPrazo(
+  ultimo: RegistroLedger,
+  maxTime: number,
+): Promise<RegistroLedger> {
+  let alto = ultimo;
+  let baixo: RegistroLedger | null = null;
+  let passo = Math.max(1, Math.ceil((fechouEm(ultimo) - maxTime) / 5));
+  let sondagens = 0;
+  while (!baixo) {
+    if (++sondagens > MAX_SONDAGENS) throw indeterminado('busca do ledger do prazo excedeu o limite');
+    const seq = alto.sequence - passo;
+    if (seq < 1) throw indeterminado('histórico do Horizon não alcança o prazo');
+    const l = await ledgerPorSequencia(seq);
+    if (fechouEm(l) <= maxTime) baixo = l;
+    else alto = l;
+    passo *= 2;
+  }
+  while (alto.sequence - baixo.sequence > 1) {
+    if (++sondagens > MAX_SONDAGENS) throw indeterminado('busca do ledger do prazo excedeu o limite');
+    const l = await ledgerPorSequencia(Math.floor((alto.sequence + baixo.sequence) / 2));
+    if (fechouEm(l) <= maxTime) baixo = l;
+    else alto = l;
+  }
+  return alto;
+}
+
+/**
+ * Procura o hash nas txs de um ledger. A lista tem de bater com a contagem
+ * do registro do ledger (imutável): instância atrasada ou parcial → erro.
+ */
+async function txNoLedger(l: RegistroLedger, hash: string): Promise<RegistroTx | null> {
+  const esperado = l.successful_transaction_count + l.failed_transaction_count;
+  if (esperado === 0) return null;
+  let vistos = 0;
+  let cursor: string | undefined;
+  for (;;) {
+    let q = horizon.transactions().forLedger(l.sequence).includeFailed(true).order('asc').limit(PAGINA_HORIZON);
+    if (cursor) q = q.cursor(cursor);
+    const { records } = (await q.call()) as unknown as { records: RegistroTx[] };
+    const achou = records.find((r) => r.hash === hash);
+    if (achou) return achou;
+    vistos += records.length;
+    if (records.length < PAGINA_HORIZON || vistos >= esperado) break;
+    cursor = records[records.length - 1].paging_token;
+  }
+  if (vistos !== esperado) {
+    throw indeterminado(`ledger ${l.sequence} veio com ${vistos} de ${esperado} txs`);
+  }
+  return null;
+}
+
+/**
+ * Decide, pelo ledger do Horizon e não pelo relógio local, se a tx do
+ * envelope ainda pode entrar:
+ * - ENTROU: está no ledger (achada pelo hash ou na varredura da janela);
+ * - EM_ABERTO: a rede ainda não fechou ledger com closeTime > maxTime;
+ * - EXPIROU: já fechou, e a tx não está em nenhum ledger da janela em que
+ *   podia entrar (cada ledger conferido contra a própria contagem de txs).
+ * Qualquer erro (404 de ledger da janela, lista incompleta, Horizon fora)
+ * PROPAGA: significa indeterminado — não reemitir.
+ * Só EXPIROU autoriza tx nova; ela sai da mesma conta-fonte (issuer).
+ */
+export async function txExpirouNaRede(xdr: string): Promise<ExpiracaoNaRede> {
+  return (await avaliarExpiracao(xdr)).r;
+}
+
+async function avaliarExpiracao(
+  xdr: string,
+): Promise<{ r: ExpiracaoNaRede; registro?: RegistroTx }> {
+  const tx = new Transaction(xdr, networkPassphrase);
+  const hash = tx.hash().toString('hex');
+  const maxTime = Number(tx.timeBounds?.maxTime ?? 0);
+  if (!maxTime) throw indeterminado('envelope sem maxTime');
+
+  const direto = await buscarRegistroTx(hash);
+  if (direto) {
+    return {
+      r: { status: 'ENTROU', hash, successful: direto.successful, ledger: direto.ledger_attr ?? 0 },
+      registro: direto,
+    };
+  }
+
+  const pagina = (await horizon.ledgers().order('desc').limit(1).call()) as unknown as {
+    records: RegistroLedger[];
+  };
+  const ultimo = pagina.records[0];
+  if (!ultimo) throw indeterminado('Horizon sem ledgers');
+  if (fechouEm(ultimo) <= maxTime) return { r: { status: 'EM_ABERTO', hash, maxTime } };
+
+  const aposPrazo = await primeiroLedgerAposPrazo(ultimo, maxTime);
+  const limiteInferior = maxTime - STELLAR_TX_TIMEOUT_SEC - FOLGA_RELOGIO_SEC;
+  let esperado = aposPrazo.sequence - 1;
+  let cursor = aposPrazo.paging_token;
+  let varridos = 0;
+  for (;;) {
+    const { records } = (await horizon
+      .ledgers()
+      .cursor(cursor)
+      .order('desc')
+      .limit(PAGINA_HORIZON)
+      .call()) as unknown as { records: RegistroLedger[] };
+    if (records.length === 0) throw indeterminado('histórico do Horizon não cobre a janela');
+    for (const l of records) {
+      if (l.sequence !== esperado) throw indeterminado(`ledger ${esperado} faltando na listagem`);
+      if (fechouEm(l) < limiteInferior) {
+        return {
+          r: {
+            status: 'EXPIROU',
+            hash,
+            maxTime,
+            ledgerAposPrazo: aposPrazo.sequence,
+            fechadoEm: aposPrazo.closed_at,
+          },
+        };
+      }
+      if (++varridos > MAX_LEDGERS_JANELA) throw indeterminado('janela maior que o limite');
+      const achou = await txNoLedger(l, hash);
+      if (achou) {
+        return {
+          r: { status: 'ENTROU', hash, successful: achou.successful, ledger: l.sequence },
+          registro: achou,
+        };
+      }
+      esperado -= 1;
+    }
+    cursor = records[records.length - 1].paging_token;
+  }
+}
+
 /**
  * Submete um envelope já assinado e classifica o resultado:
  * - SUCCESS: entrou;
@@ -407,6 +568,8 @@ export function _setRelogioForTests(r?: Partial<Relogio>): void {
 
 const INTERVALO_REENVIO_MS = 5_000;
 const FOLGA_PRAZO_SEC = 10;
+/** Depois do prazo, quanto esperar a rede fechar um ledger > maxTime antes de desistir sem desfecho. */
+const ESPERA_REDE_SEC = 60;
 
 /**
  * Leva a emissão a um desfecho conclusivo. No erro ambíguo reenvia o MESMO
@@ -446,11 +609,26 @@ async function confirmarEmissao(env: {
     }
   }
 
-  // Consulta final obrigatória: erro aqui propaga (não afirma "não entrou").
-  const final = await buscarRegistroTx(env.hash);
-  if (final?.successful) return respostaDoRegistro(final);
-  if (final) throw new EmissaoError('EMISSAO_FALHOU', env.hash, { resultCodes: { transaction: 'tx_failed' } });
-  throw new EmissaoError('EMISSAO_NAO_CONFIRMADA', env.hash, { maxTime: env.maxTime });
+  // Desfecho decidido pela rede (R1): erro aqui propaga (não afirma "não entrou").
+  const limiteEspera = (env.maxTime + FOLGA_PRAZO_SEC + ESPERA_REDE_SEC) * 1000;
+  for (;;) {
+    const { r, registro } = await avaliarExpiracao(env.xdr);
+    if (r.status === 'EXPIROU') {
+      throw new EmissaoError('EMISSAO_NAO_CONFIRMADA', env.hash, { maxTime: env.maxTime });
+    }
+    if (r.status === 'ENTROU') {
+      if (!r.successful) {
+        throw new EmissaoError('EMISSAO_FALHOU', env.hash, { resultCodes: { transaction: 'tx_failed' } });
+      }
+      return respostaDoRegistro({ ...registro!, ledger_attr: registro!.ledger_attr ?? r.ledger });
+    }
+    if (relogio.agora() >= limiteEspera) {
+      throw new Error(
+        `Emissão ${env.hash}: expiração indeterminada — a rede não fechou ledger depois do maxTime. Não reemitir; consultar de novo.`,
+      );
+    }
+    await relogio.dormir(INTERVALO_REENVIO_MS);
+  }
 }
 
 export type EmissaoPorMemoErrorCode =
