@@ -47,6 +47,9 @@ import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 
 export const dynamic = 'force-dynamic';
 
+/** Folga depois do maxTime do envelope para o ledger fechar e o Horizon ingerir (antes de liberar a reserva). */
+const MARGEM_FECHAMENTO_LEDGER_SEC = 120;
+
 /**
  * Assinatura do investidor no envelope: exatamente UMA assinatura, com o hint da
  * chave dele e válida sobre o hash da tx. Devolve os 64 bytes ou `null`.
@@ -255,15 +258,49 @@ export const POST = withAuth(async (req, { user }) => {
     const onchain =
       reserved.count === 1 ? null : await fetchTransactionByHash(expectedTxHash);
 
+    // Libera a reserva (só desta XDR e só enquanto não consumida): sem isso o quote fica "em voo"
+    // para sempre e o gate do NAV (SWAP_EM_VOO) fecha a plataforma inteira.
+    const liberarReserva = () =>
+      db.quote.updateMany({
+        where: { id: quote.id, submitXdrHash: xdrHash, consumedAt: null },
+        data: { submitXdrHash: null },
+      });
+
     let finalHash: string;
     if (onchain?.successful) {
       finalHash = onchain.hash;
     } else if (onchain && !onchain.successful) {
+      // Entrou e falhou on-chain: a sequence foi consumida e nada foi emitido (prova positiva).
+      await liberarReserva();
       return NextResponse.json(
         { error: 'tx anterior falhou on-chain — refaça o swap (rebuild)' },
         { status: 409 },
       );
     } else {
+      // N1-S1 (Argus): reserva órfã com a tx fora da chain só pode ser RE-ASSINADA enquanto o
+      // envelope ainda vale (antes do maxTime). Depois disso a Plina não assina mais: o preço
+      // (NAV congelado) e o quote já venceram, e re-assinar emitiria ao preço velho.
+      if (reserved.count !== 1) {
+        const maxTime = Number(
+          new Transaction(signedXdr, networkPassphrase).timeBounds?.maxTime ?? 0,
+        );
+        const agora = Math.floor(Date.now() / 1000);
+        if (!maxTime || agora > maxTime + MARGEM_FECHAMENTO_LEDGER_SEC) {
+          await liberarReserva();
+          return NextResponse.json(
+            { error: 'tx expirada — refaça o swap (rebuild)', code: 'GONE' },
+            { status: 410 },
+          );
+        }
+        if (agora > maxTime) {
+          // Venceu, mas dentro da margem de fechamento/ingestão do ledger: a tx pode ter entrado e o
+          // Horizon ainda não a mostra. Não assina, não libera: tente de novo em instantes.
+          return NextResponse.json(
+            { error: 'aguardando o fechamento do ledger — tente novamente em instantes' },
+            { status: 409 },
+          );
+        }
+      }
       // A Plina assina só agora, com o XDR já validado e a assinatura do
       // investidor conferida. O envelope é reenviado sem assinaturas e as duas
       // entram em `submitWithPrivySignature` (investidor + issuer).
