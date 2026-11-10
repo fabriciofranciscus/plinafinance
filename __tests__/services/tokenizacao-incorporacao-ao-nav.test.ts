@@ -820,6 +820,21 @@ describe('incorporarCota — substituição com a MESMA sequence (contrato da Es
     expect(st.cotas.size).toBe(1);
   });
 
+  it('cenário do Argus (Q1): original A + duas substituições; quemConsumiuSequence recebe o XDR de TODAS as tentativas', async () => {
+    await expirada(); // A (XDR1) ambígua e expirada
+    st.submitScript = ['AMBIGUOUS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' }); // R1 (XDR2), ambígua
+    avancar(130_000); // R1 também expira
+    st.submitScript = ['SEQ_CONSUMIDA'];
+    st.consumo = { status: 'ANTIGA_ENTROU', hash: 'hash1', successful: true, ledger: 9 }; // foi a A que entrou
+    const r = await incorporarCota(base); // R2 (XDR3): tx_bad_seq → quem consumiu a sequence?
+    expect(st.built.map((b) => b.sequence)).toEqual([st.built[0].sequence, st.built[0].sequence, st.built[0].sequence]);
+    expect(st.consumoArgs[0]).toEqual(['XDR1', 'XDR2', 'XDR3']); // A, R1 e R2: nenhuma fica de fora
+    expect(r.txHash).toBe('hash1'); // confirma a A; nada de tx com sequence nova
+    expect(st.built).toHaveLength(3);
+    expect(st.cotas.size).toBe(1);
+  });
+
   it('SEQUENCIA_CONSUMIDA + a nossa entrou e FALHOU: libera tx com sequence NOVA, uma emissão', async () => {
     await expirada();
     st.submitScript = ['SEQ_CONSUMIDA', 'SUCCESS'];
