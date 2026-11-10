@@ -120,3 +120,14 @@ describe('issuer de fonte única e falha fechada (Argus, Z16)', () => {
     expect(res.headers.get('cache-control')).toBe('public, max-age=300, s-maxage=300');
   });
 });
+
+describe('sem dados pessoais (Z16-b: Norma, LGPD; Argus, phishing; decisão da Thais)', () => {
+  it('não publica [[PRINCIPALS]] nem e-mail nominal; só o endereço de função', async () => {
+    const { body, doc } = await servir();
+    expect(doc).not.toHaveProperty('PRINCIPALS');
+    expect(body).not.toMatch(/\[\[PRINCIPALS\]\]/);
+    expect(body).not.toMatch(/thais@|fabricio@|Thais Reis|Fabricio Santos/i);
+    const emails = body.match(/[\w.+-]+@[\w-]+\.[\w.]+/g) ?? [];
+    expect(new Set(emails)).toEqual(new Set(['contato@plina.finance']));
+  });
+});

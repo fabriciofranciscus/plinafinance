@@ -60,19 +60,8 @@ is_asset_anchored = false
 # não existe. AUTH_REQUIRED/REVOCABLE/CLAWBACK seguem ligados no issuer on-chain.
 regulated = false
 
-[[PRINCIPALS]]
-name = "Thais Reis"
-email = "thais@plina.finance"
-twitter = ""
-github = ""
-keybase = ""
-
-[[PRINCIPALS]]
-name = "Fabricio Santos"
-email = "fabricio@plina.finance"
-twitter = ""
-github = ""
-keybase = ""
+# Seção de principais omitida de propósito (opcional na SEP-1): sem nomes nem e-mails
+# pessoais no arquivo público. Contato: ORG_OFFICIAL_EMAIL.
 `;
 
 export async function GET() {
