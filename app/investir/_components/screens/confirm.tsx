@@ -76,7 +76,7 @@ export function ConfirmScreen({
             <span className="font-mono text-2xl md:text-3xl text-base/45 ml-3">PLINA-RF</span>
           </p>
           <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65 mt-3">
-            Simulação em testnet · 1 PLINA-RF = 1 BRL na cotação do POC
+            Simulação em testnet · valores da cotação acima, sem valor financeiro real
           </p>
         </div>
 

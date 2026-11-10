@@ -271,21 +271,21 @@ export default function MinhaPosicaoPage() {
       <PageWrap>
         <div className="py-16">
           <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-            Acesso institucional · PLINA-RF
+            Rede de testes · Minha posição
           </p>
           <h1 className="font-title mt-3 text-4xl font-semibold tracking-tight">
-            Sua carteira institucional
+            Sua posição (testnet)
           </h1>
           <p className="font-text mt-4 text-base/80 max-w-2xl leading-relaxed">
-            Esta superfície expõe seu saldo PLINA-RF, sua composição
-            lastreada no pool e a atividade auditável da sua posição.
-            Faça login pra continuar.
+            Esta tela mostra seu saldo do token de demonstração, a composição
+            do pool de demonstração e a atividade da sua posição, tudo em rede
+            de testes e sem valor financeiro real. Faça login para continuar.
           </p>
           <button
             onClick={() => login()}
             className="mt-8 bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors"
           >
-            Entrar com email institucional
+            Entrar com e-mail
           </button>
         </div>
       </PageWrap>
