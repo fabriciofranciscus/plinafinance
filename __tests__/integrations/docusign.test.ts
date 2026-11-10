@@ -250,6 +250,33 @@ describe('criarEnvelope', () => {
   });
 });
 
+describe('buscarEnvelopePorTransactionId', () => {
+  it('consulta por transaction_ids e devolve o envelope ou null', async () => {
+    const a = montar([tokenOk(), json({ totalSetSize: '1', envelopes: [{ envelopeId: ENV_ID }] })]);
+    expect(await a.cliente.buscarEnvelopePorTransactionId(entrada.transactionId)).toBe(ENV_ID);
+    const [url] = a.fetchImpl.mock.calls[1] as unknown as [string];
+    expect(url).toContain(`/envelopes?transaction_ids=${entrada.transactionId}&from_date=`);
+
+    const b = montar([tokenOk(), json({ totalSetSize: '0' })]);
+    expect(await b.cliente.buscarEnvelopePorTransactionId(entrada.transactionId)).toBeNull();
+  });
+
+  it('rejeita transactionId inválida sem rede e mais de um envelope', async () => {
+    const a = montar([]);
+    await expect(a.cliente.buscarEnvelopePorTransactionId('x')).rejects.toMatchObject({ codigo: 'ENTRADA_INVALIDA' });
+    expect(a.fetchImpl).not.toHaveBeenCalled();
+    const b = montar([tokenOk(), json({ envelopes: [{ envelopeId: ENV_ID }, { envelopeId: '99999999-8888-7777-6666-555555555555' }] })]);
+    await expect(b.cliente.buscarEnvelopePorTransactionId(entrada.transactionId)).rejects.toMatchObject({ codigo: 'RESPOSTA_INVALIDA' });
+  });
+
+  it('criarEnvelope: 2xx sem envelopeId recupera pela transactionId; sem achar, erro', async () => {
+    const a = montar([tokenOk(), json({}, 201), json({ envelopes: [{ envelopeId: ENV_ID }] })]);
+    expect(await a.cliente.criarEnvelope(entrada)).toEqual({ envelopeId: ENV_ID });
+    const b = montar([tokenOk(), json({}, 201), json({ totalSetSize: '0' })]);
+    await expect(b.cliente.criarEnvelope(entrada)).rejects.toMatchObject({ codigo: 'RESPOSTA_INVALIDA' });
+  });
+});
+
 describe('transactionIdDeterministico', () => {
   it('é estável, em formato GUID, e muda com a chave', () => {
     const a = transactionIdDeterministico('cessao:1');

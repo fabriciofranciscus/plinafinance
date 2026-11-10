@@ -16,7 +16,7 @@ fora do Instaward 2. Integrações só em sandbox.
 
 | Função | Retorno |
 |---|---|
-| `obterTokenDocusign()` | token JWT (cache até ~5 min antes de expirar) |
+| `buscarEnvelopePorTransactionId(transactionId)` | `envelopeId` já criado ou `null` (consulta `GET /envelopes?transaction_ids=`) |
 | `criarEnvelope({ documentoPdf, nomeDocumento, signatario: { nome, email }, emailSubject, transactionId, posicaoAssinatura? })` | `{ envelopeId }` (envio por e-mail, status `sent`, sem `clientUserId`) |
 | `transactionIdDeterministico(chaveDeNegocio)` | GUID estável para usar como `transactionId` |
 | `obterStatusEnvelope(envelopeId)` | `criado` · `enviado` · `entregue` · `assinado` · `concluido` · `recusado` · `anulado` · `desconhecido` |
@@ -25,11 +25,23 @@ fora do Instaward 2. Integrações só em sandbox.
 
 ## Idempotência da criação
 
-`transactionId` é obrigatório (GUID). A DocuSign devolve o **mesmo** envelope para a mesma
-`transactionId`, então o chamador deriva o id de uma chave de negócio estável
-(`transactionIdDeterministico(\`cessao:${id}\`)`, nunca PII) e o grava/reusa em qualquer retry.
-Rede, timeout, 429 e 5xx no POST viram `RESULTADO_INCERTO`: repita com a MESMA `transactionId`;
-não gere outra. O smoke prova isso no sandbox (reenvio devolve o mesmo envelope).
+`transactionId` é obrigatório (GUID); o chamador deriva o id de uma chave de negócio estável
+(`transactionIdDeterministico(\`cessao:${id}\`)`, nunca PII) e o grava ANTES do POST.
+
+Medido no sandbox (2026-11-10):
+- dois POSTs **sequenciais** com a mesma `transactionId` devolvem o **mesmo** envelope (201), sem 2º e-mail;
+- dois POSTs **simultâneos** não têm resposta garantida (um voltou 201 sem `envelopeId`), mas não duplicaram;
+- `GET /envelopes?transaction_ids=<id>&from_date=…` encontra o envelope (0 quando não existe).
+
+Por isso: nunca dispare dois `criarEnvelope` em paralelo para a mesma operação; um 2xx sem `envelopeId`
+é recuperado pela consulta; rede, timeout, 429 e 5xx no POST viram `RESULTADO_INCERTO` — chame
+`buscarEnvelopePorTransactionId` com a MESMA `transactionId` e só reenvie (com a mesma) se vier `null`.
+O dedupe é por janela limitada na DocuSign (~7 dias, doc.); não reuse a chave para outro envelope.
+
+## Download
+
+`documents/combined` NÃO devolve bytes idênticos em downloads diferentes (medido). Quem ancorar hash
+(DS3) deve guardar os bytes baixados junto do hash.
 
 `criarClienteDocusign({ env, fetchImpl, agora })` cria uma instância isolada (testes).
 

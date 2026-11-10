@@ -15,7 +15,8 @@ export type { CodigoErroDocusign } from './errors';
 let padrao: ClienteDocusign | undefined;
 const cliente = (): ClienteDocusign => (padrao ??= criarClienteDocusign());
 
-export const obterTokenDocusign = () => cliente().obterToken();
 export const criarEnvelope = (entrada: CriarEnvelopeInput) => cliente().criarEnvelope(entrada);
+export const buscarEnvelopePorTransactionId = (transactionId: string) =>
+  cliente().buscarEnvelopePorTransactionId(transactionId);
 export const obterStatusEnvelope = (envelopeId: string) => cliente().obterStatusEnvelope(envelopeId);
 export const baixarDocumentoAssinado = (envelopeId: string) => cliente().baixarDocumentoAssinado(envelopeId);
