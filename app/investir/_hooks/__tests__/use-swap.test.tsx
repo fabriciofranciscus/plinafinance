@@ -135,6 +135,8 @@ describe('useSwap — goToConfirm: onRampReady gate', () => {
         xdr: 'xdr-1',
         hashHex: '0xabc',
         quoteId: 'q-1',
+        plinarfAmount: '100.0000000',
+        navPorTokenNaCotacao: '1.00000000',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -182,6 +184,8 @@ describe('useSwap — goToConfirm: mock branch', () => {
         xdr: 'xdr-1',
         hashHex: '0xabc',
         quoteId: 'q-1',
+        plinarfAmount: '100.0000000',
+        navPorTokenNaCotacao: '1.00000000',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -224,6 +228,8 @@ describe('useSwap — goToConfirm: claiming detour', () => {
         xdr: 'xdr-1',
         hashHex: '0xabc',
         quoteId: 'q-1',
+        plinarfAmount: '100.0000000',
+        navPorTokenNaCotacao: '1.00000000',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -256,6 +262,8 @@ describe('useSwap — buy', () => {
         xdr: 'xdr-1',
         hashHex: '0xdeadbeef',
         quoteId: 'q-1',
+        plinarfAmount: '100.0000000',
+        navPorTokenNaCotacao: '1.00000000',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -314,6 +322,8 @@ describe('useSwap — buy', () => {
         xdr: 'xdr-1',
         hashHex: '0xabc',
         quoteId: 'q-1',
+        plinarfAmount: '100.0000000',
+        navPorTokenNaCotacao: '1.00000000',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -346,6 +356,8 @@ describe('useSwap — buy: corpo do submit (N1)', () => {
     xdr: 'xdr-1',
     hashHex: '0xdeadbeef',
     quoteId: 'q-1',
+    plinarfAmount: '100.0000000',
+    navPorTokenNaCotacao: '1.00000000',
     mock: false,
   } satisfies SwapEnvelope;
 
@@ -434,13 +446,17 @@ describe('useSwap — buy: corpo do submit (N1)', () => {
     expect(result.current.buyResult).toBeNull();
 
     // recotar: novo build devolve outro quote; o aviso some
-    fetchMock.mockResolvedValueOnce(jsonResponse({ ...envelope, quoteId: 'q-3' }));
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ...envelope, quoteId: 'q-3', plinarfAmount: '9990.0000000' }),
+    );
     await act(async () => {
       await result.current.requote();
     });
     await flushAsync();
     expect(fetchMock.mock.calls[2]![0]).toBe('/api/investidor/buy/swap/build');
     expect(result.current.cotacaoExpirada).toBe(false);
+    // a confirmação deriva o valor do build novo, não do /quote inicial
+    expect(result.current.swapBuild).toMatchObject({ quoteId: 'q-3', plinarfAmount: '9990.0000000' });
     expect(onNextScreen).toHaveBeenLastCalledWith('confirm');
 
     fetchMock.mockResolvedValueOnce(jsonResponse({ swapTxHash: 'real-tx' }));
