@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Prisma } from '@prisma/client';
 
-const { fetchSupplyDasClasses } = vi.hoisted(() => ({ fetchSupplyDasClasses: vi.fn() }));
+const { fetchSupplyDasClasses, quoteFindFirst } = vi.hoisted(() => ({
+  fetchSupplyDasClasses: vi.fn(),
+  quoteFindFirst: vi.fn(),
+}));
 vi.mock('@/lib/stellar/supply', () => ({ fetchSupplyDasClasses }));
+vi.mock('@/lib/db', () => ({ db: { quote: { findFirst: quoteFindFirst } } }));
 
 import {
   NAV_INDISPONIVEL_MENSAGEM,
@@ -25,6 +29,7 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   resetNavSupplyCache();
   fetchSupplyDasClasses.mockReset().mockResolvedValue(ledger());
+  quoteFindFirst.mockReset().mockResolvedValue(null);
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -121,3 +126,38 @@ describe('lerSupplyDoNav — TTL e single-flight', () => {
     expect(fetchSupplyDasClasses).not.toHaveBeenCalled();
   });
 });
+
+describe('lerSupplyDoNav — swap em voo (quote com XDR reservada e sem consumedAt)', () => {
+  it('quote submetido e não escriturado → NAV indisponível (503), mesmo com o supply já com +q', async () => {
+    // O ledger já tem o token emitido (+q); a escrituração (caixa +V) ainda não existe: o NAV cairia.
+    fetchSupplyDasClasses.mockResolvedValue(ledger('1235714'));
+    quoteFindFirst.mockResolvedValue({ id: 'q1' });
+    const err = await lerSupplyDoNav().catch((e) => e);
+    expect(err).toBeInstanceOf(NavIndisponivelError);
+    expect(err.motivo).toBe('SWAP_EM_VOO');
+    expect(err.code).toBe('LEDGER_UNAVAILABLE');
+    expect(err.message).toBe(NAV_INDISPONIVEL_MENSAGEM);
+    expect(quoteFindFirst).toHaveBeenCalledWith({
+      where: { submitXdrHash: { not: null }, consumedAt: null, plinarfAmount: { not: null } },
+      select: { id: true },
+    });
+  });
+
+  it('vale com a leitura fresca e com o supply em cache; escriturado, o NAV volta', async () => {
+    await lerSupplyDoNav(); // cacheia
+    quoteFindFirst.mockResolvedValue({ id: 'q1' });
+    await expect(lerSupplyDoNav()).rejects.toMatchObject({ motivo: 'SWAP_EM_VOO' });
+    await expect(lerSupplyDoNav({ fresh: true })).rejects.toMatchObject({ motivo: 'SWAP_EM_VOO' });
+    quoteFindFirst.mockResolvedValue(null);
+    await expect(lerSupplyDoNav()).resolves.toMatchObject({ senior: { code: 'PLINARF' } });
+  });
+
+  it('falha ao ler os quotes é fail-closed, sem vazar a causa', async () => {
+    quoteFindFirst.mockRejectedValue(new Error('connect ECONNREFUSED db.internal'));
+    const err = await lerSupplyDoNav().catch((e) => e);
+    expect(err).toBeInstanceOf(NavIndisponivelError);
+    expect(err.motivo).toBe('LEDGER_LEITURA_FALHOU');
+    expect(err.message).not.toMatch(/ECONNREFUSED|db\.internal/);
+  });
+});
+

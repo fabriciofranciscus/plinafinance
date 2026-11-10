@@ -20,6 +20,7 @@ import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { ApiError } from '../api/errors';
 import { calcularPrecoDeEmissao } from './emissao';
+import { valorLiquidoDaCotacao } from './regras-swap';
 
 /** Validade de um quote renovado: cobre build → assinatura → submit. O NAV é revalidado no submit. */
 export const COTACAO_RENOVADA_TTL_MS = 5 * 60_000;
@@ -60,7 +61,7 @@ export async function renovarCotacaoParaSwap(
     );
   }
 
-  const preco = await calcularPrecoDeEmissao({ valorBrl: quote.fromAmount });
+  const preco = await calcularPrecoDeEmissao({ valorBrl: valorLiquidoDaCotacao(quote) });
   const dados = {
     navPorTokenNaCotacao: preco.navPorTokenNaCotacao,
     plinarfAmount: preco.plinarfAmount,

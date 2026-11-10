@@ -31,6 +31,7 @@ import {
 import { ticketMinimoFor } from '@/lib/config/suitability';
 import { sensitiveAuthLimiter, clientIp } from '@/lib/rate-limit/config';
 import { calcularPrecoDeEmissao } from '@/lib/services/emissao';
+import { assertClasseDisponivel, valorLiquidoDaCotacao } from '@/lib/services/regras-swap';
 import { navUnavailableResponse } from '@/lib/api/nav-unavailable';
 import { internalErrorResponse } from '@/lib/api/internal-error';
 import { ApiError } from '@/lib/api/errors';
@@ -72,6 +73,8 @@ export const POST = withAuth(async (req, { user }) => {
   try {
     const { customerId, stellarAddress } = body;
     const direction = body.direction ?? 'onramp';
+    // N1: Subordinada sem NAV próprio → recusada antes de qualquer chamada ao anchor.
+    if (direction === 'onramp') assertClasseDisponivel(body.classe);
 
     let sourceAmount: string;
     let fromCurrency: string;
@@ -217,7 +220,10 @@ export const POST = withAuth(async (req, { user }) => {
     const preco =
       direction === 'offramp'
         ? null
-        : await calcularPrecoDeEmissao({ valorBrl: fromAmount });
+        : await calcularPrecoDeEmissao({
+            // N1: V = valor LÍQUIDO que chega ao fundo (BRL menos o fee da Etherfuse), não o bruto.
+            valorBrl: valorLiquidoDaCotacao({ fromAmount, fee: quote.fee }),
+          });
 
     await db.quote.create({
       data: {
@@ -256,7 +262,7 @@ export const POST = withAuth(async (req, { user }) => {
     const indisponivel = navUnavailableResponse(err, 'quote');
     if (indisponivel) return indisponivel;
     if (err instanceof ApiError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
     }
     return internalErrorResponse(err, 'quote');
   }

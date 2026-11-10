@@ -324,6 +324,24 @@ describe('POST /api/investidor/buy/swap/submit', () => {
     expect(eventoAuditCreate.mock.calls[0][0].data.privyId).toBe('did:privy:abc');
   });
 
+  it('N1: o caixa do fundo recebe o valor LÍQUIDO do fee (fee ≠ 0), o mesmo V que gerou q', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote({ fromAmount: new Prisma.Decimal('150'), fee: '50' }));
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(200);
+    const mov = movimentoCreateMany.mock.calls[0][0].data[0];
+    expect(mov.tipo).toBe('SUBSCRICAO');
+    expect(new Prisma.Decimal(mov.valorBrl).toFixed(2)).toBe('100.00'); // 150 − 50, não 150
+  });
+
+  it('N1: cotação antiga de classe SUBORDINADA é recusada (422 CLASSE_INDISPONIVEL), sem reservar nem assinar', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote({ classe: 'SUBORDINADA' }));
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(422);
+    expect((await r.json()).code).toBe('CLASSE_INDISPONIVEL');
+    expect(quoteUpdateMany).not.toHaveBeenCalled();
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+  });
+
   it('N1: a Plina assina só no submit: o issuer do env co-assina e vai em extraSignatures com a chave do env', async () => {
     quoteFindUnique.mockResolvedValueOnce(baseQuote());
     await POST(req(FULL_BODY));

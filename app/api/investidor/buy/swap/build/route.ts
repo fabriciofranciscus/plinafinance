@@ -34,6 +34,7 @@ import { mainnetCutoverGuard } from '@/lib/env/feature-gates';
 import { buildAsset, loadAccount } from '@/lib/stellar/account';
 import { logStellarError } from '@/lib/stellar/log-error';
 import { assetCodeForClasse, classeOrDefault } from '@/lib/stellar/classes';
+import { assertClasseDisponivel, valorLiquidoDaCotacao } from '@/lib/services/regras-swap';
 import { registrarMovimentoFundo } from '@/lib/services/razao-fundo';
 import { incrementarHolding } from '@/lib/services/holdings';
 import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
@@ -166,6 +167,7 @@ export const POST = withApi(async (req, { requestId }) => {
   const bridgeAmount = quote.toAmount.toFixed(7); // TESOURO pago (perna 1)
   const stellarAmount = cotacao.plinarfAmount.toFixed(7); // PLINARF emitido (perna 2)
   const classe = classeOrDefault(quote.classe);
+  assertClasseDisponivel(classe); // N1: Subordinada sem NAV próprio
   const plinarfCode = assetCodeForClasse(classe);
 
   const instructions = quote.onRampOrder.paymentInstructionsJson as
@@ -227,7 +229,7 @@ export const POST = withApi(async (req, { requestId }) => {
       });
       await registrarMovimentoFundo(tx, {
         tipo: 'SUBSCRICAO',
-        valorBrl: quote.fromAmount,
+        valorBrl: valorLiquidoDaCotacao(quote), // N1: caixa pelo valor LÍQUIDO do fee
         tokens: stellarAmount,
         chave: `subscricao:${cotacao.id}`,
         quoteId: cotacao.id,

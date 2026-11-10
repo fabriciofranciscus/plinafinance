@@ -103,6 +103,7 @@ vi.mock('@/lib/db', () => {
   return {
     db: {
       eventoAudit: { findFirst: st.eventoFind, create: eventoAudit.create },
+      quote: { findFirst: async () => null }, // lerSupplyDoNav: nenhum swap em voo
       cota,
       movimentoFundo,
       $transaction: (fn: (t: typeof tx) => Promise<unknown>) => {
