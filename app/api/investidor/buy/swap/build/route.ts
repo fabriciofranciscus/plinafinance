@@ -2,8 +2,8 @@
  * POST /api/investidor/buy/swap/build
  *
  * Monta o envelope atômico de emissão de PLINARF — duas legs no mesmo
- * envelope assinado: (1) investor → distributor em TESOURO; (2) distributor
- * → investor em PLINARF. Investor co-assina via Privy; distributor já
+ * envelope assinado: (1) investor → distributor em TESOURO; (2) issuer
+ * → investor em PLINARF (emissão nova). Investor co-assina via Privy; o issuer já
  * vem pré-assinado server-side. Submissão em /swap/submit.
  *
  * Pré-condições:
@@ -13,13 +13,14 @@
  *
  * Modo mock (PLINA-MOD-005 bypass): quando a order é mock (sandbox sem
  * iframe), não há TESOURO real na wallet — emissão cai num caminho
- * direto (distribute single-shot) executado server-side. Marca audit log.
+ * direto (emissão single-shot pelo issuer) executado server-side. Marca audit log.
  *
  * Body: { quoteId, investorPubkey, investidorId? }
- * Returns (real): { xdr, hashHex, distributorSigBase64, mock: false }
+ * Returns (real): { xdr, hashHex, issuerSigBase64, mock: false }
  * Returns (mock): { txHash, mock: true, alreadyExecuted: true }
  */
 
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
@@ -27,8 +28,8 @@ import {
   buildSwapBridgeForPlinarfXdr,
   preSignWithSigner,
 } from '@/lib/stellar/transactions';
-import { distribute, createTrustline } from '@/lib/stellar/issuer';
-import { distributorSigner } from '@/lib/stellar/signer';
+import { issueAsset, createTrustline } from '@/lib/stellar/issuer';
+import { distributorSigner, issuerSigner } from '@/lib/stellar/signer';
 import { mainnetCutoverGuard } from '@/lib/env/feature-gates';
 import { buildAsset, loadAccount } from '@/lib/stellar/account';
 import { logStellarError } from '@/lib/stellar/log-error';
@@ -146,9 +147,10 @@ export const POST = withApi(async (req, { requestId }) => {
   });
 
   const issuerPubkey = process.env.STELLAR_ISSUER_PUBLIC;
+  const issuerSecret = process.env.STELLAR_ISSUER_SECRET;
   const distributorSecret = process.env.STELLAR_DISTRIBUTOR_SECRET;
   const distributorPubkey = process.env.STELLAR_DISTRIBUTOR_PUBLIC;
-  if (!issuerPubkey || !distributorSecret || !distributorPubkey) {
+  if (!issuerPubkey || !issuerSecret || !distributorSecret || !distributorPubkey) {
     // env ausente: erro interno, vira INTERNAL genérico (não surfacia).
     throw new Error('Stellar issuer/distributor não configurados');
   }
@@ -176,7 +178,7 @@ export const POST = withApi(async (req, { requestId }) => {
 
   // Defesa em profundidade: uma order mock NUNCA pode emitir PLINARF sem
   // perna TESOURO fora de sandbox (ex.: dados de testnet num DB promovido a
-  // mainnet). `distribute()` é free-mint — recusa antes de tocar a chain.
+  // mainnet). `issueAsset` é free-mint — recusa antes de tocar a chain.
   if (mock && !sandboxMockAllowed()) {
     throw new ApiError(
       'CONFLICT',
@@ -188,12 +190,14 @@ export const POST = withApi(async (req, { requestId }) => {
   if (mock) {
     // Sem TESOURO real na wallet — emissão direta server-side, consumo
     // atômico do quote + audit log marcando mock.
-    const distRes = await distribute(
-      distributorSigner(),
-      issuerPubkey,
+    // N1: a subscrição EMITE token novo (issuer → investidor, supply +q). Pagar
+    // do distributor tiraria da posição legada da Plina e o NAV subiria a cada venda.
+    const distRes = await issueAsset(
+      issuerSigner(),
       investorPubkey,
       stellarAmount,
       plinarfCode,
+      { memoHash: createHash('sha256').update(`plina:subscricao:${quote.id}`).digest() },
     );
 
     await db.$transaction(async (tx) => {
@@ -277,15 +281,16 @@ export const POST = withApi(async (req, { requestId }) => {
     memo: `q:${quote.id.slice(0, 24)}`,
   });
 
-  // Distributor pré-assina server-side — investor só co-assina o hash.
-  const distributorSig = preSignWithSigner(distributorSigner(), xdr);
+  // N1: quem assina a perna 2 é o ISSUER (emissão nova): ele pré-assina
+  // server-side e o investidor só co-assina o hash. O distributor só recebe a
+  // perna 1 (ativo-ponte) e não assina nem entrega PLINARF na subscrição.
+  const issuerSig = preSignWithSigner(issuerSigner(), xdr);
 
   return ok(
     {
       xdr,
       hashHex,
-      distributorSigBase64: distributorSig.sigBase64,
-      distributorPubkey: distributorSig.pubkey,
+      issuerSigBase64: issuerSig.sigBase64,
       mock: false,
     },
     { requestId },

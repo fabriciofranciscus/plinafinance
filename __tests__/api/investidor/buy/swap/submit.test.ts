@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import { Keypair } from '@stellar/stellar-sdk';
+import { Account, Asset, Keypair, Operation, TransactionBuilder } from '@stellar/stellar-sdk';
+import { networkPassphrase } from '@/lib/stellar/config';
 
 const USER_PK = Keypair.random().publicKey();
 const OTHER_PK = Keypair.random().publicKey();
 const DIST_PK = Keypair.random().publicKey();
+const ISSUER = Keypair.random();
 
 const {
   quoteFindUnique,
@@ -87,8 +90,9 @@ vi.mock('@/lib/services/investidor', () => ({ assertElegivelParaTrustline }));
 vi.mock('@/lib/stellar/parse-swap-xdr', () => ({ assertSwapXdrMatchesQuote }));
 vi.mock('@/lib/anchors/etherfuse/tesouro', () => ({ resolveTesouroAsset }));
 
-const SAVED_ISSUER = process.env.STELLAR_ISSUER_PUBLIC;
-process.env.STELLAR_ISSUER_PUBLIC = 'GISSUER';
+// N1: as chaves públicas vêm só do env; a assinatura pré-assinada é do ISSUER.
+process.env.STELLAR_ISSUER_PUBLIC = ISSUER.publicKey();
+process.env.STELLAR_DISTRIBUTOR_PUBLIC = DIST_PK;
 
 import { POST } from '@/app/api/investidor/buy/swap/submit/route';
 
@@ -100,18 +104,26 @@ function req(body: object): Request {
   });
 }
 
+/** XDR real (a rota confere a assinatura do issuer contra o hash da tx). */
+function realTx() {
+  return new TransactionBuilder(new Account(USER_PK, '1'), { fee: '100', networkPassphrase })
+    .addOperation(Operation.payment({ source: USER_PK, destination: DIST_PK, asset: Asset.native(), amount: '1' }))
+    .setTimeout(0)
+    .build();
+}
+const TX = realTx();
+const ISSUER_SIG = ISSUER.sign(TX.hash()).toString('base64');
+
 const FULL_BODY = {
   quoteId: 'q_1',
   investorPubkey: USER_PK,
   signatureHex: 'deadbeef',
-  xdr: 'AAAA',
-  distributorSigBase64: 'sig==',
-  distributorPubkey: DIST_PK,
+  xdr: TX.toXDR(),
+  issuerSigBase64: ISSUER_SIG,
 };
 
 /** sha256(FULL_BODY.xdr) — é o que a rota usa como chave de reserva (C-04). */
-const XDR_HASH =
-  '63c1dd951ffedf6f7fd968ad4efa39b8ed584f162f46e715114ee184f8de9201';
+const XDR_HASH = createHash('sha256').update(FULL_BODY.xdr).digest('hex');
 
 function baseQuote(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -154,7 +166,8 @@ beforeEach(() => {
       issuer: 'GTESOURO',
       identifier: 'TESOURO:GTESOURO',
     });
-  process.env.STELLAR_ISSUER_PUBLIC = SAVED_ISSUER ?? 'GISSUER';
+  process.env.STELLAR_ISSUER_PUBLIC = ISSUER.publicKey();
+  process.env.STELLAR_DISTRIBUTOR_PUBLIC = DIST_PK;
 });
 
 describe('POST /api/investidor/buy/swap/submit', () => {
@@ -291,5 +304,57 @@ describe('POST /api/investidor/buy/swap/submit', () => {
     expect(eventoAuditCreate.mock.calls[0][0].data.acao).toBe('SWAP_EXECUTADO');
     expect(eventoAuditCreate.mock.calls[0][0].data.payloadJson.mock).toBe(false);
     expect(eventoAuditCreate.mock.calls[0][0].data.privyId).toBe('did:privy:abc');
+  });
+
+  it('N1: o issuer do env co-assina; a assinatura vai no extraSignatures com a chave pública do env', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    await POST(req(FULL_BODY));
+    expect(submitWithPrivySignature.mock.calls[0][0].extraSignatures).toEqual([
+      { pubkey: ISSUER.publicKey(), sigBase64: ISSUER_SIG },
+    ]);
+  });
+
+  it('N1: o validador recebe issuer e distributor do ENV, nunca do body', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    await POST(req(FULL_BODY));
+    const expected = assertSwapXdrMatchesQuote.mock.calls[0][1];
+    expect(expected.issuerPubkey).toBe(ISSUER.publicKey());
+    expect(expected.distributorPubkey).toBe(DIST_PK);
+  });
+
+  it('N1: body com distributorPubkey ou distributorSigBase64 (formato antigo) → 400, nada acontece', async () => {
+    const velho = { ...FULL_BODY, distributorPubkey: Keypair.random().publicKey(), distributorSigBase64: 'sig==' };
+    const r = await POST(req(velho));
+    expect(r.status).toBe(400);
+    expect(quoteFindUnique).not.toHaveBeenCalled();
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+  });
+
+  it('N1: assinatura que não é do issuer do env (outra chave ou outra XDR) → 400, sem reservar nem submeter', async () => {
+    quoteFindUnique.mockResolvedValue(baseQuote());
+    const outraChave = Keypair.random().sign(TX.hash()).toString('base64');
+    const r1 = await POST(req({ ...FULL_BODY, issuerSigBase64: outraChave }));
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).error).toMatch(/assinatura do issuer/);
+
+    const outraXdr = new TransactionBuilder(new Account(USER_PK, '2'), { fee: '100', networkPassphrase })
+      .addOperation(Operation.payment({ source: USER_PK, destination: DIST_PK, asset: Asset.native(), amount: '2' }))
+      .setTimeout(0).build();
+    const sigDaOutraXdr = ISSUER.sign(outraXdr.hash()).toString('base64');
+    const r2 = await POST(req({ ...FULL_BODY, issuerSigBase64: sigDaOutraXdr }));
+    expect(r2.status).toBe(400);
+    const r3 = await POST(req({ ...FULL_BODY, issuerSigBase64: '!!!nao-base64!!!' }));
+    expect(r3.status).toBe(400);
+
+    expect(quoteUpdateMany).not.toHaveBeenCalled();
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+  });
+
+  it('N1: sem as chaves no env → 500 e nada acontece', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    delete process.env.STELLAR_DISTRIBUTOR_PUBLIC;
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(500);
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
   });
 });

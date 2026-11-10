@@ -14,7 +14,9 @@ const {
   holdingUpsert,
   buildSwapBridgeForPlinarfXdr,
   preSignWithSigner,
-  distribute,
+  issueAsset,
+  issuerSigner,
+  distributorSigner,
   buildAsset,
   resolveTesouroAsset,
   assertElegivelParaTrustline,
@@ -28,7 +30,9 @@ const {
   holdingUpsert: vi.fn(),
   buildSwapBridgeForPlinarfXdr: vi.fn(),
   preSignWithSigner: vi.fn(),
-  distribute: vi.fn(),
+  issueAsset: vi.fn(),
+  issuerSigner: vi.fn(() => ({ id: 'issuer' })),
+  distributorSigner: vi.fn(() => ({ id: 'distributor' })),
   buildAsset: vi.fn(),
   resolveTesouroAsset: vi.fn(),
   assertElegivelParaTrustline: vi.fn(),
@@ -79,12 +83,14 @@ vi.mock('@/lib/stellar/transactions', () => ({
   buildSwapBridgeForPlinarfXdr,
   preSignWithSigner,
 }));
-vi.mock('@/lib/stellar/issuer', () => ({ distribute }));
+vi.mock('@/lib/stellar/issuer', () => ({ issueAsset, createTrustline: vi.fn() }));
+vi.mock('@/lib/stellar/signer', () => ({ issuerSigner, distributorSigner }));
 vi.mock('@/lib/stellar/account', () => ({ buildAsset, loadAccount }));
 vi.mock('@/lib/anchors/etherfuse/tesouro', () => ({ resolveTesouroAsset }));
 vi.mock('@/lib/services/investidor', () => ({ assertElegivelParaTrustline }));
 
 process.env.STELLAR_ISSUER_PUBLIC = 'GISSUER';
+process.env.STELLAR_ISSUER_SECRET = 'SISS';
 process.env.STELLAR_DISTRIBUTOR_SECRET = 'SDIST';
 process.env.STELLAR_DISTRIBUTOR_PUBLIC = 'GDIST';
 
@@ -125,7 +131,7 @@ beforeEach(() => {
   eventoAuditCreate.mockReset().mockResolvedValue({});
   movimentoCreateMany.mockReset().mockResolvedValue({ count: 1 });
   holdingUpsert.mockReset().mockResolvedValue({});
-  distribute.mockReset().mockResolvedValue({ hash: 'tx_mock_hash' });
+  issueAsset.mockReset().mockResolvedValue({ hash: 'tx_mock_hash' });
   buildSwapBridgeForPlinarfXdr.mockReset();
   preSignWithSigner.mockReset();
   buildAsset.mockReset().mockReturnValue({});
@@ -162,7 +168,7 @@ describe('POST /api/investidor/buy/swap/build', () => {
     expect(r.status).toBe(409);
   });
 
-  it('200 mock path executa distribute + audit log', async () => {
+  it('200 mock path executa a emissão (issuer) + audit log', async () => {
     quoteFindUnique.mockResolvedValueOnce(baseQuote());
     const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
     expect(r.status).toBe(200);
@@ -170,7 +176,7 @@ describe('POST /api/investidor/buy/swap/build', () => {
     expect(json.data.mock).toBe(true);
     expect(json.data.alreadyExecuted).toBe(true);
     expect(json.data.txHash).toBe('tx_mock_hash');
-    expect(distribute).toHaveBeenCalledOnce();
+    expect(issueAsset).toHaveBeenCalledOnce();
     expect(eventoAuditCreate).toHaveBeenCalledOnce();
     expect(eventoAuditCreate.mock.calls[0][0].data.acao).toBe('SWAP_EXECUTADO');
     expect(eventoAuditCreate.mock.calls[0][0].data.payloadJson.mock).toBe(true);
@@ -183,7 +189,7 @@ describe('POST /api/investidor/buy/swap/build', () => {
     );
     const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
     expect(r.status).toBe(409);
-    expect(distribute).not.toHaveBeenCalled();
+    expect(issueAsset).not.toHaveBeenCalled();
     expect(buildSwapBridgeForPlinarfXdr).not.toHaveBeenCalled();
   });
 
@@ -205,7 +211,10 @@ describe('POST /api/investidor/buy/swap/build', () => {
     expect(mov.deltaCaixa.toFixed(2)).toBe('400.00');
     expect(mov.deltaTokens.toFixed(7)).toBe('376.4705882');
     expect(mov.chave).toBe('subscricao:q_1');
-    expect(distribute.mock.calls[0][3]).toBe('376.4705882');
+    expect(issueAsset.mock.calls[0][2]).toBe('376.4705882');
+    expect(issueAsset.mock.calls[0][0]).toEqual({ id: 'issuer' }); // N1: emite o issuer, não o distributor
+    expect(issueAsset.mock.calls[0][1]).toBe(USER_PK);
+    expect(issueAsset.mock.calls[0][4].memoHash).toHaveLength(32);
     expect(eventoAuditCreate.mock.calls[0][0].data.payloadJson.amount).toBe('376.4705882');
     expect(eventoAuditCreate.mock.calls[0][0].data.payloadJson.navPorTokenNaCotacao).toBe('1.06250000');
   });
@@ -222,11 +231,34 @@ describe('POST /api/investidor/buy/swap/build', () => {
     resolveTesouroAsset.mockResolvedValueOnce({ code: 'TESOURO', issuer: 'GTES', identifier: 'TESOURO:GTES' });
     loadAccount.mockResolvedValueOnce({ balances: [{ asset_code: 'TESOURO', asset_issuer: 'GTES' }] });
     buildSwapBridgeForPlinarfXdr.mockResolvedValueOnce({ xdr: 'XDR', hashHex: '0xabc' });
-    preSignWithSigner.mockReturnValueOnce({ sigBase64: 'sig', pubkey: 'GDIST' });
+    preSignWithSigner.mockReturnValueOnce({ sigBase64: 'sig', pubkey: 'GISSUER' });
     const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
     expect(r.status).toBe(200);
     const args = buildSwapBridgeForPlinarfXdr.mock.calls[0][0];
     expect(args.bridgeAmount).toBe('344.0000000');
     expect(args.plinarfAmount).toBe('376.4705882');
+    // N1: quem pré-assina é o ISSUER (emissão nova), não o distributor; a resposta
+    // traz issuerSigBase64 e NÃO devolve chave pública nem assinatura do distributor.
+    expect(preSignWithSigner.mock.calls[0][0]).toEqual({ id: 'issuer' });
+    const data = (await r.json()).data;
+    expect(data.issuerSigBase64).toBe('sig');
+    expect(data).not.toHaveProperty('distributorSigBase64');
+    expect(data).not.toHaveProperty('distributorPubkey');
+    // o distributor segue só como destino da perna ponte
+    expect(args.distributorPubkey).toBe('GDIST');
+    expect(args.issuerPubkey).toBe('GISSUER');
+  });
+
+  it('N1: sem STELLAR_ISSUER_SECRET o build recusa (o issuer precisa pré-assinar)', async () => {
+    const saved = process.env.STELLAR_ISSUER_SECRET;
+    delete process.env.STELLAR_ISSUER_SECRET;
+    try {
+      quoteFindUnique.mockResolvedValueOnce(baseQuote({ onRampOrder: { id: 'ord_1', status: 'completed', paymentInstructionsJson: {} } }));
+      const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+      expect(r.status).toBe(500);
+      expect(buildSwapBridgeForPlinarfXdr).not.toHaveBeenCalled();
+    } finally {
+      process.env.STELLAR_ISSUER_SECRET = saved;
+    }
   });
 });
