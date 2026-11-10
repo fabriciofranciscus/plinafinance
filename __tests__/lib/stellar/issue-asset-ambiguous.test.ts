@@ -73,6 +73,7 @@ let ledgersSumidos = new Set<number>(); // instância que ainda não tem o ledge
 // accounts/{issuer}/transactions (desc): o que a instância do Horizon mostra da conta.
 let txsDaConta: Array<Record<string, unknown>> = [];
 let contaConsultada: string | undefined;
+let paginasDaConta = 0;
 const fechamento = (s: number) => REDE_BASE + 5 * (s - PRIMEIRO);
 const ultimoLedger = () =>
   ultimoFixo ?? PRIMEIRO + Math.floor((agora / 1000 - REDE_BASE) / 5);
@@ -126,7 +127,11 @@ function txsBuilder() {
     cursor: (c: string) => ((q.cursor = c), b),
     call: async () => {
       const s = q.ledger!;
-      if (s === -1) return { records: txsDaConta.slice(0, q.limit) };
+      if (s === -1) {
+        paginasDaConta += 1;
+        const inicio = q.cursor ? txsDaConta.findIndex((r) => r.paging_token === q.cursor) + 1 : 0;
+        return { records: txsDaConta.slice(inicio, inicio + q.limit) };
+      }
       registroLedger(s); // 404 se a instância não tem o ledger
       if (listaParcial.has(s)) return { records: [] };
       const todos = txsPorLedger.get(s) ?? [];
@@ -170,6 +175,7 @@ beforeEach(() => {
   ledgersSumidos = new Set();
   txsDaConta = [];
   contaConsultada = undefined;
+  paginasDaConta = 0;
   vi.spyOn(horizon, 'transactions').mockImplementation(() => txsBuilder() as never);
   vi.spyOn(horizon, 'ledgers').mockImplementation(() => ledgersBuilder() as never);
 });
@@ -617,8 +623,21 @@ describe('substituição com a MESMA sequence (decisão do Atlas; contratos/2026
 });
 
 describe('quemConsumiuSequence — prova positiva de quem consumiu a sequence (Argus/Atlas 12:38)', () => {
-  function txDaConta(hash: string, seq: string, successful = true, source = issuerKp.publicKey()) {
-    return { ...registro(hash, successful), ledger_attr: 777, source_account: source, source_account_sequence: seq };
+  function txDaConta(
+    hash: string,
+    seq: string,
+    successful = true,
+    source = issuerKp.publicKey(),
+    memo?: Buffer,
+  ) {
+    return {
+      ...registro(hash, successful),
+      ledger_attr: 777,
+      paging_token: `pt-${hash}`,
+      source_account: source,
+      source_account_sequence: seq,
+      ...(memo ? { memo_type: 'hash', memo: memo.toString('base64') } : { memo_type: 'none' }),
+    };
   }
 
   async function tentativas() {
@@ -703,5 +722,82 @@ describe('quemConsumiuSequence — prova positiva de quem consumiu a sequence (A
         }) as never,
     );
     await expect(quemConsumiuSequence([antiga.xdr])).rejects.toThrow('horizon 503');
+  });
+});
+
+describe('quemConsumiuSequence — ressalvas do Argus (Q1, Q4)', () => {
+  function txDaConta(hash: string, seq: string, memo?: Buffer, source = issuerKp.publicKey()) {
+    return {
+      ...registro(hash),
+      ledger_attr: 888,
+      paging_token: `pt-${hash}`,
+      source_account: source,
+      source_account_sequence: seq,
+      ...(memo ? { memo_type: 'hash', memo: memo.toString('base64') } : { memo_type: 'none' }),
+    };
+  }
+  const mais = (seq: string, n: number) => String(BigInt(seq) + BigInt(n));
+
+  async function substituicaoSemOXdrDaAntiga() {
+    const antiga = await buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', { memoHash: MEMO });
+    const seq = new Transaction(antiga.xdr, networkPassphrase).sequence;
+    return { antigaHash: antiga.hash, r1Xdr: antiga.xdr, seq };
+  }
+
+  it('Q1: A entrou, a lista de tentativas só tem R1 → ANTIGA_ENTROU pelo memo da emissão, nunca OUTRA_TX', async () => {
+    const { r1Xdr, seq } = await substituicaoSemOXdrDaAntiga();
+    txsDaConta = [txDaConta('hash-de-A', seq, MEMO)];
+
+    expect(await quemConsumiuSequence([r1Xdr])).toEqual({
+      status: 'ANTIGA_ENTROU',
+      hash: 'hash-de-A',
+      successful: true,
+      ledger: 888,
+    });
+  });
+
+  it('Q1: hash do histórico (hashesConhecidos) também prova que foi nossa, mesmo sem memo', async () => {
+    const { r1Xdr, seq } = await substituicaoSemOXdrDaAntiga();
+    txsDaConta = [txDaConta('hash-de-A', seq)];
+
+    expect(await quemConsumiuSequence([r1Xdr], { hashesConhecidos: ['hash-de-A'] })).toMatchObject({
+      status: 'ANTIGA_ENTROU',
+      hash: 'hash-de-A',
+    });
+  });
+
+  it('Q1: memo diferente e hash desconhecido → OUTRA_TX', async () => {
+    const { r1Xdr, seq } = await substituicaoSemOXdrDaAntiga();
+    txsDaConta = [txDaConta('de-outra-emissao', seq, Buffer.alloc(32, 7))];
+
+    expect(await quemConsumiuSequence([r1Xdr], { hashesConhecidos: ['outro'] })).toEqual({
+      status: 'OUTRA_TX',
+      hash: 'de-outra-emissao',
+    });
+  });
+
+  it('Q4: S na 2ª página → acha paginando', async () => {
+    const { r1Xdr, seq } = await substituicaoSemOXdrDaAntiga();
+    const acima = Array.from({ length: 200 }, (_, i) => txDaConta(`acima-${i}`, mais(seq, 200 - i)));
+    txsDaConta = [...acima, txDaConta('consumidora', seq), txDaConta('abaixo', mais(seq, -1))];
+
+    expect(await quemConsumiuSequence([r1Xdr])).toEqual({ status: 'OUTRA_TX', hash: 'consumidora' });
+    expect(paginasDaConta).toBe(2);
+  });
+
+  it('Q4: passou abaixo de S sem achar → INDETERMINADO, sem ler mais páginas', async () => {
+    const { r1Xdr, seq } = await substituicaoSemOXdrDaAntiga();
+    txsDaConta = [txDaConta('acima', mais(seq, 1)), txDaConta('abaixo', mais(seq, -1)), txDaConta('bem-abaixo', mais(seq, -2))];
+
+    expect(await quemConsumiuSequence([r1Xdr])).toMatchObject({ status: 'INDETERMINADO' });
+    expect(paginasDaConta).toBe(1);
+  });
+
+  it('Q4: teto de 10 páginas → INDETERMINADO', async () => {
+    const { r1Xdr, seq } = await substituicaoSemOXdrDaAntiga();
+    txsDaConta = Array.from({ length: 2_400 }, (_, i) => txDaConta(`acima-${i}`, mais(seq, 2_400 - i)));
+
+    expect(await quemConsumiuSequence([r1Xdr])).toMatchObject({ status: 'INDETERMINADO' });
+    expect(paginasDaConta).toBe(10);
   });
 });
