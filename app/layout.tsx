@@ -1,14 +1,30 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import localFont from "next/font/local";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { BotIdClient } from "botid/client";
-import { PrivyAppProvider } from "@/components/PrivyAppProvider";
-import { PessoaProvider } from "@/components/PessoaProvider";
+import { AppProviders } from "@/components/AppProviders";
 import { AppShell } from "@/components/AppShell";
 import { isAdminAuthenticated } from "@/lib/auth/admin";
 import { db } from "@/lib/db";
 import { getDictionary } from "@/lib/i18n/get-locale";
+import { ItfFontFaces } from "@/components/ItfFontFaces";
+
+// Geist e Geist Mono (OFL): arquivos no repo, self-host (sem pedido externo).
+// Chillax/Satoshi (ITF) ficam fora do Git: ver components/ItfFontFaces.tsx.
+const geist = localFont({
+  src: "./fonts/Geist-Variable-latin.woff2",
+  variable: "--font-geist",
+  weight: "100 900",
+  display: "swap",
+});
+const geistMono = localFont({
+  src: "./fonts/GeistMono-Variable-latin.woff2",
+  variable: "--font-geist-mono",
+  weight: "100 900",
+  display: "swap",
+});
 
 export async function generateMetadata(): Promise<Metadata> {
   const { locale, dict } = await getDictionary();
@@ -47,16 +63,14 @@ export default async function RootLayout({
     params?.issuerPubkey ?? process.env.STELLAR_ISSUER_PUBLIC ?? "";
 
   return (
-    <html lang={locale} className="scroll-smooth">
+    <html
+      lang={locale}
+      className={`scroll-smooth ${geist.variable} ${geistMono.variable}`}
+      // O script da landing põe `reveal-ready` aqui antes da primeira pintura.
+      suppressHydrationWarning
+    >
       <head>
-        <link
-          href="https://api.fontshare.com/v2/css?f[]=chillax@400,500,600,700&f[]=satoshi@400,500,700&display=swap"
-          rel="stylesheet"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500&family=Geist:wght@300;400;500;600&display=swap"
-          rel="stylesheet"
-        />
+        <ItfFontFaces />
       </head>
       <body className="font-text antialiased min-h-screen flex flex-col relative">
         {/* F-M0-5: sem isso, o servidor nunca recebe prova de "humano" e
@@ -77,13 +91,11 @@ export default async function RootLayout({
           />
         )}
         <a href="#main" className="skip-link">Pular para conteúdo</a>
-        <PrivyAppProvider>
-          <PessoaProvider>
-            <AppShell isAdmin={isAdmin} issuerPubkey={issuerPubkey}>
-              <div id="main">{children}</div>
-            </AppShell>
-          </PessoaProvider>
-        </PrivyAppProvider>
+        <AppProviders>
+          <AppShell isAdmin={isAdmin} issuerPubkey={issuerPubkey}>
+            <div id="main">{children}</div>
+          </AppShell>
+        </AppProviders>
         <Analytics />
         <SpeedInsights />
       </body>
