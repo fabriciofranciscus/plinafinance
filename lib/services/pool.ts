@@ -258,6 +258,21 @@ export function navParaEmissao(
 }
 
 /**
+ * Tolerância relativa entre o NAV congelado na cotação e o NAV relido no
+ * build/submit: 1 bp (0,01%). Acima disso a compra é recusada (409 NAV_MUDOU)
+ * e o investidor recota — o preço da cotação não vale mais (L1-S2).
+ */
+export const NAV_TOLERANCIA_RELATIVA = new Prisma.Decimal('0.0001');
+
+/** `true` se |atual − cotação| ÷ cotação > `NAV_TOLERANCIA_RELATIVA`. NAV ≤ 0 em qualquer lado → mudou. */
+export function navMudou(navNaCotacao: Numericable, navAtual: Numericable): boolean {
+  const cot = toDecimal(navNaCotacao);
+  const atual = toDecimal(navAtual);
+  if (cot.lte(0) || atual.lte(0)) return true;
+  return atual.minus(cot).abs().div(cot).gt(NAV_TOLERANCIA_RELATIVA);
+}
+
+/**
  * Quantidade de PLINA-RF emitida para `valorBrl` integralizado ao NAV/token
  * dado: `valorBrl ÷ navPorToken`, **truncada** (ROUND_DOWN) a 7 casas — a
  * precisão do Stellar. Nunca emite mais do que o BRL pago compra, e o NAV de

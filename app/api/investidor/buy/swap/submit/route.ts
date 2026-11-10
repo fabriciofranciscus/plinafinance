@@ -1,18 +1,18 @@
 /**
  * POST /api/investidor/buy/swap/submit
  *
- * Recebe a signature do investor sobre o envelope swap (TESOURO → distributor
- * + PLINARF → investor) e a signature pré-assinada do ISSUER (N1: a perna 2 é
- * emissão nova); submete
- * a tx atômica. Atomicidade: ambas legs commitam juntas — se TESOURO leg
- * underfundar, PLINARF leg não executa.
+ * Recebe o envelope do swap (TESOURO → distributor + PLINARF issuer →
+ * investor) JÁ assinado pelo investidor. A Plina só assina AQUI (N1, L1-S1/S3):
+ * valida o XDR contra o quote e contra as chaves do env, relê o NAV (L1-S2) e só
+ * então acrescenta a assinatura do issuer e submete a tx atômica. Qualquer
+ * divergência dá 4xx, sem assinar e sem gastar fee.
  *
  * Marca o quote como consumido dentro da mesma db.$transaction do audit log.
  * Modo mock é tratado em /swap/build — esta rota só aceita real.
  *
- * Body: { quoteId, investorPubkey, signatureHex, xdr, issuerSigBase64, investidorId? }
- * As chaves públicas (issuer, distributor) vêm só do env — nunca do body.
- * Returns: { swapTxHash }
+ * Body: { quoteId, signedXdr } — o investidor vem da sessão; issuer e
+ * distributor vêm só do env, nunca do body.
+ * Returns: { swapTxHash } | 409 { code: 'NAV_MUDOU' } quando o NAV divergiu da cotação.
  */
 
 import { NextResponse } from 'next/server';
@@ -23,19 +23,19 @@ import { Keypair, Transaction } from '@stellar/stellar-sdk';
 import { networkPassphrase } from '@/lib/stellar/config';
 import { db } from '@/lib/db';
 import {
+  preSignWithSigner,
   submitWithPrivySignature,
   txHashFromXdr,
   fetchTransactionByHash,
 } from '@/lib/stellar/transactions';
+import { issuerSigner } from '@/lib/stellar/signer';
+import { NavMudouError, revalidarNavDaCotacao } from '@/lib/services/emissao';
+import { navUnavailableResponse } from '@/lib/api/nav-unavailable';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { extractSafeError, logStellarError } from '@/lib/stellar/log-error';
 import { parseBody } from '@/lib/http/parse-body';
-import {
-  stellarPubkey,
-  stellarSignatureHex,
-  stellarXdr,
-} from '@/lib/http/zod-stellar';
+import { stellarXdr } from '@/lib/http/zod-stellar';
 import { parseStellarAmount } from '@/lib/format/parse-stellar-amount';
 import { registrarMovimentoFundo } from '@/lib/services/razao-fundo';
 import { assertSwapXdrMatchesQuote } from '@/lib/stellar/parse-swap-xdr';
@@ -45,43 +45,49 @@ import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 
 export const dynamic = 'force-dynamic';
 
-/** `true` só se `sigBase64` é assinatura válida de `issuerPubkey` sobre o hash da XDR. */
-function issuerSignatureValid(xdr: string, issuerPubkey: string, sigBase64: string): boolean {
+/**
+ * Assinatura do investidor no envelope: exatamente UMA assinatura, com o hint da
+ * chave dele e válida sobre o hash da tx. Devolve os 64 bytes ou `null`.
+ * (Verificado aqui, antes de a Plina assinar; a rede verificaria depois.)
+ */
+function investorSignature(tx: Transaction, investorPubkey: string): Buffer | null {
+  if (tx.signatures.length !== 1) return null;
+  const sig = tx.signatures[0];
   try {
-    const hash = new Transaction(xdr, networkPassphrase).hash();
-    return Keypair.fromPublicKey(issuerPubkey).verify(hash, Buffer.from(sigBase64, 'base64'));
+    const kp = Keypair.fromPublicKey(investorPubkey);
+    if (!sig.hint().equals(kp.signatureHint())) return null;
+    const raw = sig.signature();
+    return kp.verify(tx.hash(), raw) ? Buffer.from(raw) : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
 const Schema = z
   .object({
     quoteId: z.string().min(1).max(60),
-    investorPubkey: stellarPubkey(),
-    signatureHex: stellarSignatureHex(),
-    xdr: stellarXdr(),
-    issuerSigBase64: z.string().min(1).max(256),
-    investidorId: z.string().min(1).max(60).optional(),
+    signedXdr: stellarXdr(),
   })
   .strict();
 
 export const POST = withAuth(async (req, { user }) => {
   const parsed = await parseBody(req, Schema);
   if ('response' in parsed) return parsed.response;
-  const {
-    quoteId,
-    investorPubkey,
-    signatureHex,
-    xdr,
-    issuerSigBase64,
-    investidorId,
-  } = parsed.data;
+  const { quoteId, signedXdr } = parsed.data;
+  // O investidor é o da sessão — o body não escolhe quem paga nem quem recebe.
+  const investorPubkey = user.publicKey;
   try {
-    if (user.publicKey !== investorPubkey) {
+    let signedTx: Transaction;
+    try {
+      signedTx = new Transaction(signedXdr, networkPassphrase);
+    } catch {
+      return NextResponse.json({ error: 'xdr inválida' }, { status: 400 });
+    }
+    const investorSig = investorSignature(signedTx, investorPubkey);
+    if (!investorSig) {
       return NextResponse.json(
-        { error: 'investorPubkey não corresponde ao investidor autenticado' },
-        { status: 403 },
+        { error: 'assinatura do investidor ausente ou inválida' },
+        { status: 400 },
       );
     }
 
@@ -98,16 +104,11 @@ export const POST = withAuth(async (req, { user }) => {
         { status: 403 },
       );
     }
-    if (investidorId && quote.investidorId !== investidorId) {
-      return NextResponse.json(
-        { error: 'investidorId não bate com o quote' },
-        { status: 403 },
-      );
-    }
     // C-04: idempotência. xdrHash reserva a request; retry com mesmo XDR
     // após sucesso retorna hash existente, com XDR diferente em quote já
     // lacrado retorna 409.
-    const xdrHash = createHash('sha256').update(xdr).digest('hex');
+    // Chave pelo hash da tx (não depende de quem assinou nem da ordem das assinaturas).
+    const xdrHash = createHash('sha256').update(signedTx.hash()).digest('hex');
     if (quote.consumedAt) {
       if (quote.submitXdrHash === xdrHash && quote.consumedTxHash) {
         logStellarError(
@@ -121,12 +122,11 @@ export const POST = withAuth(async (req, { user }) => {
       }
       return NextResponse.json({ error: 'quote já consumido' }, { status: 409 });
     }
-    // Validade da cotação FX só vale ANTES do pagamento. Pós-settlement
-    // (onramp completed) a swap é 1:1 NAV; não bloqueia por expiração — o
-    // settlement/claim/assinatura levam mais que o TTL de 60s do quote.
+    // L1-S2: o quote expira mesmo com o onramp `completed` — o preço de emissão
+    // (NAV congelado) só vale dentro da janela do quote. Reserva órfã (mesma XDR já
+    // em curso) segue para a reconciliação, que consulta a chain.
     const onRampOrder = quote.onRampOrder;
-    const onrampCompleted = onRampOrder?.status === 'completed';
-    if (!onrampCompleted && quote.expiresAt.getTime() <= Date.now()) {
+    if (!quote.submitXdrHash && quote.expiresAt.getTime() <= Date.now()) {
       return NextResponse.json({ error: 'quote expirado' }, { status: 410 });
     }
     if (!onRampOrder || onRampOrder.status !== 'completed') {
@@ -151,8 +151,8 @@ export const POST = withAuth(async (req, { user }) => {
       publicKey: investorPubkey,
     });
 
-    // C-01: valida que a XDR assinada bate com o quote server-side.
-    // Sem isso, signature em rawSign não amarra amount/asset/destinos.
+    // C-01: valida que a XDR assinada bate com o quote server-side — a Plina só
+    // assina depois disto. Sem isso, a signature não amarra amount/asset/destinos.
     // As chaves vêm só do env: o body não escolhe quem emite nem quem recebe o ponte.
     const issuerPubkey = process.env.STELLAR_ISSUER_PUBLIC;
     const distributorPubkey = process.env.STELLAR_DISTRIBUTOR_PUBLIC;
@@ -176,7 +176,7 @@ export const POST = withAuth(async (req, { user }) => {
     const plinarfCode = assetCodeForClasse(classe);
     const tesouro = await resolveTesouroAsset(investorPubkey);
     try {
-      assertSwapXdrMatchesQuote(xdr, {
+      assertSwapXdrMatchesQuote(signedXdr, {
         investorPubkey,
         distributorPubkey,
         issuerPubkey,
@@ -194,13 +194,23 @@ export const POST = withAuth(async (req, { user }) => {
       );
     }
 
-    // N1: a assinatura pré-assinada tem de ser do ISSUER do env sobre o hash desta
-    // XDR. Conferida aqui, antes de reservar o quote e de gastar fee.
-    if (!issuerSignatureValid(xdr, issuerPubkey, issuerSigBase64)) {
-      return NextResponse.json(
-        { error: 'assinatura do issuer inválida para esta XDR' },
-        { status: 400 },
-      );
+    // L1-S2: relê o NAV e recusa se divergiu da cotação além de 1 bp. Só em reserva
+    // nova: numa reserva órfã a tx pode já estar no ledger e o NAV de agora (com o
+    // supply novo e o caixa ainda não escriturado) não é o da cotação.
+    if (!quote.submitXdrHash) {
+      try {
+        await revalidarNavDaCotacao({
+          fromAmount: quote.fromAmount,
+          navPorTokenNaCotacao: quote.navPorTokenNaCotacao,
+        });
+      } catch (err) {
+        if (err instanceof NavMudouError) {
+          return NextResponse.json({ error: err.message, code: err.code }, { status: 409 });
+        }
+        const indisponivel = navUnavailableResponse(err, 'swap/submit');
+        if (indisponivel) return indisponivel;
+        throw err;
+      }
     }
 
     // C-04: reserva o xdrHash ANTES do submit. Race window de 2 chamadas
@@ -237,7 +247,7 @@ export const POST = withAuth(async (req, { user }) => {
     // submetida; numa reserva órfã (recovery), o hash é determinístico a partir
     // da XDR, então consultamos o Horizon — se a tx já está on-chain com sucesso,
     // os tokens já foram mintados e só falta escriturar (sem re-submeter).
-    const expectedTxHash = txHashFromXdr(xdr);
+    const expectedTxHash = txHashFromXdr(signedXdr);
     const onchain =
       reserved.count === 1 ? null : await fetchTransactionByHash(expectedTxHash);
 
@@ -250,12 +260,21 @@ export const POST = withAuth(async (req, { user }) => {
         { status: 409 },
       );
     } else {
+      // A Plina assina só agora, com o XDR já validado e a assinatura do
+      // investidor conferida. O envelope é reenviado sem assinaturas e as duas
+      // entram em `submitWithPrivySignature` (investidor + issuer).
+      const issuerSig = preSignWithSigner(issuerSigner(), signedXdr);
+      if (issuerSig.pubkey !== issuerPubkey) {
+        throw new Error('signer do issuer diverge da configuração');
+      }
+      const unsigned = new Transaction(signedXdr, networkPassphrase);
+      unsigned.signatures.length = 0;
       const submitRes = await submitWithPrivySignature({
-        xdr,
+        xdr: unsigned.toXDR(),
         investorPubkey,
-        investorSignatureHex: signatureHex,
+        investorSignatureHex: `0x${investorSig.toString('hex')}`,
         extraSignatures: [
-          { pubkey: issuerPubkey, sigBase64: issuerSigBase64 },
+          { pubkey: issuerSig.pubkey, sigBase64: issuerSig.sigBase64 },
         ],
       });
       finalHash = submitRes.hash;

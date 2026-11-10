@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import { Account, Asset, Keypair, Operation, TransactionBuilder } from '@stellar/stellar-sdk';
+import { Account, Asset, Keypair, Operation, Transaction, TransactionBuilder } from '@stellar/stellar-sdk';
+import { NavMudouError } from '@/lib/services/emissao';
+import { NavIndisponivelError } from '@/lib/services/nav-supply';
 import { networkPassphrase } from '@/lib/stellar/config';
 
-const USER_PK = Keypair.random().publicKey();
+const USER = Keypair.random();
+const USER_PK = USER.publicKey();
 const OTHER_PK = Keypair.random().publicKey();
 const DIST_PK = Keypair.random().publicKey();
 const ISSUER = Keypair.random();
@@ -22,6 +25,8 @@ const {
   assertElegivelParaTrustline,
   assertSwapXdrMatchesQuote,
   resolveTesouroAsset,
+  preSignWithSigner,
+  revalidarNav,
 } = vi.hoisted(() => ({
   quoteFindUnique: vi.fn(),
   quoteUpdateMany: vi.fn(),
@@ -35,6 +40,8 @@ const {
   assertElegivelParaTrustline: vi.fn(),
   assertSwapXdrMatchesQuote: vi.fn(),
   resolveTesouroAsset: vi.fn(),
+  preSignWithSigner: vi.fn(),
+  revalidarNav: vi.fn(),
 }));
 
 vi.mock('@/lib/wallet/auth-guard', () => ({
@@ -82,15 +89,21 @@ vi.mock('@/lib/db', () => ({
 // Mock explícito (nada de importActual) pra manter o teste hermético: o real
 // `fetchTransactionByHash` bate no Horizon.
 vi.mock('@/lib/stellar/transactions', () => ({
+  preSignWithSigner,
   submitWithPrivySignature,
   txHashFromXdr,
   fetchTransactionByHash,
 }));
+vi.mock('@/lib/stellar/signer', () => ({ issuerSigner: () => ({ id: 'issuer' }) }));
+vi.mock('@/lib/services/emissao', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/services/emissao')>();
+  return { ...actual, revalidarNavDaCotacao: revalidarNav };
+});
 vi.mock('@/lib/services/investidor', () => ({ assertElegivelParaTrustline }));
 vi.mock('@/lib/stellar/parse-swap-xdr', () => ({ assertSwapXdrMatchesQuote }));
 vi.mock('@/lib/anchors/etherfuse/tesouro', () => ({ resolveTesouroAsset }));
 
-// N1: as chaves públicas vêm só do env; a assinatura pré-assinada é do ISSUER.
+// N1: as chaves públicas vêm só do env; o ISSUER assina no submit (depois de validar).
 process.env.STELLAR_ISSUER_PUBLIC = ISSUER.publicKey();
 process.env.STELLAR_DISTRIBUTOR_PUBLIC = DIST_PK;
 
@@ -104,26 +117,24 @@ function req(body: object): Request {
   });
 }
 
-/** XDR real (a rota confere a assinatura do issuer contra o hash da tx). */
-function realTx() {
+/** XDR real assinado pelo investidor (a rota confere a assinatura dele antes de assinar pela Plina). */
+function realTx(amount = '1') {
   return new TransactionBuilder(new Account(USER_PK, '1'), { fee: '100', networkPassphrase })
-    .addOperation(Operation.payment({ source: USER_PK, destination: DIST_PK, asset: Asset.native(), amount: '1' }))
+    .addOperation(Operation.payment({ source: USER_PK, destination: DIST_PK, asset: Asset.native(), amount }))
     .setTimeout(0)
     .build();
 }
 const TX = realTx();
-const ISSUER_SIG = ISSUER.sign(TX.hash()).toString('base64');
+TX.sign(USER);
+const ISSUER_SIG = 'issuer-sig-base64';
 
 const FULL_BODY = {
   quoteId: 'q_1',
-  investorPubkey: USER_PK,
-  signatureHex: 'deadbeef',
-  xdr: TX.toXDR(),
-  issuerSigBase64: ISSUER_SIG,
+  signedXdr: TX.toXDR(),
 };
 
-/** sha256(FULL_BODY.xdr) — é o que a rota usa como chave de reserva (C-04). */
-const XDR_HASH = createHash('sha256').update(FULL_BODY.xdr).digest('hex');
+/** sha256(hash da tx) — é o que a rota usa como chave de reserva (C-04). */
+const XDR_HASH = createHash('sha256').update(TX.hash()).digest('hex');
 
 function baseQuote(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -156,6 +167,8 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue({ hash: 'tx_real_hash' });
   txHashFromXdr.mockReset().mockReturnValue('tx_real_hash');
+  preSignWithSigner.mockReset().mockReturnValue({ pubkey: ISSUER.publicKey(), sigBase64: ISSUER_SIG });
+  revalidarNav.mockReset().mockResolvedValue(undefined);
   fetchTransactionByHash.mockReset().mockResolvedValue(null);
   assertElegivelParaTrustline.mockReset().mockResolvedValue(undefined);
   assertSwapXdrMatchesQuote.mockReset();
@@ -176,9 +189,14 @@ describe('POST /api/investidor/buy/swap/submit', () => {
     expect(r.status).toBe(400);
   });
 
-  it('403 investorPubkey ≠ user.publicKey', async () => {
-    const r = await POST(req({ ...FULL_BODY, investorPubkey: OTHER_PK }));
-    expect(r.status).toBe(403);
+  it('400 quando o XDR não está assinado pelo investidor da sessão (assinatura de outra chave)', async () => {
+    const outro = realTx();
+    outro.sign(Keypair.random());
+    const r = await POST(req({ ...FULL_BODY, signedXdr: outro.toXDR() }));
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toMatch(/assinatura do investidor/);
+    expect(quoteFindUnique).not.toHaveBeenCalled();
+    expect(preSignWithSigner).not.toHaveBeenCalled();
   });
 
   it('404 quote inexistente', async () => {
@@ -306,47 +324,70 @@ describe('POST /api/investidor/buy/swap/submit', () => {
     expect(eventoAuditCreate.mock.calls[0][0].data.privyId).toBe('did:privy:abc');
   });
 
-  it('N1: o issuer do env co-assina; a assinatura vai no extraSignatures com a chave pública do env', async () => {
+  it('N1: a Plina assina só no submit: o issuer do env co-assina e vai em extraSignatures com a chave do env', async () => {
     quoteFindUnique.mockResolvedValueOnce(baseQuote());
     await POST(req(FULL_BODY));
-    expect(submitWithPrivySignature.mock.calls[0][0].extraSignatures).toEqual([
-      { pubkey: ISSUER.publicKey(), sigBase64: ISSUER_SIG },
-    ]);
+    expect(preSignWithSigner).toHaveBeenCalledTimes(1);
+    const arg = submitWithPrivySignature.mock.calls[0][0];
+    expect(arg.extraSignatures).toEqual([{ pubkey: ISSUER.publicKey(), sigBase64: ISSUER_SIG }]);
+    // o envelope é reenviado SEM assinaturas; a do investidor entra por investorSignatureHex
+    expect(new Transaction(arg.xdr, networkPassphrase).signatures).toHaveLength(0);
+    expect(arg.investorPubkey).toBe(USER_PK);
+    expect(arg.investorSignatureHex).toBe('0x' + Buffer.from(TX.signatures[0].signature()).toString('hex'));
   });
 
-  it('N1: o validador recebe issuer e distributor do ENV, nunca do body', async () => {
+  it('N1: a Plina NÃO assina quando o XDR diverge do quote (4xx, sem assinar, sem gastar fee)', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    assertSwapXdrMatchesQuote.mockImplementationOnce(() => { throw new Error('leg2 source ≠ issuer'); });
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(400);
+    expect(preSignWithSigner).not.toHaveBeenCalled();
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+    expect(quoteUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('N1: o validador recebe issuer, distributor e investidor do ENV/sessão, nunca do body', async () => {
     quoteFindUnique.mockResolvedValueOnce(baseQuote());
     await POST(req(FULL_BODY));
     const expected = assertSwapXdrMatchesQuote.mock.calls[0][1];
     expect(expected.issuerPubkey).toBe(ISSUER.publicKey());
     expect(expected.distributorPubkey).toBe(DIST_PK);
+    expect(expected.investorPubkey).toBe(USER_PK);
   });
 
-  it('N1: body com distributorPubkey ou distributorSigBase64 (formato antigo) → 400, nada acontece', async () => {
-    const velho = { ...FULL_BODY, distributorPubkey: Keypair.random().publicKey(), distributorSigBase64: 'sig==' };
-    const r = await POST(req(velho));
-    expect(r.status).toBe(400);
+  it('N1: body com campos do desenho antigo (investorPubkey, signatureHex, xdr, issuerSigBase64, distributorPubkey…) → 400, nada acontece', async () => {
+    for (const extra of [
+      { investorPubkey: USER_PK },
+      { signatureHex: 'a'.repeat(128) },
+      { issuerSigBase64: 'sig' },
+      { distributorPubkey: Keypair.random().publicKey() },
+      { distributorSigBase64: 'sig==' },
+      { investidorId: 'inv_1' },
+    ]) {
+      const r = await POST(req({ ...FULL_BODY, ...extra }));
+      expect(r.status).toBe(400);
+    }
     expect(quoteFindUnique).not.toHaveBeenCalled();
+    expect(preSignWithSigner).not.toHaveBeenCalled();
+  });
+
+  it('N1: envelope com mais de uma assinatura ou sem a do investidor → 400, sem assinar', async () => {
+    quoteFindUnique.mockResolvedValue(baseQuote());
+    const duas = realTx(); duas.sign(USER); duas.sign(Keypair.random());
+    expect((await POST(req({ ...FULL_BODY, signedXdr: duas.toXDR() }))).status).toBe(400);
+    const nenhuma = realTx();
+    expect((await POST(req({ ...FULL_BODY, signedXdr: nenhuma.toXDR() }))).status).toBe(400);
+    expect((await POST(req({ ...FULL_BODY, signedXdr: 'nao-e-xdr' }))).status).toBe(400);
+    expect(preSignWithSigner).not.toHaveBeenCalled();
     expect(submitWithPrivySignature).not.toHaveBeenCalled();
   });
 
-  it('N1: assinatura que não é do issuer do env (outra chave ou outra XDR) → 400, sem reservar nem submeter', async () => {
-    quoteFindUnique.mockResolvedValue(baseQuote());
-    const outraChave = Keypair.random().sign(TX.hash()).toString('base64');
-    const r1 = await POST(req({ ...FULL_BODY, issuerSigBase64: outraChave }));
-    expect(r1.status).toBe(400);
-    expect((await r1.json()).error).toMatch(/assinatura do issuer/);
-
-    const outraXdr = new TransactionBuilder(new Account(USER_PK, '2'), { fee: '100', networkPassphrase })
-      .addOperation(Operation.payment({ source: USER_PK, destination: DIST_PK, asset: Asset.native(), amount: '2' }))
-      .setTimeout(0).build();
-    const sigDaOutraXdr = ISSUER.sign(outraXdr.hash()).toString('base64');
-    const r2 = await POST(req({ ...FULL_BODY, issuerSigBase64: sigDaOutraXdr }));
-    expect(r2.status).toBe(400);
-    const r3 = await POST(req({ ...FULL_BODY, issuerSigBase64: '!!!nao-base64!!!' }));
-    expect(r3.status).toBe(400);
-
-    expect(quoteUpdateMany).not.toHaveBeenCalled();
+  it('N1: signer do issuer que não é o issuer do env → erro, nada submetido', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    preSignWithSigner.mockReturnValueOnce({ pubkey: Keypair.random().publicKey(), sigBase64: 'x' });
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(500);
     expect(submitWithPrivySignature).not.toHaveBeenCalled();
   });
 
@@ -355,6 +396,56 @@ describe('POST /api/investidor/buy/swap/submit', () => {
     delete process.env.STELLAR_DISTRIBUTOR_PUBLIC;
     const r = await POST(req(FULL_BODY));
     expect(r.status).toBe(500);
+    expect(preSignWithSigner).not.toHaveBeenCalled();
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+  });
+
+  it('L1-S2: NAV mudou além de 1 bp → 409 NAV_MUDOU, sem assinar nem reservar', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    revalidarNav.mockRejectedValueOnce(new NavMudouError());
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({ error: 'O NAV mudou; gere uma nova cotação.', code: 'NAV_MUDOU' });
+    expect(preSignWithSigner).not.toHaveBeenCalled();
+    expect(quoteUpdateMany).not.toHaveBeenCalled();
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+  });
+
+  it('L1-S2: o submit relê o NAV com o BRL e o NAV congelados do quote', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    await POST(req(FULL_BODY));
+    expect(revalidarNav.mock.calls[0][0].fromAmount.toFixed(2)).toBe('100.00');
+    expect(revalidarNav.mock.calls[0][0].navPorTokenNaCotacao.toFixed(2)).toBe('1.00');
+  });
+
+  it('L1-S2: sem NAV (ledger fora / PLINARFB) → 503 constante, sem assinar', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    revalidarNav.mockRejectedValueOnce(new NavIndisponivelError('SUBORDINADA_CIRCULANDO'));
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(503);
+    expect((await r.json()).code).toBe('LEDGER_UNAVAILABLE');
+    expect(preSignWithSigner).not.toHaveBeenCalled();
+  });
+
+  it('L1-S2: o quote expira mesmo com o onramp completed (410), sem ler NAV nem assinar', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote({ expiresAt: new Date(Date.now() - 1_000) }));
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(410);
+    expect(revalidarNav).not.toHaveBeenCalled();
+    expect(preSignWithSigner).not.toHaveBeenCalled();
+  });
+
+  it('L1-S2: reserva órfã (mesma XDR já em curso) NÃO revalida o NAV nem expira — a tx pode já estar no ledger', async () => {
+    quoteFindUnique
+      .mockResolvedValueOnce(baseQuote({ submitXdrHash: XDR_HASH, expiresAt: new Date(Date.now() - 1_000) }))
+      .mockResolvedValueOnce({ submitXdrHash: XDR_HASH, consumedTxHash: null, consumedAt: null });
+    quoteUpdateMany.mockResolvedValueOnce({ count: 0 });
+    fetchTransactionByHash.mockResolvedValueOnce({ hash: 'tx_ja_onchain', successful: true });
+    txHashFromXdr.mockReturnValue('tx_ja_onchain');
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(200);
+    expect(revalidarNav).not.toHaveBeenCalled();
     expect(submitWithPrivySignature).not.toHaveBeenCalled();
   });
 });

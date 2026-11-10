@@ -3,8 +3,8 @@
  *
  * Monta o envelope atômico de emissão de PLINARF — duas legs no mesmo
  * envelope assinado: (1) investor → distributor em TESOURO; (2) issuer
- * → investor em PLINARF (emissão nova). Investor co-assina via Privy; o issuer já
- * vem pré-assinado server-side. Submissão em /swap/submit.
+ * → investor em PLINARF (emissão nova). O investidor assina via Privy; a Plina NÃO assina no
+ * build (N1/L1-S3): o issuer assina só no /swap/submit, depois de validar o XDR.
  *
  * Pré-condições:
  *   - Quote válido (não expirado, não consumido) e pertencente ao investor.
@@ -16,7 +16,7 @@
  * direto (emissão single-shot pelo issuer) executado server-side. Marca audit log.
  *
  * Body: { quoteId, investorPubkey, investidorId? }
- * Returns (real): { xdr, hashHex, issuerSigBase64, mock: false }
+ * Returns (real): { xdr, hashHex, mock: false } — XDR sem nenhuma assinatura da Plina
  * Returns (mock): { txHash, mock: true, alreadyExecuted: true }
  */
 
@@ -24,12 +24,11 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
-import {
-  buildSwapBridgeForPlinarfXdr,
-  preSignWithSigner,
-} from '@/lib/stellar/transactions';
+import { buildSwapBridgeForPlinarfXdr } from '@/lib/stellar/transactions';
 import { issueAsset, createTrustline } from '@/lib/stellar/issuer';
 import { distributorSigner, issuerSigner } from '@/lib/stellar/signer';
+import { NavMudouError, revalidarNavDaCotacao } from '@/lib/services/emissao';
+import { NAV_INDISPONIVEL_MENSAGEM, NavIndisponivelError } from '@/lib/services/nav-supply';
 import { mainnetCutoverGuard } from '@/lib/env/feature-gates';
 import { buildAsset, loadAccount } from '@/lib/stellar/account';
 import { logStellarError } from '@/lib/stellar/log-error';
@@ -118,12 +117,9 @@ export const POST = withApi(async (req, { requestId }) => {
   if (quote.consumedAt) {
     throw new ApiError('CONFLICT', 409, 'quote já consumido');
   }
-  // A validade da cotação FX só é um gate ANTES do pagamento (consumida no
-  // /onramp/create). Depois que o TESOURO foi liquidado (onramp completed), a
-  // swap é 1:1 NAV e não depende mais da janela do quote — não bloqueia, pra
-  // não barrar o settlement/claim/assinatura que levam mais que o TTL.
-  const onrampCompleted = quote.onRampOrder?.status === 'completed';
-  if (!onrampCompleted && quote.expiresAt.getTime() <= Date.now()) {
+  // L1-S2: o quote expira mesmo com o onramp `completed`. O preço de emissão
+  // (NAV congelado na cotação) só vale dentro da janela do quote.
+  if (quote.expiresAt.getTime() <= Date.now()) {
     throw new ApiError('GONE', 410, 'quote expirado');
   }
   if (!quote.onRampOrder) {
@@ -147,10 +143,9 @@ export const POST = withApi(async (req, { requestId }) => {
   });
 
   const issuerPubkey = process.env.STELLAR_ISSUER_PUBLIC;
-  const issuerSecret = process.env.STELLAR_ISSUER_SECRET;
   const distributorSecret = process.env.STELLAR_DISTRIBUTOR_SECRET;
   const distributorPubkey = process.env.STELLAR_DISTRIBUTOR_PUBLIC;
-  if (!issuerPubkey || !issuerSecret || !distributorSecret || !distributorPubkey) {
+  if (!issuerPubkey || !distributorSecret || !distributorPubkey) {
     // env ausente: erro interno, vira INTERNAL genérico (não surfacia).
     throw new Error('Stellar issuer/distributor não configurados');
   }
@@ -164,6 +159,23 @@ export const POST = withApi(async (req, { requestId }) => {
       409,
       'cotação sem preço de emissão ao NAV — refaça a cotação',
     );
+  }
+  // L1-S2: relê o NAV antes de montar/emitir; mudou além de 1 bp → recotar.
+  // Sem NAV (ledger fora, PLINARFB circulando) → 503 constante.
+  try {
+    await revalidarNavDaCotacao({
+      fromAmount: quote.fromAmount,
+      navPorTokenNaCotacao: quote.navPorTokenNaCotacao,
+    });
+  } catch (err) {
+    if (err instanceof NavMudouError) {
+      throw new ApiError('NAV_MUDOU', 409, err.message);
+    }
+    if (err instanceof NavIndisponivelError) {
+      console.error('[swap/build] NAV indisponível', { requestId, motivo: err.motivo });
+      throw new ApiError('LEDGER_UNAVAILABLE', 503, NAV_INDISPONIVEL_MENSAGEM);
+    }
+    throw err;
   }
   const navNaCotacao = quote.navPorTokenNaCotacao.toFixed(8);
   const bridgeAmount = quote.toAmount.toFixed(7); // TESOURO pago (perna 1)
@@ -190,6 +202,9 @@ export const POST = withApi(async (req, { requestId }) => {
   if (mock) {
     // Sem TESOURO real na wallet — emissão direta server-side, consumo
     // atômico do quote + audit log marcando mock.
+    if (!process.env.STELLAR_ISSUER_SECRET) {
+      throw new Error('Stellar issuer não configurado');
+    }
     // N1: a subscrição EMITE token novo (issuer → investidor, supply +q). Pagar
     // do distributor tiraria da posição legada da Plina e o NAV subiria a cada venda.
     const distRes = await issueAsset(
@@ -281,16 +296,13 @@ export const POST = withApi(async (req, { requestId }) => {
     memo: `q:${quote.id.slice(0, 24)}`,
   });
 
-  // N1: quem assina a perna 2 é o ISSUER (emissão nova): ele pré-assina
-  // server-side e o investidor só co-assina o hash. O distributor só recebe a
-  // perna 1 (ativo-ponte) e não assina nem entrega PLINARF na subscrição.
-  const issuerSig = preSignWithSigner(issuerSigner(), xdr);
-
+  // N1 + L1-S1/S3: o build NÃO assina nada pela Plina nem devolve chave pública.
+  // O investidor assina o envelope e o /swap/submit valida o XDR contra as
+  // chaves do env, só então acrescenta a assinatura do issuer e submete.
   return ok(
     {
       xdr,
       hashHex,
-      issuerSigBase64: issuerSig.sigBase64,
       mock: false,
     },
     { requestId },

@@ -8,7 +8,7 @@ vi.mock('@/lib/db', () => ({
     movimentoFundo: { aggregate: async () => ({ _sum: { deltaCaixa: null } }), createMany: async () => ({ count: 1 }) } },
 }));
 
-import { calcularPrecoDeEmissao } from '@/lib/services/emissao';
+import { NavMudouError, calcularPrecoDeEmissao, revalidarNavDaCotacao } from '@/lib/services/emissao';
 import { navPorTokenAsDecimal } from '@/lib/services/pool';
 import { NavIndisponivelError, resetNavSupplyCache } from '@/lib/services/nav-supply';
 
@@ -90,5 +90,32 @@ describe('calcularPrecoDeEmissao', () => {
     m.fetchSupplyDasClasses.mockResolvedValue({ senior: supply('240000'), subordinada: supply('0') });
     resetNavSupplyCache();
     expect((await calcularPrecoDeEmissao({ valorBrl: '400' })).navPorTokenNaCotacao.toFixed(4)).toBe('1.0417');
+  });
+});
+
+describe('revalidarNavDaCotacao (L1-S2)', () => {
+  const quote = (nav: string) => ({ fromAmount: '400', navPorTokenNaCotacao: nav });
+
+  it('NAV igual ao congelado → passa e devolve o NAV atual', async () => {
+    // beforeEach: cota R$ 85.000 / 80.000 tokens = 1,0625
+    const atual = await revalidarNavDaCotacao(quote('1.06250000'));
+    expect(atual.toFixed(8)).toBe('1.06250000');
+  });
+
+  it('NAV a 0,5 bp do congelado → passa; a 2 bp → NavMudouError', async () => {
+    await expect(revalidarNavDaCotacao(quote('1.06245000'))).resolves.toBeDefined(); // ~0,47 bp
+    const err = await revalidarNavDaCotacao(quote('1.06230000')).catch((e) => e); // ~1,9 bp
+    expect(err).toBeInstanceOf(NavMudouError);
+    expect(err.code).toBe('NAV_MUDOU');
+  });
+
+  it('NAV subiu desde a cotação (ex.: vendas anteriores sem caixa) → NavMudouError', async () => {
+    m.fetchSupplyDasClasses.mockResolvedValue({ senior: supply('70000'), subordinada: supply('0') }); // 85.000/70.000
+    await expect(revalidarNavDaCotacao(quote('1.06250000'))).rejects.toBeInstanceOf(NavMudouError);
+  });
+
+  it('sem NAV (ledger fora) → NavIndisponivelError, não NavMudouError', async () => {
+    m.fetchSupplyDasClasses.mockRejectedValue(new Error('x'));
+    await expect(revalidarNavDaCotacao(quote('1.06250000'))).rejects.toBeInstanceOf(NavIndisponivelError);
   });
 });
