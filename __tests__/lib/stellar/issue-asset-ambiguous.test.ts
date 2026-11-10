@@ -793,11 +793,11 @@ describe('quemConsumiuSequence — ressalvas do Argus (Q1, Q4)', () => {
     expect(paginasDaConta).toBe(1);
   });
 
-  it('Q4: teto de 10 páginas → INDETERMINADO', async () => {
+  it('Q4: teto de 5 páginas → INDETERMINADO', async () => {
     const { r1Xdr, seq } = await substituicaoSemOXdrDaAntiga();
     txsDaConta = Array.from({ length: 2_400 }, (_, i) => txDaConta(`acima-${i}`, mais(seq, 2_400 - i)));
 
     expect(await quemConsumiuSequence([r1Xdr])).toMatchObject({ status: 'INDETERMINADO' });
-    expect(paginasDaConta).toBe(10);
+    expect(paginasDaConta).toBe(5);
   });
 });

@@ -521,7 +521,7 @@ type RegistroTxDaConta = RegistroTx & {
   memo?: string;
 };
 
-const MAX_PAGINAS_CONTA = 10;
+const MAX_PAGINAS_CONTA = 5;
 
 /**
  * Prova POSITIVA de qual tx consumiu a sequence S das tentativas (todas com a
