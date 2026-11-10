@@ -27,7 +27,7 @@ const st = vi.hoisted(() => ({
   consumo: null as null | Error | { status: string; hash?: string; successful?: boolean; ledger?: number; motivo?: string },
   consumoArgs: [] as string[][],
   /** Resultado de cada chamada de submitEnvelope, em ordem (padrão SUCCESS). */
-  submitScript: [] as Array<'SUCCESS' | 'FAILED' | 'AMBIGUOUS' | 'AMBIGUOUS_LANDS' | 'SEQ_CONSUMIDA' | 'ANTERIOR_EMITIU' | 'ERRO_COMUM'>,
+  submitScript: [] as Array<'SUCCESS' | 'FAILED' | 'AMBIGUOUS' | 'AMBIGUOUS_LANDS' | 'SEQ_CONSUMIDA' | 'ANTERIOR_EMITIU' | 'ERRO_COMUM' | 'FAILED_TOO_LATE'>,
   failAuditOnce: false,
   /** Respostas forçadas de buscarTxPorHash, em ordem (esgotadas, volta ao ledger simulado). */
   hashScript: [] as Array<{ found: boolean; successful?: boolean; ledgerCloseTime?: string }>,
@@ -83,6 +83,7 @@ vi.mock('@/lib/stellar/issuer', () => ({
       return { status: 'SUCCESS', hash: t.hash };
     }
     if (outcome === 'FAILED') return { status: 'FAILED', hash: t.hash, resultCodes: { transaction: 'tx_failed' } };
+    if (outcome === 'FAILED_TOO_LATE') return { status: 'FAILED', hash: t.hash, resultCodes: { transaction: 'tx_too_late' } };
     if (outcome === 'AMBIGUOUS_LANDS') st.chain.set(t.hash, { successful: true, amount: t.amount, memoHex: t.memoHex });
     return { status: 'AMBIGUOUS', hash: t.hash, reason: 'timeout' };
   }),
@@ -911,6 +912,39 @@ describe('incorporarCota — substituição com a MESMA sequence (contrato da Es
     const t = st.tentativas.get(memoDe('ces_1'))!;
     expect(t.status).toBe('PENDENTE');
     expect(st.cotas.size).toBe(0);
+  });
+});
+
+describe('incorporarCota — tx_too_late não é falha definitiva (F1 da Vera)', () => {
+  it('reenvio com FAILED tx_too_late e 404 por hash: nenhuma tx nova, tentativa PENDENTE, sem FALHOU', async () => {
+    st.submitScript = ['AMBIGUOUS', 'FAILED_TOO_LATE'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    avancar(30_000);
+    // a tx pode já ter entrado (Horizon atrasado: 404 por hash); o core devolve tx_too_late ao reenviar
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    expect(st.built).toHaveLength(1);
+    expect(st.tentativas.get(memoDe('ces_1'))!.status).toBe('PENDENTE');
+    expect(st.cotas.size).toBe(0);
+    // depois do maxTime a próxima chamada decide pelo Horizon + substituição com a MESMA sequence
+    avancar(100_000);
+    st.submitScript = ['ANTERIOR_EMITIU'];
+    const r = await incorporarCota(base);
+    expect(r.txHash).toBe('hash1');
+    expect(st.built[1].sequence).toBe(st.built[0].sequence);
+    expect(emissoes()).toBe(1);
+  });
+
+  it('1º envio com FAILED tx_too_late também não marca FALHOU', async () => {
+    st.submitScript = ['FAILED_TOO_LATE'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    expect(st.tentativas.get(memoDe('ces_1'))!.status).toBe('PENDENTE');
+    expect(st.built).toHaveLength(1);
+  });
+
+  it('FAILED com outro código segue definitivo (FALHOU + tx nova), como antes', async () => {
+    st.submitScript = ['FAILED', 'SUCCESS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_FALHOU' });
+    expect(st.tentativas.get(memoDe('ces_1'))!.status).toBe('FALHOU');
   });
 });
 

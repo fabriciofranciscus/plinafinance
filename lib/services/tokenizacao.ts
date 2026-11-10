@@ -190,6 +190,14 @@ interface ItemHistoricoTentativa {
 
 type LinhaTentativa = NonNullable<Awaited<ReturnType<typeof db.tentativaEmissao.findUnique>>>;
 
+/**
+ * `tx_too_late` NÃO prova que a tx não entrou: no core o prazo é validado antes da sequence, então
+ * reenviar uma tx que JÁ entrou, mas expirou, volta tx_too_late. Com o Horizon atrasado (404 por
+ * hash) tratá-la como falha definitiva emitiria duas vezes.
+ */
+const ehTxTooLate = (resultCodes: unknown) =>
+  (resultCodes as { transaction?: unknown } | null)?.transaction === 'tx_too_late';
+
 /** Erro de operador da substituição (`EmissaoError` da Estela): a mesma sequence já foi consumida. */
 const ehSequenciaConsumida = (err: unknown) =>
   (err as { code?: unknown } | null)?.code === 'EMISSAO_SEQUENCIA_CONSUMIDA';
@@ -333,6 +341,9 @@ async function obterEmissaoOnChain(input: {
       // `tx_bad_seq` & cia.: pode já ter entrado — confere pelo hash antes de afirmar falha.
       const depois = await buscarTxPorHash(t.txHash);
       if (depois.found && depois.successful) return confirmada(t);
+      // tx_too_late: não é falha definitiva — mantém PENDENTE; a próxima chamada decide por
+      // txExpirouNaRede e, se EXPIROU, pela substituição com a mesma sequence.
+      if (ehTxTooLate(r.resultCodes)) throw emAndamento(t);
       await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'FALHOU' } });
       throw new IncorporacaoEmissaoError('EMISSAO_FALHOU', { resultCodes: r.resultCodes });
     }
@@ -464,6 +475,9 @@ async function obterEmissaoOnChain(input: {
   if (r.status === 'SUCCESS') {
     await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'CONFIRMADA' } });
     return { txHash: r.hash, quantidade: preco.plinarfAmount, navAntes: preco.navPorTokenNaCotacao, recuperada: false };
+  }
+  if (r.status === 'FAILED' && ehTxTooLate(r.resultCodes)) {
+    throw emAndamento({ maxTime: dados.maxTime }); // não prova que não entrou: fica PENDENTE
   }
   if (r.status === 'FAILED') {
     await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'FALHOU' } });
