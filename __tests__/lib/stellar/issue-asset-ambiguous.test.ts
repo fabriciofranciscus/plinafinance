@@ -452,17 +452,16 @@ describe('issueAsset decide o desfecho pela rede, não pelo relógio local (R1)'
   });
 });
 
-describe('reemissão sai da mesma conta-fonte (R1)', () => {
-  it('nova tentativa depois de EXPIROU: mesma source (issuer) e sequence recarregada da conta', async () => {
+describe('primeira tentativa (sem sequenceDe)', () => {
+  // A substituição NÃO recarrega a conta: ver "(2) mesma conta-fonte e sem loadAccount na substituição".
+  it('source = issuer e sequence = a da conta do issuer + 1 (loadAccount)', async () => {
     const a = await buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', { memoHash: MEMO });
-    const b = await buildIssueAssetTx(signer, DESTINO, '400.0000000', 'PLINARF', { memoHash: MEMO });
     const ta = new Transaction(a.xdr, networkPassphrase);
-    const tb = new Transaction(b.xdr, networkPassphrase);
 
     expect(ta.source).toBe(issuerKp.publicKey());
-    expect(tb.source).toBe(issuerKp.publicKey());
-    expect(tb.sequence).toBe(ta.sequence); // mesma sequence: no máximo uma das duas entra
-    expect(vi.mocked(horizon.loadAccount).mock.calls.every(([k]) => k === issuerKp.publicKey())).toBe(true);
+    expect(a.sequence).toBe('11'); // Account(issuer, '10') + 1
+    expect(ta.sequence).toBe(a.sequence);
+    expect(vi.mocked(horizon.loadAccount).mock.calls).toEqual([[issuerKp.publicKey()]]);
   });
 });
 
