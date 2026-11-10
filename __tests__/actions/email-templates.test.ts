@@ -15,7 +15,7 @@ const PROIBIDOS_RESPOSTA = [
 ];
 const PROIBIDOS_INTERNO = [
   'plina-rf', 'plinarf', 'fidc', 'cvm 175', 'oferta restrita', 'investidor qualificado',
-  'expression of interest', 'tiquete',
+  'expression of interest', 'manifestacao de interesse', 'tiquete',
 ];
 
 const base: LeadData = {
