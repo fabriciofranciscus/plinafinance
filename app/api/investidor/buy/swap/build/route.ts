@@ -139,9 +139,9 @@ export const POST = withApi(async (req, { requestId }) => {
   });
 
   const issuerPubkey = process.env.STELLAR_ISSUER_PUBLIC;
-  const distributorSecret = process.env.STELLAR_DISTRIBUTOR_SECRET;
   const distributorPubkey = process.env.STELLAR_DISTRIBUTOR_PUBLIC;
-  if (!issuerPubkey || !distributorSecret || !distributorPubkey) {
+  // O N1 não assina mais com o distributor: só as chaves PÚBLICAS são necessárias aqui.
+  if (!issuerPubkey || !distributorPubkey) {
     // env ausente: erro interno, vira INTERNAL genérico (não surfacia).
     throw new Error('Stellar issuer/distributor não configurados');
   }
