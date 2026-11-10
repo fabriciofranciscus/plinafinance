@@ -77,7 +77,8 @@ export type IncorporacaoBloqueioCodigo =
   | 'ANUENCIA_PENDENTE_EM_MAINNET'
   | 'POSICAO_PLINA_AUSENTE'
   | 'CUSTO_INVALIDO'
-  | 'PIX_DIVERGE_DO_CUSTO';
+  | 'PIX_DIVERGE_DO_CUSTO'
+  | 'VALOR_DIVERGE_DA_TENTATIVA';
 
 const BLOQUEIO_MENSAGEM: Record<IncorporacaoBloqueioCodigo, string> = {
   LAUDO_AUSENTE: 'Emissão recusada: laudo de validação legal não registrado (hashValidacao).',
@@ -90,6 +91,8 @@ const BLOQUEIO_MENSAGEM: Record<IncorporacaoBloqueioCodigo, string> = {
     'Emissão recusada: conta de posição da Plina não configurada.',
   CUSTO_INVALIDO: 'Emissão recusada: custo de aquisição não positivo.',
   PIX_DIVERGE_DO_CUSTO: 'Emissão recusada: valor do Pix difere do custo de aquisição.',
+  VALOR_DIVERGE_DA_TENTATIVA:
+    'Emissão recusada: já existe uma emissão em andamento ou confirmada para esta incorporação com outro valor de aporte. Restaure o valor original; o operador decide.',
 };
 
 export class IncorporacaoBloqueadaError extends Error {
@@ -189,6 +192,16 @@ async function obterEmissaoOnChain(input: {
   const { memoHash, code, posicaoPlina, valorAporte } = input;
   const chave = memoHash.toString('hex');
   const tentativa = await db.tentativaEmissao.findUnique({ where: { memoHash: chave } });
+  // Tentativa encerrada nesta chamada (vira item do histórico quando sai tx nova).
+  let encerradaComo: 'FALHOU' | 'EXPIRADA' | undefined;
+
+  // O domínio grava V da chamada atual com a q já emitida: se V mudou enquanto a tx pode
+  // estar (ou já está) na chain, o NAV subiria/cairia sem aporte correspondente. Recusa.
+  const exigirMesmoValor = (t: { valorBrl: Prisma.Decimal.Value }) => {
+    if (!new Prisma.Decimal(t.valorBrl).eq(valorAporte)) {
+      throw new IncorporacaoBloqueadaError('VALOR_DIVERGE_DA_TENTATIVA');
+    }
+  };
 
   const confirmada = async (t: {
     txHash: string;
@@ -208,11 +221,16 @@ async function obterEmissaoOnChain(input: {
     // Caminho principal: a tx desta tentativa já está na chain?
     const achada = await buscarTxPorHash(tentativa.txHash);
     if (achada.found) {
-      if (achada.successful) return confirmada(tentativa);
+      if (achada.successful) {
+        exigirMesmoValor(tentativa);
+        return confirmada(tentativa);
+      }
       // Entrou e falhou on-chain: não aplicou nada; libera nova tentativa.
       await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'FALHOU' } });
+      encerradaComo = 'FALHOU';
     } else if (Date.now() < tentativa.maxTime.getTime() + FOLGA_MAXTIME_MS) {
       // Ainda pode entrar: reenvia o MESMO envelope; nunca cria tx nova agora.
+      exigirMesmoValor(tentativa); // antes de reenviar: reenviar já poria q de outro V na chain
       const reenvio = await submitEnvelope(tentativa.envelopeXdr);
       if (reenvio.status === 'SUCCESS') return confirmada(tentativa);
       if (reenvio.status === 'FAILED') {
@@ -226,6 +244,7 @@ async function obterEmissaoOnChain(input: {
     } else {
       // Expirou e não foi achada pelo hash: morreu. Pode construir tx nova.
       await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'EXPIRADA' } });
+      encerradaComo = 'EXPIRADA';
     }
   } else if (!tentativa) {
     // Rede de segurança: emissões anteriores a esta tabela (achadas só pelo memo).
@@ -253,7 +272,25 @@ async function obterEmissaoOnChain(input: {
     code,
     { memoHash },
   );
+  // Trilha: a tentativa anterior (FALHOU/EXPIRADA) vai para o histórico em vez de ser apagada.
+  const historico = [
+    ...(Array.isArray(tentativa?.historico) ? (tentativa.historico as Prisma.InputJsonValue[]) : []),
+    ...(tentativa
+      ? [
+          {
+            txHash: tentativa.txHash,
+            maxTime: tentativa.maxTime.toISOString(),
+            status: encerradaComo ?? tentativa.status,
+            valorBrl: new Prisma.Decimal(tentativa.valorBrl).toString(),
+            quantidade: new Prisma.Decimal(tentativa.quantidade).toString(),
+            navPorToken: new Prisma.Decimal(tentativa.navPorToken).toString(),
+            substituidaEm: new Date().toISOString(),
+          } as Prisma.InputJsonValue,
+        ]
+      : []),
+  ];
   const dados = {
+    historico,
     txHash: built.hash,
     envelopeXdr: built.xdr,
     maxTime: new Date(built.maxTime * 1000),
@@ -449,6 +486,13 @@ export async function incorporarCota(
         hashValidacao: pre.hashValidacao,
       });
       if (!mov.criado) throw new Error('Aporte já registrado para esta incorporação.');
+
+      // A tentativa só deixa de travar o NAV quando o domínio está gravado: o mesmo commit
+      // que cria a Cota preenche `aplicadaEm` (sem tentativa, p.ex. achada só pelo memo, não faz nada).
+      await tx.tentativaEmissao.updateMany({
+        where: { memoHash: memoHash.toString('hex'), aplicadaEm: null },
+        data: { aplicadaEm: new Date() },
+      });
 
       return { cotaId, txHash, tokensEmitidos: quantidade.toNumber() };
     },
