@@ -800,6 +800,35 @@ enum TipoMovimentoFundo {
   RESGATE_PAGO
 }
 
+/// Tentativa de emissão on-chain (E1-4, contrato 2026-11-10-reemissao-erro-ambiguo).
+/// NÃO é fato de domínio (não é Cota, EventoAudit nem MovimentoFundo): é o registro
+/// do envelope assinado, commitado ANTES do submit, que permite reenviar o MESMO
+/// XDR num erro ambíguo (timeout/5xx/rede) e só construir tx nova depois de a
+/// antiga expirar. `memoHash` (hex) identifica a incorporação.
+model TentativaEmissao {
+  memoHash     String                 @id
+  txHash       String
+  envelopeXdr  String                 @db.Text
+  /// Fim da validade da tx (timebounds.maxTime). Depois dele (+10 s) a tx não entra mais.
+  maxTime      DateTime
+  status       StatusTentativaEmissao @default(PENDENTE)
+  /// Preço usado na tx, para gravar o domínio idêntico ao que foi emitido na recuperação.
+  valorBrl     Decimal                @db.Decimal(20, 7)
+  quantidade   Decimal                @db.Decimal(20, 7)
+  navPorToken  Decimal                @db.Decimal(20, 8)
+  criadaEm     DateTime               @default(now())
+  atualizadaEm DateTime               @updatedAt
+
+  @@index([status])
+}
+
+enum StatusTentativaEmissao {
+  PENDENTE
+  CONFIRMADA
+  FALHOU
+  EXPIRADA
+}
+
 /// Append-only (CLAUDE.md). Toda mudança de estado relevante registra.
 /// `payloadHash` é o SHA-256 que foi pra blockchain como memo. Vendedor/
 /// comprador podem cross-verificar: hash do documento off-chain == memo
