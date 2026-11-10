@@ -81,9 +81,9 @@ function EntrarInner() {
 
         <dl className="mt-16 pt-10 border-t border-light-hairline grid grid-cols-1 sm:grid-cols-3 gap-px bg-base/10">
           {[
-            { k: 'Token', v: 'PLINA-RF' },
-            { k: 'Lastro', v: 'FIDC / CVM 175' },
-            { k: 'Rede', v: 'Stellar' },
+            { k: 'Ambiente', v: 'Rede de testes' },
+            { k: 'Ativo', v: 'Cota de demonstração' },
+            { k: 'Rede', v: 'Stellar testnet' },
           ].map((it) => (
             <div key={it.k} className="bg-white px-5 py-5">
               <dt className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65">

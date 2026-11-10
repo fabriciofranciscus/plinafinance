@@ -96,7 +96,7 @@ export function Rail({ current }: { current: Screen }) {
 
       <div className="mt-auto pt-12">
         <p className="font-mono text-[10px] text-base/55 leading-relaxed">
-          CVM 175 · FIDC<br />
+          Rede de testes · sem oferta<br />
           Cessão registrada on-chain · Stellar testnet
         </p>
       </div>

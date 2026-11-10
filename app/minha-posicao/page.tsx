@@ -467,10 +467,10 @@ export default function MinhaPosicaoPage() {
             {!hasPosition && (
               <div className="mt-6 border-l-0 border-t border-light-hairline pt-6">
                 <p className="font-text text-base/70 text-sm leading-relaxed max-w-2xl">
-                  Você ainda não detém PLINA-RF. Cada token representa
-                  R$ 1,00 de NAV em direito creditório brasileiro
-                  contemplado, lastreado pela curva de realização
-                  acompanhada do FIDC.
+                  Você ainda não detém tokens de demonstração. O valor de cada
+                  token é o valor do pool dividido pelos tokens emitidos,
+                  calculado pela Plina em rede de testes, sem valor financeiro
+                  real.
                 </p>
                 <a
                   href="/investir"
@@ -739,8 +739,9 @@ export default function MinhaPosicaoPage() {
               </div>
               <p className="font-text text-xs text-base/60 mt-3 max-w-2xl">
                 Identificadores das cotas (administradora, número de grupo,
-                titularidade) ficam off-chain sob custódia do gestor do FIDC.
-                On-chain expomos NAV, hash de emissão e endereços públicos.
+                titularidade) ficam fora da rede, sob guarda da Plina. Na rede
+                expomos o valor por token, o hash de emissão e endereços
+                públicos.
               </p>
             </section>
           )}
