@@ -83,14 +83,6 @@ const TICKET_LABELS: Record<string, string> = {
   '10m+brl': 'R$ 10M+',
 };
 
-/** Valor textual do campo; ausente ou vazio vira undefined (campo opcional não preenchido). */
-function campo(formData: FormData, nome: string): string | undefined {
-  const raw = formData.get(nome);
-  if (typeof raw !== 'string') return undefined;
-  const v = raw.trim();
-  return v === '' ? undefined : v;
-}
-
 async function getClientIp(): Promise<string> {
   const h = await headers();
   const xff = h.get('x-forwarded-for');
@@ -147,20 +139,19 @@ export async function submitLead(
     return { status: 'error', message: 'Muitas tentativas. Aguarde um instante e tente de novo.' };
   }
 
-  const parsed = LeadSchema.safeParse({
-    name: campo(formData, 'name'),
-    org: campo(formData, 'org'),
-    email: campo(formData, 'email'),
-    phone: campo(formData, 'phone'),
-    profile: campo(formData, 'profile'),
-    jurisdiction: campo(formData, 'jurisdiction'),
-    ticket: campo(formData, 'ticket'),
-    currency: campo(formData, 'currency'),
-    classe: campo(formData, 'classe'),
-    timeline: campo(formData, 'timeline'),
-    notes: campo(formData, 'notes'),
-    lgpd: campo(formData, 'lgpd'),
-  });
+  // Todas as chaves do FormData vão ao schema strict: campo desconhecido é recusado. Só as
+  // chaves internas do Next ($ACTION_*) e o honeypot (já tratado acima) ficam de fora.
+  const bruto: Record<string, unknown> = {};
+  for (const [chave, valor] of formData.entries()) {
+    if (chave.startsWith('$ACTION') || chave === 'website') continue;
+    if (typeof valor !== 'string') {
+      bruto[chave] = valor; // arquivo: o schema recusa
+      continue;
+    }
+    const v = valor.trim();
+    bruto[chave] = v === '' ? undefined : v;
+  }
+  const parsed = LeadSchema.safeParse(bruto);
   if (!parsed.success) {
     return { status: 'error', message: mensagemDeValidacao(parsed.error) };
   }
@@ -204,8 +195,20 @@ export async function submitLead(
   } catch (err) {
     // Só o código do erro: a mensagem do Prisma carrega e-mail, nome e telefone (PII).
     const codigo = (err as { code?: unknown } | null)?.code;
-    console.error('[submitLead] DB create error', typeof codigo === 'string' ? codigo : 'desconhecido');
-    // Não bloqueia o fluxo — e-mail ainda vai (P2002 = lead já existente, mantido como está).
+    if (codigo === 'P2002') {
+      // Lead já existente: dados NÃO alterados; só o carimbo de último contato. O e-mail
+      // interno marca o reenvio (os dados novos chegam lá, para o time decidir).
+      lead.reenvio = true;
+      try {
+        await db.leadEoi.update({ where: { email: lead.email }, data: { atualizadoEm: new Date() } });
+      } catch (err2) {
+        const c2 = (err2 as { code?: unknown } | null)?.code;
+        console.error('[submitLead] DB stamp error', typeof c2 === 'string' ? c2 : 'desconhecido');
+      }
+    } else {
+      console.error('[submitLead] DB create error', typeof codigo === 'string' ? codigo : 'desconhecido');
+    }
+    // Não bloqueia o fluxo — o e-mail ainda vai.
   }
 
   let tx: nodemailer.Transporter;

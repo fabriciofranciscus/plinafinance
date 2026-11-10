@@ -33,6 +33,8 @@ export type LeadData = {
   timeline?: string;
   notes?: string;
   recebido: string;      // ISO timestamp
+  /** E-mail já cadastrado: o cadastro original foi mantido (dados não alterados). */
+  reenvio?: boolean;
 };
 
 function esc(s: string): string {
@@ -270,11 +272,14 @@ Contato exploratório · Sem oferta · Em desenvolvimento
 // Notificação interna pra equipe
 // ----------------------------------------------------------------
 
+const AVISO_REENVIO = 'Reenvio de lead existente — dados não alterados (o cadastro original foi mantido).';
+
 export function renderInternalNotification(d: LeadData) {
-  const subject = `[Plina · Contato] ${d.org}`;
+  const subject = `[Plina · Contato${d.reenvio ? ' · reenvio' : ''}] ${d.org}`;
 
   const lines = [
     `Novo contato recebido via plina.finance`,
+    ...(d.reenvio ? [``, AVISO_REENVIO] : []),
     ``,
     `Nome: ${d.name}`,
     `E-mail: ${d.email}`,
@@ -293,6 +298,7 @@ export function renderInternalNotification(d: LeadData) {
   const text = lines.join('\n');
 
   const dataRows: Array<[string, string, boolean]> = [
+    ...(d.reenvio ? [['Aviso', AVISO_REENVIO, false] as [string, string, boolean]] : []),
     ['Nome', d.name, false],
     ['E-mail', d.email, true],
     ['Organização', d.org, false],

@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const create = vi.hoisted(() => vi.fn());
+const update = vi.hoisted(() => vi.fn());
 const sendMail = vi.hoisted(() => vi.fn());
 const consume = vi.hoisted(() => vi.fn());
 
-vi.mock('@/lib/db', () => ({ db: { leadEoi: { create } } }));
+vi.mock('@/lib/db', () => ({ db: { leadEoi: { create, update } } }));
 vi.mock('@/lib/rate-limit/config', () => ({ leadLimiter: { consume } }));
 vi.mock('next/headers', () => ({
   headers: async () => new Headers({ 'x-forwarded-for': '203.0.113.7, 10.0.0.1' }),
@@ -36,6 +37,7 @@ beforeEach(() => {
   process.env.SMTP_USER = 'landing@exemplo.test';
   process.env.SMTP_PASS = 'x';
   create.mockResolvedValue({});
+  update.mockResolvedValue({});
   consume.mockResolvedValue(true);
   sendMail.mockResolvedValue({});
 });
@@ -143,16 +145,46 @@ describe('submitLead — rota pública (F1/F2 do Argus)', () => {
     expect(sendMail).not.toHaveBeenCalled();
   });
 
-  it('lead já existente NÃO é sobrescrito (create, nunca upsert) e o e-mail interno ainda sai', async () => {
+  it('reenvio de lead existente: dados NÃO alterados (só o carimbo), e-mail interno marca o reenvio, log sem PII', async () => {
     create.mockRejectedValue(Object.assign(new Error('Unique constraint failed on email fulana@example.com'), { code: 'P2002' }));
     const erro = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const r = await submitLead(INICIAL, form(OBRIGATORIOS));
+    const r = await submitLead(INICIAL, form({ ...OBRIGATORIOS, notes: 'dados novos' }));
     expect(r).toEqual({ status: 'success' });
-    expect(sendMail).toHaveBeenCalled();
+
+    // nada de nome/org/telefone/perfil no banco: só o carimbo de último contato
+    expect(update).toHaveBeenCalledTimes(1);
+    const { where, data } = update.mock.calls[0][0];
+    expect(where).toEqual({ email: 'fulana@example.com' });
+    expect(Object.keys(data)).toEqual(['atualizadoEm']);
+
+    // o time vê o reenvio e os dados novos no e-mail interno
+    const interno = sendMail.mock.calls[0][0];
+    expect(interno.subject).toBe('[Plina · Contato · reenvio] Family Office Exemplo');
+    expect(interno.text).toContain('Reenvio de lead existente — dados não alterados');
+    expect(interno.html).toContain('Reenvio de lead existente — dados não alterados');
+    expect(interno.text).toContain('dados novos');
+
     // F2: o log leva só o código, nunca e-mail, nome ou telefone
     const logado = JSON.stringify(erro.mock.calls);
-    expect(logado).toContain('P2002');
     expect(logado).not.toMatch(/fulana|Fulana|example\.com/);
+  });
+
+  it('lead novo não é marcado como reenvio e não carimba nada', async () => {
+    await submitLead(INICIAL, form(OBRIGATORIOS));
+    expect(update).not.toHaveBeenCalled();
+    expect(sendMail.mock.calls[0][0].subject).toBe('[Plina · Contato] Family Office Exemplo');
+    expect(sendMail.mock.calls[0][0].text).not.toContain('Reenvio de lead existente');
+  });
+
+  it('campo extra no FormData é recusado pelo Zod strict; as chaves internas $ACTION_* do Next passam', async () => {
+    const r = await submitLead(INICIAL, form({ ...OBRIGATORIOS, admin: '1' }));
+    expect(r.status).toBe('error');
+    expect(create).not.toHaveBeenCalled();
+    expect(sendMail).not.toHaveBeenCalled();
+
+    const ok = await submitLead(INICIAL, form({ ...OBRIGATORIOS, $ACTION_ID_abc123: '', $ACTION_REF_1: '1' }));
+    expect(ok).toEqual({ status: 'success' });
+    expect(create).toHaveBeenCalledTimes(1);
   });
 });
 
