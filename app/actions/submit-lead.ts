@@ -83,6 +83,16 @@ const TICKET_LABELS: Record<string, string> = {
   '10m+brl': 'R$ 10M+',
 };
 
+/**
+ * Causa segura para log: só `name` e `code` do erro, nunca a mensagem nem o objeto inteiro —
+ * erros do Prisma e do nodemailer carregam destinatário, nome e telefone (PII).
+ */
+function causaSegura(err: unknown): string {
+  const e = err as { name?: unknown; code?: unknown } | null;
+  const parte = (v: unknown) => (typeof v === 'string' && /^[\w.-]{1,40}$/.test(v) ? v : undefined);
+  return [parte(e?.name), parte(e?.code)].filter(Boolean).join(':') || 'desconhecido';
+}
+
 async function getClientIp(): Promise<string> {
   const h = await headers();
   const xff = h.get('x-forwarded-for');
@@ -200,7 +210,7 @@ export async function submitLead(
       // interno marca o reenvio e leva o conteúdo novo como NÃO verificado; sem auto-resposta.
       lead.reenvio = true;
     } else {
-      console.error('[submitLead] DB create error', typeof codigo === 'string' ? codigo : 'desconhecido');
+      console.error('[submitLead] DB create error', causaSegura(err));
     }
     // Não bloqueia o fluxo — o e-mail ainda vai.
   }
@@ -209,7 +219,7 @@ export async function submitLead(
   try {
     tx = getTransporter();
   } catch (err) {
-    console.error('[submitLead] SMTP config error', err);
+    console.error('[submitLead] SMTP config error', causaSegura(err));
     return {
       status: 'error',
       message:
@@ -228,7 +238,7 @@ export async function submitLead(
       html: internal.html,
     });
   } catch (err) {
-    console.error('[submitLead] SMTP error (notificação interna)', err);
+    console.error('[submitLead] SMTP error (notificação interna)', causaSegura(err));
     return {
       status: 'error',
       message:
@@ -252,7 +262,7 @@ export async function submitLead(
         html: reply.html,
       });
     } catch (err) {
-      console.error('[submitLead] SMTP error (auto-reply)', err);
+      console.error('[submitLead] SMTP error (auto-reply)', causaSegura(err));
       // Não devolvemos erro pro usuário — a notificação interna já foi enviada.
     }
 

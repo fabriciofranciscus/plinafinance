@@ -203,3 +203,33 @@ describe('submitLead — rota pública (F1/F2 do Argus)', () => {
   });
 });
 
+describe('submitLead — logs de SMTP sem PII (revisão do Atlas, item 3)', () => {
+  const erroDoNodemailer = () =>
+    Object.assign(new Error('Recipient rejected: fulana@example.com (Fulana de Teste)'), {
+      name: 'Error',
+      code: 'EENVELOPE',
+      command: 'RCPT TO',
+      envelope: { from: 'landing@exemplo.test', to: ['fulana@example.com'] },
+    });
+
+  it('falha do SMTP na notificação interna: erro ao usuário e log só com name/code', async () => {
+    sendMail.mockRejectedValue(erroDoNodemailer());
+    const erro = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const r = await submitLead(INICIAL, form(OBRIGATORIOS));
+    expect(r.status).toBe('error');
+    const logado = JSON.stringify(erro.mock.calls);
+    expect(logado).toContain('EENVELOPE');
+    expect(logado).not.toMatch(/fulana|Fulana|example\.com|RCPT|landing@/);
+  });
+
+  it('falha do SMTP só na auto-resposta: sucesso ao usuário e log só com name/code', async () => {
+    sendMail.mockResolvedValueOnce({}).mockRejectedValueOnce(erroDoNodemailer());
+    const erro = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const r = await submitLead(INICIAL, form(OBRIGATORIOS));
+    expect(r).toEqual({ status: 'success' });
+    const logado = JSON.stringify(erro.mock.calls);
+    expect(logado).toContain('EENVELOPE');
+    expect(logado).not.toMatch(/fulana|Fulana|example\.com|RCPT|landing@/);
+  });
+});
+
