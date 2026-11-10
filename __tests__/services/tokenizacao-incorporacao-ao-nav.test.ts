@@ -24,6 +24,8 @@ const st = vi.hoisted(() => ({
   failAuditOnce: false,
   /** Respostas forçadas de buscarTxPorHash, em ordem (esgotadas, volta ao ledger simulado). */
   hashScript: [] as Array<{ found: boolean; successful?: boolean; ledgerCloseTime?: string }>,
+  /** Veredito forçado de txExpirouNaRede (padrão: ENTROU se está no ledger simulado, senão EXPIROU). */
+  expiry: null as null | 'EM_ABERTO' | Error,
   failBuscarHash: null as Error | null,
   failBuscarMemo: null as Error | null,
   calls: [] as string[],
@@ -70,6 +72,15 @@ vi.mock('@/lib/stellar/issuer', () => ({
     if (forcada) return forcada;
     const t = st.chain.get(hash);
     return t ? { found: true, successful: t.successful, ledgerCloseTime: 'x' } : { found: false };
+  }),
+  txExpirouNaRede: vi.fn(async (xdr: string) => {
+    st.calls.push('expirou');
+    if (st.expiry instanceof Error) throw st.expiry;
+    const t = st.built.find((b) => b.xdr === xdr)!;
+    const entrou = st.chain.get(t.hash);
+    if (entrou) return { status: 'ENTROU', hash: t.hash, successful: entrou.successful, ledger: 1 };
+    if (st.expiry === 'EM_ABERTO') return { status: 'EM_ABERTO', hash: t.hash, maxTime: t.maxTime };
+    return { status: 'EXPIROU', hash: t.hash, maxTime: t.maxTime, ledgerAposPrazo: 2, fechadoEm: 'x' };
   }),
   buscarEmissaoPorMemo: vi.fn(async ({ memoHash }: { memoHash: Buffer }) => {
     st.calls.push('buscarMemo');
@@ -148,7 +159,7 @@ vi.mock('@/lib/db', () => {
       return { count: 1 };
     },
   };
-  const tx = { cota, eventoAudit, movimentoFundo, tentativaEmissao, $queryRaw: vi.fn(async () => { st.calls.push('lock'); return []; }) };
+  const tx = { cota, eventoAudit, movimentoFundo, tentativaEmissao, $executeRaw: vi.fn(async () => { st.calls.push('lock'); return 0; }) };
   const run = async (fn: (t: typeof tx) => Promise<unknown>) => {
     const snap = { cotas: new Map([...st.cotas].map(([k, v]) => [k, { ...v }])), audits: [...st.audits], movs: [...st.movs] };
     try {
@@ -174,7 +185,6 @@ vi.mock('@/lib/db', () => {
 });
 
 import {
-  FOLGA_MAXTIME_MS,
   IncorporacaoBloqueadaError,
   IncorporacaoEmissaoError,
   atualizarStatusCota,
@@ -220,7 +230,7 @@ beforeEach(() => {
   st.cfg.network = 'TESTNET';
   st.cotas = new Map(); st.audits = []; st.movs = []; st.tentativas = new Map(); st.chain = new Map();
   st.built = []; st.submits = []; st.submitScript = []; st.calls = [];
-  st.failAuditOnce = false; st.hashScript = []; st.failBuscarHash = null; st.failBuscarMemo = null; st.tail = Promise.resolve();
+  st.failAuditOnce = false; st.hashScript = []; st.failBuscarHash = null; st.failBuscarMemo = null; st.expiry = null; st.tail = Promise.resolve();
   resetNavSupplyCache();
   evidencias();
   st.fetchSupplyDasClasses.mockReset().mockResolvedValue({ senior: supply('0'), subordinada: supply('0') });
@@ -393,13 +403,19 @@ describe('incorporarCota — erro ambíguo (timeout/5xx/rede): o teste da Vera',
     expect(st.cotas.size).toBe(1);
   });
 
-  it('se a tx NUNCA entrou: só DEPOIS do maxTime (+10 s) sai tx nova, e a emissão acontece uma vez', async () => {
+  it('se a tx NUNCA entrou: só quando o Horizon confirma EXPIROU sai tx nova, e a emissão acontece uma vez', async () => {
     st.submitScript = ['AMBIGUOUS', 'AMBIGUOUS', 'SUCCESS'];
     await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
-    avancar(120_000 + FOLGA_MAXTIME_MS - 1_000); // ainda dentro de maxTime + 10 s
+    avancar(119_000); // ainda antes do maxTime: reenvia o MESMO XDR (ambíguo de novo)
     await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
     expect(st.built).toHaveLength(1);
-    avancar(2_000); // agora passou de maxTime + 10 s
+    expect(st.submits).toEqual(['XDR1', 'XDR1']);
+    avancar(2_000); // o relógio local já passou do maxTime, mas a rede ainda não fechou ledger depois dele
+    st.expiry = 'EM_ABERTO';
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    expect(st.built).toHaveLength(1); // o relógio não decide: nenhuma tx nova
+    expect(st.submits).toEqual(['XDR1', 'XDR1']); // e depois do maxTime não reenvia
+    st.expiry = null; // a rede fechou ledger depois do maxTime e a tx não está em nenhum: EXPIROU
     const r = await incorporarCota(base);
     expect(st.built).toHaveLength(2); // tx nova só agora
     expect(r.txHash).toBe('hash2');
@@ -668,3 +684,65 @@ describe('incorporarCota — parecer da Consuelo (NAV em voo, valor divergente, 
     expect(typeof t.historico[0].substituidaEm).toBe('string');
   });
 });
+
+describe('incorporarCota — expiração decidida pelo Horizon (R1 do Argus, txExpirouNaRede)', () => {
+  it('depois do maxTime, ENTROU com sucesso: confirma pela tx guardada, sem tx nova e sem reenviar', async () => {
+    st.submitScript = ['AMBIGUOUS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    st.chain.set('hash1', { successful: true, amount: '400.0000000', memoHex: memoDe('ces_1') });
+    st.hashScript = [{ found: false }]; // a busca rápida por hash não a vê (nó atrasado), a varredura vê
+    avancar(130_000);
+    const r = await incorporarCota(base);
+    expect(r.txHash).toBe('hash1');
+    expect(st.built).toHaveLength(1);
+    expect(st.submits).toEqual(['XDR1']);
+    expect(st.calls).toContain('expirou');
+    expect(emissoes()).toBe(1);
+  });
+
+  it('depois do maxTime, ENTROU mas FALHOU on-chain: nada emitido, libera tx nova', async () => {
+    st.submitScript = ['AMBIGUOUS', 'SUCCESS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    st.chain.set('hash1', { successful: false, amount: '400.0000000', memoHex: memoDe('ces_1') });
+    st.hashScript = [{ found: false }];
+    avancar(130_000);
+    const r = await incorporarCota(base);
+    expect(r.txHash).toBe('hash2');
+    expect(st.tentativas.get(memoDe('ces_1'))!.historico[0]).toMatchObject({ txHash: 'hash1', status: 'FALHOU' });
+  });
+
+  it('depois do maxTime, exceção da primitiva = indeterminado: não reemite, mantém a tentativa PENDENTE', async () => {
+    st.submitScript = ['AMBIGUOUS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    avancar(130_000);
+    st.expiry = new Error('Expiração indeterminada: ledger 404 STELLAR_HORIZON_URL');
+    const err = await incorporarCota(base).catch((e) => e);
+    expect(err).toBeInstanceOf(IncorporacaoEmissaoError);
+    expect(err.code).toBe('EMISSAO_EM_ANDAMENTO');
+    expect(err.message).not.toMatch(/indeterminada|STELLAR_/);
+    expect(st.built).toHaveLength(1);
+    expect(st.tentativas.get(memoDe('ces_1'))!.status).toBe('PENDENTE');
+    expect(st.cotas.size).toBe(0);
+  });
+
+  it('antes do maxTime não consulta a varredura (reenvia o mesmo XDR)', async () => {
+    st.submitScript = ['AMBIGUOUS', 'SUCCESS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    avancar(30_000);
+    await incorporarCota(base);
+    expect(st.calls).not.toContain('expirou');
+    expect(st.submits).toEqual(['XDR1', 'XDR1']);
+  });
+
+  it('EXPIROU guarda a tentativa antiga no histórico e a tx nova sai da mesma incorporação (mesmo memo)', async () => {
+    st.submitScript = ['AMBIGUOUS', 'SUCCESS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    avancar(130_000);
+    await incorporarCota(base);
+    expect(st.built[1].memoHex).toBe(st.built[0].memoHex);
+    const t = st.tentativas.get(memoDe('ces_1'))!;
+    expect(t.historico).toHaveLength(1);
+    expect(t.historico[0]).toMatchObject({ txHash: 'hash1', status: 'EXPIRADA' });
+  });
+});
+
