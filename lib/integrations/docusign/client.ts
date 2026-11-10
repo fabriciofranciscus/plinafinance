@@ -57,6 +57,12 @@ const entradaEnvelope = z
       })
       .strict(),
     emailSubject: z.string().trim().min(1).max(100),
+    /**
+     * Chave de idempotência da operação (GUID estável, ex.: `transactionIdDeterministico(cessaoId)`).
+     * A DocuSign devolve o MESMO envelope para a mesma transactionId, então repetir a chamada após
+     * um resultado incerto (timeout, 5xx) nunca cria outro envelope nem outro e-mail.
+     */
+    transactionId: z.string().regex(GUID),
     /** Posição do campo de assinatura (pontos, origem no canto superior esquerdo). */
     posicaoAssinatura: z
       .object({
@@ -230,13 +236,15 @@ export function criarClienteDocusign(opcoes: ClienteDocusignOpcoes = {}) {
       if (!parsed.success) {
         throw new DocusignError('ENTRADA_INVALIDA', 'DocuSign: dados do envelope inválidos.');
       }
-      const { documentoPdf, nomeDocumento, signatario, emailSubject, posicaoAssinatura } = parsed.data;
+      const { documentoPdf, nomeDocumento, signatario, emailSubject, transactionId, posicaoAssinatura } =
+        parsed.data;
       if (documentoPdf.length === 0 || documentoPdf.length > MAX_PDF_BYTES || documentoPdf.subarray(0, 5).toString('latin1') !== '%PDF-') {
         throw new DocusignError('ENTRADA_INVALIDA', 'DocuSign: o documento deve ser um PDF válido de até 25 MB.');
       }
       const pos = posicaoAssinatura ?? { pagina: 1, x: 72, y: 700 };
 
       return withSpan('docusign.criar_envelope', { 'docusign.operacao': 'criar_envelope' }, async (span) => {
+        await obterToken(); // falha de token acontece antes do POST: não é resultado incerto
         const res = await api(
           '/envelopes',
           {
@@ -244,6 +252,7 @@ export function criarClienteDocusign(opcoes: ClienteDocusignOpcoes = {}) {
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
             body: JSON.stringify({
               emailSubject,
+              transactionId,
               status: 'sent',
               documents: [
                 {
@@ -276,7 +285,18 @@ export function criarClienteDocusign(opcoes: ClienteDocusignOpcoes = {}) {
             }),
           },
           'criação do envelope',
-        );
+        ).catch((e: unknown) => {
+          // Rede/timeout/5xx/429 no POST: a DocuSign pode ter criado o envelope. Repetir com a
+          // mesma transactionId recupera o envelope existente em vez de criar outro.
+          if (e instanceof DocusignError && e.codigo === 'INDISPONIVEL') {
+            throw new DocusignError(
+              'RESULTADO_INCERTO',
+              'DocuSign: não foi possível confirmar se o envelope foi criado. Repita a operação com a MESMA transactionId; ela devolve o envelope já criado, sem duplicar o envio.',
+              e.httpStatus,
+            );
+          }
+          throw e;
+        });
         span.setAttribute('http.status_code', res.status);
         const dados = (await res.json().catch(() => null)) as { envelopeId?: unknown } | null;
         if (!dados || typeof dados.envelopeId !== 'string' || !GUID.test(dados.envelopeId)) {

@@ -7,6 +7,7 @@ import { criarClienteDocusign, type ClienteDocusign, type CriarEnvelopeInput } f
 
 export { criarClienteDocusign, normalizarStatusEnvelope } from './client';
 export type { ClienteDocusign, CriarEnvelopeInput, StatusEnvelope } from './client';
+export { transactionIdDeterministico } from './transaction-id';
 export { verificarHmacConnect } from './connect-hmac';
 export { DocusignConsentRequiredError, DocusignError } from './errors';
 export type { CodigoErroDocusign } from './errors';

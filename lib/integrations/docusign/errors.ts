@@ -12,6 +12,7 @@ export type CodigoErroDocusign =
   | 'ENVELOPE_NAO_ENCONTRADO'
   | 'REQUISICAO_REJEITADA'
   | 'INDISPONIVEL'
+  | 'RESULTADO_INCERTO'
   | 'RESPOSTA_INVALIDA';
 
 export class DocusignError extends Error {

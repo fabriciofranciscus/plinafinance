@@ -8,11 +8,13 @@
  * Saída:  só o envelopeId e o status. Nunca imprime token, chave nem e-mail.
  */
 
+import { randomUUID } from 'node:crypto';
 import { config as loadEnv } from 'dotenv';
 import {
   criarClienteDocusign,
   DocusignConsentRequiredError,
   DocusignError,
+  transactionIdDeterministico,
 } from '../lib/integrations/docusign';
 
 loadEnv({ path: '.env' });
@@ -59,13 +61,20 @@ async function main() {
   await docusign.obterToken();
   console.log('1. token JWT obtido (consentimento OK)');
 
-  const { envelopeId } = await docusign.criarEnvelope({
+  const entrada = {
     documentoPdf: gerarPdfMinuta(),
     nomeDocumento: 'Minuta TESTNET.pdf',
     signatario: { nome, email },
     emailSubject: 'MINUTA – TESTNET (sandbox Plina)',
-  });
+    transactionId: transactionIdDeterministico(`smoke-docusign:${randomUUID()}`),
+  };
+  const { envelopeId } = await docusign.criarEnvelope(entrada);
   console.log(`2. envelope criado: ${envelopeId}`);
+
+  // Prova de idempotência: repetir com a mesma transactionId devolve o MESMO envelope (sem 2º e-mail).
+  const repetido = await docusign.criarEnvelope(entrada);
+  console.log(`2b. reenvio com a mesma transactionId: ${repetido.envelopeId === envelopeId ? 'mesmo envelope (idempotente)' : 'ENVELOPE DIFERENTE — idempotência falhou'}`);
+  if (repetido.envelopeId !== envelopeId) process.exit(1);
 
   const status = await docusign.obterStatusEnvelope(envelopeId);
   console.log(`3. status: ${status}`);
