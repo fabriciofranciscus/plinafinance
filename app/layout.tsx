@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import localFont from "next/font/local";
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Telemetry } from "@/components/Telemetry";
 import { BotIdClient } from "botid/client";
 import { AppProviders } from "@/components/AppProviders";
 import { AppShell } from "@/components/AppShell";
@@ -96,8 +95,7 @@ export default async function RootLayout({
             <div id="main">{children}</div>
           </AppShell>
         </AppProviders>
-        <Analytics />
-        <SpeedInsights />
+        <Telemetry />
       </body>
     </html>
   );
