@@ -12,15 +12,24 @@ const st = vi.hoisted(() => ({
   cotas: new Map<string, Row>(),
   audits: [] as Row[],
   movs: [] as Row[],
-  chain: new Map<string, { txHash: string; amount: string }>(),
-  calls: [] as string[],
-  failChain: false,
+  /** Tentativas de emissão: FORA do rollback (commit próprio, antes do submit). */
+  tentativas: new Map<string, Row>(),
+  /** Txs "no ledger": hash → { successful, amount, memoHex }. */
+  chain: new Map<string, { successful: boolean; amount: string; memoHex: string }>(),
+  /** Txs construídas (pelo build) e já enviadas ao menos uma vez. */
+  built: [] as Array<{ hash: string; xdr: string; amount: string; memoHex: string; maxTime: number }>,
+  submits: [] as string[],
+  /** Resultado de cada chamada de submitEnvelope, em ordem (padrão SUCCESS). */
+  submitScript: [] as Array<'SUCCESS' | 'FAILED' | 'AMBIGUOUS' | 'AMBIGUOUS_LANDS'>,
   failAuditOnce: false,
-  failBuscar: null as Error | null,
+  /** Respostas forçadas de buscarTxPorHash, em ordem (esgotadas, volta ao ledger simulado). */
+  hashScript: [] as Array<{ found: boolean; successful?: boolean; ledgerCloseTime?: string }>,
+  failBuscarHash: null as Error | null,
+  failBuscarMemo: null as Error | null,
+  calls: [] as string[],
   fetchSupplyDasClasses: vi.fn(),
   eventoFind: vi.fn(),
   tail: Promise.resolve() as Promise<unknown>,
-  txCount: 0,
 }));
 
 vi.mock('@/lib/stellar/config', async (importOriginal) => {
@@ -31,18 +40,43 @@ vi.mock('@/lib/stellar/config', async (importOriginal) => {
 });
 vi.mock('@/lib/stellar/issuer', () => ({
   executeClawback: vi.fn(),
-  issueAsset: vi.fn(async (_s: unknown, _d: string, amount: string, _code: string, opts?: { memoHash?: Buffer }) => {
-    st.calls.push('issueAsset');
+  buildIssueAssetTx: vi.fn(async (_s: unknown, _d: string, amount: string, _code: string, opts?: { memoHash?: Buffer }) => {
+    const n = st.built.length + 1;
+    const hash = `hash${n}`;
+    const maxTime = Math.floor(Date.now() / 1000) + 120;
+    const t = { hash, xdr: `XDR${n}`, amount, memoHex: opts?.memoHash?.toString('hex') ?? '', maxTime };
+    st.built.push(t);
+    st.calls.push('build');
+    return { xdr: t.xdr, hash, maxTime };
+  }),
+  submitEnvelope: vi.fn(async (xdr: string) => {
+    st.calls.push('submit');
+    st.submits.push(xdr);
     await Promise.resolve();
-    if (st.failChain) throw new Error('tx_bad_auth S-test-secret');
-    const txHash = `tx${st.chain.size + 1}`;
-    if (opts?.memoHash) st.chain.set(opts.memoHash.toString('hex'), { txHash, amount });
-    return { hash: txHash };
+    const t = st.built.find((b) => b.xdr === xdr)!;
+    const outcome = st.submitScript.shift() ?? 'SUCCESS';
+    if (outcome === 'SUCCESS') {
+      st.chain.set(t.hash, { successful: true, amount: t.amount, memoHex: t.memoHex });
+      return { status: 'SUCCESS', hash: t.hash };
+    }
+    if (outcome === 'FAILED') return { status: 'FAILED', hash: t.hash, resultCodes: { transaction: 'tx_failed' } };
+    if (outcome === 'AMBIGUOUS_LANDS') st.chain.set(t.hash, { successful: true, amount: t.amount, memoHex: t.memoHex });
+    return { status: 'AMBIGUOUS', hash: t.hash, reason: 'timeout' };
+  }),
+  buscarTxPorHash: vi.fn(async (hash: string) => {
+    st.calls.push('buscarHash');
+    if (st.failBuscarHash) throw st.failBuscarHash;
+    const forcada = st.hashScript.shift();
+    if (forcada) return forcada;
+    const t = st.chain.get(hash);
+    return t ? { found: true, successful: t.successful, ledgerCloseTime: 'x' } : { found: false };
   }),
   buscarEmissaoPorMemo: vi.fn(async ({ memoHash }: { memoHash: Buffer }) => {
-    st.calls.push('buscar');
-    if (st.failBuscar) throw st.failBuscar;
-    return st.chain.get(memoHash.toString('hex')) ?? null;
+    st.calls.push('buscarMemo');
+    if (st.failBuscarMemo) throw st.failBuscarMemo;
+    const hex = memoHash.toString('hex');
+    for (const [hash, t] of st.chain) if (t.memoHex === hex && t.successful) return { txHash: hash, amount: t.amount };
+    return null;
   }),
 }));
 vi.mock('@/lib/stellar/signer', () => ({ issuerSigner: () => ({}) }));
@@ -89,11 +123,24 @@ vi.mock('@/lib/db', () => {
       return { count };
     },
   };
+  const tentativaEmissao = {
+    findUnique: async ({ where }: { where: { memoHash: string } }) => st.tentativas.get(where.memoHash) ?? null,
+    upsert: async ({ where, create, update }: { where: { memoHash: string }; create: Row; update: Row }) => {
+      st.calls.push('tentativa.upsert');
+      const atual = st.tentativas.get(where.memoHash);
+      st.tentativas.set(where.memoHash, atual ? { ...atual, ...update } : { ...create });
+      return st.tentativas.get(where.memoHash);
+    },
+    update: async ({ where, data }: { where: { memoHash: string }; data: Row }) => {
+      const atual = st.tentativas.get(where.memoHash)!;
+      st.tentativas.set(where.memoHash, { ...atual, ...data });
+      return st.tentativas.get(where.memoHash);
+    },
+  };
   const tx = { cota, eventoAudit, movimentoFundo, $queryRaw: vi.fn(async () => { st.calls.push('lock'); return []; }) };
   const run = async (fn: (t: typeof tx) => Promise<unknown>) => {
     const snap = { cotas: new Map([...st.cotas].map(([k, v]) => [k, { ...v }])), audits: [...st.audits], movs: [...st.movs] };
     try {
-      st.txCount++;
       return await fn(tx);
     } catch (e) {
       st.cotas = snap.cotas; st.audits = snap.audits; st.movs = snap.movs; // rollback
@@ -105,6 +152,7 @@ vi.mock('@/lib/db', () => {
       eventoAudit: { findFirst: st.eventoFind, create: eventoAudit.create },
       cota,
       movimentoFundo,
+      tentativaEmissao,
       $transaction: (fn: (t: typeof tx) => Promise<unknown>) => {
         const p = st.tail.then(() => run(fn));
         st.tail = p.catch(() => undefined);
@@ -115,7 +163,9 @@ vi.mock('@/lib/db', () => {
 });
 
 import {
+  FOLGA_MAXTIME_MS,
   IncorporacaoBloqueadaError,
+  IncorporacaoEmissaoError,
   atualizarStatusCota,
   incorporarCota,
   memoHashDaIncorporacao,
@@ -147,31 +197,40 @@ const base = {
   cessaoId: 'ces_1',
 };
 
+const T0 = Date.parse('2026-11-10T12:00:00Z');
+const avancar = (ms: number) => vi.setSystemTime(new Date(Date.now() + ms));
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(T0));
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   process.env.STELLAR_ISSUER_SECRET = 'S-test';
   process.env.STELLAR_PLINA_POSITION_PUBLIC = POSICAO;
   st.cfg.network = 'TESTNET';
-  st.cotas = new Map(); st.audits = []; st.movs = []; st.chain = new Map(); st.calls = [];
-  st.failChain = false; st.failAuditOnce = false; st.failBuscar = null; st.tail = Promise.resolve(); st.txCount = 0;
+  st.cotas = new Map(); st.audits = []; st.movs = []; st.tentativas = new Map(); st.chain = new Map();
+  st.built = []; st.submits = []; st.submitScript = []; st.calls = [];
+  st.failAuditOnce = false; st.hashScript = []; st.failBuscarHash = null; st.failBuscarMemo = null; st.tail = Promise.resolve();
   resetNavSupplyCache();
   evidencias();
   st.fetchSupplyDasClasses.mockReset().mockResolvedValue({ senior: supply('0'), subordinada: supply('0') });
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
-const emissoes = () => st.calls.filter((c) => c === 'issueAsset').length;
+/** Txs que de fato entraram no ledger (uma emissão = uma tx). */
+const emissoes = () => st.chain.size;
+const memoDe = (chave: string) => memoHashDaIncorporacao(chave).toString('hex');
 
 describe('incorporarCota — aporte ao NAV', () => {
-  it('1ª incorporação com supply zero: R$ 400 → 400 PLINARF, para a posição da Plina, com code e memo', async () => {
+  it('1ª incorporação com supply zero: R$ 400 → 400 PLINARF, para a posição da Plina, com memo por cessão', async () => {
     const r = await incorporarCota(base);
     expect(r.tokensEmitidos).toBe(400);
-    const { issueAsset } = await import('@/lib/stellar/issuer');
-    const [, dest, amount, code, opts] = (issueAsset as any).mock.calls[0];
-    expect(dest).toBe(POSICAO);
-    expect(amount).toBe('400.0000000');
-    expect(code).toBe('PLINARF');
-    expect(opts.memoHash.equals(createHash('sha256').update('plina:incorporacao:ces_1').digest())).toBe(true);
+    expect(st.built).toHaveLength(1);
+    expect(st.built[0].amount).toBe('400.0000000');
+    expect(st.built[0].memoHex).toBe(createHash('sha256').update('plina:incorporacao:ces_1').digest('hex'));
+    expect(st.built[0].memoHex).toBe(memoDe('ces_1'));
   });
 
   it('NAV por token igual antes e depois do aporte (R$ 64.000 a NAV 1,041667 → ~61.440 tokens)', async () => {
@@ -192,70 +251,230 @@ describe('incorporarCota — aporte ao NAV', () => {
     expect(navDepois.toFixed(6)).toBe(navAntes.toFixed(6));
   });
 
-  it('DB depois da chain: nada é gravado antes de issueAsset; grava cota + audits + APORTE_COTA só depois', async () => {
+  it('DB depois da chain: a tentativa é commitada ANTES do submit; domínio só depois', async () => {
     await incorporarCota({ ...base, pixValorBrl: '400.00', pixHash: 'pixTx' });
-    const iChain = st.calls.indexOf('issueAsset');
-    expect(iChain).toBeGreaterThan(-1);
+    const iSubmit = st.calls.indexOf('submit');
+    expect(iSubmit).toBeGreaterThan(-1);
+    expect(st.calls.indexOf('tentativa.upsert')).toBeLessThan(iSubmit); // fora do domínio, antes do submit
     for (const w of ['cota.create', 'audit.create', 'mov.create']) {
-      expect(st.calls.indexOf(w)).toBeGreaterThan(iChain);
+      expect(st.calls.indexOf(w)).toBeGreaterThan(iSubmit);
     }
-    expect(st.calls.indexOf('lock')).toBeLessThan(iChain); // lock não grava linha de domínio
+    expect(st.calls.indexOf('lock')).toBeLessThan(iSubmit); // lock não grava linha de domínio
     const cota = [...st.cotas.values()][0];
-    expect(cota).toMatchObject({ status: 'DISPONIVEL', emissaoTxHash: 'tx1', hashValidacao: HASH, anuenciaStatus: 'DECLARADA_PENDENTE', cessaoId: 'ces_1' });
+    expect(cota).toMatchObject({ status: 'DISPONIVEL', emissaoTxHash: 'hash1', hashValidacao: HASH, anuenciaStatus: 'DECLARADA_PENDENTE', cessaoId: 'ces_1' });
     expect(cota.id).toMatch(/^inc_[0-9a-f]{32}$/);
     expect(st.audits.map((a) => a.acao)).toEqual(['COTA_INCORPORADA', 'TOKEN_EMITIDO']);
     const mov = st.movs[0];
-    expect(mov).toMatchObject({ tipo: 'APORTE_COTA', refHash: 'pixTx', hashValidacao: HASH, txHash: 'tx1', chave: `aporte-cota:${cota.id}` });
+    expect(mov).toMatchObject({ tipo: 'APORTE_COTA', refHash: 'pixTx', hashValidacao: HASH, txHash: 'hash1', chave: `aporte-cota:${cota.id}` });
     expect(mov.deltaCaixa.toString()).toBe('0'); // nunca AQUISICAO: o fundo não pagou a cota
-    expect(mov.valorBrl.toFixed(2)).toBe('400.00');
     expect(mov.deltaTokens.toFixed(7)).toBe('400.0000000');
     expect(mov.navPorToken.toFixed(8)).toBe('1.00000000');
   });
 
-  it('falha na chain: NADA gravado (sem cota, sem audit, sem movimento) e mensagem sem segredo', async () => {
-    st.failChain = true;
+  it('a TentativaEmissao guarda o envelope, o hash, o maxTime e o preço (fora do domínio)', async () => {
+    await incorporarCota(base);
+    const t = st.tentativas.get(memoDe('ces_1'))!;
+    expect(t).toMatchObject({ txHash: 'hash1', envelopeXdr: 'XDR1', status: 'CONFIRMADA' });
+    expect(t.maxTime.getTime()).toBe(T0 + 120_000);
+    expect(t.quantidade.toFixed(7)).toBe('400.0000000');
+    expect(t.navPorToken.toFixed(8)).toBe('1.00000000');
+    expect(t.valorBrl.toFixed(2)).toBe('400.00');
+  });
+});
+
+describe('incorporarCota — erro definitivo da rede (FAILED)', () => {
+  it('lança EMISSAO_FALHOU na hora, com os result codes; nada gravado no domínio; tentativa FALHOU', async () => {
+    st.submitScript = ['FAILED'];
     const err = await incorporarCota(base).catch((e) => e);
-    expect(err.message).toMatch(/nada foi gravado/);
-    expect(err.message).not.toMatch(/S-test|tx_bad_auth/);
+    expect(err).toBeInstanceOf(IncorporacaoEmissaoError);
+    expect(err.code).toBe('EMISSAO_FALHOU');
+    expect(err.detalhes.resultCodes).toEqual({ transaction: 'tx_failed' });
+    expect(err.message).not.toMatch(/Reexecutar é seguro/);
     expect(st.cotas.size).toBe(0);
     expect(st.audits).toHaveLength(0);
     expect(st.movs).toHaveLength(0);
+    expect(st.tentativas.get(memoDe('ces_1'))!.status).toBe('FALHOU');
   });
 
-  it('crash entre submit e commit: a nova chamada acha a emissão pelo memo, grava e NÃO reemite', async () => {
-    st.failAuditOnce = true; // chain ok, banco cai antes do commit
+  it('FAILED libera nova tentativa NA HORA: tx nova, uma emissão, domínio gravado uma vez', async () => {
+    st.submitScript = ['FAILED', 'SUCCESS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_FALHOU' });
+    const r = await incorporarCota(base);
+    expect(st.built).toHaveLength(2);
+    expect(r.txHash).toBe('hash2');
+    expect(emissoes()).toBe(1);
+    expect(st.cotas.size).toBe(1);
+    expect(st.movs).toHaveLength(1);
+  });
+
+  it('tx que entrou mas FALHOU on-chain não aplicou nada: libera tx nova', async () => {
+    st.submitScript = ['AMBIGUOUS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    st.chain.set('hash1', { successful: false, amount: '400.0000000', memoHex: memoDe('ces_1') });
+    const r = await incorporarCota(base);
+    expect(st.built).toHaveLength(2);
+    expect(r.txHash).toBe('hash2');
+    expect(st.tentativas.get(memoDe('ces_1'))!.status).toBe('CONFIRMADA');
+  });
+});
+
+describe('incorporarCota — erro ambíguo (timeout/5xx/rede): o teste da Vera', () => {
+  const estadoLimpo = () => {
+    expect(st.cotas.size).toBe(0);
+    expect(st.audits).toHaveLength(0);
+    expect(st.movs).toHaveLength(0);
+  };
+
+  it('ambíguo → EMISSAO_EM_ANDAMENTO com o maxTime; NADA gravado no domínio; tentativa fica PENDENTE', async () => {
+    st.submitScript = ['AMBIGUOUS'];
+    const err = await incorporarCota(base).catch((e) => e);
+    expect(err).toBeInstanceOf(IncorporacaoEmissaoError);
+    expect(err.code).toBe('EMISSAO_EM_ANDAMENTO');
+    expect(err.detalhes.maxTime.getTime()).toBe(T0 + 120_000);
+    expect(err.message).toContain(new Date(T0 + 120_000).toISOString());
+    expect(err.message).not.toMatch(/Reexecutar é seguro/);
+    estadoLimpo();
+    expect(st.tentativas.get(memoDe('ces_1'))!.status).toBe('PENDENTE');
+  });
+
+  it('a tx "entra" depois; nova chamada DENTRO dos 120 s NÃO emite tx nova: reenvia o MESMO XDR (ou recusa)', async () => {
+    st.submitScript = ['AMBIGUOUS', 'AMBIGUOUS']; // 1º envio e o reenvio seguem ambíguos
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    avancar(30_000);
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    expect(st.built).toHaveLength(1); // nenhuma tx nova
+    expect(st.submits).toEqual(['XDR1', 'XDR1']); // o MESMO envelope reenviado
+    expect(emissoes()).toBe(0);
+    estadoLimpo();
+  });
+
+  it('a tx entra durante a espera e a nova chamada a ACHA PELO HASH: grava o domínio uma vez, sem emitir de novo', async () => {
+    st.submitScript = ['AMBIGUOUS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    // a tx entra no ledger depois do timeout
+    st.chain.set('hash1', { successful: true, amount: '400.0000000', memoHex: memoDe('ces_1') });
+    avancar(130_000); // depois dos 120 s
+    const r = await incorporarCota(base);
+    expect(r.txHash).toBe('hash1');
+    expect(r.tokensEmitidos).toBe(400);
+    expect(st.built).toHaveLength(1);
+    expect(st.submits).toEqual(['XDR1']); // nenhum reenvio: achou pelo hash
+    expect(emissoes()).toBe(1);
+    expect(st.cotas.size).toBe(1);
+    expect(st.movs).toHaveLength(1);
+    expect(st.audits[0].payloadJson.recuperadaPorMemo).toBe(true);
+    expect(st.movs[0].navPorToken.toFixed(8)).toBe('1.00000000'); // preço guardado na tentativa
+    // e uma terceira chamada é idempotente
+    await incorporarCota(base);
+    expect(st.cotas.size).toBe(1);
+    expect(emissoes()).toBe(1);
+  });
+
+  it('o reenvio do mesmo XDR que "pega" (SUCCESS) grava o domínio, sem tx nova', async () => {
+    st.submitScript = ['AMBIGUOUS', 'SUCCESS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    avancar(20_000);
+    const r = await incorporarCota(base);
+    expect(r.txHash).toBe('hash1');
+    expect(st.built).toHaveLength(1);
+    expect(st.submits).toEqual(['XDR1', 'XDR1']);
+    expect(emissoes()).toBe(1);
+    expect(st.cotas.size).toBe(1);
+  });
+
+  it('se a tx NUNCA entrou: só DEPOIS do maxTime (+10 s) sai tx nova, e a emissão acontece uma vez', async () => {
+    st.submitScript = ['AMBIGUOUS', 'AMBIGUOUS', 'SUCCESS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    avancar(120_000 + FOLGA_MAXTIME_MS - 1_000); // ainda dentro de maxTime + 10 s
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    expect(st.built).toHaveLength(1);
+    avancar(2_000); // agora passou de maxTime + 10 s
+    const r = await incorporarCota(base);
+    expect(st.built).toHaveLength(2); // tx nova só agora
+    expect(r.txHash).toBe('hash2');
+    expect(emissoes()).toBe(1); // a antiga nunca entrou; a nova entrou uma vez
+    expect(st.cotas.size).toBe(1);
+    expect(st.movs).toHaveLength(1);
+    expect(st.tentativas.get(memoDe('ces_1'))).toMatchObject({ txHash: 'hash2', status: 'CONFIRMADA' });
+  });
+
+  it('reenvio com FAILED (ex.: tx_bad_seq) mas a tx JÁ entrou: confere pelo hash e confirma, sem afirmar falha', async () => {
+    st.submitScript = ['AMBIGUOUS', 'FAILED'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    avancar(10_000);
+    // a busca inicial não acha; o reenvio dá FAILED; a releitura acha (a tx entrou entre uma e outra)
+    st.hashScript = [{ found: false }, { found: true, successful: true, ledgerCloseTime: 'x' }];
+    const r = await incorporarCota(base);
+    expect(r.txHash).toBe('hash1');
+    expect(st.built).toHaveLength(1);
+    expect(st.cotas.size).toBe(1);
+    expect(st.tentativas.get(memoDe('ces_1'))!.status).toBe('CONFIRMADA');
+  });
+
+  it('reenvio com FAILED e a tx não está no ledger → EMISSAO_FALHOU e libera tx nova', async () => {
+    st.submitScript = ['AMBIGUOUS', 'FAILED', 'SUCCESS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    avancar(10_000);
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_FALHOU' });
+    expect(st.tentativas.get(memoDe('ces_1'))!.status).toBe('FALHOU');
+    const r = await incorporarCota(base);
+    expect(r.txHash).toBe('hash2');
+    expect(emissoes()).toBe(1);
+  });
+
+  it('falha ao consultar o Horizon por hash é fail-closed: não emite tx nova, não grava', async () => {
+    st.submitScript = ['AMBIGUOUS'];
+    await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+    st.failBuscarHash = new Error('horizon down');
+    avancar(200_000);
+    await expect(incorporarCota(base)).rejects.toThrow('horizon down');
+    expect(st.built).toHaveLength(1);
+    estadoLimpo();
+  });
+});
+
+describe('incorporarCota — crash, concorrência e idempotência', () => {
+  it('crash entre submit e commit: a nova chamada acha a tx pelo hash e grava, SEM reemitir', async () => {
+    st.failAuditOnce = true; // chain ok (SUCCESS), banco cai antes do commit do domínio
     await expect(incorporarCota(base)).rejects.toThrow('db caiu');
     expect(emissoes()).toBe(1);
-    expect(st.chain.size).toBe(1);
-    expect(st.cotas.size).toBe(0); // rollback: nenhuma linha sem a tx corresponde
+    expect(st.cotas.size).toBe(0); // rollback: nenhuma linha de domínio sem a tx correspondente
 
     const r = await incorporarCota(base);
-    expect(emissoes()).toBe(1); // continua 1 emissão
-    expect(r.txHash).toBe('tx1');
+    expect(emissoes()).toBe(1);
+    expect(st.built).toHaveLength(1);
+    expect(r.txHash).toBe('hash1');
     expect(r.tokensEmitidos).toBe(400);
     expect(st.cotas.size).toBe(1);
     expect(st.audits[0].payloadJson.recuperadaPorMemo).toBe(true);
     expect(st.movs).toHaveLength(1);
-    expect(st.movs[0].navPorToken.toFixed(8)).toBe('1.00000000'); // V ÷ q reconstruído
   });
 
-  it('recuperação usa a quantidade EMITIDA, mesmo que o NAV do ledger já tenha mudado', async () => {
+  it('a recuperação usa a quantidade EMITIDA (guardada na tentativa), mesmo com o NAV do ledger já alterado', async () => {
     st.failAuditOnce = true;
     await expect(incorporarCota(base)).rejects.toThrow('db caiu');
-    // o supply do ledger já inclui os 400 emitidos; recalcular daria outro NAV/quantidade
     st.fetchSupplyDasClasses.mockResolvedValue({ senior: supply('400'), subordinada: supply('0') });
     const r = await incorporarCota(base);
     expect(r.tokensEmitidos).toBe(400);
     expect(emissoes()).toBe(1);
   });
 
-  it('duas chamadas concorrentes: uma emissão só, as duas devolvem a mesma cota', async () => {
+  it('duas chamadas concorrentes: uma tx só, as duas devolvem a mesma cota', async () => {
     const [a, b] = await Promise.all([incorporarCota(base), incorporarCota(base)]);
+    expect(st.built).toHaveLength(1);
     expect(emissoes()).toBe(1);
     expect(st.cotas.size).toBe(1);
     expect(st.movs).toHaveLength(1);
     expect(a.cotaId).toBe(b.cotaId);
     expect(a.txHash).toBe(b.txHash);
+  });
+
+  it('duas chamadas concorrentes com envio ambíguo: ainda uma tx só (a 2ª reenvia o mesmo XDR)', async () => {
+    st.submitScript = ['AMBIGUOUS', 'AMBIGUOUS'];
+    const rs = await Promise.allSettled([incorporarCota(base), incorporarCota(base)]);
+    expect(rs.every((r) => r.status === 'rejected' && (r.reason as IncorporacaoEmissaoError).code === 'EMISSAO_EM_ANDAMENTO')).toBe(true);
+    expect(st.built).toHaveLength(1);
+    expect(new Set(st.submits)).toEqual(new Set(['XDR1']));
   });
 
   it('reexecução depois de concluída é idempotente (não emite, não duplica)', async () => {
@@ -266,10 +485,19 @@ describe('incorporarCota — aporte ao NAV', () => {
     expect(st.movs).toHaveLength(1);
   });
 
+  it('rede de segurança: emissão anterior à tabela (sem tentativa) é achada pelo memo e não reemite', async () => {
+    st.chain.set('hashLegado', { successful: true, amount: '400.0000000', memoHex: memoDe('ces_1') });
+    const r = await incorporarCota(base);
+    expect(r.txHash).toBe('hashLegado');
+    expect(st.built).toHaveLength(0);
+    expect(st.audits[0].payloadJson.recuperadaPorMemo).toBe(true);
+    expect(st.movs[0].navPorToken.toFixed(8)).toBe('1.00000000'); // V ÷ q reconstruído
+  });
+
   it('falha de leitura da busca por memo é fail-closed: não emite às cegas', async () => {
-    st.failBuscar = new Error('horizon down');
+    st.failBuscarMemo = new Error('horizon down');
     await expect(incorporarCota(base)).rejects.toThrow('horizon down');
-    expect(emissoes()).toBe(0);
+    expect(st.built).toHaveLength(0);
     expect(st.cotas.size).toBe(0);
   });
 
@@ -277,7 +505,7 @@ describe('incorporarCota — aporte ao NAV', () => {
     const { cessaoId: _omit, ...semCessao } = base;
     void _omit;
     await incorporarCota(semCessao);
-    expect(st.chain.has(memoHashDaIncorporacao(HASH).toString('hex'))).toBe(true);
+    expect(st.built[0].memoHex).toBe(memoHashDaIncorporacao(HASH).toString('hex'));
   });
 });
 
@@ -287,6 +515,7 @@ describe('incorporarCota — emissão recusada (nada vai à chain)', () => {
     expect(err).toBeInstanceOf(IncorporacaoBloqueadaError);
     expect(err.code).toBe(code);
     expect(emissoes()).toBe(0);
+    expect(st.built).toHaveLength(0);
     expect(st.cotas.size).toBe(0);
   };
 

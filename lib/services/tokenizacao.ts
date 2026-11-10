@@ -23,7 +23,13 @@ import {
   TipoBem,
 } from '@prisma/client';
 import { db } from '../db';
-import { buscarEmissaoPorMemo, executeClawback, issueAsset } from '../stellar/issuer';
+import {
+  buildIssueAssetTx,
+  buscarEmissaoPorMemo,
+  buscarTxPorHash,
+  executeClawback,
+  submitEnvelope,
+} from '../stellar/issuer';
 import { issuerSigner } from '../stellar/signer';
 import { navDaCotaAsDecimal } from './pool';
 import { calcularPrecoDeEmissao } from './emissao';
@@ -134,6 +140,148 @@ export async function verificarPreCondicoesDeEmissao(hashValidacao: string | und
   };
 }
 
+/** Mais um pouco além do `maxTime` antes de dar a tx por morta (fechamento de ledger). */
+export const FOLGA_MAXTIME_MS = 10_000;
+
+export type IncorporacaoEmissaoCodigo = 'EMISSAO_EM_ANDAMENTO' | 'EMISSAO_FALHOU';
+
+/**
+ * A emissão não está concluída: `EMISSAO_EM_ANDAMENTO` (erro ambíguo; a tx ainda
+ * pode entrar até `maxTime` — NADA foi gravado no domínio e nenhuma tx nova será
+ * criada antes disso) ou `EMISSAO_FALHOU` (definitiva, com os result codes).
+ */
+export class IncorporacaoEmissaoError extends Error {
+  constructor(
+    readonly code: IncorporacaoEmissaoCodigo,
+    readonly detalhes: { maxTime?: Date; resultCodes?: unknown } = {},
+  ) {
+    super(
+      code === 'EMISSAO_EM_ANDAMENTO'
+        ? `Emissão em andamento; nada foi gravado. Tente de novo depois de ${(detalhes.maxTime ?? new Date()).toISOString()}.`
+        : 'Emissão recusada pela rede; nada foi gravado. Uma nova tentativa já pode ser feita.',
+    );
+    this.name = 'IncorporacaoEmissaoError';
+  }
+}
+
+interface EmissaoOnChain {
+  txHash: string;
+  quantidade: Prisma.Decimal;
+  navAntes: Prisma.Decimal;
+  recuperada: boolean;
+}
+
+/**
+ * Garante UMA emissão on-chain para esta incorporação e devolve o que foi emitido.
+ *
+ * A `TentativaEmissao` (fora do domínio) é gravada com `db` — numa transação
+ * própria, que commita antes do submit e sobrevive ao rollback da transação de
+ * domínio. Em erro ambíguo o MESMO envelope (mesmo hash, mesma sequence) é
+ * reenviado: o protocolo não aplica a mesma tx duas vezes. Tx nova só depois de
+ * a antiga expirar (`maxTime` + 10 s) sem ser achada pelo hash.
+ */
+async function obterEmissaoOnChain(input: {
+  memoHash: Buffer;
+  code: string;
+  posicaoPlina: string;
+  valorAporte: Prisma.Decimal;
+}): Promise<EmissaoOnChain> {
+  const { memoHash, code, posicaoPlina, valorAporte } = input;
+  const chave = memoHash.toString('hex');
+  const tentativa = await db.tentativaEmissao.findUnique({ where: { memoHash: chave } });
+
+  const confirmada = async (t: {
+    txHash: string;
+    quantidade: Prisma.Decimal;
+    navPorToken: Prisma.Decimal;
+  }): Promise<EmissaoOnChain> => {
+    await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'CONFIRMADA' } });
+    return {
+      txHash: t.txHash,
+      quantidade: new Prisma.Decimal(t.quantidade),
+      navAntes: new Prisma.Decimal(t.navPorToken),
+      recuperada: true,
+    };
+  };
+
+  if (tentativa && (tentativa.status === 'PENDENTE' || tentativa.status === 'CONFIRMADA')) {
+    // Caminho principal: a tx desta tentativa já está na chain?
+    const achada = await buscarTxPorHash(tentativa.txHash);
+    if (achada.found) {
+      if (achada.successful) return confirmada(tentativa);
+      // Entrou e falhou on-chain: não aplicou nada; libera nova tentativa.
+      await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'FALHOU' } });
+    } else if (Date.now() < tentativa.maxTime.getTime() + FOLGA_MAXTIME_MS) {
+      // Ainda pode entrar: reenvia o MESMO envelope; nunca cria tx nova agora.
+      const reenvio = await submitEnvelope(tentativa.envelopeXdr);
+      if (reenvio.status === 'SUCCESS') return confirmada(tentativa);
+      if (reenvio.status === 'FAILED') {
+        // `tx_bad_seq` & cia.: pode já ter entrado — confere pelo hash antes de afirmar falha.
+        const depois = await buscarTxPorHash(tentativa.txHash);
+        if (depois.found && depois.successful) return confirmada(tentativa);
+        await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'FALHOU' } });
+        throw new IncorporacaoEmissaoError('EMISSAO_FALHOU', { resultCodes: reenvio.resultCodes });
+      }
+      throw new IncorporacaoEmissaoError('EMISSAO_EM_ANDAMENTO', { maxTime: tentativa.maxTime });
+    } else {
+      // Expirou e não foi achada pelo hash: morreu. Pode construir tx nova.
+      await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'EXPIRADA' } });
+    }
+  } else if (!tentativa) {
+    // Rede de segurança: emissões anteriores a esta tabela (achadas só pelo memo).
+    const porMemo = await buscarEmissaoPorMemo({ code, destination: posicaoPlina, memoHash });
+    if (porMemo) {
+      const quantidade = new Prisma.Decimal(porMemo.amount);
+      if (!quantidade.gt(0)) throw new IncorporacaoBloqueadaError('CUSTO_INVALIDO');
+      return {
+        txHash: porMemo.txHash,
+        quantidade,
+        // O supply do ledger já inclui esta emissão: NAV "antes" reconstruído de V ÷ q.
+        navAntes: valorAporte.div(quantidade).toDecimalPlaces(8, Prisma.Decimal.ROUND_HALF_EVEN),
+        recuperada: true,
+      };
+    }
+  }
+
+  // Tx nova: NAV antes do aporte (supply zero → 1,00); lança se o ledger não
+  // responde ou se PLINARFB circula (D3). Constrói, COMMITA a tentativa e só então envia.
+  const preco = await calcularPrecoDeEmissao({ valorBrl: valorAporte });
+  const built = await buildIssueAssetTx(
+    issuerSigner(),
+    posicaoPlina,
+    preco.plinarfAmount.toFixed(7),
+    code,
+    { memoHash },
+  );
+  const dados = {
+    txHash: built.hash,
+    envelopeXdr: built.xdr,
+    maxTime: new Date(built.maxTime * 1000),
+    status: 'PENDENTE' as const,
+    valorBrl: valorAporte,
+    quantidade: preco.plinarfAmount,
+    navPorToken: preco.navPorTokenNaCotacao,
+  };
+  await db.tentativaEmissao.upsert({
+    where: { memoHash: chave },
+    create: { memoHash: chave, ...dados },
+    update: dados,
+  });
+
+  const r = await submitEnvelope(built.xdr);
+  if (r.status === 'SUCCESS') {
+    await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'CONFIRMADA' } });
+    return { txHash: r.hash, quantidade: preco.plinarfAmount, navAntes: preco.navPorTokenNaCotacao, recuperada: false };
+  }
+  if (r.status === 'FAILED') {
+    await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'FALHOU' } });
+    logStellarError('[incorporarCota] emissão recusada', new Error('FAILED'));
+    throw new IncorporacaoEmissaoError('EMISSAO_FALHOU', { resultCodes: r.resultCodes });
+  }
+  // AMBIGUOUS: fica PENDENTE; a próxima chamada reenvia o mesmo envelope.
+  throw new IncorporacaoEmissaoError('EMISSAO_EM_ANDAMENTO', { maxTime: dados.maxTime });
+}
+
 /** Memo.hash determinístico da emissão: um por cessão (ou, sem cessão, por laudo). */
 export function memoHashDaIncorporacao(chave: string): Buffer {
   return createHash('sha256').update(`plina:incorporacao:${chave}`).digest();
@@ -156,10 +304,11 @@ function cotaIdDaIncorporacao(memoHash: Buffer): string {
  *     (`pg_advisory_xact_lock` pela chave da incorporação);
  *  3. a cota já existe? (mesmo id determinístico) → devolve o resultado, sem
  *     reemitir; laudo usado por outra cota → recusa;
- *  4. `buscarEmissaoPorMemo`: se a emissão daquela incorporação já está na
- *     chain (crash entre submit e commit), reaproveita o `txHash` e a quantidade
- *     emitida — não reemite;
- *  5. senão preço ao NAV (fail-closed, D3) e `issueAsset(..., { memoHash })`;
+ *  4. `obterEmissaoOnChain`: `TentativaEmissao` (fora do domínio, commitada ANTES
+ *     do submit) + busca por hash. Achou → reaproveita; ainda dentro do `maxTime`
+ *     → reenvia o MESMO envelope e, se continuar ambíguo, `EMISSAO_EM_ANDAMENTO`
+ *     (nada gravado, sem tx nova); expirada → pode construir tx nova;
+ *  5. senão preço ao NAV (fail-closed, D3), constrói, grava a tentativa e envia;
  *  6. só depois do sucesso on-chain, na mesma transação: `Cota`, `EventoAudit`
  *     e `MovimentoFundo` APORTE_COTA. Falha em qualquer ponto desfaz a
  *     transação: nenhuma linha de domínio existe sem a tx on-chain.
@@ -223,37 +372,14 @@ export async function incorporarCota(
       });
       if (laudoUsado) throw new IncorporacaoBloqueadaError('LAUDO_JA_USADO');
 
-      // 4) A emissão desta incorporação já está na chain? (crash pós-submit)
-      const achada = await buscarEmissaoPorMemo({ code, destination: posicaoPlina, memoHash });
-
-      let txHash: string;
-      let quantidade: Prisma.Decimal;
-      let navAntes: Prisma.Decimal;
-      let recuperada = false;
-      if (achada) {
-        recuperada = true;
-        txHash = achada.txHash;
-        quantidade = new Prisma.Decimal(achada.amount);
-        if (!quantidade.gt(0)) throw new IncorporacaoBloqueadaError('CUSTO_INVALIDO');
-        // NAV "antes" reconstruído do que foi de fato emitido (o supply do
-        // ledger já inclui esta emissão, então não dá para recalcular).
-        navAntes = valorAporte.div(quantidade).toDecimalPlaces(8, Prisma.Decimal.ROUND_HALF_EVEN);
-      } else {
-        // 5) NAV antes do aporte (supply zero → 1,00); lança se o ledger não
-        // responde ou se PLINARFB circula (D3). Depois emite com o memo.
-        const preco = await calcularPrecoDeEmissao({ valorBrl: valorAporte });
-        quantidade = preco.plinarfAmount;
-        navAntes = preco.navPorTokenNaCotacao;
-        try {
-          const res = await issueAsset(issuerSigner(), posicaoPlina, quantidade.toFixed(7), code, { memoHash });
-          txHash = res.hash;
-        } catch (err) {
-          logStellarError('[incorporarCota] emissão', err);
-          // Nada foi gravado (a transação desfaz). Se a tx chegou a entrar, a
-          // próxima chamada a acha pelo memo e não reemite.
-          throw new Error('Emissão on-chain falhou; nada foi gravado. Reexecutar é seguro (idempotente por memo).');
-        }
-      }
+      // 4–5) Emissão on-chain idempotente, com reenvio do MESMO envelope no erro
+      // ambíguo (contrato 2026-11-10-reemissao-erro-ambiguo). Qualquer falha ou
+      // "em andamento" sai daqui ANTES de qualquer escrita de domínio.
+      const emissao = await obterEmissaoOnChain({ memoHash, code, posicaoPlina, valorAporte });
+      const txHash = emissao.txHash;
+      const quantidade = emissao.quantidade;
+      const navAntes = emissao.navAntes;
+      const recuperada = emissao.recuperada;
       const quantityStr = quantidade.toFixed(7);
 
       // 6) DB depois da chain, na mesma transação.
@@ -326,7 +452,9 @@ export async function incorporarCota(
 
       return { cotaId, txHash, tokensEmitidos: quantidade.toNumber() };
     },
-    // A transação cobre a chamada à chain (segundos): timeout acima do padrão de 5 s.
+    // O trabalho dentro da transação é limitado (leituras + no máx. um envio e um
+    // reenvio): NÃO há espera de 120 s aqui — o erro ambíguo sai como
+    // EMISSAO_EM_ANDAMENTO e o reenvio é de uma nova chamada. Timeout mantido (não aumentado).
     { timeout: 120_000, maxWait: 15_000 },
   );
 }
