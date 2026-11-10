@@ -31,6 +31,10 @@ export interface SwapXdrExpectation {
   expectedPlinarfAmount: string;
   /** Code do asset emitido (PLINARF Sênior / PLINARFB Subordinada). Default PLINARF. */
   plinarfCode?: string;
+  /** Prazo do quote (N1-S1): maxTime do envelope ≤ quoteExpiresAt + 120 s. */
+  quoteExpiresAt?: Date;
+  /** Memo.text que o build gerou (ex.: `q:<quoteId>`); se informado, o envelope tem de trazê-lo igual. */
+  memoTexto?: string;
 }
 
 function isPayment(op: AnyOp): op is Operation.Payment {
@@ -79,6 +83,45 @@ function assertJanelaDeValidade(tx: Transaction, agoraSec: number): void {
   }
 }
 
+/**
+ * Precondições v2 (N1-S1): a nossa tx não usa nenhuma. minAccountSequence foi o
+ * vetor do HIGH (tx_bad_seq → reserva órfã → reenvio dias depois com NAV velho).
+ */
+function assertSemPrecondicoesV2(tx: Transaction): void {
+  const lb = tx.ledgerBounds;
+  if (lb && (Number(lb.minLedger) !== 0 || Number(lb.maxLedger) !== 0)) {
+    throw new Error('xdr com precondição ledgerBounds: não permitida');
+  }
+  if (tx.minAccountSequence !== undefined && tx.minAccountSequence !== null) {
+    throw new Error('xdr com precondição minAccountSequence: não permitida');
+  }
+  if (Number(tx.minAccountSequenceAge ?? 0) !== 0) {
+    throw new Error('xdr com precondição minAccountSequenceAge: não permitida');
+  }
+  if (Number(tx.minAccountSequenceLedgerGap ?? 0) !== 0) {
+    throw new Error('xdr com precondição minAccountSequenceLedgerGap: não permitida');
+  }
+  if ((tx.extraSigners?.length ?? 0) > 0) {
+    throw new Error('xdr com precondição extraSigners: não permitida');
+  }
+}
+
+/** maxTime do envelope não pode passar do prazo do quote + 120 s (N1-S1). */
+function assertDentroDoQuote(tx: Transaction, quoteExpiresAt: Date): void {
+  const expira = quoteExpiresAt instanceof Date ? quoteExpiresAt.getTime() : NaN;
+  if (!Number.isFinite(expira)) throw new Error('expectativa quoteExpiresAt inválida');
+  const limite = Math.floor(expira / 1000) + STELLAR_TX_TIMEOUT_SEC;
+  const maxTime = Number(tx.timeBounds?.maxTime ?? 0);
+  if (maxTime > limite) {
+    throw new Error(`xdr maxTime=${maxTime} além do prazo do quote + ${STELLAR_TX_TIMEOUT_SEC} s (${limite})`);
+  }
+}
+
+function assertMemo(tx: Transaction, memoTexto: string): void {
+  const valor = tx.memo.type === 'text' ? Buffer.from(tx.memo.value as Buffer | string).toString('utf8') : null;
+  if (valor !== memoTexto) throw new Error('xdr memo diferente do gerado no build');
+}
+
 function fmtAsset(a: Asset): string {
   return a.isNative() ? 'native' : `${a.code}:${a.issuer}`;
 }
@@ -103,6 +146,9 @@ export function assertSwapXdrMatchesQuote(
   }
 
   assertJanelaDeValidade(tx, opts?.agoraSec ?? Math.floor(Date.now() / 1000));
+  if (expected.quoteExpiresAt !== undefined) assertDentroDoQuote(tx, expected.quoteExpiresAt);
+  assertSemPrecondicoesV2(tx);
+  if (expected.memoTexto !== undefined) assertMemo(tx, expected.memoTexto);
 
   if (tx.source !== expected.investorPubkey) {
     throw new Error(
