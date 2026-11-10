@@ -16,7 +16,8 @@
  * direto (emissão single-shot pelo issuer) executado server-side. Marca audit log.
  *
  * Body: { quoteId, investorPubkey, investidorId? }
- * Returns (real): { xdr, hashHex, mock: false } — XDR sem nenhuma assinatura da Plina
+ * Returns (real): { xdr, hashHex, quoteId, mock: false } — XDR sem nenhuma assinatura da Plina;
+ *   `quoteId` é o quote a usar no submit (novo se o anterior expirou — recotar)
  * Returns (mock): { txHash, mock: true, alreadyExecuted: true }
  */
 
@@ -27,7 +28,7 @@ import { db } from '@/lib/db';
 import { buildSwapBridgeForPlinarfXdr } from '@/lib/stellar/transactions';
 import { issueAsset, createTrustline } from '@/lib/stellar/issuer';
 import { distributorSigner, issuerSigner } from '@/lib/stellar/signer';
-import { NavMudouError, revalidarNavDaCotacao } from '@/lib/services/emissao';
+import { renovarCotacaoParaSwap } from '@/lib/services/cotacao-swap';
 import { NAV_INDISPONIVEL_MENSAGEM, NavIndisponivelError } from '@/lib/services/nav-supply';
 import { mainnetCutoverGuard } from '@/lib/env/feature-gates';
 import { buildAsset, loadAccount } from '@/lib/stellar/account';
@@ -117,11 +118,6 @@ export const POST = withApi(async (req, { requestId }) => {
   if (quote.consumedAt) {
     throw new ApiError('CONFLICT', 409, 'quote já consumido');
   }
-  // L1-S2: o quote expira mesmo com o onramp `completed`. O preço de emissão
-  // (NAV congelado na cotação) só vale dentro da janela do quote.
-  if (quote.expiresAt.getTime() <= Date.now()) {
-    throw new ApiError('GONE', 410, 'quote expirado');
-  }
   if (!quote.onRampOrder) {
     throw new ApiError(
       'CONFLICT',
@@ -150,36 +146,25 @@ export const POST = withApi(async (req, { requestId }) => {
     throw new Error('Stellar issuer/distributor não configurados');
   }
 
-  // M1-3: o PLINARF emitido NÃO é 1:1 com o TESOURO pago. Quantidade e NAV
-  // vêm congelados do quote (BRL ÷ NAV). Quote sem preço de emissão (legado ou
-  // anterior ao M1-3) é recusado: nunca cai em 1:1.
-  if (!quote.plinarfAmount || !quote.navPorTokenNaCotacao) {
-    throw new ApiError(
-      'CONFLICT',
-      409,
-      'cotação sem preço de emissão ao NAV — refaça a cotação',
-    );
-  }
-  // L1-S2: relê o NAV antes de montar/emitir; mudou além de 1 bp → recotar.
+  // M1-3: o PLINARF emitido NÃO é 1:1 com o TESOURO pago: quantidade e NAV vêm do
+  // preço de emissão. Quote sem preço (legado) é precificado aqui, no recotar.
+  // L1-S2 + recotar: o build RELÊ o NAV e atualiza `navPorTokenNaCotacao` e
+  // `plinarfAmount` do quote (cotação expirada → quote novo, ordem religada). O
+  // submit recusa com 409 NAV_MUDOU se o NAV divergir mais de 1 bp DESTE preço.
   // Sem NAV (ledger fora, PLINARFB circulando) → 503 constante.
+  let cotacao;
   try {
-    await revalidarNavDaCotacao({
-      fromAmount: quote.fromAmount,
-      navPorTokenNaCotacao: quote.navPorTokenNaCotacao,
-    });
+    cotacao = await renovarCotacaoParaSwap(quote);
   } catch (err) {
-    if (err instanceof NavMudouError) {
-      throw new ApiError('NAV_MUDOU', 409, err.message);
-    }
     if (err instanceof NavIndisponivelError) {
       console.error('[swap/build] NAV indisponível', { requestId, motivo: err.motivo });
       throw new ApiError('LEDGER_UNAVAILABLE', 503, NAV_INDISPONIVEL_MENSAGEM);
     }
     throw err;
   }
-  const navNaCotacao = quote.navPorTokenNaCotacao.toFixed(8);
+  const navNaCotacao = cotacao.navPorTokenNaCotacao.toFixed(8);
   const bridgeAmount = quote.toAmount.toFixed(7); // TESOURO pago (perna 1)
-  const stellarAmount = quote.plinarfAmount.toFixed(7); // PLINARF emitido (perna 2)
+  const stellarAmount = cotacao.plinarfAmount.toFixed(7); // PLINARF emitido (perna 2)
   const classe = classeOrDefault(quote.classe);
   const plinarfCode = assetCodeForClasse(classe);
 
@@ -212,12 +197,12 @@ export const POST = withApi(async (req, { requestId }) => {
       investorPubkey,
       stellarAmount,
       plinarfCode,
-      { memoHash: createHash('sha256').update(`plina:subscricao:${quote.id}`).digest() },
+      { memoHash: createHash('sha256').update(`plina:subscricao:${cotacao.id}`).digest() },
     );
 
     await db.$transaction(async (tx) => {
       const consumed = await tx.quote.updateMany({
-        where: { id: quote.id, consumedAt: null },
+        where: { id: cotacao.id, consumedAt: null },
         data: {
           consumedAt: new Date(),
           consumedTxHash: distRes.hash,
@@ -244,8 +229,8 @@ export const POST = withApi(async (req, { requestId }) => {
         tipo: 'SUBSCRICAO',
         valorBrl: quote.fromAmount,
         tokens: stellarAmount,
-        chave: `subscricao:${quote.id}`,
-        quoteId: quote.id,
+        chave: `subscricao:${cotacao.id}`,
+        quoteId: cotacao.id,
         refHash: distRes.hash,
       });
       await tx.eventoAudit.create({
@@ -256,7 +241,7 @@ export const POST = withApi(async (req, { requestId }) => {
           privyId: user.privyId,
           stellarTxHash: distRes.hash,
           payloadJson: {
-            quoteId: quote.id,
+            quoteId: cotacao.id,
             orderId: quote.onRampOrder?.id,
             amount: stellarAmount,
             navPorTokenNaCotacao: navNaCotacao,
@@ -269,7 +254,7 @@ export const POST = withApi(async (req, { requestId }) => {
     });
 
     return ok(
-      { txHash: distRes.hash, mock: true, alreadyExecuted: true },
+      { txHash: distRes.hash, quoteId: cotacao.id, mock: true, alreadyExecuted: true },
       { requestId },
     );
   }
@@ -293,7 +278,7 @@ export const POST = withApi(async (req, { requestId }) => {
     issuerPubkey,
     distributorPubkey,
     plinarfCode,
-    memo: `q:${quote.id.slice(0, 24)}`,
+    memo: `q:${cotacao.id.slice(0, 24)}`,
   });
 
   // N1 + L1-S1/S3: o build NÃO assina nada pela Plina nem devolve chave pública.
@@ -303,6 +288,7 @@ export const POST = withApi(async (req, { requestId }) => {
     {
       xdr,
       hashHex,
+      quoteId: cotacao.id,
       mock: false,
     },
     { requestId },
