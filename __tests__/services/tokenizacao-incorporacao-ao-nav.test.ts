@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Prisma, StatusCota } from '@prisma/client';
+import { Keypair } from '@stellar/stellar-sdk';
 
 const m = vi.hoisted(() => ({
   cfg: { network: 'TESTNET' },
@@ -54,7 +55,7 @@ import { navPorTokenAsDecimal } from '@/lib/services/pool';
 const D = (v: string) => new Prisma.Decimal(v);
 const supply = (c: string) => ({ circulante: D(c), tesouraria: D('0') }) as never;
 const HASH = 'a'.repeat(64);
-const POSICAO = 'GPOSICAOPLINA';
+const POSICAO = Keypair.random().publicKey();
 
 function evidencias(anuencia: 'CONFIRMADA' | 'DECLARADA_PENDENTE' | null = 'DECLARADA_PENDENTE', laudo = true) {
   m.eventoFind.mockImplementation(async ({ where }: { where: { acao: string } }) => {
@@ -169,6 +170,14 @@ describe('incorporarCota — emissão recusada (nada vai à chain)', () => {
   it('declarada pendente em mainnet', async () => { m.cfg.network = 'PUBLIC'; await recusa(base, 'ANUENCIA_PENDENTE_EM_MAINNET'); });
   it('laudo já usado por outra cota', async () => { m.cotaFindFirst.mockResolvedValue({ id: 'c0' }); await recusa(base, 'LAUDO_JA_USADO'); });
   it('sem conta de posição da Plina', async () => { delete process.env.STELLAR_PLINA_POSITION_PUBLIC; await recusa(base, 'POSICAO_PLINA_AUSENTE'); });
+  it('conta de posição inválida também é recusada', async () => { process.env.STELLAR_PLINA_POSITION_PUBLIC = 'nao-e-chave'; await recusa(base, 'POSICAO_PLINA_AUSENTE'); });
+
+  it('a mensagem de recusa é fixa e não cita nome de env nem valor', async () => {
+    process.env.STELLAR_PLINA_POSITION_PUBLIC = 'valor-secreto-invalido';
+    const err = await incorporarCota(base).catch((e) => e);
+    expect(err.code).toBe('POSICAO_PLINA_AUSENTE');
+    expect(err.message).not.toMatch(/STELLAR_|PLINA_POSITION|valor-secreto/);
+  });
   it('Pix diferente do custo', () => recusa({ ...base, pixValorBrl: '390.00' }, 'PIX_DIVERGE_DO_CUSTO'));
   it('custo não positivo', () => recusa({ ...base, desagioAquisicao: '1' }, 'CUSTO_INVALIDO'));
 
