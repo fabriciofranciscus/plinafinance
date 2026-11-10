@@ -35,6 +35,11 @@ import { CompradorPipeline } from './comprador-pipeline';
 import { logoutAction } from './actions';
 
 export const dynamic = 'force-dynamic';
+// incorporarCotaAction (usada nesta página) pode segurar uma $transaction de até
+// 120 s (E1-4, M3 do Argus). Server Actions herdam o limite da PÁGINA
+// (Next: route segment config `maxDuration`); 150 s dá folga sobre os 120 s.
+// Exceção só de testnet: antes do M6 o Bento refaz a transação curta, sem rede.
+export const maxDuration = 150;
 
 function brl(value: number): string {
   return new Intl.NumberFormat('pt-BR', {
