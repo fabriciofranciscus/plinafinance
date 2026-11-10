@@ -174,7 +174,10 @@ function assertCodeDaPlina(code: unknown): asserts code is string {
   }
 }
 
-/** Memo.hash da emissão: exatamente 32 bytes (ex.: sha256 da chave da cessão). */
+/**
+ * Memo.hash da emissão: exatamente 32 bytes, sha256("plina:incorporacao:" + chave).
+ * O prefixo é exclusivo da emissão (invariante usado por quemConsumiuSequence).
+ */
 function assertMemoHash(memoHash: unknown): asserts memoHash is Buffer {
   if (!Buffer.isBuffer(memoHash) || memoHash.length !== 32) {
     throw new IssueAssetInputError('ISSUE_MEMO_INVALID');
@@ -531,6 +534,12 @@ const MAX_PAGINAS_CONTA = 5;
  * Memo.hash da emissão (chave de idempotência). Um 404 por hash nunca é prova:
  * se S não aparece (passou abaixo de S, fim da lista ou teto de páginas),
  * INDETERMINADO. Erro do Horizon propaga.
+ *
+ * INVARIANTE do memo: o prefixo de memo "plina:incorporacao:"
+ * (lib/services/tokenizacao.ts:499) é EXCLUSIVO da emissão; nenhum outro fluxo
+ * pode usá-lo, porque esta função reconhece a tx nossa por ele. A trilha de
+ * auditoria usa sha256OfPayload (lib/stellar/audit.ts), sem esse prefixo, e só
+ * o issuer assina tx com source = issuer.
  * Uso depois de EMISSAO_SEQUENCIA_CONSUMIDA
  * (contratos/2026-11-10-substituicao-mesma-sequence.md, adendos).
  */
