@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Quote" ADD COLUMN IF NOT EXISTS "navPorTokenNaCotacao" DECIMAL(20,8);
+ALTER TABLE "Quote" ADD COLUMN IF NOT EXISTS "plinarfAmount" DECIMAL(20,7);

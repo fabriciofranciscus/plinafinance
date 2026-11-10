@@ -11,6 +11,7 @@ const {
   quoteUpdateMany,
   investidorUpdate,
   eventoAuditCreate,
+  movimentoCreateMany,
   holdingUpsert,
   submitWithPrivySignature,
   txHashFromXdr,
@@ -23,6 +24,7 @@ const {
   quoteUpdateMany: vi.fn(),
   investidorUpdate: vi.fn(),
   eventoAuditCreate: vi.fn(),
+  movimentoCreateMany: vi.fn(),
   holdingUpsert: vi.fn(),
   submitWithPrivySignature: vi.fn(),
   txHashFromXdr: vi.fn(),
@@ -59,6 +61,7 @@ vi.mock('@/lib/db', () => ({
         quote: { updateMany: typeof quoteUpdateMany };
         investidor: { update: typeof investidorUpdate };
         eventoAudit: { create: typeof eventoAuditCreate };
+        movimentoFundo: { createMany: typeof movimentoCreateMany };
         holdingPLINARF: { upsert: typeof holdingUpsert };
       }) => Promise<unknown>,
     ) =>
@@ -66,6 +69,7 @@ vi.mock('@/lib/db', () => ({
         quote: { updateMany: quoteUpdateMany },
         investidor: { update: investidorUpdate },
         eventoAudit: { create: eventoAuditCreate },
+        movimentoFundo: { createMany: movimentoCreateMany },
         holdingPLINARF: { upsert: holdingUpsert },
       }),
   },
@@ -115,7 +119,10 @@ function baseQuote(overrides: Partial<Record<string, unknown>> = {}) {
     investidorId: 'inv_1',
     consumedAt: null,
     expiresAt: new Date(Date.now() + 60_000),
+    fromAmount: new Prisma.Decimal('100'),
     toAmount: new Prisma.Decimal('99.5'),
+    navPorTokenNaCotacao: new Prisma.Decimal('1'),
+    plinarfAmount: new Prisma.Decimal('99.5'),
     investidor: { publicKey: 'GABC' },
     onRampOrder: {
       id: 'ord_1',
@@ -131,6 +138,7 @@ beforeEach(() => {
   quoteUpdateMany.mockReset().mockResolvedValue({ count: 1 });
   investidorUpdate.mockReset().mockResolvedValue({});
   eventoAuditCreate.mockReset().mockResolvedValue({});
+  movimentoCreateMany.mockReset().mockResolvedValue({ count: 1 });
   holdingUpsert.mockReset().mockResolvedValue({});
   submitWithPrivySignature
     .mockReset()

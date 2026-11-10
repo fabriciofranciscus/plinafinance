@@ -17,6 +17,7 @@
  * Cada estado com prova on-chain via Memo.hash. Comprador NÃO tem wallet.
  */
 
+import { registrarMovimentoFundo } from './razao-fundo';
 import {
   CaminhoRealizacao,
   LeadCompradorStatus,
@@ -505,6 +506,14 @@ export async function executarCaminhoA(
         onChainTxHash: onChain.txHash,
         operador: input.operador,
       },
+    });
+    // E2-5: o caixa entra no numerador do NAV por este único evento do razão.
+    await registrarMovimentoFundo(tx, {
+      tipo: 'REALIZACAO',
+      valorBrl: valorRealizado,
+      chave: `realizacao:${created.id}`,
+      cotaId: reserva.cotaId,
+      refHash: onChain.txHash,
     });
     await tx.cota.update({
       where: { id: reserva.cotaId },

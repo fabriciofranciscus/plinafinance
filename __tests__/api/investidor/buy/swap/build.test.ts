@@ -10,6 +10,7 @@ const {
   quoteUpdateMany,
   investidorUpdate,
   eventoAuditCreate,
+  movimentoCreateMany,
   holdingUpsert,
   buildSwapBridgeForPlinarfXdr,
   preSignWithSigner,
@@ -17,11 +18,13 @@ const {
   buildAsset,
   resolveTesouroAsset,
   assertElegivelParaTrustline,
+  loadAccount,
 } = vi.hoisted(() => ({
   quoteFindUnique: vi.fn(),
   quoteUpdateMany: vi.fn(),
   investidorUpdate: vi.fn(),
   eventoAuditCreate: vi.fn(),
+  movimentoCreateMany: vi.fn(),
   holdingUpsert: vi.fn(),
   buildSwapBridgeForPlinarfXdr: vi.fn(),
   preSignWithSigner: vi.fn(),
@@ -29,6 +32,7 @@ const {
   buildAsset: vi.fn(),
   resolveTesouroAsset: vi.fn(),
   assertElegivelParaTrustline: vi.fn(),
+  loadAccount: vi.fn(),
 }));
 
 vi.mock('@/lib/wallet/auth-guard', async (importOriginal) => {
@@ -57,6 +61,7 @@ vi.mock('@/lib/db', () => ({
         quote: { updateMany: typeof quoteUpdateMany };
         investidor: { update: typeof investidorUpdate };
         eventoAudit: { create: typeof eventoAuditCreate };
+        movimentoFundo: { createMany: typeof movimentoCreateMany };
         holdingPLINARF: { upsert: typeof holdingUpsert };
       }) => Promise<unknown>,
     ) =>
@@ -64,6 +69,7 @@ vi.mock('@/lib/db', () => ({
         quote: { updateMany: quoteUpdateMany },
         investidor: { update: investidorUpdate },
         eventoAudit: { create: eventoAuditCreate },
+        movimentoFundo: { createMany: movimentoCreateMany },
         holdingPLINARF: { upsert: holdingUpsert },
       }),
   },
@@ -74,7 +80,7 @@ vi.mock('@/lib/stellar/transactions', () => ({
   preSignWithSigner,
 }));
 vi.mock('@/lib/stellar/issuer', () => ({ distribute }));
-vi.mock('@/lib/stellar/account', () => ({ buildAsset }));
+vi.mock('@/lib/stellar/account', () => ({ buildAsset, loadAccount }));
 vi.mock('@/lib/anchors/etherfuse/tesouro', () => ({ resolveTesouroAsset }));
 vi.mock('@/lib/services/investidor', () => ({ assertElegivelParaTrustline }));
 
@@ -98,7 +104,10 @@ function baseQuote(overrides: Partial<Record<string, unknown>> = {}) {
     investidorId: 'inv_1',
     consumedAt: null,
     expiresAt: new Date(Date.now() + 60_000),
+    fromAmount: new Prisma.Decimal('100'),
     toAmount: new Prisma.Decimal('99.5'),
+    navPorTokenNaCotacao: new Prisma.Decimal('1'),
+    plinarfAmount: new Prisma.Decimal('99.5'),
     investidor: { publicKey: USER_PK },
     onRampOrder: {
       id: 'ord_1',
@@ -114,6 +123,7 @@ beforeEach(() => {
   quoteUpdateMany.mockReset().mockResolvedValue({ count: 1 });
   investidorUpdate.mockReset().mockResolvedValue({});
   eventoAuditCreate.mockReset().mockResolvedValue({});
+  movimentoCreateMany.mockReset().mockResolvedValue({ count: 1 });
   holdingUpsert.mockReset().mockResolvedValue({});
   distribute.mockReset().mockResolvedValue({ hash: 'tx_mock_hash' });
   buildSwapBridgeForPlinarfXdr.mockReset();
@@ -165,5 +175,58 @@ describe('POST /api/investidor/buy/swap/build', () => {
     expect(eventoAuditCreate.mock.calls[0][0].data.acao).toBe('SWAP_EXECUTADO');
     expect(eventoAuditCreate.mock.calls[0][0].data.payloadJson.mock).toBe(true);
     expect(eventoAuditCreate.mock.calls[0][0].data.privyId).toBe('did:privy:abc');
+  });
+
+  it('409 quando o quote não tem preço de emissão (legado) — nunca cai em 1:1', async () => {
+    quoteFindUnique.mockResolvedValueOnce(
+      baseQuote({ plinarfAmount: null, navPorTokenNaCotacao: null }),
+    );
+    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+    expect(r.status).toBe(409);
+    expect(distribute).not.toHaveBeenCalled();
+    expect(buildSwapBridgeForPlinarfXdr).not.toHaveBeenCalled();
+  });
+
+  it('mock path emite o PLINARF do quote, não o TESOURO (NAV 1,0625)', async () => {
+    quoteFindUnique.mockResolvedValueOnce(
+      baseQuote({
+        fromAmount: new Prisma.Decimal('400'),
+        toAmount: new Prisma.Decimal('344'),
+        navPorTokenNaCotacao: new Prisma.Decimal('1.0625'),
+        plinarfAmount: new Prisma.Decimal('376.4705882'),
+      }),
+    );
+    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+    expect(r.status).toBe(200);
+    // E2-5: o BRL integralizado (fromAmount) entra no caixa com os q tokens emitidos.
+    const mov = movimentoCreateMany.mock.calls[0][0].data[0];
+    expect(mov.tipo).toBe('SUBSCRICAO');
+    expect(mov.valorBrl.toFixed(2)).toBe('400.00');
+    expect(mov.deltaCaixa.toFixed(2)).toBe('400.00');
+    expect(mov.deltaTokens.toFixed(7)).toBe('376.4705882');
+    expect(mov.chave).toBe('subscricao:q_1');
+    expect(distribute.mock.calls[0][3]).toBe('376.4705882');
+    expect(eventoAuditCreate.mock.calls[0][0].data.payloadJson.amount).toBe('376.4705882');
+    expect(eventoAuditCreate.mock.calls[0][0].data.payloadJson.navPorTokenNaCotacao).toBe('1.06250000');
+  });
+
+  it('real path: perna ponte = toAmount e perna PLINARF = plinarfAmount (valores distintos)', async () => {
+    quoteFindUnique.mockResolvedValueOnce(
+      baseQuote({
+        toAmount: new Prisma.Decimal('344'),
+        navPorTokenNaCotacao: new Prisma.Decimal('1.0625'),
+        plinarfAmount: new Prisma.Decimal('376.4705882'),
+        onRampOrder: { id: 'ord_1', status: 'completed', paymentInstructionsJson: {} },
+      }),
+    );
+    resolveTesouroAsset.mockResolvedValueOnce({ code: 'TESOURO', issuer: 'GTES', identifier: 'TESOURO:GTES' });
+    loadAccount.mockResolvedValueOnce({ balances: [{ asset_code: 'TESOURO', asset_issuer: 'GTES' }] });
+    buildSwapBridgeForPlinarfXdr.mockResolvedValueOnce({ xdr: 'XDR', hashHex: '0xabc' });
+    preSignWithSigner.mockReturnValueOnce({ sigBase64: 'sig', pubkey: 'GDIST' });
+    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+    expect(r.status).toBe(200);
+    const args = buildSwapBridgeForPlinarfXdr.mock.calls[0][0];
+    expect(args.bridgeAmount).toBe('344.0000000');
+    expect(args.plinarfAmount).toBe('376.4705882');
   });
 });
