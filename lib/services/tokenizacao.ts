@@ -341,11 +341,13 @@ async function obterEmissaoOnChain(input: {
       // `tx_bad_seq` & cia.: pode já ter entrado — confere pelo hash antes de afirmar falha.
       const depois = await buscarTxPorHash(t.txHash);
       if (depois.found && depois.successful) return confirmada(t);
-      // tx_too_late: não é falha definitiva — mantém PENDENTE; a próxima chamada decide por
-      // txExpirouNaRede e, se EXPIROU, pela substituição com a mesma sequence.
-      if (ehTxTooLate(r.resultCodes)) throw emAndamento(t);
-      await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'FALHOU' } });
-      throw new IncorporacaoEmissaoError('EMISSAO_FALHOU', { resultCodes: r.resultCodes });
+      // FAILED de um envelope JÁ salvo (reenvio ou substituição) é AMBÍGUO, nunca FALHOU: o core
+      // checa prazo e taxa antes da sequence, então uma tx que já entrou pode voltar tx_too_late
+      // (ou outro código) ao ser reenviada, e um Horizon atrasado não a mostra por hash. Mantém
+      // PENDENTE; a próxima chamada decide por txExpirouNaRede, pela substituição com a MESMA
+      // sequence e, se a sequence for consumida, por quemConsumiuSequence. FALHOU só vem do
+      // hash achado com falha, de ANTIGA_ENTROU com falha ou do 1º submit de tx nova.
+      throw emAndamento(t);
     }
     throw emAndamento(t);
   };
