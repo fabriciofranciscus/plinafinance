@@ -1,12 +1,15 @@
 'use server';
 
+import { headers } from 'next/headers';
 import nodemailer from 'nodemailer';
+import { z } from 'zod';
 import {
   renderInternalNotification,
   renderInvestorReply,
   type LeadData,
 } from './email-templates';
 import { db } from '@/lib/db';
+import { leadLimiter } from '@/lib/rate-limit/config';
 
 export type LeadState = {
   status: 'idle' | 'success' | 'error';
@@ -80,6 +83,56 @@ const TICKET_LABELS: Record<string, string> = {
   '10m+brl': 'R$ 10M+',
 };
 
+/** Valor textual do campo; ausente ou vazio vira undefined (campo opcional não preenchido). */
+function campo(formData: FormData, nome: string): string | undefined {
+  const raw = formData.get(nome);
+  if (typeof raw !== 'string') return undefined;
+  const v = raw.trim();
+  return v === '' ? undefined : v;
+}
+
+async function getClientIp(): Promise<string> {
+  const h = await headers();
+  const xff = h.get('x-forwarded-for');
+  if (xff) return xff.split(',')[0]!.trim();
+  return h.get('x-real-ip')?.trim() ?? 'unknown';
+}
+
+const PROFILES = [...PROFILES_VALIDOS] as [string, ...string[]];
+const TICKETS = [...TICKETS_VALIDOS] as [string, ...string[]];
+
+/** Obrigatórios: name, org, email, profile (+ aceite LGPD). Tíquete é opcional, mas segue a lista fechada. */
+const LeadSchema = z
+  .object({
+    name: z.string().max(200),
+    org: z.string().max(200),
+    email: z.string().max(254).regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'email'),
+    phone: z.string().max(50).optional(),
+    profile: z.enum(PROFILES),
+    jurisdiction: z.string().max(100).optional(),
+    ticket: z.enum(TICKETS).optional(),
+    currency: z.string().max(30).optional(),
+    classe: z.string().max(30).optional(),
+    timeline: z.string().max(30).optional(),
+    notes: z.string().max(1000).optional(),
+    lgpd: z.literal('on'),
+  })
+  .strict();
+
+/** Mantém as mensagens de antes, na mesma ordem de prioridade. */
+function mensagemDeValidacao(erro: z.ZodError): string {
+  const por = new Map(erro.issues.map((i) => [String(i.path[0]), i]));
+  const obrigatorioAusente = ['name', 'org', 'email', 'profile'].some(
+    (k) => por.get(k)?.code === 'invalid_type',
+  );
+  if (obrigatorioAusente) return 'Preencha todos os campos obrigatórios.';
+  if (por.has('email')) return 'E-mail inválido.';
+  if (por.has('profile')) return 'Selecione um perfil de investidor válido.';
+  if (por.has('ticket')) return 'Selecione um tíquete indicativo válido.';
+  if (por.has('lgpd')) return 'É necessário aceitar os termos de privacidade (LGPD).';
+  return 'Verifique os dados informados e tente novamente.';
+}
+
 export async function submitLead(
   _prev: LeadState,
   formData: FormData
@@ -89,39 +142,30 @@ export async function submitLead(
     return { status: 'success' };
   }
 
-  const name = sanitize(formData.get('name'), 200);
-  const org = sanitize(formData.get('org'), 200);
-  const email = sanitize(formData.get('email'), 200);
-  const phone = sanitize(formData.get('phone'), 50);
-  const profile = sanitize(formData.get('profile'), 60);
-  const jurisdiction = sanitize(formData.get('jurisdiction'), 100);
-  const ticket = sanitize(formData.get('ticket'), 30);
-  const currency = sanitize(formData.get('currency'), 30);
-  const classe = sanitize(formData.get('classe'), 30);
-  const timeline = sanitize(formData.get('timeline'), 30);
-  const notes = sanitize(formData.get('notes'), 1000);
-  const lgpd = formData.get('lgpd');
-
-  if (!name || !org || !email || !profile) {
-    return { status: 'error', message: 'Preencha todos os campos obrigatórios.' };
+  // Rota pública: limite por IP antes de qualquer trabalho (SMTP, banco).
+  if (!(await leadLimiter.consume(await getClientIp()))) {
+    return { status: 'error', message: 'Muitas tentativas. Aguarde um instante e tente de novo.' };
   }
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { status: 'error', message: 'E-mail inválido.' };
+  const parsed = LeadSchema.safeParse({
+    name: campo(formData, 'name'),
+    org: campo(formData, 'org'),
+    email: campo(formData, 'email'),
+    phone: campo(formData, 'phone'),
+    profile: campo(formData, 'profile'),
+    jurisdiction: campo(formData, 'jurisdiction'),
+    ticket: campo(formData, 'ticket'),
+    currency: campo(formData, 'currency'),
+    classe: campo(formData, 'classe'),
+    timeline: campo(formData, 'timeline'),
+    notes: campo(formData, 'notes'),
+    lgpd: campo(formData, 'lgpd'),
+  });
+  if (!parsed.success) {
+    return { status: 'error', message: mensagemDeValidacao(parsed.error) };
   }
-
-  if (!PROFILES_VALIDOS.has(profile)) {
-    return { status: 'error', message: 'Selecione um perfil de investidor válido.' };
-  }
-
-  // Tíquete é opcional (sondagem de demanda, sem oferta). Se vier, tem de ser um valor da lista.
-  if (ticket && !TICKETS_VALIDOS.has(ticket)) {
-    return { status: 'error', message: 'Selecione um tíquete indicativo válido.' };
-  }
-
-  if (lgpd !== 'on') {
-    return { status: 'error', message: 'É necessário aceitar os termos de privacidade (LGPD).' };
-  }
+  const { name, org, email, phone, profile, jurisdiction, ticket, currency, classe, timeline, notes } =
+    parsed.data;
 
   const lead: LeadData = {
     name,
@@ -138,23 +182,12 @@ export async function submitLead(
     recebido: new Date().toISOString(),
   };
 
-  // Persiste no banco. Upsert por email — resubmissão atualiza sem duplicar.
+  // Persiste no banco. NÃO sobrescreve lead existente: quem conhece o e-mail de outra pessoa
+  // não pode trocar nome, organização e telefone dela (F1-c do Argus). Resubmissão do mesmo
+  // e-mail mantém o registro original; a manifestação nova chega no e-mail interno.
   try {
-    await db.leadEoi.upsert({
-      where: { email: lead.email },
-      update: {
-        nome: lead.name,
-        org: lead.org,
-        telefone: lead.phone ?? null,
-        perfil: lead.profile,
-        jurisdiction: lead.jurisdiction ?? null,
-        ticket: lead.ticket ?? null,
-        currency: lead.currency ?? null,
-        classe: lead.classe ?? null,
-        timeline: lead.timeline ?? null,
-        notes: lead.notes ?? null,
-      },
-      create: {
+    await db.leadEoi.create({
+      data: {
         nome: lead.name,
         org: lead.org,
         email: lead.email,
@@ -169,8 +202,10 @@ export async function submitLead(
       },
     });
   } catch (err) {
-    console.error('[submitLead] DB upsert error', err);
-    // Não bloqueia o fluxo — e-mail ainda vai.
+    // Só o código do erro: a mensagem do Prisma carrega e-mail, nome e telefone (PII).
+    const codigo = (err as { code?: unknown } | null)?.code;
+    console.error('[submitLead] DB create error', typeof codigo === 'string' ? codigo : 'desconhecido');
+    // Não bloqueia o fluxo — e-mail ainda vai (P2002 = lead já existente, mantido como está).
   }
 
   let tx: nodemailer.Transporter;
