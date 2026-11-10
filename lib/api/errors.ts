@@ -19,6 +19,7 @@ export const API_ERROR_CODES = [
   'NOT_FOUND',             // 404 — recurso inexistente
   'CONFLICT',              // 409 — estado inválido (cota já realizada, etc.)
   'GONE',                  // 410 — recurso expirado (quote vencido)
+  'NAV_MUDOU',             // 409 — NAV divergiu da cotação além de 1 bp; recotar
   'RATE_LIMITED',          // 429 — rate-limit estourado
   'STELLAR_SUBMIT_FAILED', // 502 — Horizon retornou erro
   'LEDGER_UNAVAILABLE',    // 503 — leitura do ledger falhou; NAV indisponível

@@ -49,9 +49,13 @@ describe('liquidar/quote — NAV indisponível', () => {
     },
   );
 
-  it('erro comum continua 500 (comportamento anterior)', async () => {
-    calcularValorLiquidacao.mockRejectedValue(new Error('outro'));
-    expect((await quote(post({ amountPlinarf: '10' }))).status).toBe(500);
+  it('L1-S5: erro comum → 500 fixo, sem err.message no corpo', async () => {
+    calcularValorLiquidacao.mockRejectedValue(new Error('prisma: relation "Cota" does not exist (DATABASE_URL=…)'));
+    const r = await quote(post({ amountPlinarf: '10' }));
+    expect(r.status).toBe(500);
+    const body = await r.json();
+    expect(body).toEqual({ error: 'erro interno' });
+    expect(JSON.stringify(body)).not.toMatch(/prisma|Cota|DATABASE_URL/);
   });
 });
 
@@ -66,5 +70,12 @@ describe('liquidar/submit — NAV indisponível', () => {
     expect(body).toEqual({ error: NAV_INDISPONIVEL_MENSAGEM, code: 'LEDGER_UNAVAILABLE' });
     expect(JSON.stringify(body)).not.toMatch(/ENOTFOUND|PLINARFB|subordinada/i);
     expect(submitLiquidacao).toHaveBeenCalledTimes(1);
+  });
+
+  it('L1-S5: erro comum → 500 fixo, sem err.message no corpo', async () => {
+    submitLiquidacao.mockRejectedValue(new Error('horizon timeout GAAAA…SECRET'));
+    const r = await submit(post({ xdr: 'AAAA'.repeat(30), pubkey: 'GBN3EFNQLKN54LI3A4PYWOCXEK6ESTWFQNMOQDSY6EXIJYCPRKRBJOIF', signatureHex: 'a'.repeat(128) }));
+    expect(r.status).toBe(500);
+    expect(await r.json()).toEqual({ error: 'erro interno' });
   });
 });

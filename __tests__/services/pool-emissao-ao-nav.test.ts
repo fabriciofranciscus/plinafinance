@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { Prisma, StatusCota } from '@prisma/client';
 import {
   NAV_INICIAL_POR_TOKEN,
+  NAV_TOLERANCIA_RELATIVA,
+  navMudou,
   navParaEmissao,
   navPorTokenAsDecimal,
   quantidadeEmitida,
@@ -130,5 +132,31 @@ describe('com tesouraria legada no distributor (posição da Plina conta em N)',
 
   it('NAV para emissão com só tesouraria legada usa o NAV do ledger, não 1,00', () => {
     expect(navParaEmissao([cota], [], { circulante: '0', tesouraria: '80000' }).toFixed(4)).toBe('1.0625');
+  });
+});
+
+describe('navMudou — tolerância de 1 bp (L1-S2)', () => {
+  it('a tolerância é 1 bp relativo', () => {
+    expect(NAV_TOLERANCIA_RELATIVA.toString()).toBe('0.0001');
+  });
+  it('igual ou dentro de 1 bp → não mudou (inclusive exatamente 1 bp)', () => {
+    expect(navMudou('1.06250000', '1.06250000')).toBe(false);
+    expect(navMudou('1.00000000', '1.00010000')).toBe(false); // +1 bp exato
+    expect(navMudou('1.00000000', '0.99990000')).toBe(false); // −1 bp exato
+    expect(navMudou('1.06250000', '1.06255000')).toBe(false);
+  });
+  it('acima de 1 bp, para cima ou para baixo → mudou', () => {
+    expect(navMudou('1.00000000', '1.00010001')).toBe(true);
+    expect(navMudou('1.00000000', '0.99989999')).toBe(true);
+    expect(navMudou('1.06250000', '1.07')).toBe(true);
+  });
+  it('é relativo: a mesma diferença absoluta pesa mais num NAV menor', () => {
+    expect(navMudou('100', '100.009')).toBe(false); // 0,9 bp
+    expect(navMudou('0.5', '0.50006')).toBe(true); // 1,2 bp
+  });
+  it('NAV ≤ 0 de qualquer lado → mudou (fail-closed)', () => {
+    expect(navMudou('0', '1')).toBe(true);
+    expect(navMudou('1', '0')).toBe(true);
+    expect(navMudou('1', '-1')).toBe(true);
   });
 });

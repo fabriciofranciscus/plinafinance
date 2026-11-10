@@ -29,8 +29,10 @@ import {
   mainnetCutoverGuard,
 } from '@/lib/env/feature-gates';
 import { ticketMinimoFor } from '@/lib/config/suitability';
+import { sensitiveAuthLimiter, clientIp } from '@/lib/rate-limit/config';
 import { calcularPrecoDeEmissao } from '@/lib/services/emissao';
 import { navUnavailableResponse } from '@/lib/api/nav-unavailable';
+import { internalErrorResponse } from '@/lib/api/internal-error';
 import { ApiError } from '@/lib/api/errors';
 
 export const dynamic = 'force-dynamic';
@@ -57,6 +59,11 @@ const Schema = z
   );
 
 export const POST = withAuth(async (req, { user }) => {
+  // L1-S4: cada cotação chama a Etherfuse, lê o ledger e grava no banco — o
+  // limiter de rotas autenticadas com custo (10/min por IP) vem antes de tudo.
+  if (!(await sensitiveAuthLimiter.consume(clientIp(req)))) {
+    return NextResponse.json({ error: 'too many requests' }, { status: 429 });
+  }
   const cutover = await mainnetCutoverGuard();
   if (cutover) return cutover;
   const parsed = await parseBody(req, Schema);
@@ -251,9 +258,6 @@ export const POST = withAuth(async (req, { user }) => {
     if (err instanceof ApiError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'unknown' },
-      { status: 500 },
-    );
+    return internalErrorResponse(err, 'quote');
   }
 });

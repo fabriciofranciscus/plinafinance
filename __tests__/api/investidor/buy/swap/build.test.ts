@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { Keypair } from '@stellar/stellar-sdk';
+import { NavMudouError } from '@/lib/services/emissao';
+import { NavIndisponivelError } from '@/lib/services/nav-supply';
 
 const USER_PK = Keypair.random().publicKey();
 const OTHER_PK = Keypair.random().publicKey();
@@ -15,6 +17,7 @@ const {
   buildSwapBridgeForPlinarfXdr,
   preSignWithSigner,
   issueAsset,
+  revalidarNav,
   issuerSigner,
   distributorSigner,
   buildAsset,
@@ -31,6 +34,7 @@ const {
   buildSwapBridgeForPlinarfXdr: vi.fn(),
   preSignWithSigner: vi.fn(),
   issueAsset: vi.fn(),
+  revalidarNav: vi.fn(),
   issuerSigner: vi.fn(() => ({ id: 'issuer' })),
   distributorSigner: vi.fn(() => ({ id: 'distributor' })),
   buildAsset: vi.fn(),
@@ -84,6 +88,10 @@ vi.mock('@/lib/stellar/transactions', () => ({
   preSignWithSigner,
 }));
 vi.mock('@/lib/stellar/issuer', () => ({ issueAsset, createTrustline: vi.fn() }));
+vi.mock('@/lib/services/emissao', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/services/emissao')>();
+  return { ...actual, revalidarNavDaCotacao: revalidarNav };
+});
 vi.mock('@/lib/stellar/signer', () => ({ issuerSigner, distributorSigner }));
 vi.mock('@/lib/stellar/account', () => ({ buildAsset, loadAccount }));
 vi.mock('@/lib/anchors/etherfuse/tesouro', () => ({ resolveTesouroAsset }));
@@ -132,6 +140,7 @@ beforeEach(() => {
   movimentoCreateMany.mockReset().mockResolvedValue({ count: 1 });
   holdingUpsert.mockReset().mockResolvedValue({});
   issueAsset.mockReset().mockResolvedValue({ hash: 'tx_mock_hash' });
+  revalidarNav.mockReset().mockResolvedValue(undefined);
   buildSwapBridgeForPlinarfXdr.mockReset();
   preSignWithSigner.mockReset();
   buildAsset.mockReset().mockReturnValue({});
@@ -237,28 +246,71 @@ describe('POST /api/investidor/buy/swap/build', () => {
     const args = buildSwapBridgeForPlinarfXdr.mock.calls[0][0];
     expect(args.bridgeAmount).toBe('344.0000000');
     expect(args.plinarfAmount).toBe('376.4705882');
-    // N1: quem pré-assina é o ISSUER (emissão nova), não o distributor; a resposta
-    // traz issuerSigBase64 e NÃO devolve chave pública nem assinatura do distributor.
-    expect(preSignWithSigner.mock.calls[0][0]).toEqual({ id: 'issuer' });
+    // N1 + L1-S1/S3: o build NÃO assina nada pela Plina (nem issuer nem distributor) e
+    // não devolve assinatura nem chave pública; a Plina assina só no submit.
+    expect(preSignWithSigner).not.toHaveBeenCalled();
+    expect(issuerSigner).not.toHaveBeenCalled();
     const data = (await r.json()).data;
-    expect(data.issuerSigBase64).toBe('sig');
-    expect(data).not.toHaveProperty('distributorSigBase64');
-    expect(data).not.toHaveProperty('distributorPubkey');
+    expect(data).toEqual({ xdr: 'XDR', hashHex: '0xabc', mock: false });
     // o distributor segue só como destino da perna ponte
     expect(args.distributorPubkey).toBe('GDIST');
     expect(args.issuerPubkey).toBe('GISSUER');
   });
 
-  it('N1: sem STELLAR_ISSUER_SECRET o build recusa (o issuer precisa pré-assinar)', async () => {
+  it('N1: o caminho real não precisa do segredo do issuer (só o mock emite no build)', async () => {
     const saved = process.env.STELLAR_ISSUER_SECRET;
     delete process.env.STELLAR_ISSUER_SECRET;
     try {
       quoteFindUnique.mockResolvedValueOnce(baseQuote({ onRampOrder: { id: 'ord_1', status: 'completed', paymentInstructionsJson: {} } }));
+      resolveTesouroAsset.mockResolvedValueOnce({ code: 'TESOURO', issuer: 'GTES', identifier: 'TESOURO:GTES' });
+      loadAccount.mockResolvedValueOnce({ balances: [{ asset_code: 'TESOURO', asset_issuer: 'GTES' }] });
+      buildSwapBridgeForPlinarfXdr.mockResolvedValueOnce({ xdr: 'XDR', hashHex: '0xabc' });
       const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
-      expect(r.status).toBe(500);
-      expect(buildSwapBridgeForPlinarfXdr).not.toHaveBeenCalled();
+      expect(r.status).toBe(200);
+      // o mock path, que emite pelo issuer, recusa sem o segredo e não emite
+      quoteFindUnique.mockResolvedValueOnce(baseQuote());
+      const r2 = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+      expect(r2.status).toBe(500);
+      expect(issueAsset).not.toHaveBeenCalled();
     } finally {
       process.env.STELLAR_ISSUER_SECRET = saved;
     }
+  });
+
+  it('L1-S2: NAV mudou além de 1 bp → 409 NAV_MUDOU, nada é montado nem emitido', async () => {
+    revalidarNav.mockRejectedValueOnce(new NavMudouError());
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+    expect(r.status).toBe(409);
+    expect((await r.json()).error.code).toBe('NAV_MUDOU');
+    expect(issueAsset).not.toHaveBeenCalled();
+    expect(buildSwapBridgeForPlinarfXdr).not.toHaveBeenCalled();
+  });
+
+  it('L1-S2: o build relê o NAV com o BRL e o NAV congelados da cotação', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+    expect(revalidarNav.mock.calls[0][0].fromAmount.toFixed(2)).toBe('100.00');
+    expect(revalidarNav.mock.calls[0][0].navPorTokenNaCotacao.toFixed(2)).toBe('1.00');
+  });
+
+  it('L1-S2: sem NAV (ledger fora / PLINARFB) → 503 LEDGER_UNAVAILABLE constante', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    revalidarNav.mockRejectedValueOnce(new NavIndisponivelError('LEDGER_LEITURA_FALHOU', { cause: new Error('ENOTFOUND horizon') }));
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+    expect(r.status).toBe(503);
+    const body = await r.json();
+    expect(body.error.code).toBe('LEDGER_UNAVAILABLE');
+    expect(JSON.stringify(body)).not.toMatch(/ENOTFOUND|horizon/i);
+    expect(issueAsset).not.toHaveBeenCalled();
+  });
+
+  it('L1-S2: o quote expira mesmo com o onramp completed (410)', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote({ expiresAt: new Date(Date.now() - 1_000) }));
+    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+    expect(r.status).toBe(410);
+    expect(issueAsset).not.toHaveBeenCalled();
+    expect(revalidarNav).not.toHaveBeenCalled();
   });
 });

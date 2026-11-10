@@ -45,6 +45,16 @@ vi.mock('@/lib/stellar/transactions', async (importOriginal) => {
     fetchTransactionByHash: async () => null,
   };
 });
+vi.mock('@/lib/stellar/signer', () => ({
+  issuerSigner: () => ({
+    publicKey: () => ISSUER.publicKey(),
+    signatureBase64: (tx: Transaction) => ISSUER.sign(tx.hash()).toString('base64'),
+  }),
+}));
+vi.mock('@/lib/services/emissao', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/services/emissao')>();
+  return { ...actual, revalidarNavDaCotacao: async () => undefined };
+});
 vi.mock('@/lib/services/investidor', () => ({ assertElegivelParaTrustline: vi.fn() }));
 vi.mock('@/lib/anchors/etherfuse/tesouro', () => ({
   resolveTesouroAsset: async () => ({ ...BRIDGE, identifier: `${BRIDGE.code}:${BRIDGE.issuer}` }),
@@ -87,8 +97,14 @@ beforeEach(() => {
   m.submitWithPrivySignature.mockReset().mockResolvedValue({ hash: 'tx_hash' });
 });
 
-describe('N1 — subscrição emite: builder + validador + assinatura do issuer', () => {
-  it('a perna 2 montada pelo build sai do ISSUER; o ponte vai ao distributor', async () => {
+const signedBy = (xdr: string, kp: Keypair) => {
+  const tx = new Transaction(xdr, networkPassphrase);
+  tx.sign(kp);
+  return tx.toXDR();
+};
+
+describe('N1 — subscrição emite: builder + validador + assinatura da Plina só no submit', () => {
+  it('a perna 2 montada pelo build sai do ISSUER; o ponte vai ao distributor; sem assinatura da Plina', async () => {
     const { xdr } = await build();
     const tx = new Transaction(xdr, networkPassphrase);
     const [leg1, leg2] = tx.operations as Operation.Payment[];
@@ -96,35 +112,39 @@ describe('N1 — subscrição emite: builder + validador + assinatura do issuer'
     expect(leg2.source).toBe(ISSUER.publicKey());
     expect(leg2.destination).toBe(USER.publicKey());
     expect(leg2.amount).toBe('376.4705882');
+    expect(tx.signatures).toHaveLength(0); // o build não assina nada
   });
 
-  it('submit aceita o XDR do build com a assinatura do issuer e submete com o issuer do env', async () => {
+  it('submit aceita o XDR do build assinado pelo investidor e o issuer co-assina SÓ ali (assinatura válida sobre o hash)', async () => {
     const { xdr } = await build();
-    const sig = ISSUER.sign(new Transaction(xdr, networkPassphrase).hash()).toString('base64');
-    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER.publicKey(), signatureHex: 'a'.repeat(128), xdr, issuerSigBase64: sig }));
+    const r = await POST(req({ quoteId: 'q_1', signedXdr: signedBy(xdr, USER) }));
     expect(r.status).toBe(200);
-    expect(m.submitWithPrivySignature.mock.calls[0][0].extraSignatures).toEqual([{ pubkey: ISSUER.publicKey(), sigBase64: sig }]);
+    const arg = m.submitWithPrivySignature.mock.calls[0][0];
+    const hash = new Transaction(xdr, networkPassphrase).hash();
+    expect(arg.extraSignatures).toHaveLength(1);
+    expect(arg.extraSignatures[0].pubkey).toBe(ISSUER.publicKey());
+    expect(ISSUER.verify(hash, Buffer.from(arg.extraSignatures[0].sigBase64, 'base64'))).toBe(true);
+    expect(USER.verify(hash, Buffer.from(arg.investorSignatureHex.slice(2), 'hex'))).toBe(true);
+    expect(new Transaction(arg.xdr, networkPassphrase).signatures).toHaveLength(0);
   });
 
-  it('submit recusa assinatura do DISTRIBUTOR no lugar da do issuer (quem entrega o PLINARF não pode ser o distributor)', async () => {
+  it('submit recusa XDR não assinado pelo investidor e assinado por outro: o issuer não assina', async () => {
     const { xdr } = await build();
-    const sigDist = DIST.sign(new Transaction(xdr, networkPassphrase).hash()).toString('base64');
-    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER.publicKey(), signatureHex: 'a'.repeat(128), xdr, issuerSigBase64: sigDist }));
-    expect(r.status).toBe(400);
+    for (const signed of [xdr, signedBy(xdr, DIST), signedBy(xdr, Keypair.random())]) {
+      const r = await POST(req({ quoteId: 'q_1', signedXdr: signed }));
+      expect(r.status).toBe(400);
+    }
     expect(m.submitWithPrivySignature).not.toHaveBeenCalled();
   });
 
-  it('submit recusa um XDR cuja perna 2 sai do distributor (desenho antigo), mesmo com assinatura válida do issuer', async () => {
-    const { xdr } = await build();
-    void xdr;
-    // desenho antigo: perna 2 com source = distributor
+  it('submit recusa um XDR cuja perna 2 sai do distributor (desenho antigo), mesmo assinado pelo investidor', async () => {
     const { TransactionBuilder } = await import('@stellar/stellar-sdk');
     const velho = new TransactionBuilder(new Account(USER.publicKey(), '10'), { fee: '100', networkPassphrase })
       .addOperation(Operation.payment({ source: USER.publicKey(), destination: DIST.publicKey(), asset: new Asset(BRIDGE.code, BRIDGE.issuer), amount: '344.0000000' }))
       .addOperation(Operation.payment({ source: DIST.publicKey(), destination: USER.publicKey(), asset: new Asset('PLINARF', ISSUER.publicKey()), amount: '376.4705882' }))
       .setTimeout(60).build();
-    const sig = ISSUER.sign(velho.hash()).toString('base64');
-    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER.publicKey(), signatureHex: 'a'.repeat(128), xdr: velho.toXDR(), issuerSigBase64: sig }));
+    velho.sign(USER);
+    const r = await POST(req({ quoteId: 'q_1', signedXdr: velho.toXDR() }));
     expect(r.status).toBe(400);
     expect((await r.json()).error).toMatch(/xdr divergente/);
     expect(m.submitWithPrivySignature).not.toHaveBeenCalled();

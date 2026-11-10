@@ -24,12 +24,14 @@ process.env.ETHERFUSE_API_KEY = 'test';
 
 import { POST } from '@/app/api/investidor/quote/route';
 import { NAV_INDISPONIVEL_MENSAGEM, NavIndisponivelError } from '@/lib/services/nav-supply';
+import { sensitiveAuthLimiter } from '@/lib/rate-limit/config';
 
 const req = (body: object) =>
   new Request('http://x/quote', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 const onramp = { amountBrl: '400', customerId: 'cust_1', stellarAddress: USER_PK };
 
-beforeEach(() => {
+beforeEach(async () => {
+  await sensitiveAuthLimiter.reset();
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   quoteCreate.mockReset().mockResolvedValue({});
   getQuote.mockReset().mockResolvedValue({
@@ -74,5 +76,22 @@ describe('POST /api/investidor/quote — preço de emissão ao NAV', () => {
     expect(r.status).toBe(503);
     expect(await r.json()).toEqual({ error: NAV_INDISPONIVEL_MENSAGEM, code: 'LEDGER_UNAVAILABLE' });
     expect(quoteCreate).not.toHaveBeenCalled();
+  });
+
+  it('L1-S4: sensitiveAuthLimiter — acima de 10/min por IP → 429, sem chamar a Etherfuse', async () => {
+    const codes: number[] = [];
+    for (let i = 0; i < 12; i++) codes.push((await POST(req(onramp))).status);
+    expect(codes.slice(0, 10).every((c) => c === 200)).toBe(true);
+    expect(codes.slice(10)).toEqual([429, 429]);
+    expect(getQuote).toHaveBeenCalledTimes(10);
+  });
+
+  it('L1-S5: erro inesperado → 500 fixo, sem err.message no corpo (a causa vai ao log)', async () => {
+    getQuote.mockRejectedValue(new Error('connect ECONNREFUSED 10.0.0.5:5432 DATABASE_URL=postgres://u:p@h/db'));
+    const r = await POST(req(onramp));
+    expect(r.status).toBe(500);
+    const body = await r.json();
+    expect(body).toEqual({ error: 'erro interno' });
+    expect(JSON.stringify(body)).not.toMatch(/ECONNREFUSED|DATABASE_URL|postgres/);
   });
 });
