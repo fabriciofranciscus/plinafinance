@@ -1276,8 +1276,8 @@ function PassoEnvioCota(props: {
         )}
       </div>
       <p className="font-text text-sm text-base/70 mt-1">
-        Informe sua cota para estimarmos o valor líquido. A oferta firme sai
-        após análise documental.
+        Informe sua cota para estimarmos o valor líquido. A proposta sai após a
+        análise documental (simulação em rede de testes).
       </p>
 
       <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">

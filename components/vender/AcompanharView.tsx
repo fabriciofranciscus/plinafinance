@@ -261,8 +261,8 @@ function PainelOferta({
     <div className="mt-6 border-t border-light-hairline pt-6">
       {ilustrativo && (
         <p className="font-mono text-[11px] text-base/55 mb-4">
-          Exemplo ilustrativo — sua oferta firme aparece aqui quando a mesa
-          concluir a validação.
+          Exemplo ilustrativo — sua proposta aparece aqui quando a mesa
+          concluir a validação (simulação em rede de testes).
         </p>
       )}
 

@@ -75,11 +75,11 @@ const TIPO_BEM_LABEL: Record<string, string> = {
 const ACAO_LABEL: Record<string, string> = {
   COTA_INCORPORADA: 'Cota incorporada ao pool',
   TOKEN_EMITIDO: 'PLINA-RF emitido',
-  INVESTIDOR_ONBOARDED: 'Onboarding institucional concluído',
+  INVESTIDOR_ONBOARDED: 'Cadastro concluído',
   TRUSTLINE_AUTORIZADA: 'Trustline autorizada pelo issuer',
   TRUSTLINE_REVOGADA: 'Trustline revogada',
   DISTRIBUICAO: 'Aquisição de PLINA-RF',
-  CLAWBACK_EXECUTADO: 'Clawback institucional',
+  CLAWBACK_EXECUTADO: 'Clawback executado',
   COTA_REALIZADA: 'Cota realizada',
   PLINARF_LIQUIDADO: 'Liquidação de PLINA-RF',
 };
@@ -316,7 +316,7 @@ export default function MinhaPosicaoPage() {
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div>
             <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-              Extrato institucional · {pool?.network ?? 'TESTNET'}
+              Extrato · {pool?.network ?? 'TESTNET'}
             </p>
             <h1 className="font-title mt-3 text-4xl md:text-5xl font-semibold tracking-tight">
               Sua posição
@@ -650,7 +650,7 @@ export default function MinhaPosicaoPage() {
             <div className="border-y border-light-hairline divide-y divide-light-hairline">
               <ComplianceRow
                 label="Custodiante"
-                value="Privy embedded wallet · MPC institucional"
+                value="Privy embedded wallet · MPC"
                 detail="Investidor mantém controle via session Privy. Chaves nunca expostas a frontend nem backend Plina."
               />
               <ComplianceRow
@@ -659,7 +659,7 @@ export default function MinhaPosicaoPage() {
                 detail="Trustline autorizada após KYC. Issuer pode revogar autorização e reverter saldos sob política pública linkada no stellar.toml."
               />
               <ComplianceRow
-                label="KYC institucional"
+                label="KYC"
                 value="Aprovado · Etherfuse sandbox (LATAM)"
                 detail="Identidade + documentos + agreements submetidos via API. Em produção, idem em produção Etherfuse."
               />
@@ -671,12 +671,12 @@ export default function MinhaPosicaoPage() {
             </div>
           </section>
 
-          {/* 3. Composição lastreada */}
+          {/* 3. Composição do pool de demonstração */}
           {pool && pool.cotasCount > 0 && (
             <section className="mb-16">
               <div className="flex items-baseline justify-between mb-4">
                 <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
-                  Composição lastreada · pool consolidado
+                  Composição do pool de demonstração
                 </p>
                 <a
                   href="/pool"
@@ -775,20 +775,20 @@ export default function MinhaPosicaoPage() {
                 label={hasPosition ? 'Aumentar posição' : 'Adquirir PLINA-RF'}
                 description={
                   hasPosition
-                    ? 'Compre tokens adicionais via Etherfuse + Stellar.'
-                    : 'Onboarding institucional + onramp BRL/PIX → TESOURO → PLINA-RF.'
+                    ? 'Simule a compra de tokens adicionais em rede de testes.'
+                    : 'Cadastro + entrada BRL/Pix (simulada) → TESOURO → token de demonstração.'
                 }
                 href="/investir"
-                cta="Comprar"
+                cta="Simular"
               />
               <NextStep
                 label="Verificar transparência"
-                description="Composição do pool, NAV diário, hashes de emissão. Auditável em tempo real."
+                description="Composição do pool de demonstração, valor por token e hashes de emissão. Verificável no Stellar Expert."
                 href="/pool"
                 cta="Pool público"
               />
               <NextStep
-                label="Política institucional"
+                label="Política de clawback"
                 description="Quatro hipóteses exclusivas de clawback. Linkada no stellar.toml SEP-0001."
                 href="/politica-clawback"
                 cta="Ler política"

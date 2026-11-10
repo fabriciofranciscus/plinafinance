@@ -141,7 +141,6 @@ export function useInvestirFlow() {
             ? { jurisdicao: institutionalProfile.jurisdiction }
             : {}),
           entityType: institutionalProfile.entityType,
-          estimatedTicket: institutionalProfile.estimatedTicket || undefined,
           currency: institutionalProfile.currency,
         },
         getAccessToken,

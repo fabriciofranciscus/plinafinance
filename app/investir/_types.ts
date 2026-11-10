@@ -40,8 +40,6 @@ export interface InstitutionalProfile {
   /** CNPJ (14 dígitos, com ou sem máscara). Só na trilha BR. */
   cnpj?: string;
   entityType: EntityType;
-  /** String decimal (USD ou BRL conforme a trilha). */
-  estimatedTicket: string;
   currency: DepositCurrency;
 }
 
