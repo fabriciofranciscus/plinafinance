@@ -269,11 +269,11 @@ describe('buscarEnvelopePorTransactionId', () => {
     await expect(b.cliente.buscarEnvelopePorTransactionId(entrada.transactionId)).rejects.toMatchObject({ codigo: 'RESPOSTA_INVALIDA' });
   });
 
-  it('criarEnvelope: 2xx sem envelopeId recupera pela transactionId; sem achar, erro', async () => {
+  it('criarEnvelope: 2xx sem envelopeId recupera pela transactionId; sem achar, resultado incerto', async () => {
     const a = montar([tokenOk(), json({}, 201), json({ envelopes: [{ envelopeId: ENV_ID }] })]);
     expect(await a.cliente.criarEnvelope(entrada)).toEqual({ envelopeId: ENV_ID });
     const b = montar([tokenOk(), json({}, 201), json({ totalSetSize: '0' })]);
-    await expect(b.cliente.criarEnvelope(entrada)).rejects.toMatchObject({ codigo: 'RESPOSTA_INVALIDA' });
+    await expect(b.cliente.criarEnvelope(entrada)).rejects.toMatchObject({ codigo: 'RESULTADO_INCERTO' });
   });
 });
 

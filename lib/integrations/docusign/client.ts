@@ -331,7 +331,11 @@ export function criarClienteDocusign(opcoes: ClienteDocusignOpcoes = {}) {
         // 2xx sem envelopeId (visto em POSTs simultâneos): recupera pela transactionId.
         const existente = await buscarPorTransactionId(transactionId);
         if (existente) return { envelopeId: existente };
-        throw new DocusignError('RESPOSTA_INVALIDA', 'DocuSign: resposta de criação de envelope inesperada.');
+        // O envelope pode existir mesmo sem aparecer na consulta (atraso de indexação): incerto.
+        throw new DocusignError(
+          'RESULTADO_INCERTO',
+          'DocuSign: a criação respondeu sem identificar o envelope. Antes de reenviar, consulte buscarEnvelopePorTransactionId com a MESMA transactionId; se vier null, repita criarEnvelope com a mesma transactionId.',
+        );
       });
     },
 
