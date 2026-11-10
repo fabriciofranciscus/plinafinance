@@ -17,10 +17,19 @@ fora do Instaward 2. Integrações só em sandbox.
 | Função | Retorno |
 |---|---|
 | `obterTokenDocusign()` | token JWT (cache até ~5 min antes de expirar) |
-| `criarEnvelope({ documentoPdf, nomeDocumento, signatario: { nome, email }, emailSubject, posicaoAssinatura? })` | `{ envelopeId }` (envio por e-mail, status `sent`, sem `clientUserId`) |
+| `criarEnvelope({ documentoPdf, nomeDocumento, signatario: { nome, email }, emailSubject, transactionId, posicaoAssinatura? })` | `{ envelopeId }` (envio por e-mail, status `sent`, sem `clientUserId`) |
+| `transactionIdDeterministico(chaveDeNegocio)` | GUID estável para usar como `transactionId` |
 | `obterStatusEnvelope(envelopeId)` | `criado` · `enviado` · `entregue` · `assinado` · `concluido` · `recusado` · `anulado` · `desconhecido` |
 | `baixarDocumentoAssinado(envelopeId)` | `Buffer` (PDF combinado) |
 | `verificarHmacConnect(rawBody, headers, chave)` | `boolean` (HMAC-SHA256, tempo constante; aceita qualquer `X-DocuSign-Signature-N`) |
+
+## Idempotência da criação
+
+`transactionId` é obrigatório (GUID). A DocuSign devolve o **mesmo** envelope para a mesma
+`transactionId`, então o chamador deriva o id de uma chave de negócio estável
+(`transactionIdDeterministico(\`cessao:${id}\`)`, nunca PII) e o grava/reusa em qualquer retry.
+Rede, timeout, 429 e 5xx no POST viram `RESULTADO_INCERTO`: repita com a MESMA `transactionId`;
+não gere outra. O smoke prova isso no sandbox (reenvio devolve o mesmo envelope).
 
 `criarClienteDocusign({ env, fetchImpl, agora })` cria uma instância isolada (testes).
 

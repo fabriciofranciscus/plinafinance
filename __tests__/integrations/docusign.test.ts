@@ -5,6 +5,7 @@ import {
   DocusignConsentRequiredError,
   DocusignError,
   normalizarStatusEnvelope,
+  transactionIdDeterministico,
   verificarHmacConnect,
 } from '@/lib/integrations/docusign';
 import { carregarConfigDocusign } from '@/lib/integrations/docusign/config';
@@ -46,6 +47,7 @@ const entrada = {
   nomeDocumento: 'Minuta.pdf',
   signatario: { nome: 'Fulana de Teste', email: 'fulana@example.com' },
   emailSubject: 'Assine a minuta',
+  transactionId: transactionIdDeterministico('teste:cessao-1'),
 };
 
 describe('config', () => {
@@ -157,6 +159,7 @@ describe('criarEnvelope', () => {
     const corpo = JSON.parse(init.body as string);
     expect(corpo.status).toBe('sent');
     expect(corpo.emailSubject).toBe('Assine a minuta');
+    expect(corpo.transactionId).toBe(entrada.transactionId);
     expect(corpo.documents[0]).toMatchObject({ documentId: '1', fileExtension: 'pdf', documentBase64: PDF.toString('base64') });
     const signer = corpo.recipients.signers[0];
     expect(signer).toMatchObject({ name: 'Fulana de Teste', email: 'fulana@example.com' });
@@ -170,6 +173,8 @@ describe('criarEnvelope', () => {
       { ...entrada, signatario: { nome: 'X', email: 'nao-e-email' } },
       { ...entrada, documentoPdf: Buffer.from('nao e pdf') },
       { ...entrada, extra: 1 },
+      { ...entrada, transactionId: undefined },
+      { ...entrada, transactionId: 'nao-e-guid' },
     ];
     for (const i of invalidas) {
       await expect(cliente.criarEnvelope(i as never)).rejects.toMatchObject({ codigo: 'ENTRADA_INVALIDA' });
@@ -200,7 +205,7 @@ describe('criarEnvelope', () => {
 
   it('5xx vira INDISPONIVEL; falha de rede também', async () => {
     const a = montar([tokenOk(), json({}, 503)]);
-    await expect(a.cliente.criarEnvelope(entrada)).rejects.toMatchObject({ codigo: 'INDISPONIVEL', httpStatus: 503 });
+    await expect(a.cliente.criarEnvelope(entrada)).rejects.toMatchObject({ codigo: 'RESULTADO_INCERTO', httpStatus: 503 });
     const b = montar([
       tokenOk(),
       () => {
@@ -208,8 +213,50 @@ describe('criarEnvelope', () => {
       },
     ]);
     const erro = await b.cliente.criarEnvelope(entrada).catch((e) => e);
-    expect(erro.codigo).toBe('INDISPONIVEL');
+    expect(erro.codigo).toBe('RESULTADO_INCERTO');
     expect(erro.message).not.toContain('detalhe interno');
+  });
+
+  it('falha do token antes do POST não é resultado incerto', async () => {
+    const { cliente, fetchImpl } = montar([json({}, 503)]);
+    await expect(cliente.criarEnvelope(entrada)).rejects.toMatchObject({ codigo: 'INDISPONIVEL' });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('idempotência: POST aceito com resposta perdida + reenvio com a mesma transactionId recupera um único envelope', async () => {
+    // Fake da DocuSign: dedup por transactionId (mesmo contrato da API real).
+    const criados = new Map<string, string>();
+    let posts = 0;
+    let perderResposta = true;
+    const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
+      if (url.endsWith('/oauth/token')) return tokenOk();
+      posts++;
+      const { transactionId } = JSON.parse(init.body as string);
+      if (!criados.has(transactionId)) criados.set(transactionId, ENV_ID);
+      if (perderResposta) {
+        perderResposta = false;
+        throw new TypeError('timeout depois do aceite');
+      }
+      return json({ envelopeId: criados.get(transactionId) }, 201);
+    });
+    const cliente = criarClienteDocusign({ env: ENV, fetchImpl: fetchImpl as unknown as typeof fetch });
+
+    const primeira = await cliente.criarEnvelope(entrada).catch((e) => e);
+    expect(primeira.codigo).toBe('RESULTADO_INCERTO');
+    expect(await cliente.criarEnvelope(entrada)).toEqual({ envelopeId: ENV_ID });
+
+    expect(posts).toBe(2);
+    expect(criados.size).toBe(1); // um só envelope (um só e-mail) para a operação
+  });
+});
+
+describe('transactionIdDeterministico', () => {
+  it('é estável, em formato GUID, e muda com a chave', () => {
+    const a = transactionIdDeterministico('cessao:1');
+    expect(a).toBe(transactionIdDeterministico('cessao:1'));
+    expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(a).not.toBe(transactionIdDeterministico('cessao:2'));
+    expect(() => transactionIdDeterministico('')).toThrow();
   });
 });
 
