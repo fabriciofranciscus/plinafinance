@@ -666,7 +666,7 @@ export default function MinhaPosicaoPage() {
               <ComplianceRow
                 label="Jurisdição"
                 value="Brasil · POC operado com capital próprio"
-                detail="Sem oferta pública (Lei 11.795/2008). Fase 1 estrutura FIDC formal sob CVM 175 com administrador fiduciário e auditoria big four."
+                detail="Fase 01: operação privada sob a Lei 11.795/2008, em rede de testes. Sem oferta. Uma estrutura institucional é fase futura, sujeita a aprovação regulatória."
               />
             </div>
           </section>

@@ -11,7 +11,7 @@
 export const metadata = {
   title: 'Política de Clawback · Plina',
   description:
-    'Política pública e auditável de clawback do token PLINA-RF: quatro hipóteses exclusivas — decisão judicial, sanção regulatória, fraude documental, erro operacional.',
+    'Política pública de clawback do ativo PLINA-RF em rede de testes: quatro hipóteses exclusivas — decisão judicial, sanção regulatória, fraude documental, erro operacional.',
 };
 
 const HIPOTESES = [
@@ -37,7 +37,7 @@ const HIPOTESES = [
     enum: 'ERRO_OPERACIONAL',
     titulo: 'Erro operacional',
     descricao:
-      'Erro material em operação da Plina (emissão duplicada, montante incorreto, destinatário equivocado), corrigível dentro de janela máxima documentada. Acionamento requer aprovação do administrador fiduciário do FIDC.',
+      'Erro material em operação da Plina (emissão duplicada, montante incorreto, destinatário equivocado), corrigível dentro de janela máxima documentada. Acionamento segue a aprovação por duas pessoas autorizadas descrita no procedimento.',
   },
 ];
 
@@ -46,7 +46,7 @@ export default function PoliticaClawbackPage() {
     <div className="mx-auto max-w-3xl px-6 py-16 md:py-24 font-text text-base text-base">
       <header className="mb-12 border-b border-light-hairline pb-8">
         <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-          Política pública · vinculante · auditável
+          Política pública · versão 0.1 · rede de testes
         </p>
         <h1 className="font-title mt-3 text-4xl md:text-5xl font-semibold tracking-tight">
           Política de Clawback PLINA-RF
@@ -56,9 +56,8 @@ export default function PoliticaClawbackPage() {
           <span className="font-mono text-sm">AUTH_REQUIRED</span>,{' '}
           <span className="font-mono text-sm">AUTH_REVOCABLE</span> e{' '}
           <span className="font-mono text-sm">AUTH_CLAWBACK_ENABLED</span>.
-          Clawback é instrumento institucional regulado, restrito às quatro
-          hipóteses listadas abaixo. Nenhuma outra hipótese justifica o
-          acionamento.
+          Clawback é um mecanismo de reversão restrito às quatro hipóteses
+          listadas abaixo. Nenhuma outra hipótese justifica o acionamento.
         </p>
       </header>
 
@@ -95,17 +94,25 @@ export default function PoliticaClawbackPage() {
             jurídico, hash do documento de suporte e operador responsável.
           </li>
           <li>
+            Aprovação por duas pessoas autorizadas antes da execução. Requisito
+            para qualquer operação com valor real; ainda não implementado. Hoje,
+            em rede de testes, o acionamento é feito pelo operador e registrado
+            na rede.
+          </li>
+          <li>
             Execução on-chain via operação <span className="font-mono">clawback</span>{' '}
             do issuer Stellar. Cada acionamento gera transação pública verificável
             no Stellar Expert, contendo memo com referência ao fundamento.
           </li>
           <li>
-            Notificação ao investidor afetado pelos canais cadastrados em até{' '}
-            48h, com cópia ao administrador fiduciário do FIDC.
+            Notificação ao investidor afetado pelos canais cadastrados, em até
+            48h. Requisito para qualquer operação com valor real; ainda não
+            implementado. Hoje, em rede de testes, não há investidor externo e o
+            acionamento é feito pelo operador e registrado na rede.
           </li>
           <li>
-            Inclusão em relatório trimestral de auditoria publicado pelo gestor
-            do FIDC.
+            Registro do acionamento em relatório de transparência a ser
+            publicado pela Plina; periodicidade a definir.
           </li>
         </ol>
       </section>
@@ -120,21 +127,22 @@ export default function PoliticaClawbackPage() {
             sujeito à responsabilização civil e regulatória.
           </li>
           <li>
-            Plina não detém custódia das cotas do FIDC — apenas opera o
-            issuer Stellar sob política pública e supervisão do administrador
-            fiduciário registrado na CVM.
+            Nesta fase, em rede de testes, a Plina opera o issuer Stellar sob
+            esta política pública. Uma estrutura institucional, com prestadores
+            regulados, é planejada para fase futura e sujeita a aprovação
+            regulatória.
           </li>
           <li>
-            Auditoria big four trimestral revisa todos os clawbacks executados
-            no período, com publicação dos achados.
+            Todo acionamento fica registrado em log interno e em transação
+            pública verificável na rede.
           </li>
         </ul>
       </section>
 
       <p className="mt-16 pt-8 border-t border-light-hairline text-xs text-base/60">
-        Versão 0.1 · POC testnet. Versão final entra em vigor com a
-        constituição do FIDC sob CVM 175 (Fase 1 do roadmap). Atualizações
-        registradas com versionamento aqui e linkadas no{' '}
+        Versão 0.1 · rede de testes. A versão final entra em vigor antes de
+        qualquer operação com valor real. Atualizações registradas com
+        versionamento aqui e linkadas no{' '}
         <span className="font-mono">stellar.toml</span>.
       </p>
     </div>
