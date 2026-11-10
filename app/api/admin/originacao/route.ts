@@ -28,6 +28,10 @@ import {
 import { TipoBem } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
+// A ação `incorporar-cota` faz envio on-chain (com reenvio) dentro de uma $transaction de até 120 s
+// (exceção registrada em testnet, E1-4 M3): o limite da função precisa cobrir isso. Em Server Actions
+// o `maxDuration` vai na PÁGINA que as usa (app/admin/page.tsx, dona: Flora).
+export const maxDuration = 150;
 
 const NumericString = z.string().regex(/^\d+(\.\d+)?$/, 'valor numérico inválido');
 
