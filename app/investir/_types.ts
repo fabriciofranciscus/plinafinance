@@ -58,7 +58,12 @@ export interface OnboardData {
 export interface QuoteData {
   quoteId: string;
   fromAmount: string;
+  /** Valor em TESOURO que o investidor paga na perna 1 do swap. */
   toAmount: string;
+  /** Tokens a emitir pelo NAV (N1), calculado no servidor. Ausente em cotação antiga. */
+  plinarfAmount?: string | null;
+  /** NAV por token que o servidor usou na cotação (só informativo). */
+  navPorTokenNaCotacao?: string | null;
   exchangeRate: string;
   fee: string;
   expiresAt: string;

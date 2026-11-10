@@ -5,6 +5,7 @@ import { NUMBER_BR, explorerTx } from '../../_lib/format';
 import { TestnetBanner } from '../shell/testnet-banner';
 import { Term } from '../shared/term';
 import { DataRow } from '../shared/data-row';
+import { tokensDaCotacao } from '../../_lib/quote-tokens';
 
 export function SettlingScreen({
   onRamp,
@@ -96,7 +97,7 @@ export function SettlingScreen({
             k="A receber"
             v={
               <span className="font-mono text-sm">
-                {NUMBER_BR.format(Number(quote.toAmount))} PLINA-RF
+                {NUMBER_BR.format(Number(tokensDaCotacao(quote)))} PLINA-RF
               </span>
             }
           />
