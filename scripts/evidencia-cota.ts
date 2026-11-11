@@ -1,13 +1,16 @@
 /**
  * E1-P — evidência da cota: `pnpm evidencia:cota <cotaId>`.
  *
- * Lista em ordem validação → cessão → liquidação → incorporação → emissão, com link do explorer,
+ * Lista em ordem validação → cessão → liquidação → incorporação (registro canônico ancorado ANTES da emissão) → emissão (o pagamento que emitiu PLINA-RF), com link do explorer,
  * documento e SHA-256 de cada passo, e CONFERE sha256(documento guardado) == hash no banco ==
  * Memo.hash on-chain. Só leitura. Só testnet (recusa PUBLIC). Sai com código 1 se algum passo não fecha.
  * Saída: exports/evidencia-cota-<id>.{md,json} (gitignored) + tabela no terminal.
  *
  * Pathnames do Blob (sobrescreva com env se o dono mudar): EVIDENCIA_BLOB_CESSAO_PATH, EVIDENCIA_BLOB_COMPROVANTE_PATH
- * (use {cessaoId}). Padrões: DS3 `cessoes/{cessaoId}/assinada.pdf`; E1-2 `comprovantes/{cessaoId}.pdf`.
+ * (use {cessaoId}) e EVIDENCIA_BLOB_INCORPORACAO_PATH (use {cotaId}). Padrões: DS3 `cessoes/{cessaoId}/assinada.pdf`;
+ * E1-2 `comprovantes/{cessaoId}.pdf`; incorporação `cotas/{cotaId}/incorporacao.json` (Bento, ainda não publicado).
+ * Incorporação: a tx da âncora é achada no histórico do distributor por Memo.hash = sha256(bytes) (sem confiar no banco);
+ * o hash REGISTRADO no banco fica null até o Bento publicar o campo (fail-closed: reprova SEM_HASH_REGISTRADO).
  */
 import { config as loadEnv } from 'dotenv';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -38,11 +41,32 @@ async function main() {
   if (STELLAR_NETWORK !== 'TESTNET') throw new Error('Recusado: evidência só roda contra TESTNET.');
   const { db } = await import('../lib/db');
   const { sha256OfPayload } = await import('../lib/stellar/audit');
+  const { issuerSigner, distributorSigner } = await import('../lib/stellar/signer');
+  const { assetCode } = await import('../lib/stellar/config');
+  const { sha256Hex } = await import('./evidencia-cota/core');
 
   const caminho = (env: string | undefined, padrao: string, id: string) => (env ?? padrao).replace('{cessaoId}', id);
 
   const fontes: Fontes = {
     hashPayload: sha256OfPayload,
+    ativo: () => ({ code: assetCode, issuer: issuerSigner().publicKey() }),
+    async registroIncorporacao(cotaId) {
+      const bytes = await lerBlob(caminho(process.env.EVIDENCIA_BLOB_INCORPORACAO_PATH, 'cotas/{cotaId}/incorporacao.json', cotaId).replace('{cotaId}', cotaId));
+      if (!bytes) return null;
+      // Âncora própria: payment do distributor com Memo.hash = sha256(bytes) (só leitura do histórico).
+      const alvo = Buffer.from(sha256Hex(bytes), 'hex').toString('base64');
+      const dist = distributorSigner().publicKey();
+      let url: string | null = `${horizonUrl}/accounts/${dist}/transactions?order=desc&limit=200`;
+      for (let pag = 0; url && pag < 5; pag++) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Horizon ${res.status} ao ler o histórico do distributor`);
+        const j = (await res.json()) as { _embedded: { records: { hash: string; memo_type?: string; memo?: string }[] }; _links: { next: { href: string } } };
+        const achou = j._embedded.records.find((r) => r.memo_type === 'hash' && r.memo === alvo);
+        if (achou) return { bytes, hashRegistrado: null, txHash: achou.hash };
+        url = j._embedded.records.length === 200 ? j._links.next.href : null;
+      }
+      return { bytes, hashRegistrado: null, txHash: null };
+    },
     async cota(id) {
       const c = await db.cota.findUnique({ where: { id } });
       return c && {
@@ -64,9 +88,15 @@ async function main() {
       const res = await fetch(`${horizonUrl}/transactions/${hash}`);
       if (res.status === 404) return null;
       if (!res.ok) throw new Error(`Horizon ${res.status} ao ler a tx ${hash}`); // nunca vira "não achou"
-      const j = (await res.json()) as { successful: boolean; memo_type?: string; memo?: string };
+      const j = (await res.json()) as { successful: boolean; memo_type?: string; memo?: string; paging_token?: string };
       const memoHex = j.memo_type === 'hash' && j.memo ? Buffer.from(j.memo, 'base64').toString('hex') : null;
-      return { sucesso: j.successful === true, memoHex };
+      const ops = await fetch(`${horizonUrl}/transactions/${hash}/operations?limit=200`);
+      if (!ops.ok) throw new Error(`Horizon ${ops.status} ao ler as operações da tx ${hash}`);
+      const oj = (await ops.json()) as { _embedded: { records: { type: string; asset_type?: string; asset_code?: string; asset_issuer?: string; amount?: string; from?: string; to?: string }[] } };
+      const pagamentos = oj._embedded.records
+        .filter((o) => o.type === 'payment' && o.asset_type !== 'native' && o.asset_code && o.asset_issuer)
+        .map((o) => ({ asset: `${o.asset_code}:${o.asset_issuer}`, amount: o.amount ?? '', from: o.from ?? '', to: o.to ?? '' }));
+      return { sucesso: j.successful === true, memoHex, ordem: j.paging_token, pagamentos };
     },
   };
 

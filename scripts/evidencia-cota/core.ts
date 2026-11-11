@@ -3,8 +3,11 @@
  *
  * Para 1 cota, monta a trilha em ordem
  *   validação → cessão → liquidação → incorporação → emissão
- * e, em cada passo, CONFERE (não apenas lista): SHA-256 recalculado do documento ==
- * hash registrado no banco == Memo.hash lido da tx no Horizon. Todo acesso externo entra por
+ * e, em cada passo, CONFERE (não apenas lista): SHA-256 recalculado do documento GUARDADO ==
+ * hash registrado no banco == Memo.hash lido da tx no Horizon. Decisão do Atlas (11/11): vale para TODAS as
+ * transições ancoradas — validação (laudo), cessão (PDF), liquidação (comprovante), incorporação (registro canônico
+ * JSON, âncora PRÓPRIA e ANTERIOR à emissão). A emissão é "o pagamento que emitiu PLINA-RF": memo = sha256 da chave
+ * de incorporação (invariante do E1-4) e o pagamento é aberto (ativo, valor, origem) e conferido. Todo acesso externo entra por
  * `Fontes` (banco, Blob, Horizon), então o núcleo roda em teste com dublês e o `main` só liga as portas.
  *
  * Regras: só leitura; nenhum segredo; nenhuma escrita em banco/chain; testnet apenas.
@@ -18,6 +21,20 @@ export interface TxLida {
   sucesso: boolean;
   /** Memo.hash em hex minúsculo (64), ou null se a tx não tem memo do tipo hash. */
   memoHex: string | null;
+  /** Ordem total no ledger (paging_token do Horizon, numérico). Compara "antes/depois" sem ambiguidade. */
+  ordem?: string;
+  /** Operações de payment da tx (só as de ativo). Preenchido pelo Horizon; opcional em dublês. */
+  pagamentos?: { asset: string; amount: string; from: string; to: string }[];
+}
+
+/** Registro canônico da incorporação (Atlas, E1): guardado como JSON e ancorado com ancorarSha256 ANTES da emissão. */
+export interface RegistroIncorporacao {
+  /** Bytes GUARDADOS (Blob). Nunca reserializados: o hash é dos bytes. */
+  bytes: Buffer;
+  /** Hash que o banco diz ter ancorado. */
+  hashRegistrado: string | null;
+  /** Tx da âncora própria (Memo.hash = sha256(bytes)). */
+  txHash: string | null;
 }
 
 export interface Fontes {
@@ -38,9 +55,13 @@ export interface Fontes {
   } | null>;
   /** Bytes GUARDADOS do PDF assinado (Blob privado, DS3). Nunca baixa de novo no DocuSign. */
   pdfCessao(cessaoId: string): Promise<Buffer | null>;
-  pagamento(cessaoId: string): Promise<{ status: string; onChainTxHash: string | null } | null>;
+  pagamento(cessaoId: string): Promise<{ status: string; onChainTxHash: string | null; hashComprovante?: string | null } | null>;
   /** Bytes GUARDADOS do comprovante do PSP (E1-2). */
   comprovante(cessaoId: string): Promise<Buffer | null>;
+  /** Registro canônico da incorporação guardado + âncora própria; null = o app ainda não gerou. */
+  registroIncorporacao(cotaId: string): Promise<RegistroIncorporacao | null>;
+  /** Ativo PLINA-RF (código + conta emissora): o que o pagamento de emissão deve conter. */
+  ativo(): { code: string; issuer: string };
   /** MovimentoFundo APORTE_COTA da cota. */
   aporte(cotaId: string): Promise<{
     txHash: string | null;
@@ -82,6 +103,15 @@ export interface EvidenciaCota {
 }
 
 export const sha256Hex = (b: Buffer | string): string => createHash('sha256').update(b).digest('hex');
+/** Decimal canônico p/ comparar "100", "100.00" e "100.0000000" sem float. */
+export const dec = (x: string | number | null | undefined): string | null => {
+  if (x === null || x === undefined) return null;
+  const t = String(x).trim();
+  if (!/^-?\d+(\.\d+)?$/.test(t)) return null;
+  const [i, f = ''] = t.split('.');
+  const frac = f.replace(/0+$/, '');
+  return frac ? `${i.replace(/^(-?)0+(?=\d)/, '$1')}.${frac}` : i.replace(/^(-?)0+(?=\d)/, '$1');
+};
 const HEX64 = /^[0-9a-f]{64}$/;
 export const explorerTx = (h: string): string => `https://stellar.expert/explorer/testnet/tx/${h}`;
 
@@ -115,6 +145,38 @@ async function conferir(p: PassoEvidencia, f: Fontes, esperado: { doc: string | 
   if (esperado.doc !== esperado.reg) return { ...p, motivo: 'DOCUMENTO_DIVERGE_DO_REGISTRO: sha256(documento) ≠ hash no banco' };
   if (esperado.doc !== t.memoHex) return { ...p, motivo: 'MEMO_DIVERGE: Memo.hash on-chain ≠ sha256(documento)' };
   return { ...p, confere: true };
+}
+
+/** Conteúdo do registro canônico × cota/aporte/emissor + ordem (âncora estritamente antes da emissão). null = ok. */
+async function validarRegistro(
+  bytes: Buffer,
+  cota: NonNullable<Awaited<ReturnType<Fontes['cota']>>>,
+  aporte: Awaited<ReturnType<Fontes['aporte']>>,
+  issuer: string,
+  emissaoTx: string | null,
+  ancoraTx: string,
+  f: Fontes,
+): Promise<string | null> {
+  let j: Record<string, unknown>;
+  try { j = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>; } catch { return 'REGISTRO_NAO_E_JSON'; }
+  if (!j || typeof j !== 'object' || Array.isArray(j)) return 'REGISTRO_NAO_E_JSON';
+  const faltam = ['cotaId', 'cessaoId', 'valor', 'navPorToken', 'quantidade', 'issuer'].filter((k) => !(k in j));
+  if (faltam.length) return `REGISTRO_INCOMPLETO: faltam ${faltam.join(', ')}`;
+  if (j.cotaId !== cota.id) return 'REGISTRO_DE_OUTRA_COTA: cotaId ≠ cota';
+  if ((j.cessaoId ?? null) !== (cota.cessaoId ?? null)) return 'REGISTRO_DIVERGE: cessaoId ≠ cota';
+  if (j.issuer !== issuer) return 'REGISTRO_DIVERGE: issuer ≠ emissor do PLINA-RF';
+  if (dec(j.quantidade as string) === null || dec(j.quantidade as string) !== dec(cota.tokensEmitidos)) return 'REGISTRO_DIVERGE: quantidade ≠ tokens emitidos';
+  if (!aporte) return 'SEM_APORTE: MovimentoFundo APORTE_COTA não registrado';
+  if (dec(j.valor as string) === null || dec(j.valor as string) !== dec(aporte.valorBrl)) return 'REGISTRO_DIVERGE: valor ≠ aporte';
+  if (dec(j.navPorToken as string) === null || dec(j.navPorToken as string) !== dec(aporte.navPorToken)) return 'REGISTRO_DIVERGE: navPorToken ≠ aporte';
+  if (!aporte.txHash || aporte.txHash !== emissaoTx) return 'APORTE_FORA_DA_TX_DE_EMISSAO: txHash do aporte ≠ emissaoTxHash da cota';
+  if (aporte.hashValidacao !== cota.hashValidacao) return 'APORTE_SEM_O_LAUDO: hashValidacao do aporte ≠ da cota';
+  if (!emissaoTx) return 'SEM_TX: cota sem tx de emissão';
+  if (ancoraTx === emissaoTx) return 'ANCORA_NAO_ANTES_DA_EMISSAO: a âncora é a própria tx de emissão';
+  const [ta, te] = [await f.tx(ancoraTx), await f.tx(emissaoTx)];
+  if (!ta?.ordem || !te?.ordem) return 'ORDEM_INDETERMINADA: sem a ordem no ledger não dá para provar que a âncora veio antes da emissão';
+  if (BigInt(ta.ordem) >= BigInt(te.ordem)) return 'ANCORA_NAO_ANTES_DA_EMISSAO: a âncora do registro entrou depois (ou junto) da emissão';
+  return null;
 }
 
 export async function montarEvidencia(cotaId: string, f: Fontes, agora: () => Date = () => new Date()): Promise<EvidenciaCota> {
@@ -154,9 +216,9 @@ export async function montarEvidencia(cotaId: string, f: Fontes, agora: () => Da
     passos.push(r);
   }
 
-  // 3. Liquidação: documento = bytes GUARDADOS do comprovante do PSP. O hash registrado É o memo
-  //    esperado: sem campo próprio no banco, o memo da tx do pagamento é a única fonte, então exigimos
-  //    que ele bata com sha256(comprovante guardado).
+  // 3. Liquidação: documento = bytes GUARDADOS do comprovante do PSP (sem sobrescrita: allowOverwrite=false no E1-2).
+  //    Memo = SHA-256 dos bytes guardados. Se o banco registra o hash do comprovante (`hashComprovante`), ele precisa
+  //    bater com os bytes de hoje (pega sobrescrita depois da âncora); sem o campo, o memo da tx é o registro.
   {
     const p = base(3, 'LIQUIDACAO', 'Liquidação ao cedente (comprovante do PSP)');
     const pg = cota.cessaoId ? await f.pagamento(cota.cessaoId) : null;
@@ -165,34 +227,51 @@ export async function montarEvidencia(cotaId: string, f: Fontes, agora: () => Da
     const doc = comp ? sha256Hex(comp) : null;
     const tx = pg?.onChainTxHash ?? null;
     const memo = tx ? (await f.tx(tx))?.memoHex ?? null : null;
-    passos.push(await conferir(p, f, { doc, reg: memo, tx }));
+    const reg = pg?.hashComprovante !== undefined ? pg.hashComprovante : memo;
+    passos.push(await conferir(p, f, { doc, reg, tx }));
   }
 
-  // 4. Incorporação ao NAV: registro do razão (APORTE_COTA) amarrado ao laudo e à tx de emissão.
-  //    Não tem memo próprio: a prova on-chain é a tx do passo 5. Aqui conferimos o amarrado.
+  // 4. Incorporação: transição PRÓPRIA (Atlas): registro canônico JSON guardado + âncora (Memo.hash = sha256 dos
+  //    bytes), ANTES da tx de emissão; o conteúdo do registro precisa bater com cota, aporte e emissão.
   {
-    const p = base(4, 'INCORPORACAO', 'Incorporação ao NAV (MovimentoFundo APORTE_COTA)');
+    const p = base(4, 'INCORPORACAO', 'Incorporação ao NAV (registro canônico ancorado, antes da emissão)');
+    const reg = await f.registroIncorporacao(cotaId);
     const a = await f.aporte(cotaId);
-    p.documento = a ? `APORTE_COTA valorBrl=${a.valorBrl} navPorToken=${a.navPorToken ?? '—'}` : null;
-    p.txHash = a?.txHash ?? null;
-    p.explorerUrl = a?.txHash ? explorerTx(a.txHash) : null;
-    p.sha256Registrado = a?.hashValidacao ?? null;
-    p.sha256Documento = cota.hashValidacao;
-    if (!a) p.motivo = 'SEM_APORTE: MovimentoFundo APORTE_COTA não registrado';
-    else if (!a.txHash || a.txHash !== cota.emissaoTxHash) p.motivo = 'APORTE_FORA_DA_TX_DE_EMISSAO: txHash do aporte ≠ emissaoTxHash da cota';
-    else if (a.hashValidacao !== cota.hashValidacao) p.motivo = 'APORTE_SEM_O_LAUDO: hashValidacao do aporte ≠ da cota';
-    else p.confere = true;
-    passos.push(p);
+    p.documento = reg ? 'registro canônico da incorporação guardado (JSON)' : null;
+    if (!reg) {
+      p.motivo = 'SEM_REGISTRO_INCORPORACAO: o registro canônico da incorporação não existe (transição própria ainda não gerada)';
+      passos.push(p);
+    } else {
+      const r = await conferir(p, f, { doc: sha256Hex(reg.bytes), reg: reg.hashRegistrado, tx: reg.txHash });
+      if (r.confere) {
+        r.confere = false;
+        const motivo = await validarRegistro(reg.bytes, cota, a, f.ativo().issuer, cota.emissaoTxHash, reg.txHash!, f);
+        if (motivo) r.motivo = motivo; else r.confere = true;
+      }
+      passos.push(r);
+    }
   }
 
-  // 5. Emissão: memo = sha256("plina:incorporacao:" + chave) (chave = cessaoId ?? hashValidacao).
-  //    NÃO é hash de arquivo: o "documento" é a chave de incorporação. Ver nota no contrato do E1-P.
+  // 5. Emissão = "o pagamento que emitiu PLINA-RF": memo = sha256("plina:incorporacao:" + chave) (invariante do
+  //    E1-4; chave = cessaoId ?? hashValidacao). NÃO é hash de arquivo. Abrimos o pagamento: ativo, valor e origem.
   {
-    const p = base(5, 'EMISSAO', 'Emissão de PLINARF à posição da Plina');
+    const p = base(5, 'EMISSAO', 'Emissão de PLINARF (pagamento que emitiu o token)');
     const chave = cota.cessaoId ?? cota.hashValidacao;
     p.documento = chave ? 'chave de incorporação (cessaoId ?? hashValidacao) → memo plina:incorporacao:<chave>' : null;
     const esperado = chave ? memoDaIncorporacao(chave) : null;
-    passos.push(await conferir(p, f, { doc: esperado, reg: esperado, tx: cota.emissaoTxHash }));
+    const r = await conferir(p, f, { doc: esperado, reg: esperado, tx: cota.emissaoTxHash });
+    if (r.confere) {
+      const t = (await f.tx(cota.emissaoTxHash!))!;
+      const { code, issuer } = f.ativo();
+      if (!t.pagamentos) {
+        r.confere = false; r.motivo = 'PAGAMENTO_NAO_LIDO: não consegui abrir as operações da tx de emissão';
+      } else {
+        const ok = t.pagamentos.some((x) => x.asset === `${code}:${issuer}` && x.from === issuer && dec(x.amount) === dec(cota.tokensEmitidos));
+        if (!ok) { r.confere = false; r.motivo = `PAGAMENTO_EMISSAO_DIVERGE: nenhum payment de ${code} do emissor com ${cota.tokensEmitidos} na tx`; }
+        else r.documento = `${r.documento} · payment ${code} ${cota.tokensEmitidos} do emissor`;
+      }
+    }
+    passos.push(r);
   }
 
   return { cotaId, geradaEm: agora().toISOString(), network: 'TESTNET', passos, todosConferem: passos.every((x) => x.confere) };
