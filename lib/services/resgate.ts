@@ -31,6 +31,7 @@ import {
   assinaturaUnicaDoInvestidor,
   bridgeAmountDoResgate,
   memoHashDoResgate,
+  classificarErroDeEnvio,
   precoNaFaixa,
   tetoResgateBrl,
 } from './regras-resgate';
@@ -350,12 +351,25 @@ async function submeterResgateInterno(input: SubmeterResgateInput): Promise<{ tx
     if (distSig.pubkey !== distributorPubkey) throw new Error('signer do distributor diverge da configuração');
     const unsigned = new Transaction(signedXdr, networkPassphrase);
     unsigned.signatures.length = 0;
-    const res = await submitWithPrivySignature({
-      xdr: unsigned.toXDR(),
-      investorPubkey: investidor.publicKey,
-      investorSignatureHex: `0x${investorSig.toString('hex')}`,
-      extraSignatures: [{ pubkey: distSig.pubkey, sigBase64: distSig.sigBase64 }],
-    });
+    let res: { hash: string };
+    try {
+      res = await submitWithPrivySignature({
+        xdr: unsigned.toXDR(),
+        investorPubkey: investidor.publicKey,
+        investorSignatureHex: `0x${investorSig.toString('hex')}`,
+        extraSignatures: [{ pubkey: distSig.pubkey, sigBase64: distSig.sigBase64 }],
+      });
+    } catch (err) {
+      if (classificarErroDeEnvio(err) === 'RECUSADO') {
+        // A rede RECUSOU (result_codes definitivos): a tx não vai a lugar nenhum → libera a reserva na hora (o gate do
+        // NAV não fecha) e propaga o erro original (a rota o devolve como 502 STELLAR_SUBMIT_FAILED).
+        await liberarReservaDoResgate(cot.id, xdrHash);
+        throw err;
+      }
+      // Resultado INCERTO (timeout/5xx/rede/código ambíguo): a tx pode ter entrado. A reserva fica (órfã) e o varredor decide.
+      console.error('[resgate] envio com resultado incerto', (err as { name?: string })?.name ?? 'erro');
+      throw new ApiError('STELLAR_SUBMIT_INCERTO', 504, 'Não foi possível confirmar o resultado na rede. A conferência é feita automaticamente; não repita o resgate agora.');
+    }
     finalHash = res.hash;
   }
 

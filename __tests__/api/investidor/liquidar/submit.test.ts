@@ -68,6 +68,10 @@ describe('POST /api/investidor/liquidar/submit (E2-6)', () => {
     ['CONFLICT', 409],
     ['VALIDATION_FAILED', 400],
     ['NOT_FOUND', 404],
+    ['STELLAR_SUBMIT_INCERTO', 504],
+    ['PRECO_FORA_DA_FAIXA', 409],
+    ['RESGATE_ACIMA_DO_TETO', 409],
+    ['LIQUIDEZ_INSUFICIENTE', 409],
   ] as const)('ApiError %s → %s com { error, code }', async (code, status) => {
     submeterResgate.mockRejectedValue(new ApiError(code, status, 'mensagem de negócio'));
     const r = await POST(req(BODY));

@@ -5,6 +5,7 @@
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { Keypair, type Transaction } from '@stellar/stellar-sdk';
+import { extractSafeError } from '../stellar/log-error';
 
 /** Validade da cotação do resgate. */
 export const COTACAO_RESGATE_TTL_MS = 5 * 60_000;
@@ -80,6 +81,28 @@ export function tetoResgateBrl(env: string | undefined = process.env.RESGATE_MAX
     /* cai no padrão */
   }
   return new Prisma.Decimal(TETO_RESGATE_BRL_PADRAO);
+}
+
+/**
+ * Códigos de transação com que a rede RECUSOU o envio de forma definitiva: `tx_failed` (entrou no ledger e falhou) e
+ * as rejeições antes do ledger sem relação com sequence/prazo. FICAM DE FORA (incerto → órfã): `tx_bad_seq` e
+ * `tx_too_late` (um reenvio de uma tx que JÁ entrou também responde assim, p.ex. duas chamadas paralelas do mesmo
+ * XDR), `tx_too_early` e `tx_internal_error`.
+ */
+const RECUSA_DEFINITIVA = new Set([
+  'tx_failed', 'tx_bad_auth', 'tx_bad_auth_extra', 'tx_insufficient_balance', 'tx_insufficient_fee',
+  'tx_malformed', 'tx_no_source_account', 'tx_not_supported', 'tx_missing_operation',
+]);
+
+/**
+ * Desfecho do erro do envio ao Horizon (Atlas): `RECUSADO` (result_codes definitivos → a reserva é liberada na hora, o
+ * NAV não fecha) ou `INCERTO` (timeout/5xx/rede/sem result_codes definitivos → a tx pode ter entrado: a reserva segue
+ * como órfã e o varredor decide pela prova on-chain).
+ */
+export function classificarErroDeEnvio(err: unknown): 'RECUSADO' | 'INCERTO' {
+  const codes = extractSafeError(err).result_codes as { transaction?: unknown } | undefined;
+  const t = codes && typeof codes === 'object' ? codes.transaction : undefined;
+  return typeof t === 'string' && RECUSA_DEFINITIVA.has(t) ? 'RECUSADO' : 'INCERTO';
 }
 
 /** Memo.hash do envelope do resgate. NÃO usa o prefixo `plina:incorporacao:` (exclusivo da emissão). */

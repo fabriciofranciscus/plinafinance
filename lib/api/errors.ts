@@ -27,7 +27,8 @@ export const API_ERROR_CODES = [
   'SWAP_EM_CONFERENCIA',   // 409 — o investidor tem um swap em conferência (reserva órfã): sem quote/reserva novos
   'CLASSE_INDISPONIVEL',   // 422 — classe (Subordinada) sem NAV próprio: recusada por enquanto
   'RATE_LIMITED',          // 429 — rate-limit estourado
-  'STELLAR_SUBMIT_FAILED', // 502 — Horizon retornou erro
+  'STELLAR_SUBMIT_FAILED', // 502 — Horizon retornou erro (a rede RECUSOU: result_codes definitivos)
+  'STELLAR_SUBMIT_INCERTO', // 504 — resultado do envio incerto (timeout/5xx/rede): a tx pode ter entrado; segue as regras de órfã
   'LEDGER_UNAVAILABLE',    // 503 — leitura do ledger falhou; NAV indisponível
   'ETHERFUSE_ERROR',       // 502 — anchor retornou erro
   'INTERNAL',              // 500 — erro inesperado (não vaza mensagem original)

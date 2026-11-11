@@ -424,6 +424,59 @@ describe('submeterResgate — recusas antes de a Plina assinar', () => {
     });
   });
 
+  describe('erro do envio ao Horizon (Atlas): recusado libera na hora; incerto vira STELLAR_SUBMIT_INCERTO e fica órfã', () => {
+    const horizon = (status: number, title: string, result_codes?: unknown) =>
+      Object.assign(new Error(title), { response: { status, data: { status, title, extras: result_codes ? { result_codes } : {} } } });
+    const hashDe = (tx = envelope()) => createHash('sha256').update(tx.hash()).digest('hex');
+    const liberou = () =>
+      m.updateMany.mock.calls.some((c) => c[0].where?.submitXdrHash === hashDe() && c[0].data?.submitXdrHash === null);
+
+    it.each([
+      ['tx_failed', { transaction: 'tx_failed', operations: ['op_underfunded'] }],
+      ['tx_bad_auth', { transaction: 'tx_bad_auth' }],
+      ['tx_insufficient_fee', { transaction: 'tx_insufficient_fee' }],
+    ])('RECUSADO (%s): libera a reserva na hora e propaga o erro original (a rota o devolve como 502)', async (_n, codes) => {
+      m.findFirst.mockResolvedValue(cotacao());
+      const erro = horizon(400, 'Transaction Failed', codes);
+      m.submitPrivy.mockRejectedValue(erro);
+      await expect(tenta()).rejects.toBe(erro);
+      expect(liberou()).toBe(true);
+      expect(m.movCreateMany).not.toHaveBeenCalled(); // nada escriturado
+    });
+
+    it.each([
+      ['504 Timeout (sem result_codes)', horizon(504, 'Timeout')],
+      ['503 Service Unavailable', horizon(503, 'Service Unavailable')],
+      ['429 Rate Limit', horizon(429, 'Rate Limit Exceeded')],
+      ['rede sem resposta', Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })],
+      ['tx_bad_seq (um reenvio de tx já aplicada responde assim)', horizon(400, 'Transaction Failed', { transaction: 'tx_bad_seq' })],
+      ['tx_too_late', horizon(400, 'Transaction Failed', { transaction: 'tx_too_late' })],
+      ['tx_internal_error', horizon(400, 'Transaction Failed', { transaction: 'tx_internal_error' })],
+    ])('INCERTO (%s): 504 STELLAR_SUBMIT_INCERTO e a reserva FICA (órfã, o varredor decide)', async (_n, erro) => {
+      m.findFirst.mockResolvedValue(cotacao());
+      m.submitPrivy.mockRejectedValue(erro);
+      await expect(tenta()).rejects.toMatchObject({ code: 'STELLAR_SUBMIT_INCERTO', status: 504 });
+      expect(liberou()).toBe(false);
+      expect(m.movCreateMany).not.toHaveBeenCalled();
+    });
+
+    it('a mensagem do INCERTO não vaza detalhe da rede', async () => {
+      m.findFirst.mockResolvedValue(cotacao());
+      m.submitPrivy.mockRejectedValue(horizon(504, 'Timeout'));
+      const e = await tenta().catch((x) => x);
+      expect(String(e.message)).not.toMatch(/Timeout|horizon|socket/i);
+    });
+
+    it('reenvio de reserva ÓRFÃ que a rede recusa: também libera na hora', async () => {
+      const tx = envelope();
+      m.findFirst.mockResolvedValue(cotacao({ submitXdrHash: hashDe(tx), submitMaxTime: new Date((AGORA_SEC + 100) * 1000) }));
+      m.updateMany.mockResolvedValueOnce({ count: 0 }); // a reserva já existe
+      m.submitPrivy.mockRejectedValue(horizon(400, 'Transaction Failed', { transaction: 'tx_failed', operations: ['op_no_trust'] }));
+      await expect(tenta(tx)).rejects.toMatchObject({ response: { status: 400 } });
+      expect(liberou()).toBe(true);
+    });
+  });
+
   describe('liquidez sob lock na reserva (cotações simultâneas, condição de merge do Atlas)', () => {
     it('toma o advisory lock antes de ler os reservados e reservar (mesma transação)', async () => {
       m.findFirst.mockResolvedValue(cotacao());
@@ -570,10 +623,10 @@ describe('submeterResgate — reserva órfã (mesma regra do swap, N1-S1)', () =
 });
 
 describe('submeterResgate — falha do Horizon', () => {
-  it('o submit falha: a reserva fica (a órfã é resolvida depois), nada é escriturado e o erro propaga', async () => {
+  it('o submit falha sem prova de recusa (erro genérico): a reserva fica (órfã), nada é escriturado e vira STELLAR_SUBMIT_INCERTO', async () => {
     m.findFirst.mockResolvedValue(cotacao());
     m.submitPrivy.mockRejectedValue(new Error('horizon 504'));
-    await expect(submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: envelope().toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA })).rejects.toThrow('horizon 504');
+    await expect(submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: envelope().toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA })).rejects.toMatchObject({ code: 'STELLAR_SUBMIT_INCERTO', status: 504 });
     expect(m.movCreateMany).not.toHaveBeenCalled();
     expect(m.updateMany).toHaveBeenCalledTimes(1); // só a reserva; sem liberar
   });
