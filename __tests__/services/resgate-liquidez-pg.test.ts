@@ -126,6 +126,8 @@ describe.skipIf(!PG)('resgate — liquidez sob concorrência real no Postgres', 
     process.env.STELLAR_ISSUER_PUBLIC = ISSUER.publicKey();
     process.env.STELLAR_DISTRIBUTOR_PUBLIC = DIST.publicKey();
     process.env.PRECO_TESOURO_REF_BRL = '1.25'; // referência independente (faixa ±2%)
+    process.env.PRECO_TESOURO_REF_DATA = new Date().toISOString();
+    delete process.env.TESOURO_TAXA_ANUAL;
     delete process.env.RESGATE_MAX_BRL;
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     st.assinados = []; st.submits = []; st.saldoTesouro = '1000.0000000';

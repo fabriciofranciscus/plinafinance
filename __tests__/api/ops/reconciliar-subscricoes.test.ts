@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
-const m = vi.hoisted(() => ({ reconciliar: vi.fn(), consume: vi.fn(), alerta: vi.fn(), marcar: vi.fn(), marcarResgate: vi.fn() }));
+const m = vi.hoisted(() => ({ ref: vi.fn(), reconciliar: vi.fn(), consume: vi.fn(), alerta: vi.fn(), marcar: vi.fn(), marcarResgate: vi.fn() }));
+vi.mock('@/lib/services/preco-referencia-tesouro', () => ({ obterPrecoReferenciaTesouro: m.ref }));
 vi.mock('@/lib/services/alerta-ops', () => ({ enviarAlertaOps: m.alerta }));
 vi.mock('@/lib/services/swap-escrituracao', () => ({ reconciliarSwapsOrfaos: m.reconciliar, marcarConflitosAlertados: m.marcar, marcarConflitosResgateAlertados: m.marcarResgate }));
 vi.mock('@/lib/rate-limit/config', () => ({
@@ -23,6 +24,7 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   process.env.OPS_CRON_SECRET = SECRET;
   m.reconciliar.mockReset().mockResolvedValue(RESULTADO);
+  m.ref.mockReset().mockResolvedValue({ status: 'OK' });
   m.consume.mockReset().mockResolvedValue(true);
   m.alerta.mockReset().mockResolvedValue(true);
   m.marcar.mockReset().mockResolvedValue(undefined);
@@ -37,7 +39,7 @@ describe('GET /api/ops/reconciliar-subscricoes', () => {
     const r = await GET(req(`Bearer ${SECRET}`));
     expect(r.status).toBe(200);
     const { conflitoQuoteIds: _ids, conflitoResgateIds: _rids, ...contagens } = RESULTADO;
-    expect(await r.json()).toEqual({ ...contagens, alerta: false, alertaEnviado: false });
+    expect(await r.json()).toEqual({ ...contagens, referenciaPreco: 'OK', alerta: false, alertaEnviado: false });
     expect(m.alerta).not.toHaveBeenCalled(); // sem conflito, sem e-mail
     expect(m.reconciliar).toHaveBeenCalledOnce();
   });
@@ -143,6 +145,20 @@ describe('GET /api/ops/reconciliar-subscricoes', () => {
     const body = await (await GET(req(`Bearer ${SECRET}`))).json();
     expect(body).toMatchObject({ alerta: true, alertaEnviado: false, vencidasSemProva: 1 });
     expect(m.alerta).not.toHaveBeenCalled();
+  });
+
+  it.each([['VENCIDA'], ['AUSENTE']])('referência de preço %s → alerta:true (todo resgate é recusado), só o estado na resposta', async (status) => {
+    m.ref.mockResolvedValue({ status, preco: '1.2345' });
+    const body = await (await GET(req(`Bearer ${SECRET}`))).json();
+    expect(body).toMatchObject({ alerta: true, referenciaPreco: status });
+    expect(JSON.stringify(body)).not.toContain('1.2345');
+  });
+
+  it('falha ao ler a referência → INDISPONIVEL e alerta:true (o job não pode ficar verde sem saber)', async () => {
+    m.ref.mockRejectedValue(new Error('db fora'));
+    const r = await GET(req(`Bearer ${SECRET}`));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ alerta: true, referenciaPreco: 'INDISPONIVEL' });
   });
 
   it('a resposta traz vigiaRestantes (só contagem)', async () => {

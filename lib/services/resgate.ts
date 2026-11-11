@@ -139,7 +139,11 @@ async function exigirPrecoETeto(i: { precoTesouroBrl: string | Prisma.Decimal; b
     throw new ApiError('RESGATE_ACIMA_DO_TETO', 409, 'Este valor está acima do limite por resgate. Tente um valor menor.');
   }
   const ref = await obterPrecoReferenciaTesouro();
-  if (!ref || !precoNaFaixa(i.precoTesouroBrl, ref)) {
+  if (ref.status === 'VENCIDA') {
+    console.error('[resgate] referência de preço do ativo-ponte VENCIDA — atualizar PRECO_TESOURO_REF_BRL/DATA');
+    throw new ApiError('PRECO_FORA_DA_FAIXA', 409, 'A referência de preço do ativo-ponte está vencida. Nada foi enviado. Tente novamente mais tarde.');
+  }
+  if (ref.status !== 'OK' || !precoNaFaixa(i.precoTesouroBrl, ref.preco)) {
     console.error('[resgate] preço do ativo-ponte fora da faixa ou sem referência independente');
     throw new ApiError('PRECO_FORA_DA_FAIXA', 409, 'O preço do ativo-ponte não pôde ser validado agora. Nada foi enviado. Tente novamente mais tarde.');
   }

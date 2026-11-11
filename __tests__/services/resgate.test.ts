@@ -56,6 +56,7 @@ import { cotarResgate, submeterResgate } from '@/lib/services/resgate';
 import { memoHashDoResgate } from '@/lib/services/regras-resgate';
 
 const D = (v: string) => new Prisma.Decimal(v);
+const ok = (v: string) => ({ status: 'OK', preco: new Prisma.Decimal(v), base: new Prisma.Decimal(v), idadeDias: 0, origem: 'SWAP' });
 const NAV = D('1.00000000');
 
 function envelope(opts: { amount?: string; bridge?: string; maxTime?: number; quoteId?: string; assinar?: boolean; memo?: Buffer } = {}) {
@@ -89,7 +90,7 @@ beforeEach(() => {
   m.preco.mockResolvedValue({ navPorToken: NAV, brlEquivalente: D('100.00'), navTotal: 1, tokensVivos: 1 });
   m.buildResgate.mockResolvedValue({ xdr: 'XDR_BUILD', hashHex: '0xabc', maxTime: AGORA_SEC + 120 });
   m.conferencia.mockResolvedValue(undefined);
-  m.ref.mockResolvedValue(D('1.25'));
+  m.ref.mockResolvedValue(ok('1.25'));
   delete process.env.RESGATE_MAX_BRL;
   m.lockRaw.mockResolvedValue(1);
   m.agregado.mockResolvedValue({ _sum: { brlEquivalente: null, bridgeAmount: null } });
@@ -161,7 +162,7 @@ describe('cotarResgate (build)', () => {
 
 describe('cotarResgate — preço líquido e liquidez (Consuelo/Atlas)', () => {
   it('TESOURO = BRL ÷ preço líquido, truncado PARA BAIXO, e o preço fica gravado na cotação', async () => {
-    m.ref.mockResolvedValue(D('1.17')); // referência independente próxima do preço real do sandbox (faixa ±2%)
+    m.ref.mockResolvedValue(ok('1.17')); // referência independente próxima do preço real do sandbox (faixa ±2%)
     await cotarResgate(cotarIn({ precoTesouroBrl: '1.1693333' })); // 100 ÷ 1,1693333 = 85,5144… → 85,5144...
     const dados = m.create.mock.calls[0][0].data;
     expect(dados.taxaBridge).toBe('1.1693333');
@@ -242,20 +243,28 @@ describe('guardas de preço e teto (Argus R2)', () => {
     submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA });
 
   it('BUILD: preço da Etherfuse acima da faixa (+2,1%) → 409 PRECO_FORA_DA_FAIXA, nada persistido', async () => {
-    m.ref.mockResolvedValue(D('1.00'));
+    m.ref.mockResolvedValue(ok('1.00'));
     await expect(cotarResgate(cotarIn({ precoTesouroBrl: '1.021' }))).rejects.toMatchObject({ code: 'PRECO_FORA_DA_FAIXA', status: 409 });
     expect(m.create).not.toHaveBeenCalled();
     expect(m.buildResgate).not.toHaveBeenCalled();
   });
 
   it('BUILD: preço dentro da faixa (+2,0% e −2,0%) passa', async () => {
-    m.ref.mockResolvedValue(D('1.25'));
+    m.ref.mockResolvedValue(ok('1.25'));
     await expect(cotarResgate(cotarIn({ precoTesouroBrl: '1.275' }))).resolves.toMatchObject({ quoteId: expect.any(String) });
     await expect(cotarResgate(cotarIn({ precoTesouroBrl: '1.225' }))).resolves.toBeDefined();
   });
 
+  it('BUILD: referência VENCIDA (> 30 dias) → 409 PRECO_FORA_DA_FAIXA com o motivo "vencida", nada persistido', async () => {
+    m.ref.mockResolvedValue({ status: 'VENCIDA', idadeDias: 31, origem: 'CONFIG' });
+    const e = await cotarResgate(cotarIn()).catch((x) => x);
+    expect(e).toMatchObject({ code: 'PRECO_FORA_DA_FAIXA', status: 409 });
+    expect(String(e.message)).toMatch(/vencida/i);
+    expect(m.create).not.toHaveBeenCalled();
+  });
+
   it('BUILD: sem referência independente (nenhum swap escriturado e sem config) → recusa (fail-closed)', async () => {
-    m.ref.mockResolvedValue(null);
+    m.ref.mockResolvedValue({ status: 'AUSENTE' });
     await expect(cotarResgate(cotarIn())).rejects.toMatchObject({ code: 'PRECO_FORA_DA_FAIXA', status: 409 });
     expect(m.create).not.toHaveBeenCalled();
   });
@@ -278,7 +287,7 @@ describe('guardas de preço e teto (Argus R2)', () => {
   it('SUBMIT (reserva nova): preço de agora fora da faixa da referência → 409 PRECO_FORA_DA_FAIXA, sem reservar nem assinar', async () => {
     m.findFirst.mockResolvedValue(cotacao());
     m.precoAgora.mockResolvedValue('1.25'); // igual ao da cotação: o 1 bp passa
-    m.ref.mockResolvedValue(D('1.00')); // mas a referência independente discorda (+25%)
+    m.ref.mockResolvedValue(ok('1.00')); // mas a referência independente discorda (+25%)
     await expect(tentaSubmit()).rejects.toMatchObject({ code: 'PRECO_FORA_DA_FAIXA', status: 409 });
     expect(m.updateMany).not.toHaveBeenCalled();
     expect(m.preSign).not.toHaveBeenCalled();
@@ -297,7 +306,7 @@ describe('guardas de preço e teto (Argus R2)', () => {
     const tx = envelope();
     m.findFirst.mockResolvedValue(cotacao({ submitXdrHash: createHash('sha256').update(tx.hash()).digest('hex') }));
     m.updateMany.mockResolvedValueOnce({ count: 0 });
-    m.ref.mockResolvedValue(null);
+    m.ref.mockResolvedValue({ status: 'AUSENTE' });
     process.env.RESGATE_MAX_BRL = '1';
     await expect(tentaSubmit(tx)).resolves.toBeDefined();
     expect(m.ref).not.toHaveBeenCalled();

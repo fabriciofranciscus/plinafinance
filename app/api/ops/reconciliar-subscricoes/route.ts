@@ -11,6 +11,7 @@
 import { NextResponse } from 'next/server';
 import { requireOpsCron } from '@/lib/auth/ops-cron';
 import { enviarAlertaOps } from '@/lib/services/alerta-ops';
+import { obterPrecoReferenciaTesouro } from '@/lib/services/preco-referencia-tesouro';
 import {
   marcarConflitosAlertados,
   marcarConflitosResgateAlertados,
@@ -67,16 +68,27 @@ export async function GET(req: Request) {
         }
       }
     }
+    // Referência de preço do TESOURO (F7): vencida (> 30 dias) ou ausente = todo resgate é recusado até a operação
+    // atualizar PRECO_TESOURO_REF_BRL/DATA. Só o estado na resposta (sem valores).
+    let referenciaPreco: string;
+    try {
+      referenciaPreco = (await obterPrecoReferenciaTesouro()).status;
+    } catch (err) {
+      console.error('[ops/reconciliar-subscricoes] referência de preço', (err as { name?: string })?.name ?? 'erro');
+      referenciaPreco = 'INDISPONIVEL';
+    }
     // `alerta` = há conflito em aberto (sem alerta entregue ainda) OU resgate órfão sem prova: fica true a cada varredura até resolver.
     // O workflow agendado deve falhar o job quando for true.
     return NextResponse.json({
       ...contagens,
+      referenciaPreco,
       // Órfã (resgate ou swap) SEM prova (INDETERMINADO / sem XDR) fecha o NAV e não se resolve sozinha: o job tem de falhar.
       alerta:
         contagens.vigiaConflitos > 0 ||
         contagens.resgatesVigiaConflitos > 0 ||
         contagens.resgatesSemProva > 0 ||
-        contagens.vencidasSemProva > 0,
+        contagens.vencidasSemProva > 0 ||
+        referenciaPreco !== 'OK',
       alertaEnviado: alertaEnviado || alertaResgateEnviado,
     });
   } catch (err) {
