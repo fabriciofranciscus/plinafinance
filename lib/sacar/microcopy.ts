@@ -97,6 +97,8 @@ export function erroResgate(
   fase: 'build' | 'submit',
   pedido?: string | null,
 ): { titulo: string; texto: string } {
+  // no submit o investidor já assinou o envelope; no build não há assinatura
+  const assinatura = fase === 'submit' ? ' A assinatura que você fez não será usada.' : '';
   const numero = pedido ? ` informando o número do pedido (${pedido})` : '';
   switch (tipo) {
     case 'sem_liquidez':
@@ -132,16 +134,16 @@ export function erroResgate(
         titulo: 'Resgate indisponível para esta subclasse',
         texto: 'O resgate desta subclasse ainda não está disponível na rede de testes.',
       };
-    // PROVISÓRIO (Bento R2, 409 no build e no submit de reserva nova): a Norma confere.
+    // Norma §2.9 (409 no build e no submit de reserva nova). Sem número do limite, sem ±2%/referência, sem causa.
     case 'preco_fora_da_faixa':
       return {
-        titulo: 'Resgate indisponível no momento',
-        texto: `Não foi possível validar o preço do TESOURO agora. Nada foi enviado. Tente de novo mais tarde ou fale com a equipe em ${EQUIPE}.`,
+        titulo: 'Não foi possível validar o preço agora',
+        texto: `Não conseguimos validar o preço deste resgate neste momento. Nada foi enviado.${assinatura} Tente de novo mais tarde ou fale com a equipe em ${EQUIPE}.`,
       };
     case 'acima_do_teto':
       return {
         titulo: 'Valor acima do limite por resgate',
-        texto: 'Este valor está acima do limite por resgate. Tente um valor menor. Rede de testes, sem valor financeiro real.',
+        texto: `Este valor está acima do limite por resgate. Nada foi enviado.${assinatura} Tente um valor menor ou fale com a equipe em ${EQUIPE}.`,
       };
     case 'rede_nao_confirmou':
       // 502 cobre rejeição real E resposta ambígua (a tx pode ter entrado): NÃO dizer "não foram resgatados".

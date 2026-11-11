@@ -110,11 +110,22 @@ describe('microcopy do resgate (E2-6): erros da Norma §2.8–2.9', () => {
     expect(erroResgate('conflito', 'submit', 'q-9').texto).toMatch(/Confira seu histórico antes de pedir um novo resgate/);
   });
 
-  it('preço fora da faixa diz "Nada foi enviado"; teto pede valor menor sem revelar o limite nem prometer janela', () => {
-    expect(erroResgate('preco_fora_da_faixa', 'build').texto).toMatch(/Nada foi enviado/);
-    const t = erroResgate('acima_do_teto', 'submit');
-    expect(t.texto).toMatch(/Tente um valor menor/);
-    expect(t.texto).not.toMatch(/\d{3}|janela|R\$/);
+  it('preço fora da faixa e teto (Norma §2.9): textos exatos, assinatura só no submit, sem limite, ±2%, referência nem causa', () => {
+    const pb = erroResgate('preco_fora_da_faixa', 'build');
+    expect(pb.titulo).toBe('Não foi possível validar o preço agora');
+    expect(pb.texto).toBe('Não conseguimos validar o preço deste resgate neste momento. Nada foi enviado. Tente de novo mais tarde ou fale com a equipe em contato@plina.finance.');
+    expect(erroResgate('preco_fora_da_faixa', 'submit').texto).toBe('Não conseguimos validar o preço deste resgate neste momento. Nada foi enviado. A assinatura que você fez não será usada. Tente de novo mais tarde ou fale com a equipe em contato@plina.finance.');
+    const tb = erroResgate('acima_do_teto', 'build');
+    expect(tb.titulo).toBe('Valor acima do limite por resgate');
+    expect(tb.texto).toBe('Este valor está acima do limite por resgate. Nada foi enviado. Tente um valor menor ou fale com a equipe em contato@plina.finance.');
+    expect(erroResgate('acima_do_teto', 'submit').texto).toContain('A assinatura que você fez não será usada.');
+    for (const t of ['preco_fora_da_faixa', 'acima_do_teto'] as const) {
+      for (const fase of ['build', 'submit'] as const) {
+        const x = erroResgate(t, fase).texto;
+        expect(x).not.toMatch(/\d|±|referência|mercado|manipula|janela|R\$/i);
+        if (fase === 'build') expect(x).not.toMatch(/assinatura/);
+      }
+    }
   });
 
   it('nenhum texto usa jargão, código cru, prazo ou janela', () => {
