@@ -96,6 +96,10 @@ describe.skipIf(!PG)('TentativaEmissao — concorrência real no Postgres', () =
     process.env.STELLAR_PLINA_POSITION_PUBLIC = Keypair.random().publicKey();
   });
   afterAll(async () => {
+    // Não deixa Cota/movimentos no banco: mudariam o NAV de outros arquivos PG que rodem depois (Vera F4).
+    await db.$executeRawUnsafe(
+      'TRUNCATE "TentativaEmissao", "MovimentoFundo", "EventoAudit", "Cota" RESTART IDENTITY CASCADE',
+    );
     await db.$disconnect();
   });
   beforeEach(async () => {

@@ -57,7 +57,7 @@ vi.mock('@/lib/stellar/transactions', () => ({
   submitWithPrivySignature: vi.fn(async (a: { xdr: string }) => {
     st.submits.push(a.xdr);
     await new Promise((r) => setTimeout(r, 30));
-    return { hash: `tx_${st.submits.length}` };
+    return { hash: `tx_${a.xdr.slice(-12)}` }; // determinístico por envelope (mesmo XDR → mesmo hash, como na rede)
   }),
 }));
 
@@ -162,6 +162,16 @@ describe.skipIf(!PG)('resgate — liquidez sob concorrência real no Postgres', 
     const ko = r.find((x): x is PromiseRejectedResult => x.status === 'rejected');
     expect(ko?.reason).toMatchObject({ code: 'LIQUIDEZ_INSUFICIENTE' });
     expect(st.submits).toHaveLength(1);
+  });
+
+  it('MESMO XDR submetido 2× em paralelo: escritura 1× e os dois recebem o MESMO txHash (idempotente, Vera F2)', async () => {
+    const [a] = await semear(1, '500.00');
+    const r = await Promise.allSettled([submeter(a), submeter(a)]);
+    expect(r.map((x) => x.status)).toEqual(['fulfilled', 'fulfilled']);
+    const [h1, h2] = r.map((x) => (x as PromiseFulfilledResult<{ txHash: string }>).value.txHash);
+    expect(h1).toBe(h2);
+    expect(await db.eventoAudit.count({ where: { acao: 'PLINARF_LIQUIDADO' } })).toBe(1);
+    expect((await caixaDoFundo()).toFixed(2)).toBe('400.00'); // baixou UMA vez
   });
 
   it('o lock é solto no fim: depois do 409, um resgate menor ainda passa (a transação não ficou presa)', async () => {

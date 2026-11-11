@@ -422,6 +422,7 @@ model Investidor {
   @@index([status])
   @@index([tipo])
   @@index([jurisdicao])
+  resgateCotacoes        ResgateCotacao[]
 }
 
 /// Quote BRL → TESOURO retornado pela Etherfuse, persistido pra binding
@@ -724,6 +725,7 @@ model LeadEoi {
 model ResgateCotacao {
   id                   String        @id @default(cuid())
   investidorId         String
+  investidor           Investidor    @relation(fields: [investidorId], references: [id])
   classe               ClassePLINARF @default(SENIOR)
   /// PLINARF a QUEIMAR (perna 1).
   plinarfAmount        Decimal       @db.Decimal(20, 7)

@@ -193,7 +193,33 @@ export interface SubmeterResgateInput {
   agora?: number;
 }
 
+/**
+ * Idempotência na corrida (Vera F2): dois submits concorrentes do MESMO XDR escrituram uma vez, e o que perde a
+ * corrida (erro de concorrência na escrituração, ou o gate do NAV já fechado pela reserva do vencedor) devolve o
+ * `txHash` da cotação consumida com este XDR, em vez de um erro. Qualquer outro desfecho propaga o erro original.
+ */
 export async function submeterResgate(input: SubmeterResgateInput): Promise<{ txHash: string }> {
+  try {
+    return await submeterResgateInterno(input);
+  } catch (err) {
+    let xdrHash: string;
+    try {
+      xdrHash = createHash('sha256').update(new Transaction(input.signedXdr, networkPassphrase).hash()).digest('hex');
+    } catch {
+      throw err;
+    }
+    const cot = await db.resgateCotacao.findUnique({
+      where: { id: input.quoteId },
+      select: { investidorId: true, submitXdrHash: true, consumedAt: true, consumedTxHash: true },
+    });
+    if (cot && cot.investidorId === input.investidor.id && cot.consumedAt && cot.consumedTxHash && cot.submitXdrHash === xdrHash) {
+      return { txHash: cot.consumedTxHash };
+    }
+    throw err;
+  }
+}
+
+async function submeterResgateInterno(input: SubmeterResgateInput): Promise<{ txHash: string }> {
   const { investidor, quoteId, signedXdr } = input;
   const agoraMs = input.agora ?? Date.now();
   const agoraSec = Math.floor(agoraMs / 1000);

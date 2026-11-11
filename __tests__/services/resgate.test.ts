@@ -310,6 +310,49 @@ describe('submeterResgate — recusas antes de a Plina assinar', () => {
     nadaAssinado();
   });
 
+  describe('corrida do MESMO XDR (Vera F2): o perdedor recebe o txHash idempotente, não um erro', () => {
+    const hashDe = (tx = envelope()) => createHash('sha256').update(tx.hash()).digest('hex');
+    const consumida = (over: Record<string, unknown> = {}) => ({
+      investidorId: 'inv_1', submitXdrHash: hashDe(), consumedAt: new Date(AGORA), consumedTxHash: 'tx_vencedor', ...over,
+    });
+    /** Perde a corrida na escrituração: a reserva passa, a cotação já foi consumida pelo vencedor. */
+    const perdeNaEscrituracao = () => {
+      m.findFirst.mockResolvedValue(cotacao());
+      m.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValue({ count: 0 });
+    };
+
+    it('"consumida concorrentemente" na escrituração → devolve o txHash da cotação consumida com este XDR', async () => {
+      perdeNaEscrituracao();
+      m.findUnique.mockResolvedValue(consumida());
+      await expect(tenta()).resolves.toEqual({ txHash: 'tx_vencedor' });
+    });
+
+    it('gate do NAV já fechado pela reserva do vencedor (503) → idem, txHash do vencedor', async () => {
+      m.findFirst.mockResolvedValue(cotacao());
+      m.preco.mockRejectedValue(new NavIndisponivelError('SWAP_EM_VOO'));
+      m.findUnique.mockResolvedValue(consumida());
+      await expect(tenta()).resolves.toEqual({ txHash: 'tx_vencedor' });
+    });
+
+    it('cotação consumida com OUTRO xdr, de outro investidor, ou ainda não consumida: o erro original propaga', async () => {
+      perdeNaEscrituracao();
+      m.findUnique.mockResolvedValueOnce(consumida({ submitXdrHash: 'outro' }));
+      await expect(tenta()).rejects.toThrow(/concorrentemente/);
+      perdeNaEscrituracao();
+      m.findUnique.mockResolvedValueOnce(consumida({ investidorId: 'inv_2' }));
+      await expect(tenta()).rejects.toThrow(/concorrentemente/);
+      perdeNaEscrituracao();
+      m.findUnique.mockResolvedValueOnce(consumida({ consumedAt: null, consumedTxHash: null }));
+      await expect(tenta()).rejects.toThrow(/concorrentemente/);
+    });
+
+    it('ownership: cotação de OUTRO investidor continua 404 (a releitura confere o dono)', async () => {
+      m.findFirst.mockResolvedValue(null);
+      m.findUnique.mockResolvedValue(consumida({ investidorId: 'inv_2' }));
+      await expect(tenta()).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404 });
+    });
+  });
+
   describe('liquidez sob lock na reserva (cotações simultâneas, condição de merge do Atlas)', () => {
     it('toma o advisory lock antes de ler os reservados e reservar (mesma transação)', async () => {
       m.findFirst.mockResolvedValue(cotacao());
