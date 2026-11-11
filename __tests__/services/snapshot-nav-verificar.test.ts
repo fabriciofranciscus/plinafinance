@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { canonicalizar } from '@/lib/services/json-canonico';
 import { montarNumerador, recalcularNav, type ArquivoSnapshotNav } from '@/lib/services/snapshot-nav-arquivo';
-import { verificarSnapshot, type LeitorHorizon, type TxHorizon } from '@/lib/services/snapshot-nav-verificar';
+import { desdeDaAncora, verificarSnapshot, type LeitorHorizon, type TxHorizon } from '@/lib/services/snapshot-nav-verificar';
 
 const D = (v: string) => new Prisma.Decimal(v);
 const DIST = 'GDIST';
@@ -172,6 +172,16 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
     expect(r.conferencias.find((c) => c.id === 'numerador')?.detalhe).toMatch(
       /denominador e conciliação refeitos do Horizon; numerador = insumos publicados.*hash de validação ancorado/,
     );
+  });
+
+  it('S3: a busca da âncora é limitada pela data do arquivo (menos 1 h de folga), não pelo histórico todo', async () => {
+    let recebido: string | undefined;
+    const l = leitor();
+    const orig = l.buscarPorMemo;
+    l.buscarPorMemo = async (c, m, desde) => { recebido = desde; return orig(c, m, desde); };
+    await verificarSnapshot(bytesDe(arquivoBase()), l, PLINA);
+    expect(recebido).toBe('2026-11-12T08:00:00.000Z'); // geradoEm 09:00Z − 1 h
+    expect(desdeDaAncora('lixo')).toBe('1970-01-01T00:00:00.000Z');
   });
 
   it('não é JSON: falha sem lançar', async () => {

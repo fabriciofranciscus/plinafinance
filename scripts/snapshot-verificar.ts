@@ -75,12 +75,17 @@ function leitor(server: Horizon.Server): LeitorHorizon {
       }
       return { soma, contas };
     },
-    async buscarPorMemo(conta, memoB64) {
+    async buscarPorMemo(conta, memoB64, desde) {
       const achadas: TxHorizon[] = [];
       let p = (await server.transactions().forAccount(conta).order('desc').limit(PAGINA).call()) as unknown as Pagina<TxHorizon>;
       for (let n = 1; p.records.length > 0; n++) {
         if (n > MAX_PAGINAS) throw new Error('histórico do distributor grande demais (limite de 50 páginas)');
-        for (const t of p.records) if (t.memo_type === 'hash' && t.memo === memoB64) achadas.push(t);
+        let passou = false;
+        for (const t of p.records) {
+          if (desde && t.created_at < desde) passou = true; // ordem desc: o resto é mais antigo que o arquivo
+          else if (t.memo_type === 'hash' && t.memo === memoB64) achadas.push(t);
+        }
+        if (passou) break;
         p = await p.next();
       }
       return achadas;

@@ -20,6 +20,7 @@ import { horizon } from '../stellar/account';
 import { AncoraError, ancorarSha256 } from '../stellar/ancora';
 import { STELLAR_NETWORK } from '../stellar/config';
 import { ConciliacaoError, exigirConciliacao } from '../stellar/conciliacao';
+import { distributorSigner } from '../stellar/signer';
 import { extractSafeError } from '../stellar/log-error';
 import type { SupplyOnChain } from '../stellar/supply';
 import { canonicalizar } from './json-canonico';
@@ -111,6 +112,22 @@ async function lerNumerador() {
   return { cotas, caixa: { movimentos, porTipo } };
 }
 
+/**
+ * O distributor que o arquivo declara (STELLAR_DISTRIBUTOR_PUBLIC) tem de ser o da chave que assina a âncora
+ * (STELLAR_DISTRIBUTOR_SECRET); senão o arquivo diria uma conta e a âncora sairia de outra. Sem gravar nada.
+ */
+function exigirDistributorConsistente(): string {
+  const declarado = process.env.STELLAR_DISTRIBUTOR_PUBLIC ?? '';
+  let assina = '';
+  try {
+    assina = distributorSigner().publicKey();
+  } catch {
+    throw new SnapshotNavError('NAV_INDISPONIVEL', 'DISTRIBUTOR_SIGNER_INDISPONIVEL');
+  }
+  if (!declarado || declarado !== assina) throw new SnapshotNavError('NAV_INDISPONIVEL', 'DISTRIBUTOR_DIVERGE');
+  return declarado;
+}
+
 async function lerRaiz(): Promise<{ ledger: number; fechadoEm: string }> {
   const r = await horizon.root();
   return { ledger: r.history_latest_ledger, fechadoEm: r.history_latest_ledger_closed_at };
@@ -118,12 +135,13 @@ async function lerRaiz(): Promise<{ ledger: number; fechadoEm: string }> {
 
 function ativoCirculado(
   s: SupplyOnChain,
+  distributor: string,
   conc: { somaTrustlinesAutorizadas: Prisma.Decimal; contasAutorizadas: number },
 ): AtivoCirculadoNoArquivo {
   const saldoIssuer = new Prisma.Decimal(0);
   return {
     issuer: s.issuer,
-    distributor: process.env.STELLAR_DISTRIBUTOR_PUBLIC ?? '',
+    distributor,
     totalEmitido: f7(s.totalEmitido),
     saldoIssuer: f7(saldoIssuer),
     saldoDistributor: f7(s.tesouraria),
@@ -134,6 +152,7 @@ function ativoCirculado(
 
 /** Gates + leituras + montagem do arquivo. Lança `SnapshotNavError` sem gravar nada. */
 async function gerarArquivo(agora: Date): Promise<{ arquivo: ArquivoSnapshotNav; navPorToken: Prisma.Decimal }> {
+  const distributor = exigirDistributorConsistente();
   const num1 = await lerNumerador();
   const horizonIni = await lerRaiz();
 
@@ -199,8 +218,8 @@ async function gerarArquivo(agora: Date): Promise<{ arquivo: ArquivoSnapshotNav;
     },
     numerador,
     circulante: {
-      [supply.senior.code]: ativoCirculado(supply.senior, conc.senior),
-      [supply.subordinada.code]: ativoCirculado(supply.subordinada, conc.subordinada),
+      [supply.senior.code]: ativoCirculado(supply.senior, distributor, conc.senior),
+      [supply.subordinada.code]: ativoCirculado(supply.subordinada, distributor, conc.subordinada),
     },
     conciliacao: {
       [conc.senior.code]: { confere: conc.senior.confere, diferenca: f7(conc.senior.diferenca) },
@@ -256,6 +275,7 @@ function resultado(row: SnapshotNav, reutilizada: boolean, pendentes: number): R
 /** Publica o arquivo gravado (mesmos bytes) e ancora o hash dele. Libera o lease se falhar. */
 async function concluir(row: SnapshotNav): Promise<SnapshotNav> {
   try {
+    exigirDistributorConsistente(); // também na retomada: a âncora sai da chave que assina
     const bytes = Buffer.from(row.conteudo, 'utf8');
     if (sha256Hex(bytes) !== row.sha256) throw new SnapshotNavError('CONTEUDO_ADULTERADO');
     const { url } = await publicarArquivoSnapshot({ data: row.data, bytes });

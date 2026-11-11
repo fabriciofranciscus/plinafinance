@@ -40,8 +40,11 @@ export interface LeitorHorizon {
     issuer: string,
     excluir: string,
   ): Promise<{ soma: Prisma.Decimal; contas: number }>;
-  /** Transações bem-sucedidas da conta cujo memo hash (base64) é `memoB64`. */
-  buscarPorMemo(conta: string, memoB64: string): Promise<TxHorizon[]>;
+  /**
+   * Transações bem-sucedidas da conta cujo memo hash (base64) é `memoB64`. `desde` (ISO): a âncora é posterior ao
+   * `geradoEm` do arquivo, então a leitura (do mais novo ao mais antigo) pode parar ao passar dele.
+   */
+  buscarPorMemo(conta: string, memoB64: string, desde?: string): Promise<TxHorizon[]>;
 }
 
 export type Estado = 'ok' | 'falhou' | 'nao_conferido';
@@ -58,6 +61,12 @@ export interface ResultadoVerificacao {
 }
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
+
+/** Folga antes do `geradoEm` (relógios, ordem de fechamento): a âncora nunca é anterior a ele. */
+export function desdeDaAncora(geradoEm: string): string {
+  const t = Date.parse(geradoEm);
+  return Number.isFinite(t) ? new Date(t - 60 * 60_000).toISOString() : '1970-01-01T00:00:00.000Z';
+}
 
 export async function verificarSnapshot(
   bytes: Buffer,
@@ -129,7 +138,7 @@ export async function verificarSnapshot(
   let candidatas: TxHorizon[] = [];
   let leituraAncoraFalhou = false;
   try {
-    candidatas = await leitor.buscarPorMemo(distAncora, memoB64);
+    candidatas = await leitor.buscarPorMemo(distAncora, memoB64, desdeDaAncora(arq.geradoEm));
   } catch {
     // Conta inexistente nessa rede (ex.: --network errada) ou Horizon fora: a âncora não foi provada.
     leituraAncoraFalhou = true;

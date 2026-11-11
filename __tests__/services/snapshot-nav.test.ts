@@ -14,6 +14,7 @@ const m = vi.hoisted(() => ({
   blob: vi.fn(),
   falhaCreateUnique: { v: false },
   rede: { v: 'TESTNET' },
+  assina: { v: 'GDISTRIBUTOR' },
 }));
 
 vi.mock('@/lib/db', () => ({
@@ -52,6 +53,7 @@ vi.mock('@/lib/db', () => ({
     },
   },
 }));
+vi.mock('@/lib/stellar/signer', () => ({ distributorSigner: () => ({ publicKey: () => { if (m.assina.v === 'THROW') throw new Error('sem chave'); return m.assina.v; } }) }));
 vi.mock('@/lib/stellar/account', () => ({ horizon: { root: m.root } }));
 vi.mock('@/lib/stellar/config', () => ({ get STELLAR_NETWORK() { return m.rede.v; } }));
 vi.mock('@/lib/services/nav-supply', async (orig) => ({
@@ -105,6 +107,7 @@ beforeEach(() => {
   m.rows.length = 0;
   m.falhaCreateUnique.v = false;
   m.rede.v = 'TESTNET';
+  m.assina.v = 'GDISTRIBUTOR';
   m.cotas.mockReset().mockResolvedValue([
     { id: 'c1', status: 'DISPONIVEL', valorCarta: D('100000.00'), desagioAquisicao: D('0.2000'), tokensEmitidos: D('80000') },
   ]);
@@ -188,6 +191,30 @@ describe('publicarSnapshotNav', () => {
     const arq = JSON.parse(m.rows[0].conteudo) as ArquivoSnapshotNav;
     expect(arq.nav).toMatchObject({ regra: 'NAV_INICIAL', porToken: '1.00000000', porTokenSobreCirculante: null });
     expect(arq.nav.nota).toMatch(/preço inicial de emissão/);
+  });
+
+  it('S2: distributor declarado ≠ chave que assina a âncora: NÃO publica, não grava, não ancora', async () => {
+    m.assina.v = 'GOUTRA_CHAVE';
+    await expect(publicarSnapshotNav({ agora: AGORA })).rejects.toMatchObject({ code: 'NAV_INDISPONIVEL', causa: 'DISTRIBUTOR_DIVERGE' });
+    expect(m.rows).toHaveLength(0);
+    expect(m.blob).not.toHaveBeenCalled();
+    expect(m.ancora).not.toHaveBeenCalled();
+  });
+
+  it('S2: a mesma checagem vale na retomada (linha PUBLICANDO): não publica nem ancora', async () => {
+    m.blob.mockRejectedValueOnce(new PublicacaoSnapshotError('FALHOU'));
+    await publicarSnapshotNav({ agora: AGORA }).catch(() => undefined);
+    m.blob.mockClear(); m.ancora.mockClear();
+    m.assina.v = 'GOUTRA_CHAVE';
+    await expect(publicarSnapshotNav({ agora: AGORA })).rejects.toMatchObject({ code: 'NAV_INDISPONIVEL', causa: 'DISTRIBUTOR_DIVERGE' });
+    expect(m.blob).not.toHaveBeenCalled();
+    expect(m.ancora).not.toHaveBeenCalled();
+  });
+
+  it('S2: sem a chave do distributor (signer indisponível): NAV_INDISPONIVEL, sem gravar', async () => {
+    m.assina.v = 'THROW';
+    await expect(publicarSnapshotNav({ agora: AGORA })).rejects.toMatchObject({ code: 'NAV_INDISPONIVEL', causa: 'DISTRIBUTOR_SIGNER_INDISPONIVEL' });
+    expect(m.rows).toHaveLength(0);
   });
 
   it('2ª chamada no mesmo dia: reutilizada, sem gates, sem Blob e sem 2ª âncora', async () => {
