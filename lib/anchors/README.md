@@ -92,10 +92,18 @@ Não é trabalho de POC — fica pra MVP/Fase 1.
 Lista mantida atualizada conforme divergirmos. Patches estão marcados
 no código com `PLINA-MOD-NNN`.
 
-- **PLINA-MOD-001** — `createCustomer` e `getKycUrl` enviam `accountType: 'business'`
-  no body de `POST /ramp/onboarding-url`. Upstream original não envia.
-  Fonte: SDF DevRel `PIX_Guide.md` §4 (live-tested). Sem isso, hosted
-  onboarding pode falhar silenciosamente em ambientes não-sandbox.
+- **PLINA-MOD-001** (revisado 2026-11-09, E2-2) — `createCustomer` cria uma
+  **organização** (`POST /ramp/organization`, UUID gerado por nós) com
+  `accountType` condicional (`personal` default; `business` = KYB, sem `userInfo`).
+  `userInfo.email` é obrigatório em `personal`. `getKycUrl` ainda usa
+  `POST /ramp/onboarding-url` (sandbox), agora com `accountType: 'personal'` +
+  `userInfo`. Antes: `accountType: 'business'` fixo (SDF DevRel `PIX_Guide.md` §4).
+  Pendente (Fase 2): `acceptAgreements` por presigned URL devolve 410 — o aceite
+  passa a ser launch `/auth/launch` scope `agreements`.
+- **PLINA-MOD-008** — `webhook.ts` (nosso): `X-Signature: sha256=<hex>` = HMAC-SHA256
+  do JSON canonicalizado (RFC 8785), segredo base64 de `POST /ramp/webhook`.
+  Sem id de evento na v1 → dedupe por hash do corpo canônico. Consumido via
+  `lib/anchors/webhook.ts` por `POST /api/webhooks/anchor` (`ANCHOR_WEBHOOK_SECRET`).
 
 - **PLINA-MOD-002** — `getQuote` envia `walletAddress` no body do quote
   (não só usa pra `resolveAssetPair`). Necessário pra Etherfuse calcular

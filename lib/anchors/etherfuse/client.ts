@@ -57,6 +57,7 @@ import type {
     EtherfusePixAccountBody,
     EtherfuseSpeiAccountBody,
     EtherfuseBankAccountResponse,
+    EtherfuseOrganizationResponse,
 } from './types';
 import { withSpan } from '../../observability/tracer';
 
@@ -392,74 +393,42 @@ export class EtherfuseClient implements Anchor {
             );
         }
 
-        const customerId = crypto.randomUUID();
-        const bankAccountId = crypto.randomUUID();
-        const publicKey = input.publicKey;
-
-        try {
-            // PLINA-MOD-001: SDF DevRel PIX_Guide.md exige `accountType: "business"`
-            // no body de /ramp/onboarding-url — upstream original não envia. Sem isso,
-            // sandbox aceita mas hosted onboarding pode falhar silenciosamente em
-            // ambientes de produção.
-            await this.request<EtherfuseOnboardingResponse>('POST', '/ramp/onboarding-url', {
-                customerId,
-                bankAccountId,
-                publicKey,
-                blockchain: this.blockchain,
-                accountType: 'business',
-            });
-
-            const now = new Date().toISOString();
-            return {
-                id: customerId,
-                email: input.email,
-                kycStatus: 'not_started',
-                country: input.country,
-                bankAccountId,
-                createdAt: now,
-                updatedAt: now,
-            };
-        } catch (err) {
-            // 409 means this public key is already registered — parse existing customer ID
-            if (err instanceof AnchorError && err.statusCode === 409) {
-                const match = err.message.match(/see org:\s*([0-9a-f-]+)/i);
-                if (match) {
-                    const existingCustomerId = match[1];
-                    console.log(
-                        `[Etherfuse] Public key already registered, using existing customer: ${existingCustomerId}`,
-                    );
-
-                    // Fetch the customer's existing bank accounts from Etherfuse
-                    let existingBankAccountId: string | undefined;
-                    try {
-                        const accounts = await this.getFiatAccounts(existingCustomerId);
-                        if (accounts.length > 0) {
-                            existingBankAccountId = accounts[0].id;
-                            console.log(
-                                `[Etherfuse] Found existing bank account: ${existingBankAccountId}`,
-                            );
-                        }
-                    } catch (bankErr) {
-                        console.warn(
-                            `[Etherfuse] Could not fetch bank accounts for recovered customer:`,
-                            bankErr,
-                        );
-                    }
-
-                    const now = new Date().toISOString();
-                    return {
-                        id: existingCustomerId,
-                        email: input.email,
-                        kycStatus: 'not_started', // Will be updated by subsequent KYC status check
-                        country: input.country,
-                        bankAccountId: existingBankAccountId,
-                        createdAt: now,
-                        updatedAt: now,
-                    };
-                }
-            }
-            throw err;
+        if (!input.email) {
+            throw new AnchorError(
+                'email is required to create an Etherfuse organization',
+                'MISSING_EMAIL',
+                400,
+            );
         }
+
+        // PLINA-MOD-001 (revisado 2026-11): o cliente é uma organização cujo UUID
+        // geramos (POST /ramp/organization). `POST /ramp/onboarding-url` foi
+        // descontinuado. accountType é condicional pelo papel: PF = 'personal',
+        // investidor institucional = 'business' (KYB). userInfo.email é obrigatório
+        // para 'personal' e rejeitado em 'business'.
+        const customerId = crypto.randomUUID();
+        const accountType = input.accountType ?? 'personal';
+        const displayName = input.name?.trim() || 'Plina customer';
+
+        await this.request<EtherfuseOrganizationResponse>('POST', '/ramp/organization', {
+            id: customerId,
+            displayName,
+            accountType,
+            ...(accountType === 'personal'
+                ? { userInfo: { email: input.email, displayName } }
+                : {}),
+        });
+
+        const now = new Date().toISOString();
+        return {
+            id: customerId,
+            email: input.email,
+            kycStatus: 'not_started',
+            country: input.country,
+            // Conta bancária é registrada depois (registerPixBankAccount).
+            createdAt: now,
+            updatedAt: now,
+        };
     }
 
     /**
@@ -740,6 +709,7 @@ export class EtherfuseClient implements Anchor {
         customerId: string,
         publicKey?: string,
         bankAccountId?: string,
+        userInfo?: { email: string; displayName?: string },
     ): Promise<string> {
         if (!publicKey) {
             throw new AnchorError(
@@ -748,10 +718,18 @@ export class EtherfuseClient implements Anchor {
                 400,
             );
         }
+        if (!userInfo?.email) {
+            throw new AnchorError(
+                'userInfo.email is required for KYC onboarding',
+                'MISSING_EMAIL',
+                400,
+            );
+        }
 
         const resolvedBankAccountId = bankAccountId || crypto.randomUUID();
 
-        // PLINA-MOD-001 (também em createCustomer): accountType obrigatório.
+        // PLINA-MOD-001 (revisado 2026-11): a org é `personal` e o sandbox exige
+        // `userInfo` (email + displayName) junto de `accountType`.
         const response = await this.request<EtherfuseOnboardingResponse>(
             'POST',
             '/ramp/onboarding-url',
@@ -760,7 +738,11 @@ export class EtherfuseClient implements Anchor {
                 bankAccountId: resolvedBankAccountId,
                 publicKey,
                 blockchain: this.blockchain,
-                accountType: 'business',
+                accountType: 'personal',
+                userInfo: {
+                    email: userInfo.email,
+                    displayName: userInfo.displayName?.trim() || 'Plina customer',
+                },
             },
         );
 

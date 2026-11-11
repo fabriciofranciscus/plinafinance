@@ -22,7 +22,7 @@ import { db } from '../db';
 import { STELLAR_NETWORK } from '../stellar/config';
 import { loadAccount } from '../stellar/account';
 import { assetCodeForClasse } from '../stellar/classes';
-import { resolveTesouroAsset } from '../anchors/etherfuse/tesouro';
+import { resolveBridgeAsset } from '../anchors/kyc';
 import { ensureKycForPessoa } from './pessoa';
 import { ApiError } from '../api/errors';
 
@@ -42,7 +42,7 @@ export async function investidorTrustlinesReady(
   try {
     const [acc, tesouro] = await Promise.all([
       loadAccount(publicKey),
-      resolveTesouroAsset(publicKey),
+      resolveBridgeAsset(publicKey),
     ]);
     const lines = acc.balances as Array<{
       asset_code?: string;
