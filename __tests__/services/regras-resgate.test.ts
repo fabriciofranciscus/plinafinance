@@ -4,9 +4,9 @@ import { Account, Asset, Keypair, Operation, TransactionBuilder } from '@stellar
 import { networkPassphrase } from '@/lib/stellar/config';
 import {
   amountPlinarfValido,
-  assertJanelaDoResgate,
   assinaturaUnicaDoInvestidor,
   bridgeAmountDoResgate,
+  precoLiquidoDoTesouro,
   memoHashDoResgate,
 } from '@/lib/services/regras-resgate';
 
@@ -33,15 +33,39 @@ describe('amountPlinarfValido', () => {
   });
 });
 
-describe('bridgeAmountDoResgate (TESOURO = BRL × taxa, para baixo)', () => {
-  it('multiplica e trunca a 7 casas PARA BAIXO (favorece o fundo)', () => {
-    expect(bridgeAmountDoResgate(D('100.00'), '0.8554')?.toFixed(7)).toBe('85.5400000');
-    expect(bridgeAmountDoResgate(D('1.00'), '0.33333339')?.toFixed(7)).toBe('0.3333333'); // não arredonda para ...34
+describe('precoLiquidoDoTesouro ((fromAmount − fee) ÷ toAmount)', () => {
+  it('desconta o fee, na mesma base da subscrição', () => {
+    // R$ 10.000 com fee R$ 50 comprou 8.500 TESOURO → preço líquido 9.950 ÷ 8.500
+    expect(precoLiquidoDoTesouro({ fromAmount: '10000', fee: '50', toAmount: '8500' })?.toFixed(6)).toBe('1.170588');
+    expect(precoLiquidoDoTesouro({ fromAmount: '100', fee: '0', toAmount: '85.54' })?.toFixed(5)).toBe('1.16904');
   });
 
-  it('taxa inválida, zero, negativa ou resultado zero → null', () => {
+  it('fee vazio/nulo = 0; dado inválido, fee negativo, toAmount ≤ 0 ou resultado ≤ 0 → null', () => {
+    expect(precoLiquidoDoTesouro({ fromAmount: '100', fee: '', toAmount: '80' })?.toFixed(2)).toBe('1.25');
+    expect(precoLiquidoDoTesouro({ fromAmount: '100', fee: null, toAmount: '80' })?.toFixed(2)).toBe('1.25');
+    for (const q of [
+      { fromAmount: 'abc', fee: '0', toAmount: '80' },
+      { fromAmount: '100', fee: '-1', toAmount: '80' },
+      { fromAmount: '100', fee: '0', toAmount: '0' },
+      { fromAmount: '100', fee: '100', toAmount: '80' },
+      { fromAmount: '100', fee: '150', toAmount: '80' },
+      { fromAmount: '100', fee: 'x', toAmount: '80' },
+    ]) {
+      expect(precoLiquidoDoTesouro(q), JSON.stringify(q)).toBeNull();
+    }
+  });
+});
+
+describe('bridgeAmountDoResgate (TESOURO = BRL ÷ preço líquido, para baixo)', () => {
+  it('divide e trunca a 7 casas PARA BAIXO (favorece o fundo)', () => {
+    expect(bridgeAmountDoResgate(D('100.00'), '1.25')?.toFixed(7)).toBe('80.0000000');
+    expect(bridgeAmountDoResgate(D('1.00'), '3')?.toFixed(7)).toBe('0.3333333'); // não arredonda para ...34
+    expect(bridgeAmountDoResgate(D('10.00'), D('1.170588'))?.toFixed(7)).toBe('8.5427152'); // 8,54271… (conferido: 8,5427153 × 1,170588 > 10)
+  });
+
+  it('preço inválido, zero ou negativo, ou resultado zero → null', () => {
     for (const t of ['abc', '0', '-1', 'NaN', 'Infinity', '']) expect(bridgeAmountDoResgate(D('100'), t), t).toBeNull();
-    expect(bridgeAmountDoResgate(D('0.01'), '0.000001')).toBeNull();
+    expect(bridgeAmountDoResgate(D('0.01'), '1000000')).toBeNull();
   });
 });
 
@@ -53,27 +77,6 @@ describe('memoHashDoResgate', () => {
     expect(a.equals(memoHashDoResgate('q_2'))).toBe(false);
     const incorporacao = require('node:crypto').createHash('sha256').update('plina:incorporacao:q_1').digest();
     expect(a.equals(incorporacao)).toBe(false);
-  });
-});
-
-describe('assertJanelaDoResgate (N1-S1 estendido ao resgate)', () => {
-  const expira = new Date((AGORA + 300) * 1000);
-
-  it('aceita janela curta e aberta dentro do prazo da cotação', () => {
-    expect(() => assertJanelaDoResgate(tx([0, AGORA + 120]), expira, AGORA)).not.toThrow();
-    expect(() => assertJanelaDoResgate(tx([AGORA + 3, AGORA + 120]), expira, AGORA)).not.toThrow();
-  });
-
-  it('já expirada passa (a órfã é decidida pela rede, não pela janela)', () => {
-    expect(() => assertJanelaDoResgate(tx([0, AGORA - 600]), expira, AGORA)).not.toThrow();
-  });
-
-  it('recusa sem timeBounds, maxTime 0, > agora+180 s, > prazo da cotação+120 s e minTime futuro', () => {
-    expect(() => assertJanelaDoResgate(tx(null), expira, AGORA)).toThrow(/timeBounds|maxTime/);
-    expect(() => assertJanelaDoResgate(tx([0, 0]), expira, AGORA)).toThrow(/maxTime/);
-    expect(() => assertJanelaDoResgate(tx([0, AGORA + 181]), expira, AGORA)).toThrow(/limite/);
-    expect(() => assertJanelaDoResgate(tx([0, AGORA + 170]), new Date((AGORA - 100) * 1000), AGORA)).toThrow(/prazo da cotação/);
-    expect(() => assertJanelaDoResgate(tx([AGORA + 60, AGORA + 120]), expira, AGORA)).toThrow(/minTime/);
   });
 });
 

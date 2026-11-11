@@ -3,7 +3,7 @@ import { Keypair } from '@stellar/stellar-sdk';
 import { ApiError } from '@/lib/api/errors';
 
 const USER_PK = Keypair.random().publicKey();
-const { submeterResgate } = vi.hoisted(() => ({ submeterResgate: vi.fn() }));
+const { submeterResgate, preco } = vi.hoisted(() => ({ submeterResgate: vi.fn(), preco: vi.fn() }));
 
 vi.mock('@/lib/wallet/auth-guard', () => ({
   withAuth:
@@ -14,6 +14,7 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
       }),
 }));
 vi.mock('@/lib/services/resgate', () => ({ submeterResgate }));
+vi.mock('@/lib/anchors/etherfuse/preco-tesouro', () => ({ obterPrecoLiquidoTesouroBrl: preco }));
 
 import { POST } from '@/app/api/investidor/liquidar/submit/route';
 
@@ -24,6 +25,7 @@ const BODY = { quoteId: 'q_1', signedXdr: 'AAAA'.repeat(30) };
 beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   submeterResgate.mockReset().mockResolvedValue({ txHash: 'tx_resgate' });
+  preco.mockReset().mockResolvedValue('1.25');
 });
 
 describe('POST /api/investidor/liquidar/submit (E2-6)', () => {
@@ -35,7 +37,16 @@ describe('POST /api/investidor/liquidar/submit (E2-6)', () => {
       investidor: { id: 'inv_1', publicKey: USER_PK, privyId: 'did:privy:abc' },
       quoteId: 'q_1',
       signedXdr: BODY.signedXdr,
+      obterPrecoTesouroBrl: expect.any(Function),
     });
+    expect(preco).not.toHaveBeenCalled(); // o preço só é lido (lazy) pelo serviço em reserva nova
+  });
+
+  it('o leitor de preço entregue ao serviço usa o cliente Etherfuse da SESSÃO e falha sem cadastro', async () => {
+    await POST(req(BODY));
+    const { obterPrecoTesouroBrl } = submeterResgate.mock.calls[0][0];
+    expect(await obterPrecoTesouroBrl()).toBe('1.25');
+    expect(preco).toHaveBeenCalledWith({ customerId: 'cust_1', stellarAddress: USER_PK });
   });
 
   it('400 com body antigo (pubkey/signatureHex/xdr) ou campo extra (strict), sem chamar o serviço', async () => {

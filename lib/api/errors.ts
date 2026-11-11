@@ -19,6 +19,7 @@ export const API_ERROR_CODES = [
   'NOT_FOUND',             // 404 — recurso inexistente
   'CONFLICT',              // 409 — estado inválido (cota já realizada, etc.)
   'GONE',                  // 410 — recurso expirado (quote vencido)
+  'LIQUIDEZ_INSUFICIENTE', // 409 — resgate acima do caixa disponível do fundo ou do saldo de TESOURO do distributor
   'COTACAO_EXPIRADA',      // 410 — cotação do resgate vencida (ou envelope fora do maxTime)
   'NAV_MUDOU',             // 409 — NAV divergiu da cotação além de 1 bp; recotar
   'SWAP_EM_CONFERENCIA',   // 409 — o investidor tem um swap em conferência (reserva órfã): sem quote/reserva novos

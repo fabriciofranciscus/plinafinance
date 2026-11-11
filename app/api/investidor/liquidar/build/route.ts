@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { ApiError } from '@/lib/api/errors';
 import { internalErrorResponse } from '@/lib/api/internal-error';
 import { navUnavailableResponse } from '@/lib/api/nav-unavailable';
-import { EtherfuseClient } from '@/lib/anchors/etherfuse';
+import { obterPrecoLiquidoTesouroBrl } from '@/lib/anchors/etherfuse/preco-tesouro';
 import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 import { cotarResgate } from '@/lib/services/resgate';
 import { withAuth } from '@/lib/wallet/auth-guard';
@@ -31,9 +31,6 @@ const Schema = z
   })
   .strict();
 
-/** BRL de referência para ler a taxa BRL→TESOURO da Etherfuse (só fonte de preço; o fee não entra no resgate). */
-const BRL_REFERENCIA = '100.00';
-
 export const POST = withAuth(async (req, { user }) => {
   if (!(await sensitiveAuthLimiter.consume(clientIp(req)))) {
     return NextResponse.json({ error: 'too many requests' }, { status: 429 });
@@ -44,17 +41,8 @@ export const POST = withAuth(async (req, { user }) => {
     if (!user.etherfuseCustomerId) {
       throw new ApiError('CONFLICT', 409, 'Conclua o cadastro antes de resgatar.');
     }
-    const apiKey = process.env.ETHERFUSE_API_KEY;
-    if (!apiKey) throw new Error('ETHERFUSE_API_KEY ausente');
-    const anchor = new EtherfuseClient({
-      apiKey,
-      baseUrl: process.env.ETHERFUSE_BASE_URL ?? 'https://api.sand.etherfuse.com',
-    });
     const tesouro = await resolveTesouroAsset(user.publicKey);
-    const cotacaoAnchor = await anchor.getQuote({
-      fromCurrency: 'BRL',
-      toCurrency: 'TESOURO',
-      fromAmount: BRL_REFERENCIA,
+    const precoTesouroBrl = await obterPrecoLiquidoTesouroBrl({
       customerId: user.etherfuseCustomerId,
       stellarAddress: user.publicKey,
     });
@@ -62,7 +50,7 @@ export const POST = withAuth(async (req, { user }) => {
       investidorId: user.investidorId,
       investorPubkey: user.publicKey,
       amountPlinarf: parsed.data.amountPlinarf,
-      taxaBrlParaBridge: cotacaoAnchor.exchangeRate,
+      precoTesouroBrl,
       bridgeAsset: { code: tesouro.code, issuer: tesouro.issuer },
     });
     return NextResponse.json(result);

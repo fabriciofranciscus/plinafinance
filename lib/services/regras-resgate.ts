@@ -5,12 +5,7 @@
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { Keypair, type Transaction } from '@stellar/stellar-sdk';
-import { STELLAR_TX_TIMEOUT_SEC } from '../stellar/config';
 
-/** Folgas da janela de validade (as mesmas do validador do swap, N1-S1). */
-export const FOLGA_RELOGIO_MAX_SEC = 60;
-export const FOLGA_RELOGIO_MIN_SEC = 5;
-export const FOLGA_COTACAO_SEC = 120;
 /** Validade da cotação do resgate. */
 export const COTACAO_RESGATE_TTL_MS = 5 * 60_000;
 
@@ -23,41 +18,39 @@ export function amountPlinarfValido(v: unknown): Prisma.Decimal | null {
   return d.gt(0) ? d : null;
 }
 
-/** TESOURO a pagar = BRL × taxa BRL→TESOURO, 7 casas, para BAIXO (favorece o fundo). Taxa inválida → null. */
-export function bridgeAmountDoResgate(brl: Prisma.Decimal, taxa: string): Prisma.Decimal | null {
-  let t: Prisma.Decimal;
+/**
+ * Preço LÍQUIDO do TESOURO em BRL (mesma base da subscrição, Consuelo/Atlas): (fromAmount − fee) ÷ toAmount da
+ * cotação Etherfuse BRL→TESOURO feita na hora. Qualquer dado inválido, fee negativo ou resultado ≤ 0 → null.
+ */
+export function precoLiquidoDoTesouro(q: { fromAmount: string; fee?: string | null; toAmount: string }): Prisma.Decimal | null {
   try {
-    t = new Prisma.Decimal(taxa);
+    const de = new Prisma.Decimal(q.fromAmount);
+    const fee = new Prisma.Decimal((q.fee ?? '').toString().trim() === '' ? '0' : String(q.fee));
+    const para = new Prisma.Decimal(q.toAmount);
+    if (!de.isFinite() || !fee.isFinite() || !para.isFinite() || fee.isNegative() || !para.gt(0)) return null;
+    const preco = de.minus(fee).div(para);
+    return preco.isFinite() && preco.gt(0) ? preco : null;
   } catch {
     return null;
   }
-  if (!t.isFinite() || !t.gt(0)) return null;
-  const v = brl.mul(t).toDecimalPlaces(7, Prisma.Decimal.ROUND_DOWN);
+}
+
+/** TESOURO a pagar = BRL ÷ preço líquido, 7 casas, para BAIXO (favorece o fundo). Preço inválido → null. */
+export function bridgeAmountDoResgate(brl: Prisma.Decimal, precoTesouroBrl: string | Prisma.Decimal): Prisma.Decimal | null {
+  let p: Prisma.Decimal;
+  try {
+    p = new Prisma.Decimal(precoTesouroBrl);
+  } catch {
+    return null;
+  }
+  if (!p.isFinite() || !p.gt(0)) return null;
+  const v = brl.div(p).toDecimalPlaces(7, Prisma.Decimal.ROUND_DOWN);
   return v.gt(0) ? v : null;
 }
 
 /** Memo.hash do envelope do resgate. NÃO usa o prefixo `plina:incorporacao:` (exclusivo da emissão). */
 export function memoHashDoResgate(quoteId: string): Buffer {
   return createHash('sha256').update(`plina:resgate:${quoteId}`).digest();
-}
-
-/**
- * Janela de validade do envelope (N1-S1 estendido ao resgate: quem assina é o distributor, que paga TESOURO):
- * timeBounds obrigatório, 0 < maxTime ≤ agora + 180 s e ≤ expiresAt + 120 s, minTime ≤ agora + 5 s.
- */
-export function assertJanelaDoResgate(tx: Transaction, expiresAt: Date, agoraSec: number): void {
-  const tb = tx.timeBounds;
-  if (!tb) throw new Error('xdr sem timeBounds: a janela de validade é obrigatória');
-  const maxTime = Number(tb.maxTime);
-  const minTime = Number(tb.minTime);
-  if (!Number.isFinite(maxTime) || maxTime <= 0) throw new Error('xdr maxTime ausente (0): a tx valeria para sempre');
-  const limite = agoraSec + STELLAR_TX_TIMEOUT_SEC + FOLGA_RELOGIO_MAX_SEC;
-  if (maxTime > limite) throw new Error(`xdr maxTime=${maxTime} além do limite ${limite}`);
-  const limiteCotacao = Math.floor(expiresAt.getTime() / 1000) + FOLGA_COTACAO_SEC;
-  if (maxTime > limiteCotacao) throw new Error(`xdr maxTime=${maxTime} além do prazo da cotação + ${FOLGA_COTACAO_SEC} s`);
-  if (!Number.isFinite(minTime) || minTime > agoraSec + FOLGA_RELOGIO_MIN_SEC) {
-    throw new Error(`xdr minTime=${minTime} no futuro`);
-  }
 }
 
 /**

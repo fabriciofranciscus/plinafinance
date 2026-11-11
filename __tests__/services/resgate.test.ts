@@ -14,6 +14,7 @@ const AGORA_SEC = AGORA / 1000;
 const m = vi.hoisted(() => ({
   create: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn(),
   preco: vi.fn(), buildResgate: vi.fn(), fetchTx: vi.fn(), preSign: vi.fn(), submitPrivy: vi.fn(),
+  caixa: vi.fn(), saldo: vi.fn(), precoAgora: vi.fn(),
   conferencia: vi.fn(), decrementar: vi.fn(), investidorUpdate: vi.fn(), eventoCreate: vi.fn(), movCreateMany: vi.fn(),
 }));
 
@@ -32,6 +33,8 @@ vi.mock('@/lib/db', () => {
   };
 });
 vi.mock('@/lib/services/liquidacao', () => ({ calcularPrecoDeResgate: m.preco }));
+vi.mock('@/lib/services/razao-fundo', async (orig) => ({ ...(await orig<typeof import('@/lib/services/razao-fundo')>()), caixaDoFundo: m.caixa }));
+vi.mock('@/lib/stellar/account', () => ({ getAssetBalance: m.saldo }));
 vi.mock('@/lib/services/holdings', () => ({ decrementarHolding: m.decrementar }));
 vi.mock('@/lib/services/swap-orfao', () => ({ assertSemSwapEmConferencia: m.conferencia }));
 vi.mock('@/lib/stellar/signer', () => ({ distributorSigner: () => ({ id: 'dist' }) }));
@@ -56,7 +59,7 @@ const NAV = D('1.00000000');
 function envelope(opts: { amount?: string; bridge?: string; maxTime?: number; quoteId?: string; assinar?: boolean; memo?: Buffer } = {}) {
   const b = new TransactionBuilder(new Account(INV.publicKey(), '1'), { fee: '100', networkPassphrase })
     .addOperation(Operation.payment({ source: INV.publicKey(), destination: ISSUER.publicKey(), asset: new Asset('PLINARF', ISSUER.publicKey()), amount: opts.amount ?? '100' }))
-    .addOperation(Operation.payment({ source: DIST.publicKey(), destination: INV.publicKey(), asset: TESOURO, amount: opts.bridge ?? '85.54' }))
+    .addOperation(Operation.payment({ source: DIST.publicKey(), destination: INV.publicKey(), asset: TESOURO, amount: opts.bridge ?? '80' }))
     .setTimebounds(0, opts.maxTime ?? AGORA_SEC + 100)
     .addMemo(Memo.hash(opts.memo ?? memoHashDoResgate(opts.quoteId ?? 'q_1')));
   const tx = b.build();
@@ -67,7 +70,7 @@ function envelope(opts: { amount?: string; bridge?: string; maxTime?: number; qu
 function cotacao(over: Record<string, unknown> = {}) {
   return {
     id: 'q_1', investidorId: 'inv_1', classe: 'SENIOR', plinarfAmount: D('100'), brlEquivalente: D('100.00'),
-    bridgeAmount: D('85.54'), taxaBridge: '0.8554', bridgeCode: 'TESOURO', bridgeIssuer: TESOURO.getIssuer(),
+    bridgeAmount: D('80'), taxaBridge: '1.25', bridgeCode: 'TESOURO', bridgeIssuer: TESOURO.getIssuer(),
     navPorTokenNaCotacao: NAV, expiresAt: new Date(AGORA + 300_000), submitXdrHash: null, submitTxHash: null,
     submitMaxTime: null, submitXdr: null, consumedAt: null, consumedTxHash: null, ...over,
   };
@@ -84,6 +87,9 @@ beforeEach(() => {
   m.preco.mockResolvedValue({ navPorToken: NAV, brlEquivalente: D('100.00'), navTotal: 1, tokensVivos: 1 });
   m.buildResgate.mockResolvedValue({ xdr: 'XDR_BUILD', hashHex: '0xabc', maxTime: AGORA_SEC + 120 });
   m.conferencia.mockResolvedValue(undefined);
+  m.caixa.mockResolvedValue(D('1000.00'));
+  m.saldo.mockResolvedValue('500.0000000');
+  m.precoAgora.mockResolvedValue('1.25');
   m.fetchTx.mockResolvedValue(null);
   m.preSign.mockReturnValue({ pubkey: DIST.publicKey(), sigBase64: 'sigdist' });
   m.submitPrivy.mockResolvedValue({ hash: 'tx_hash_final' });
@@ -94,7 +100,7 @@ beforeEach(() => {
 });
 
 const cotarIn = (over: Record<string, unknown> = {}) => ({
-  investidorId: 'inv_1', investorPubkey: INV.publicKey(), amountPlinarf: '100', taxaBrlParaBridge: '0.8554',
+  investidorId: 'inv_1', investorPubkey: INV.publicKey(), amountPlinarf: '100', precoTesouroBrl: '1.25',
   bridgeAsset: { code: 'TESOURO', issuer: TESOURO.getIssuer() }, agora: AGORA, ...over,
 });
 
@@ -107,8 +113,8 @@ describe('cotarResgate (build)', () => {
     });
     expect(typeof r.quoteId).toBe('string');
     const dados = m.create.mock.calls[0][0].data;
-    expect(dados).toMatchObject({ id: r.quoteId, investidorId: 'inv_1', classe: 'SENIOR', taxaBridge: '0.8554', bridgeCode: 'TESOURO' });
-    expect(dados.bridgeAmount.toFixed(7)).toBe('85.5400000'); // 100,00 × 0,8554
+    expect(dados).toMatchObject({ id: r.quoteId, investidorId: 'inv_1', classe: 'SENIOR', taxaBridge: '1.25', bridgeCode: 'TESOURO' });
+    expect(dados.bridgeAmount.toFixed(7)).toBe('80.0000000'); // 100,00 × 0,8554
     expect(m.preSign).not.toHaveBeenCalled(); // a Plina não assina no build
   });
 
@@ -117,7 +123,7 @@ describe('cotarResgate (build)', () => {
     const args = m.buildResgate.mock.calls[0][0];
     expect(args).toMatchObject({
       investorPubkey: INV.publicKey(), issuerPubkey: ISSUER.publicKey(), distributorPubkey: DIST.publicKey(),
-      plinarfCode: 'PLINARF', plinarfAmount: '100.0000000', bridgeAmount: '85.5400000',
+      plinarfCode: 'PLINARF', plinarfAmount: '100.0000000', bridgeAmount: '80.0000000',
     });
     expect(args.memoHash.equals(memoHashDoResgate(r.quoteId))).toBe(true);
   });
@@ -136,7 +142,7 @@ describe('cotarResgate (build)', () => {
     m.preco.mockResolvedValue({ navPorToken: NAV, brlEquivalente: D('0.00'), navTotal: 1, tokensVivos: 1 });
     await expect(cotarResgate(cotarIn({ amountPlinarf: '0.001' }))).rejects.toMatchObject({ status: 400 });
     m.preco.mockResolvedValue({ navPorToken: NAV, brlEquivalente: D('100.00'), navTotal: 1, tokensVivos: 1 });
-    await expect(cotarResgate(cotarIn({ taxaBrlParaBridge: 'abc' }))).rejects.toMatchObject({ code: 'ETHERFUSE_ERROR', status: 502 });
+    await expect(cotarResgate(cotarIn({ precoTesouroBrl: 'abc' }))).rejects.toMatchObject({ code: 'ETHERFUSE_ERROR', status: 502 });
     expect(m.create).not.toHaveBeenCalled();
   });
 
@@ -147,11 +153,41 @@ describe('cotarResgate (build)', () => {
   });
 });
 
+describe('cotarResgate — preço líquido e liquidez (Consuelo/Atlas)', () => {
+  it('TESOURO = BRL ÷ preço líquido, truncado PARA BAIXO, e o preço fica gravado na cotação', async () => {
+    await cotarResgate(cotarIn({ precoTesouroBrl: '1.1693333' })); // 100 ÷ 1,1693333 = 85,5144… → 85,5144...
+    const dados = m.create.mock.calls[0][0].data;
+    expect(dados.taxaBridge).toBe('1.1693333');
+    expect(dados.bridgeAmount.toFixed(7)).toBe(D('100').div(D('1.1693333')).toDecimalPlaces(7, Prisma.Decimal.ROUND_DOWN).toFixed(7));
+    expect(m.buildResgate.mock.calls[0][0].bridgeAmount).toBe(dados.bridgeAmount.toFixed(7));
+  });
+
+  it('BRL acima do caixa do fundo → 409 LIQUIDEZ_INSUFICIENTE, nada persistido', async () => {
+    m.caixa.mockResolvedValue(D('99.99'));
+    await expect(cotarResgate(cotarIn())).rejects.toMatchObject({ code: 'LIQUIDEZ_INSUFICIENTE', status: 409 });
+    expect(m.create).not.toHaveBeenCalled();
+    expect(m.buildResgate).not.toHaveBeenCalled();
+  });
+
+  it('TESOURO acima do saldo do distributor → 409 LIQUIDEZ_INSUFICIENTE', async () => {
+    m.saldo.mockResolvedValue('79.9999999');
+    await expect(cotarResgate(cotarIn())).rejects.toMatchObject({ code: 'LIQUIDEZ_INSUFICIENTE' });
+    expect(m.saldo).toHaveBeenCalledWith(DIST.publicKey(), 'TESOURO', TESOURO.getIssuer());
+    expect(m.create).not.toHaveBeenCalled();
+  });
+
+  it('exatamente no limite (caixa = BRL, saldo = TESOURO) passa', async () => {
+    m.caixa.mockResolvedValue(D('100.00'));
+    m.saldo.mockResolvedValue('80.0000000');
+    await expect(cotarResgate(cotarIn())).resolves.toMatchObject({ brlEquivalente: '100.00' });
+  });
+});
+
 describe('submeterResgate — caminho feliz', () => {
   it('assina como distributor SÓ no fim, submete e escritura RESGATE_PAGO (caixa −V, tokens −q) depois da chain', async () => {
     m.findFirst.mockResolvedValue(cotacao());
     const tx = envelope();
-    const r = await submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), agora: AGORA });
+    const r = await submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA });
     expect(r).toEqual({ txHash: 'tx_hash_final' });
 
     // reserva com hash, txHash, maxTime e o XDR (para a prova pela conta do investidor)
@@ -184,19 +220,19 @@ describe('submeterResgate — caminho feliz', () => {
     const tx = envelope();
     const hash = createHash('sha256').update(tx.hash()).digest('hex');
     m.findFirst.mockResolvedValue(cotacao({ consumedAt: new Date(), consumedTxHash: 'tx_antigo', submitXdrHash: hash }));
-    expect(await submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), agora: AGORA })).toEqual({ txHash: 'tx_antigo' });
+    expect(await submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA })).toEqual({ txHash: 'tx_antigo' });
     expect(m.submitPrivy).not.toHaveBeenCalled();
   });
 
   it('cotação já consumida com OUTRO xdr → 409', async () => {
     m.findFirst.mockResolvedValue(cotacao({ consumedAt: new Date(), consumedTxHash: 'tx_antigo', submitXdrHash: 'outro' }));
-    await expect(submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: envelope().toXDR(), agora: AGORA })).rejects.toMatchObject({ code: 'CONFLICT', status: 409 });
+    await expect(submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: envelope().toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA })).rejects.toMatchObject({ code: 'CONFLICT', status: 409 });
   });
 });
 
 describe('submeterResgate — recusas antes de a Plina assinar', () => {
   const tenta = (tx = envelope(), agora = AGORA) =>
-    submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), agora });
+    submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora });
   const nadaAssinado = () => {
     expect(m.preSign).not.toHaveBeenCalled();
     expect(m.submitPrivy).not.toHaveBeenCalled();
@@ -212,7 +248,7 @@ describe('submeterResgate — recusas antes de a Plina assinar', () => {
   it('assinatura do investidor ausente ou xdr inválida → 400', async () => {
     m.findFirst.mockResolvedValue(cotacao());
     await expect(tenta(envelope({ assinar: false }))).rejects.toMatchObject({ status: 400 });
-    await expect(submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: 'lixo', agora: AGORA })).rejects.toMatchObject({ status: 400 });
+    await expect(submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: 'lixo', obterPrecoTesouroBrl: m.precoAgora, agora: AGORA })).rejects.toMatchObject({ status: 400 });
     nadaAssinado();
   });
 
@@ -242,6 +278,38 @@ describe('submeterResgate — recusas antes de a Plina assinar', () => {
     m.preco.mockResolvedValue({ navPorToken: D('1.10000000'), brlEquivalente: D('110.00'), navTotal: 1, tokensVivos: 1 });
     await expect(tenta()).rejects.toMatchObject({ code: 'NAV_MUDOU', status: 409 });
     expect(m.updateMany).not.toHaveBeenCalled();
+    nadaAssinado();
+  });
+
+  it('PREÇO do TESOURO andou > 1 bp desde a cotação → 409 NAV_MUDOU, sem reservar; 1 bp ou menos passa', async () => {
+    m.findFirst.mockResolvedValue(cotacao());
+    m.precoAgora.mockResolvedValue('1.30'); // +4%
+    await expect(tenta()).rejects.toMatchObject({ code: 'NAV_MUDOU', status: 409 });
+    expect(m.updateMany).not.toHaveBeenCalled();
+    nadaAssinado();
+    m.precoAgora.mockResolvedValue('1.25009'); // +0,0072% (< 1 bp)
+    await expect(tenta()).resolves.toEqual({ txHash: 'tx_hash_final' });
+  });
+
+  it('o preço NÃO é relido numa reserva órfã (só em reserva nova)', async () => {
+    const tx = envelope();
+    m.findFirst.mockResolvedValue(cotacao({ submitXdrHash: createHash('sha256').update(tx.hash()).digest('hex') }));
+    m.updateMany.mockResolvedValueOnce({ count: 0 });
+    await submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA });
+    expect(m.precoAgora).not.toHaveBeenCalled();
+  });
+
+  it('liquidez relida na reserva nova: caixa que caiu desde a cotação → 409 LIQUIDEZ_INSUFICIENTE, sem reservar', async () => {
+    m.findFirst.mockResolvedValue(cotacao());
+    m.caixa.mockResolvedValue(D('50.00'));
+    await expect(tenta()).rejects.toMatchObject({ code: 'LIQUIDEZ_INSUFICIENTE' });
+    expect(m.updateMany).not.toHaveBeenCalled();
+    nadaAssinado();
+  });
+
+  it('JANELA: envelope com maxTime depois do prazo da cotação + 120 s → 400 (validador da Estela), nada assinado', async () => {
+    m.findFirst.mockResolvedValue(cotacao({ expiresAt: new Date(AGORA + 5_000) })); // prazo curto
+    await expect(tenta(envelope({ maxTime: AGORA_SEC + 170 }))).rejects.toMatchObject({ code: 'VALIDATION_FAILED', status: 400 });
     nadaAssinado();
   });
 
@@ -286,7 +354,7 @@ describe('submeterResgate — reserva órfã (mesma regra do swap, N1-S1)', () =
   it('dentro do maxTime e fora da chain: re-assina e reenvia; NÃO relê o NAV nem bloqueia por outra operação', async () => {
     const tx = envelope();
     orfaCom(tx);
-    const r = await submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), agora: AGORA });
+    const r = await submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA });
     expect(r.txHash).toBe('tx_hash_final');
     expect(m.preco).not.toHaveBeenCalled();
     expect(m.conferencia).not.toHaveBeenCalled();
@@ -297,7 +365,7 @@ describe('submeterResgate — reserva órfã (mesma regra do swap, N1-S1)', () =
     const tx = envelope();
     orfaCom(tx);
     m.fetchTx.mockResolvedValue({ hash: 'tx_na_chain', successful: true });
-    expect(await submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), agora: AGORA })).toEqual({ txHash: 'tx_na_chain' });
+    expect(await submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA })).toEqual({ txHash: 'tx_na_chain' });
     expect(m.preSign).not.toHaveBeenCalled();
     expect(m.submitPrivy).not.toHaveBeenCalled();
     expect(m.movCreateMany).toHaveBeenCalledOnce();
@@ -307,7 +375,7 @@ describe('submeterResgate — reserva órfã (mesma regra do swap, N1-S1)', () =
     const tx = envelope();
     const hash = orfaCom(tx);
     m.fetchTx.mockResolvedValue({ hash: 'x', successful: false });
-    await expect(submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), agora: AGORA })).rejects.toMatchObject({ status: 409 });
+    await expect(submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA })).rejects.toMatchObject({ status: 409 });
     expect(m.updateMany).toHaveBeenCalledWith({
       where: { id: 'q_1', submitXdrHash: hash, consumedAt: null },
       data: { submitXdrHash: null, submitTxHash: null, submitMaxTime: null, submitXdr: null },
@@ -318,7 +386,7 @@ describe('submeterResgate — reserva órfã (mesma regra do swap, N1-S1)', () =
   it('DEPOIS do maxTime e fora da chain: 410, a Plina NUNCA assina e NÃO libera por "não achei"', async () => {
     const tx = envelope({ maxTime: AGORA_SEC - 600 });
     orfaCom(tx);
-    await expect(submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), agora: AGORA })).rejects.toMatchObject({ code: 'COTACAO_EXPIRADA', status: 410 });
+    await expect(submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA })).rejects.toMatchObject({ code: 'COTACAO_EXPIRADA', status: 410 });
     expect(m.preSign).not.toHaveBeenCalled();
     expect(m.submitPrivy).not.toHaveBeenCalled();
     expect(m.updateMany).toHaveBeenCalledTimes(1); // só a tentativa de reserva: nada liberado
@@ -329,7 +397,7 @@ describe('submeterResgate — falha do Horizon', () => {
   it('o submit falha: a reserva fica (a órfã é resolvida depois), nada é escriturado e o erro propaga', async () => {
     m.findFirst.mockResolvedValue(cotacao());
     m.submitPrivy.mockRejectedValue(new Error('horizon 504'));
-    await expect(submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: envelope().toXDR(), agora: AGORA })).rejects.toThrow('horizon 504');
+    await expect(submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: envelope().toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA })).rejects.toThrow('horizon 504');
     expect(m.movCreateMany).not.toHaveBeenCalled();
     expect(m.updateMany).toHaveBeenCalledTimes(1); // só a reserva; sem liberar
   });
@@ -337,7 +405,7 @@ describe('submeterResgate — falha do Horizon', () => {
   it('o signer do distributor diferente da configuração → erro, sem submeter', async () => {
     m.findFirst.mockResolvedValue(cotacao());
     m.preSign.mockReturnValue({ pubkey: Keypair.random().publicKey(), sigBase64: 'x' });
-    await expect(submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: envelope().toXDR(), agora: AGORA })).rejects.toThrow(/signer/);
+    await expect(submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: envelope().toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA })).rejects.toThrow(/signer/);
     expect(m.submitPrivy).not.toHaveBeenCalled();
   });
 });

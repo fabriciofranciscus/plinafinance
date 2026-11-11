@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { ApiError } from '@/lib/api/errors';
 import { internalErrorResponse } from '@/lib/api/internal-error';
 import { navUnavailableResponse } from '@/lib/api/nav-unavailable';
+import { obterPrecoLiquidoTesouroBrl } from '@/lib/anchors/etherfuse/preco-tesouro';
 import { submeterResgate } from '@/lib/services/resgate';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { parseBody } from '@/lib/http/parse-body';
@@ -38,6 +39,11 @@ export const POST = withAuth(async (req, { user }) => {
       investidor: { id: user.investidorId, publicKey: user.publicKey, privyId: user.privyId },
       quoteId: parsed.data.quoteId,
       signedXdr: parsed.data.signedXdr,
+      // Chamado só em reserva NOVA: relê o preço do TESOURO na mesma fonte da cotação (desvio > 1 bp → 409).
+      obterPrecoTesouroBrl: async () => {
+        if (!user.etherfuseCustomerId) throw new ApiError('CONFLICT', 409, 'Conclua o cadastro antes de resgatar.');
+        return obterPrecoLiquidoTesouroBrl({ customerId: user.etherfuseCustomerId, stellarAddress: user.publicKey });
+      },
     });
     return NextResponse.json(result);
   } catch (err) {

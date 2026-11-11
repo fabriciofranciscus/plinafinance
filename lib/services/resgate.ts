@@ -20,12 +20,13 @@ import { distributorSigner } from '../stellar/signer';
 import { assetCodeForClasse } from '../stellar/classes';
 import { calcularPrecoDeResgate } from './liquidacao';
 import { navMudou } from './pool';
+import { getAssetBalance } from '../stellar/account';
+import { caixaDoFundo } from './razao-fundo';
 import { escriturarResgate, liberarReservaDoResgate } from './resgate-escrituracao';
 import { assertSemSwapEmConferencia } from './swap-orfao';
 import {
   COTACAO_RESGATE_TTL_MS,
   amountPlinarfValido,
-  assertJanelaDoResgate,
   assinaturaUnicaDoInvestidor,
   bridgeAmountDoResgate,
   memoHashDoResgate,
@@ -35,8 +36,8 @@ export interface CotarResgateInput {
   investidorId: string;
   investorPubkey: string;
   amountPlinarf: string;
-  /** Taxa BRL→TESOURO (exchangeRate de uma cotação Etherfuse feita pela rota; só fonte de preço). */
-  taxaBrlParaBridge: string;
+  /** Preço LÍQUIDO do TESOURO em BRL ((fromAmount − fee) ÷ toAmount de uma cotação Etherfuse na hora; a rota calcula). */
+  precoTesouroBrl: string;
   bridgeAsset: { code: string; issuer: string };
   agora?: number;
 }
@@ -58,6 +59,27 @@ function chavesStellar(): { issuerPubkey: string; distributorPubkey: string } {
   return { issuerPubkey, distributorPubkey };
 }
 
+/**
+ * Limite de liquidez (Consuelo): o resgate não pode passar do caixa disponível do razão nem do saldo de TESOURO do
+ * distributor — sem isso o primeiro a resgatar zera o caixa e quem fica carrega só as cotas. (Teto por janela de
+ * liquidez é decisão do CEO, depois.)
+ */
+async function exigirLiquidez(i: {
+  brl: Prisma.Decimal;
+  bridge: Prisma.Decimal;
+  distributorPubkey: string;
+  bridgeAsset: { code: string; issuer: string };
+}): Promise<void> {
+  const caixa = await caixaDoFundo();
+  if (i.brl.gt(caixa)) {
+    throw new ApiError('LIQUIDEZ_INSUFICIENTE', 409, 'O fundo não tem caixa disponível para este resgate agora. Tente um valor menor.');
+  }
+  const saldo = new Prisma.Decimal(await getAssetBalance(i.distributorPubkey, i.bridgeAsset.code, i.bridgeAsset.issuer));
+  if (i.bridge.gt(saldo)) {
+    throw new ApiError('LIQUIDEZ_INSUFICIENTE', 409, 'O fundo não tem liquidez disponível para este resgate agora. Tente um valor menor.');
+  }
+}
+
 export async function cotarResgate(input: CotarResgateInput): Promise<CotacaoDeResgate> {
   const amount = amountPlinarfValido(input.amountPlinarf);
   if (!amount) throw new ApiError('VALIDATION_FAILED', 400, 'amountPlinarf inválido: decimal > 0 com até 7 casas.');
@@ -68,10 +90,16 @@ export async function cotarResgate(input: CotarResgateInput): Promise<CotacaoDeR
   if (!preco.brlEquivalente.gt(0)) {
     throw new ApiError('VALIDATION_FAILED', 400, 'Quantidade pequena demais: o valor em BRL arredonda para zero.');
   }
-  const bridge = bridgeAmountDoResgate(preco.brlEquivalente, input.taxaBrlParaBridge);
-  if (!bridge) throw new ApiError('ETHERFUSE_ERROR', 502, 'Taxa de conversão indisponível agora. Tente novamente.');
+  const bridge = bridgeAmountDoResgate(preco.brlEquivalente, input.precoTesouroBrl);
+  if (!bridge) throw new ApiError('ETHERFUSE_ERROR', 502, 'Preço do ativo-ponte indisponível agora. Tente novamente.');
 
   const { issuerPubkey, distributorPubkey } = chavesStellar();
+  await exigirLiquidez({
+    brl: preco.brlEquivalente,
+    bridge,
+    distributorPubkey,
+    bridgeAsset: input.bridgeAsset,
+  });
   const quoteId = randomUUID();
   const built = await buildResgateXdr({
     investorPubkey: input.investorPubkey,
@@ -92,7 +120,8 @@ export async function cotarResgate(input: CotarResgateInput): Promise<CotacaoDeR
       plinarfAmount: amount,
       brlEquivalente: preco.brlEquivalente,
       bridgeAmount: bridge,
-      taxaBridge: input.taxaBrlParaBridge,
+      // Preço líquido BRL/TESOURO congelado (revalidado no submit, desvio > 1 bp → NAV_MUDOU).
+      taxaBridge: new Prisma.Decimal(input.precoTesouroBrl).toString(),
       bridgeCode: input.bridgeAsset.code,
       bridgeIssuer: input.bridgeAsset.issuer,
       navPorTokenNaCotacao: preco.navPorToken,
@@ -114,6 +143,8 @@ export interface SubmeterResgateInput {
   investidor: { id: string; publicKey: string; privyId: string };
   quoteId: string;
   signedXdr: string;
+  /** Preço líquido do TESOURO agora (cotação Etherfuse; a rota calcula). Chamado só em reserva NOVA. */
+  obterPrecoTesouroBrl: () => Promise<string>;
   agora?: number;
 }
 
@@ -159,8 +190,9 @@ export async function submeterResgate(input: SubmeterResgateInput): Promise<{ tx
       expectedPlinarfAmount: new Prisma.Decimal(cot.plinarfAmount).toFixed(7),
       expectedBridgeAmount: new Prisma.Decimal(cot.bridgeAmount).toFixed(7),
       memoHash: memoHashDoResgate(cot.id),
-    });
-    assertJanelaDoResgate(tx, cot.expiresAt, agoraSec);
+      // Janela de validade (Estela, 9d685e0): maxTime ≤ agora+180 s e ≤ prazo da cotação + 120 s.
+      quoteExpiresAt: cot.expiresAt,
+    }, { agoraSec });
   } catch (err) {
     throw new ApiError('VALIDATION_FAILED', 400, `xdr divergente da cotação: ${err instanceof Error ? err.message : 'erro'}`);
   }
@@ -171,6 +203,18 @@ export async function submeterResgate(input: SubmeterResgateInput): Promise<{ tx
     if (navMudou(cot.navPorTokenNaCotacao, atual.navPorToken)) {
       throw new ApiError('NAV_MUDOU', 409, 'O NAV mudou desde a cotação. Gere uma nova cotação.');
     }
+    // O preço do TESOURO (mesma fonte da cotação) também não pode ter andado além de 1 bp.
+    const precoAgora = await input.obterPrecoTesouroBrl();
+    if (navMudou(cot.taxaBridge, precoAgora)) {
+      throw new ApiError('NAV_MUDOU', 409, 'O preço mudou desde a cotação. Gere uma nova cotação.');
+    }
+    // Liquidez relida (outras operações podem ter consumido o caixa desde a cotação).
+    await exigirLiquidez({
+      brl: new Prisma.Decimal(cot.brlEquivalente),
+      bridge: new Prisma.Decimal(cot.bridgeAmount),
+      distributorPubkey,
+      bridgeAsset: { code: cot.bridgeCode, issuer: cot.bridgeIssuer },
+    });
     // Reserva nova com outro swap/resgate do MESMO investidor em conferência: recusa.
     await assertSemSwapEmConferencia(investidor.id, { ignorarResgateId: cot.id });
   }

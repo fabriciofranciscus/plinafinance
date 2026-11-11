@@ -3,7 +3,7 @@ import { Keypair } from '@stellar/stellar-sdk';
 import { ApiError } from '@/lib/api/errors';
 
 const USER_PK = Keypair.random().publicKey();
-const m = vi.hoisted(() => ({ cotar: vi.fn(), getQuote: vi.fn(), tesouro: vi.fn(), user: { etherfuseCustomerId: 'cust_1' as string | null } }));
+const m = vi.hoisted(() => ({ cotar: vi.fn(), preco: vi.fn(), tesouro: vi.fn(), user: { etherfuseCustomerId: 'cust_1' as string | null } }));
 
 vi.mock('@/lib/wallet/auth-guard', () => ({
   withAuth:
@@ -12,7 +12,7 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
       handler(req, { user: { privyId: 'did:privy:abc', investidorId: 'inv_1', publicKey: USER_PK, email: 'x@y.z', ...m.user } }),
 }));
 vi.mock('@/lib/services/resgate', () => ({ cotarResgate: m.cotar }));
-vi.mock('@/lib/anchors/etherfuse', () => ({ EtherfuseClient: class { getQuote = m.getQuote; } }));
+vi.mock('@/lib/anchors/etherfuse/preco-tesouro', () => ({ obterPrecoLiquidoTesouroBrl: m.preco }));
 vi.mock('@/lib/anchors/etherfuse/tesouro', () => ({ resolveTesouroAsset: m.tesouro }));
 process.env.ETHERFUSE_API_KEY = 'test';
 
@@ -32,18 +32,18 @@ beforeEach(async () => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   m.user.etherfuseCustomerId = 'cust_1';
   m.cotar.mockReset().mockResolvedValue(COTACAO);
-  m.getQuote.mockReset().mockResolvedValue({ exchangeRate: '0.8554' });
+  m.preco.mockReset().mockResolvedValue('1.25');
   m.tesouro.mockReset().mockResolvedValue({ code: 'TESOURO', issuer: 'GTES' });
 });
 
 describe('POST /api/investidor/liquidar/build (E2-6)', () => {
-  it('200 com o contrato; o investidor e a taxa vêm da sessão e da Etherfuse, não do body', async () => {
+  it('200 com o contrato; o investidor e o preço líquido do TESOURO vêm da sessão e da Etherfuse, não do body', async () => {
     const r = await POST(req({ amountPlinarf: '10' }));
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual(COTACAO);
-    expect(m.getQuote).toHaveBeenCalledWith(expect.objectContaining({ fromCurrency: 'BRL', toCurrency: 'TESOURO', customerId: 'cust_1', stellarAddress: USER_PK }));
+    expect(m.preco).toHaveBeenCalledWith({ customerId: 'cust_1', stellarAddress: USER_PK });
     expect(m.cotar).toHaveBeenCalledWith({
-      investidorId: 'inv_1', investorPubkey: USER_PK, amountPlinarf: '10', taxaBrlParaBridge: '0.8554',
+      investidorId: 'inv_1', investorPubkey: USER_PK, amountPlinarf: '10', precoTesouroBrl: '1.25',
       bridgeAsset: { code: 'TESOURO', issuer: 'GTES' },
     });
   });
@@ -59,7 +59,7 @@ describe('POST /api/investidor/liquidar/build (E2-6)', () => {
     ]) {
       expect((await POST(req(corpo))).status, JSON.stringify(corpo)).toBe(400);
     }
-    expect(m.getQuote).not.toHaveBeenCalled();
+    expect(m.preco).not.toHaveBeenCalled();
     expect(m.cotar).not.toHaveBeenCalled();
   });
 
@@ -72,7 +72,14 @@ describe('POST /api/investidor/liquidar/build (E2-6)', () => {
     m.user.etherfuseCustomerId = null;
     const r = await POST(req({ amountPlinarf: '10' }));
     expect(r.status).toBe(409);
-    expect(m.getQuote).not.toHaveBeenCalled();
+    expect(m.preco).not.toHaveBeenCalled();
+  });
+
+  it('LIQUIDEZ_INSUFICIENTE do serviço → 409 com o código', async () => {
+    m.cotar.mockRejectedValue(new ApiError('LIQUIDEZ_INSUFICIENTE', 409, 'sem liquidez'));
+    const r = await POST(req({ amountPlinarf: '10' }));
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({ error: 'sem liquidez', code: 'LIQUIDEZ_INSUFICIENTE' });
   });
 
   it('ApiError do serviço (SWAP_EM_CONFERENCIA etc.) → status e { error, code }', async () => {
@@ -91,7 +98,7 @@ describe('POST /api/investidor/liquidar/build (E2-6)', () => {
   });
 
   it('erro comum (Etherfuse fora, banco…) → 500 fixo, sem vazar a causa', async () => {
-    m.getQuote.mockRejectedValue(new Error('etherfuse 502 SEGREDO'));
+    m.preco.mockRejectedValue(new Error('etherfuse 502 SEGREDO'));
     const r = await POST(req({ amountPlinarf: '10' }));
     expect(r.status).toBe(500);
     expect(await r.json()).toEqual({ error: 'erro interno' });
