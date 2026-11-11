@@ -58,7 +58,7 @@ chave nem dados do signatário. `consent_required` vira `DocusignConsentRequired
 | `DOCUSIGN_BASE_URI` | `https://demo.docusign.net` (API em `${BASE_URI}/restapi/v2.1`) |
 | `DOCUSIGN_PRIVATE_KEY` | corpo base64 da chave RSA, uma linha, sem `BEGIN/END` (PKCS#1; fallback PKCS#8) |
 | `DOCUSIGN_OAUTH_BASE` | opcional no sandbox (default `account-d.docusign.com`); **obrigatória** com qualquer outro `BASE_URI` (falha fechado) |
-| `DOCUSIGN_CONNECT_HMAC_KEY` | chave do Connect (DS3; ainda não existe) |
+| `DOCUSIGN_CONNECT_HMAC_KEY` | chave do Connect; `POST /api/webhooks/docusign` (DS3) responde 503 sem ela. Valor não existe ainda no `.env.local` — registrar o Connect no sandbox e pôr a chave (Farol/Thais) |
 
 `DOCUSIGN_PUBLIC_KEY` não é usada. Nunca logar valores: spans e erros levam só nomes.
 
@@ -90,3 +90,8 @@ O signatário recebe o e-mail de verdade. Testes: `__tests__/integrations/docusi
 - **M3** — Termo de Adesão FIDC PLINA-RF.
 
 Ver `docs/PRD-plina-v1.md` §M1 (F-M1-1, F-M1-6), §M2 (F-M2-3), §M3 (F-M3-7).
+
+## DS2/DS3 — uso pela cessão (medido em testes com DocuSign simulado; smoke sandbox do DS2: envelope criado, reenvio devolve o mesmo)
+- `registrarCessao` → `enviarCessaoParaAssinatura` (`lib/services/cessao-docusign.ts`): `ENVIADA_DOCUSIGN`, sem memo.
+- Webhook/polling → `processarEnvelopeDocusign` (`lib/services/cessao-assinatura.ts`): status relido na API; PDF baixado UMA vez e guardado (Blob privado `cessoes/<id>/assinada.pdf`, sem sobrescrita); `hashDocumento` = SHA-256 dos bytes guardados; memo = esse hash; só então `ASSINADA`.
+- Não verificado: Connect real entregando no sandbox; Blob real (sem `BLOB_READ_WRITE_TOKEN` o armazenamento falha fechado); âncora real (porta `ancora-sha256.ts` aguarda `lib/stellar/anchor`, Estela).

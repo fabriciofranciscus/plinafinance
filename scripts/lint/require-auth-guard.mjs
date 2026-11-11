@@ -36,6 +36,7 @@ const PUBLIC_ROUTES = new Map([
   ['comprar/lead', 'captação de lead — BotID + rate-limit'],
   ['vender/simular', 'simulador read-only, sem persistência'],
   ['webhooks/anchor', 'webhook — autenticado por assinatura HMAC (X-Signature), dedupe por eventoId'],
+  ['webhooks/docusign', 'webhook — autenticado por HMAC do DocuSign Connect (X-DocuSign-Signature-N); status relido na API'],
   ['pool/summary', 'agregados públicos read-only'],
   ['comprovante/[cessaoId]', 'recibo — cessaoId é bearer token na URL'],
 ]);

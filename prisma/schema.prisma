@@ -177,6 +177,8 @@ enum AcaoAudit {
   KYC_ATUALIZADO_WEBHOOK
   // Envelope DocuSign da cessão criado (DS2); sem memo on-chain neste passo
   CESSAO_ENVIADA_DOCUSIGN
+  // Envelope recusado/anulado no DocuSign (DS3)
+  CESSAO_RECUSADA_DOCUSIGN
 }
 
 // Funil vendedor
@@ -618,6 +620,9 @@ model Cessao {
   /// só quem a grava (updateMany condicionado) chama a API; marca velha = envio
   /// anterior morreu ou ficou incerto → quem assume consulta o transactionId antes.
   docusignEnvioIniciadoEm DateTime?
+  /// DS3: claim da conclusão (baixar PDF → guardar → hash → âncora → ASSINADA). Mesmo
+  /// padrão do envio: marca velha = quem assume retoma os passos (todos idempotentes).
+  docusignConclusaoIniciadaEm DateTime?
   status              CessaoStatus  @default(PENDENTE)
   /// PRD v1.0 §M1 — caminho preferencial (API administradora) vs fallback
   /// (cartório digital). Default CARTORIO_DIGITAL pra cessões pré-M1.

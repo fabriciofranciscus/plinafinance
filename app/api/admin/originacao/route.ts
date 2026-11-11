@@ -26,6 +26,7 @@ import {
   registrarCessao,
 } from '@/lib/services/originacao';
 import { registrarTesourariaLegada } from '@/lib/services/tesouraria-legada';
+import { sincronizarCessoesDocusign } from '@/lib/services/cessao-assinatura';
 import { TipoBem } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
@@ -75,6 +76,12 @@ const Schema = z.discriminatedUnion('action', [
       hashValidacao: z.string().regex(/^[0-9a-f]{64}$/i, 'hash sha-256 hex'),
       status: z.enum(['CONFIRMADA', 'DECLARADA_PENDENTE']),
       referencia: z.string().min(1).max(200).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('sincronizar-cessoes'),
+      cessaoId: z.string().min(1).max(60).optional(),
     })
     .strict(),
   z
@@ -144,6 +151,11 @@ export async function POST(req: Request) {
           referencia: body.referencia,
           operador: 'admin-panel',
         });
+        return NextResponse.json(result);
+      }
+      case 'sincronizar-cessoes': {
+        // Polling de fallback do DS3: reconcilia cessões ENVIADA_DOCUSIGN sem webhook.
+        const result = await sincronizarCessoesDocusign({ cessaoId: body.cessaoId, operador: 'admin-panel' });
         return NextResponse.json(result);
       }
       case 'incorporar-cota': {
