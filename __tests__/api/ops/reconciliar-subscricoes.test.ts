@@ -10,10 +10,10 @@ vi.mock('@/lib/rate-limit/config', () => ({
 
 import { GET } from '@/app/api/ops/reconciliar-subscricoes/route';
 
-const SECRET = 'segredo-de-teste-ops';
+const SECRET = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90'; // 64 hex, como `openssl rand -hex 32`
 const RESULTADO = {
   escriturados: 1, liberados: 1, aguardando: 0, vencidasSemProva: 0, semHash: 0,
-  vigiaEscrituradas: 0, vigiaConflitos: 0, conflitoQuoteIds: [] as string[], erros: 0,
+  vigiaEscrituradas: 0, vigiaConflitos: 0, vigiaRestantes: 0, conflitoQuoteIds: [] as string[], erros: 0,
 };
 const req = (auth?: string) =>
   new Request('http://x/api/ops/reconciliar-subscricoes', { headers: auth ? { authorization: auth } : {} });
@@ -64,6 +64,29 @@ describe('GET /api/ops/reconciliar-subscricoes', () => {
       expect(r.status, String(auth)).toBe(404);
     }
     expect(m.reconciliar).not.toHaveBeenCalled();
+  });
+
+  it('OPS_CRON_SECRET fraco (< 32 caracteres após o trim) = não configurado: 404 mesmo com o Bearer "certo"', async () => {
+    for (const fraco of ['a', 'abcd', 'x'.repeat(31), `  ${'x'.repeat(31)}  `]) {
+      process.env.OPS_CRON_SECRET = fraco;
+      expect((await GET(req(`Bearer ${fraco.trim()}`))).status, JSON.stringify(fraco)).toBe(404);
+    }
+    expect(m.reconciliar).not.toHaveBeenCalled();
+  });
+
+  it('32 caracteres certos autorizam (e o trim do valor configurado é respeitado)', async () => {
+    const forte = 'k'.repeat(32);
+    process.env.OPS_CRON_SECRET = forte;
+    expect((await GET(req(`Bearer ${forte}`))).status).toBe(200);
+    process.env.OPS_CRON_SECRET = `  ${forte}  `;
+    expect((await GET(req(`Bearer ${forte}`))).status).toBe(200);
+    expect((await GET(req(`Bearer ${'k'.repeat(31)}j`))).status).toBe(404); // 32 chars, mas errado
+  });
+
+  it('a resposta traz vigiaRestantes (só contagem)', async () => {
+    m.reconciliar.mockResolvedValue({ ...RESULTADO, vigiaRestantes: 70 });
+    const body = await (await GET(req(`Bearer ${SECRET}`))).json();
+    expect(body.vigiaRestantes).toBe(70);
   });
 
   it('sem OPS_CRON_SECRET configurado a rota não existe (404), mesmo com um Bearer qualquer', async () => {

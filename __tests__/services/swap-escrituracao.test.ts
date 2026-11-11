@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 
 const m = vi.hoisted(() => ({
   findMany: vi.fn(),
+  count: vi.fn(),
   updateMany: vi.fn(),
   fetchTx: vi.fn(),
   situacao: vi.fn(),
@@ -21,7 +22,7 @@ vi.mock('@/lib/db', () => {
   };
   return {
     db: {
-      quote: { findMany: m.findMany, updateMany: m.updateMany },
+      quote: { findMany: m.findMany, count: m.count, updateMany: m.updateMany },
       $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
     },
   };
@@ -30,7 +31,7 @@ vi.mock('@/lib/stellar/transactions', () => ({ fetchTransactionByHash: m.fetchTx
 vi.mock('@/lib/stellar/orfa-swap', () => ({ situacaoEnvelopeSwap: m.situacao }));
 vi.mock('@/lib/services/holdings', () => ({ incrementarHolding: m.incrementarHolding }));
 
-import { reconciliarSwapsOrfaos } from '@/lib/services/swap-escrituracao';
+import { VIGIA_LOTE, reconciliarSwapsOrfaos } from '@/lib/services/swap-escrituracao';
 
 const D = (v: string) => new Prisma.Decimal(v);
 const AGORA = Date.parse('2026-11-10T12:00:00Z');
@@ -43,6 +44,9 @@ function orfa(over: Record<string, unknown> = {}) {
     submitMaxTime: new Date(AGORA + 60_000), onRampOrder: { id: 'ord_1' }, ...over,
   };
 }
+/** Chamadas de updateMany SEM o carimbo do rodízio da vigia (vigiaConsultadaEm). */
+const semCarimbo = () => m.updateMany.mock.calls.filter((c) => !('vigiaConsultadaEm' in (c[0].data ?? {})));
+
 /** 1ª consulta = órfãs; 2ª = vigia. */
 const orfas = (lista: unknown[], vigia: unknown[] = []) =>
   m.findMany.mockResolvedValueOnce(lista).mockResolvedValueOnce(vigia);
@@ -50,6 +54,7 @@ const orfas = (lista: unknown[], vigia: unknown[] = []) =>
 beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   m.findMany.mockReset().mockResolvedValue([]);
+  m.count.mockReset().mockResolvedValue(0);
   m.updateMany.mockReset().mockResolvedValue({ count: 1 });
   m.fetchTx.mockReset();
   m.situacao.mockReset();
@@ -111,7 +116,7 @@ describe('reconciliarSwapsOrfaos — prova pela conta do investidor (N1)', () =>
     m.situacao.mockResolvedValue({ status: 'LIVRE_EXPIRADA', sequenceConta: '5', ledger: 9, fechadoEm: 'x' });
     const r = await reconciliarSwapsOrfaos({ agora: AGORA });
     expect(r).toMatchObject({ aguardando: 1, liberados: 0 });
-    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(semCarimbo()).toHaveLength(0);
   });
 
   it('a marca da 1ª varredura é apagada se o estado deixa de ser LIVRE_EXPIRADA (ex.: AGUARDANDO, INDETERMINADO)', async () => {
@@ -131,7 +136,7 @@ describe('reconciliarSwapsOrfaos — prova pela conta do investidor (N1)', () =>
       .mockResolvedValueOnce({ status: 'INDETERMINADO', motivo: 'sem dado' });
     const r = await reconciliarSwapsOrfaos({ agora: AGORA });
     expect(r).toMatchObject({ aguardando: 1, vencidasSemProva: 1, liberados: 0, escriturados: 0 });
-    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(semCarimbo()).toHaveLength(0);
   });
 
   it('erro do Horizon (sem decisão): mantém a reserva, conta o erro e segue as demais', async () => {
@@ -186,7 +191,7 @@ describe('reconciliarSwapsOrfaos — reserva sem XDR guardado (só o hash)', () 
     m.fetchTx.mockResolvedValue(null);
     const r = await reconciliarSwapsOrfaos({ agora: AGORA });
     expect(r).toMatchObject({ aguardando: 1, vencidasSemProva: 1, liberados: 0 });
-    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(semCarimbo()).toHaveLength(0);
   });
 });
 
@@ -250,6 +255,60 @@ describe('reconciliarSwapsOrfaos — vigia de 24 h dos hashes liberados por temp
     const r = await reconciliarSwapsOrfaos({ agora: AGORA });
     expect(r.vigiaConflitos).toBe(0);
     expect(r.conflitoQuoteIds).toEqual([]);
-    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(semCarimbo()).toHaveLength(0);
   });
 });
+
+describe('reconciliarSwapsOrfaos — vigia em lote com rodízio (Vera/Farol)', () => {
+  const vig = (i: number) => ({
+    id: `q_${i}`, investidorId: 'inv_1', fromAmount: D('150'), fee: '50', classe: 'SENIOR',
+    plinarfAmount: D('99.5'), liberadaTxHash: `th_${i}`, consumedAt: null, consumedTxHash: null,
+    conflitoAlertadoEm: null, onRampOrder: { id: 'ord_1' },
+  });
+
+  it('a consulta pede LOTE (50), rodízio (nunca consultadas primeiro, depois as mais antigas) e conta o total', async () => {
+    orfas([]);
+    await reconciliarSwapsOrfaos({ agora: AGORA });
+    const arg = m.findMany.mock.calls[1][0];
+    expect(VIGIA_LOTE).toBe(50);
+    expect(arg.take).toBe(50);
+    expect(arg.orderBy).toEqual([{ vigiaConsultadaEm: { sort: 'asc', nulls: 'first' } }, { liberadaPorTempoEm: 'asc' }]);
+    expect(m.count).toHaveBeenCalledOnce();
+    expect(m.count.mock.calls[0][0].where.liberadaPorTempoEm.gte).toEqual(new Date(AGORA - 24 * 3600_000));
+  });
+
+  it('mais hashes que o lote: consulta só o lote, devolve `restantes` (contagem) e carimba o lote para o rodízio avançar', async () => {
+    m.count.mockResolvedValue(120);
+    const lote = Array.from({ length: 50 }, (_, i) => vig(i));
+    orfas([], lote);
+    m.fetchTx.mockResolvedValue(null);
+    const r = await reconciliarSwapsOrfaos({ agora: AGORA });
+    expect(m.fetchTx).toHaveBeenCalledTimes(50);
+    expect(r.vigiaRestantes).toBe(70); // 120 − 50
+    const carimbo = m.updateMany.mock.calls.find((c) => 'vigiaConsultadaEm' in c[0].data)!;
+    expect(carimbo[0].where.id.in).toHaveLength(50);
+    expect(carimbo[0].data.vigiaConsultadaEm).toEqual(new Date(AGORA));
+  });
+
+  it('cabe tudo no lote: restantes = 0; sem hashes na vigia: sem carimbo', async () => {
+    m.count.mockResolvedValue(2);
+    orfas([], [vig(1), vig(2)]);
+    m.fetchTx.mockResolvedValue(null);
+    expect((await reconciliarSwapsOrfaos({ agora: AGORA })).vigiaRestantes).toBe(0);
+    m.updateMany.mockClear();
+    orfas([], []);
+    await reconciliarSwapsOrfaos({ agora: AGORA });
+    expect(m.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('o carimbo cobre também os já escriturados e os que deram erro (o rodízio não trava neles)', async () => {
+    m.count.mockResolvedValue(3);
+    orfas([], [vig(1), { ...vig(2), consumedAt: new Date(), consumedTxHash: 'th_2' }, vig(3)]);
+    m.fetchTx.mockRejectedValueOnce(new Error('horizon fora')).mockResolvedValue(null);
+    const r = await reconciliarSwapsOrfaos({ agora: AGORA });
+    expect(r.erros).toBe(1);
+    const carimbo = m.updateMany.mock.calls.find((c) => 'vigiaConsultadaEm' in c[0].data)!;
+    expect(carimbo[0].where.id.in).toEqual(['q_1', 'q_2', 'q_3']);
+  });
+});
+

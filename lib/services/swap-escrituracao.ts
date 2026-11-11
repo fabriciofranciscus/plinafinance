@@ -28,6 +28,9 @@ import { situacaoEnvelopeSwap } from '../stellar/orfa-swap';
  */
 export const INTERVALO_MIN_ENTRE_VARREDURAS_MS = 5 * 60_000;
 
+/** Quantos hashes liberados por tempo a vigia consulta por execução (~0,45 s cada; a rota tem 60 s). */
+export const VIGIA_LOTE = 50;
+
 /** Janela da vigia dos hashes liberados por tempo. */
 export const VIGIA_LIBERADAS_MS = 24 * 3600_000;
 
@@ -131,6 +134,8 @@ export interface ResultadoReconciliacao {
   vigiaEscrituradas: number;
   /** Vigia: tx liberada por tempo entrou, mas o quote já foi consumido por OUTRA tx (emissão dupla). */
   vigiaConflitos: number;
+  /** Hashes liberados por tempo ainda na janela de 24 h que ficaram para a próxima execução (só contagem). */
+  vigiaRestantes: number;
   /** Ids (internos) dos quotes com conflito NOVO (ainda sem alerta): para o e-mail; a rota não os devolve. */
   conflitoQuoteIds: string[];
   erros: number;
@@ -170,7 +175,7 @@ export async function reconciliarSwapsOrfaos(
   const agoraSec = Math.floor(agora / 1000);
   const r: ResultadoReconciliacao = {
     escriturados: 0, liberados: 0, aguardando: 0, vencidasSemProva: 0, semHash: 0,
-    vigiaEscrituradas: 0, vigiaConflitos: 0, conflitoQuoteIds: [], erros: 0,
+    vigiaEscrituradas: 0, vigiaConflitos: 0, vigiaRestantes: 0, conflitoQuoteIds: [], erros: 0,
   };
 
   const orfas = (await db.quote.findMany({
@@ -249,11 +254,17 @@ export async function reconciliarSwapsOrfaos(
   }
 
   // Vigia de 24 h: hashes liberados por TEMPO. Sucesso on-chain depois → escritura + alerta.
+  const doVigia = {
+    liberadaTxHash: { not: null },
+    liberadaPorTempoEm: { gte: new Date(agora - VIGIA_LIBERADAS_MS) },
+  };
+  const totalVigia = await db.quote.count({ where: doVigia });
+  // Lote com RODÍZIO: nunca consultadas primeiro, depois as consultadas há mais tempo — com mais hashes que o
+  // lote, "só as mais antigas" deixaria as novas sem consulta até expirarem.
   const vigiadas = await db.quote.findMany({
-    where: {
-      liberadaTxHash: { not: null },
-      liberadaPorTempoEm: { gte: new Date(agora - VIGIA_LIBERADAS_MS) },
-    },
+    where: doVigia,
+    orderBy: [{ vigiaConsultadaEm: { sort: 'asc', nulls: 'first' } }, { liberadaPorTempoEm: 'asc' }],
+    take: VIGIA_LOTE,
     select: {
       id: true, investidorId: true, fromAmount: true, fee: true, classe: true, plinarfAmount: true,
       liberadaTxHash: true, consumedAt: true, consumedTxHash: true, conflitoAlertadoEm: true,
@@ -292,6 +303,14 @@ export async function reconciliarSwapsOrfaos(
       console.error('[swap-reconciliacao] vigia', v.id, (err as { name?: string })?.name ?? 'erro');
       r.erros++;
     }
+  }
+  r.vigiaRestantes = Math.max(0, totalVigia - vigiadas.length);
+  if (vigiadas.length > 0) {
+    // Carimba o lote inteiro (inclusive os já escriturados e os com erro): o rodízio avança.
+    await db.quote.updateMany({
+      where: { id: { in: vigiadas.map((v) => v.id) } },
+      data: { vigiaConsultadaEm: new Date(agora) },
+    });
   }
   return r;
 }
