@@ -29,7 +29,7 @@ function arquivo(totalEmitido: string, saldoDistributor: string): Pick<ArquivoSn
         trustlinesAutorizadas: { contas: 1, soma: f('0') },
       },
     },
-    nav: { classe: 'PLINARF', regra: 'NAV_DO_LEDGER', denominador: '', porToken: '', porTokenSobreCirculante: null },
+    nav: { classe: 'PLINARF', regra: 'NAV_DO_LEDGER', denominador: '', porToken: '', porTokenSobreCirculante: null, notaDenominador: '' },
   };
 }
 
@@ -77,6 +77,19 @@ describe('montarNumerador / recalcularNav', () => {
     expect(r.regra).toBe('NAV_INICIAL');
     expect(r.porToken.toString()).toBe('1');
     expect(r.porTokenSobreCirculante).toBeNull();
+  });
+
+  it('itens levam hashValidacao e emissaoTxHash; valorCarta/deságio só quando pedido (mainnet os omite); regra de marcação rotulada', () => {
+    const c = [{ ...cotas[0], hashValidacao: 'h'.repeat(64), emissaoTxHash: 't'.repeat(64) }];
+    const teste = montarNumerador(c, caixa);
+    expect(teste.regraMarcacao).toBe('CUSTO_DE_AQUISICAO');
+    expect(teste.cotasAtivas.itens[0]).toMatchObject({ hashValidacao: 'h'.repeat(64), emissaoTxHash: 't'.repeat(64), valorCarta: '120000.00', desagioAquisicao: '0.2500' });
+    const main = montarNumerador(c, caixa, { incluirPrecoDaCarta: false });
+    expect(main.cotasAtivas.itens[0]).not.toHaveProperty('valorCarta');
+    expect(main.cotasAtivas.itens[0]).not.toHaveProperty('desagioAquisicao');
+    expect(main.cotasAtivas.itens[0].valorMarcado).toBe(teste.cotasAtivas.itens[0].valorMarcado);
+    expect(main.total).toBe(teste.total); // a conta do revisor não depende do preço da carta
+    expect(montarNumerador([{ ...cotas[0] }], caixa).cotasAtivas.itens[0]).toMatchObject({ hashValidacao: null, emissaoTxHash: null });
   });
 
   it('não confia em total pré-somado: soma de novo a partir dos itens e do caixa por tipo', () => {

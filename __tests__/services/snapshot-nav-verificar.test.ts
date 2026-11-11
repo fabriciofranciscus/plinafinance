@@ -22,7 +22,7 @@ function arquivoBase(): ArquivoSnapshotNav {
         trustlinesAutorizadas: { contas: 3, soma: '82000.0000000' },
       },
     },
-    nav: { classe: 'PLINARF', regra: 'NAV_DO_LEDGER' as const, denominador: '', porToken: '', porTokenSobreCirculante: null },
+    nav: { classe: 'PLINARF', regra: 'NAV_DO_LEDGER' as const, denominador: '', porToken: '', porTokenSobreCirculante: null, notaDenominador: '' },
   };
   const r = recalcularNav(base);
   return {
@@ -32,7 +32,7 @@ function arquivoBase(): ArquivoSnapshotNav {
     conciliacao: { PLINARF: { confere: true, diferenca: '0.0000000' } },
     nav: {
       classe: 'PLINARF', regra: r.regra, denominador: r.denominador.toFixed(7), porToken: r.porToken.toFixed(8),
-      porTokenSobreCirculante: r.porTokenSobreCirculante!.toFixed(8),
+      porTokenSobreCirculante: r.porTokenSobreCirculante!.toFixed(8), notaDenominador: 'n',
     },
   };
 }
@@ -121,6 +121,14 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
     a.circulante.PLINARF.trustlinesAutorizadas.soma = '81000.0000000';
     const r = await verificarSnapshot(bytesDe(a), leitor({ soma: '81000' }));
     expect(estado(r, 'conciliacao-PLINARF')).toBe('falhou');
+  });
+
+  it('NAV_INICIAL com ativo > 0 no arquivo (R$ 1,00 dando o pool ao 1º investidor): falha', async () => {
+    const a = arquivoBase();
+    a.circulante.PLINARF = { ...a.circulante.PLINARF, totalEmitido: '0.0000000', circulante: '0.0000000', trustlinesAutorizadas: { contas: 0, soma: '0.0000000' } };
+    a.nav = { ...a.nav, regra: 'NAV_INICIAL', denominador: '0.0000000', porToken: '1.00000000', porTokenSobreCirculante: null };
+    const r = await verificarSnapshot(bytesDe(a), leitor({ emitido: '0', soma: '0', contas: 0 }));
+    expect(estado(r, 'nav-do-arquivo')).toBe('falhou');
   });
 
   it('não é JSON: falha sem lançar', async () => {

@@ -116,6 +116,7 @@ export async function verificarSnapshot(
   if ((r.porTokenSobreCirculante ? f8(r.porTokenSobreCirculante) : null) !== arq.nav.porTokenSobreCirculante) {
     divergencias.push('NAV sobre o circulante diverge');
   }
+  if (r.regra === 'NAV_INICIAL' && r.numerador.gt(0)) divergencias.push('NAV inicial (R$ 1,00) com ativo > 0: inconsistência');
   const somaCotas = arq.numerador.cotasAtivas.itens.reduce((s, i) => s.plus(i.valorMarcado), D(0));
   if (somaCotas.toFixed(2) !== arq.numerador.cotasAtivas.valorMarcado) divergencias.push('soma das cotas ≠ valorMarcado');
   if (divergencias.length > 0) add('nav-do-arquivo', 'falhou', divergencias.join('; '));

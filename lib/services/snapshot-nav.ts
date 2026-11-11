@@ -26,6 +26,8 @@ import { canonicalizar } from './json-canonico';
 import { NavIndisponivelError, lerSupplyDoNav } from './nav-supply';
 import { navParaEmissao } from './pool';
 import {
+  NOTA_DENOMINADOR,
+  NOTA_NAV_INICIAL,
   SNAPSHOT_TIPO,
   SNAPSHOT_VERSAO,
   f7,
@@ -92,7 +94,10 @@ async function lerNumerador() {
   const [cotas, grupos] = await Promise.all([
     db.cota.findMany({
       where: { status: { in: ['DISPONIVEL', 'RESERVADA'] } },
-      select: { id: true, status: true, valorCarta: true, desagioAquisicao: true, tokensEmitidos: true },
+      select: {
+        id: true, status: true, valorCarta: true, desagioAquisicao: true, tokensEmitidos: true,
+        hashValidacao: true, emissaoTxHash: true,
+      },
       orderBy: { id: 'asc' },
     }),
     db.movimentoFundo.groupBy({ by: ['tipo'], _sum: { deltaCaixa: true }, _count: { _all: true } }),
@@ -149,8 +154,10 @@ async function gerarArquivo(agora: Date): Promise<{ arquivo: ArquivoSnapshotNav;
 
   const horizonFim = await lerRaiz();
   const num2 = await lerNumerador();
-  const numerador = montarNumerador(num1.cotas, num1.caixa);
-  if (canonicalizar(numerador) !== canonicalizar(montarNumerador(num2.cotas, num2.caixa))) {
+  // Mainnet: valorCarta/deságio não vão ao arquivo público (política de preço; reidentificação do cedente).
+  const opcoes = { incluirPrecoDaCarta: STELLAR_NETWORK !== 'PUBLIC' };
+  const numerador = montarNumerador(num1.cotas, num1.caixa, opcoes);
+  if (canonicalizar(numerador) !== canonicalizar(montarNumerador(num2.cotas, num2.caixa, opcoes))) {
     throw new SnapshotNavError('LEITURA_INCONSISTENTE', 'NUMERADOR_MUDOU');
   }
   // As duas leituras de circulante (NAV e conciliação) são independentes: têm de ser o mesmo número.
@@ -161,6 +168,11 @@ async function gerarArquivo(agora: Date): Promise<{ arquivo: ArquivoSnapshotNav;
     throw new SnapshotNavError('LEITURA_INCONSISTENTE', 'CIRCULANTE_MUDOU');
   }
 
+  // Sem supply emitido o preço inicial (R$ 1,00) só vale com ativo zero; ativo > 0 sem token é inconsistência
+  // (daria o pool inteiro ao 1º investidor): fail-closed (parecer da Consuelo, 11/11).
+  if (supply.senior.totalEmitido.lte(0) && new Prisma.Decimal(numerador.total).gt(0)) {
+    throw new SnapshotNavError('NAV_INDISPONIVEL', 'SUPPLY_ZERO_COM_ATIVO');
+  }
   let navPorToken: Prisma.Decimal;
   try {
     navPorToken = navParaEmissao(
@@ -200,6 +212,7 @@ async function gerarArquivo(agora: Date): Promise<{ arquivo: ArquivoSnapshotNav;
       denominador: '',
       porToken: f8(navPorToken),
       porTokenSobreCirculante: null,
+      notaDenominador: NOTA_DENOMINADOR,
     },
   };
   // Denominador, regra e NAV sobre circulante saem da MESMA conta que o revisor repete (não de uma 2ª fórmula).
@@ -211,6 +224,8 @@ async function gerarArquivo(agora: Date): Promise<{ arquivo: ArquivoSnapshotNav;
     denominador: f7(r.denominador),
     porToken: f8(r.porToken),
     porTokenSobreCirculante: r.porTokenSobreCirculante ? f8(r.porTokenSobreCirculante) : null,
+    notaDenominador: NOTA_DENOMINADOR,
+    ...(r.regra === 'NAV_INICIAL' ? { nota: NOTA_NAV_INICIAL } : {}),
   };
   return { arquivo, navPorToken };
 }

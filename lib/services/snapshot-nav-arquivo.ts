@@ -33,15 +33,22 @@ export interface ArquivoSnapshotNav {
   rede: string;
   horizon: { ledger: number; fechadoEm: string; lidoEm: string; ledgerFinal: number };
   numerador: {
+    /** valorMarcado = valorCarta × (1 − deságio): custo de aquisição, sem saldo devedor, correção nem provisão. */
+    regraMarcacao: 'CUSTO_DE_AQUISICAO';
     cotasAtivas: {
       quantidade: number;
       valorMarcado: string;
       itens: Array<{
         cotaId: string;
         status: string;
-        valorCarta: string;
-        desagioAquisicao: string;
         valorMarcado: string;
+        /** Laudo de validação (memo on-chain da validação); liga a cota à prova. */
+        hashValidacao: string | null;
+        /** Tx da emissão do token contra a cota. */
+        emissaoTxHash: string | null;
+        /** Só fora da mainnet (política de preço / reidentificação do cedente): parecer da Consuelo, 11/11. */
+        valorCarta?: string;
+        desagioAquisicao?: string;
       }>;
     };
     caixaRealizado: { total: string; movimentos: number; porTipo: Record<string, string> };
@@ -54,8 +61,12 @@ export interface ArquivoSnapshotNav {
     regra: 'NAV_DO_LEDGER' | 'NAV_INICIAL';
     denominador: string;
     porToken: string;
-    /** numerador ÷ circulante do SOW; null com circulante 0. */
+    /** numerador ÷ circulante do SOW; só informação (null com circulante 0). */
     porTokenSobreCirculante: string | null;
+    /** Por que o preço usa o supply emitido e não o circulante do SOW. */
+    notaDenominador: string;
+    /** Só com NAV_INICIAL: preço inicial de emissão, não um NAV medido. */
+    nota?: string;
   };
 }
 
@@ -63,11 +74,17 @@ const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 export const f7 = (v: Prisma.Decimal.Value) => D(v).toFixed(7);
 export const f8 = (v: Prisma.Decimal.Value) => D(v).toFixed(8);
 
+export const NOTA_DENOMINADOR =
+  'o preço usa o supply emitido (circulante + distributor): tokens do distributor são aporte da Plina, com direito ao ativo; porTokenSobreCirculante é só informação (circulante do SOW)';
+export const NOTA_NAV_INICIAL = 'sem tokens em circulação: preço inicial de emissão, não um NAV medido';
+
 export interface CotaDoNumerador {
   id: string;
   status: string;
   valorCarta: Prisma.Decimal.Value;
   desagioAquisicao: Prisma.Decimal.Value;
+  hashValidacao?: string | null;
+  emissaoTxHash?: string | null;
 }
 
 export interface CaixaDoNumerador {
@@ -79,15 +96,19 @@ export interface CaixaDoNumerador {
 export function montarNumerador(
   cotas: CotaDoNumerador[],
   caixa: CaixaDoNumerador,
+  opts: { incluirPrecoDaCarta: boolean } = { incluirPrecoDaCarta: true },
 ): ArquivoSnapshotNav['numerador'] {
   const itens = [...cotas]
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
     .map((c) => ({
       cotaId: c.id,
       status: c.status,
-      valorCarta: D(c.valorCarta).toFixed(2),
-      desagioAquisicao: D(c.desagioAquisicao).toFixed(4),
       valorMarcado: navDaCotaAsDecimal(c).toFixed(2),
+      hashValidacao: c.hashValidacao ?? null,
+      emissaoTxHash: c.emissaoTxHash ?? null,
+      ...(opts.incluirPrecoDaCarta
+        ? { valorCarta: D(c.valorCarta).toFixed(2), desagioAquisicao: D(c.desagioAquisicao).toFixed(4) }
+        : {}),
     }));
   const valorMarcado = itens.reduce((s, i) => s.plus(i.valorMarcado), D(0));
   const porTipo: Record<string, string> = {};
@@ -97,6 +118,7 @@ export function montarNumerador(
     total = total.plus(caixa.porTipo[tipo]);
   }
   return {
+    regraMarcacao: 'CUSTO_DE_AQUISICAO',
     cotasAtivas: { quantidade: itens.length, valorMarcado: valorMarcado.toFixed(2), itens },
     caixaRealizado: { total: f7(total), movimentos: caixa.movimentos, porTipo },
     total: f7(valorMarcado.plus(total)),

@@ -13,6 +13,7 @@ const m = vi.hoisted(() => ({
   ancora: vi.fn(),
   blob: vi.fn(),
   falhaCreateUnique: { v: false },
+  rede: { v: 'TESTNET' },
 }));
 
 vi.mock('@/lib/db', () => ({
@@ -52,7 +53,7 @@ vi.mock('@/lib/db', () => ({
   },
 }));
 vi.mock('@/lib/stellar/account', () => ({ horizon: { root: m.root } }));
-vi.mock('@/lib/stellar/config', () => ({ STELLAR_NETWORK: 'TESTNET' }));
+vi.mock('@/lib/stellar/config', () => ({ get STELLAR_NETWORK() { return m.rede.v; } }));
 vi.mock('@/lib/services/nav-supply', async (orig) => ({
   ...(await orig<typeof import('@/lib/services/nav-supply')>()),
   lerSupplyDoNav: m.supply,
@@ -103,6 +104,7 @@ beforeEach(() => {
   process.env.STELLAR_DISTRIBUTOR_PUBLIC = 'GDISTRIBUTOR';
   m.rows.length = 0;
   m.falhaCreateUnique.v = false;
+  m.rede.v = 'TESTNET';
   m.cotas.mockReset().mockResolvedValue([
     { id: 'c1', status: 'DISPONIVEL', valorCarta: D('100000.00'), desagioAquisicao: D('0.2000'), tokensEmitidos: D('80000') },
   ]);
@@ -139,6 +141,53 @@ describe('publicarSnapshotNav', () => {
     expect(recalcularNav(arq).porToken.toFixed(8)).toBe(arq.nav.porToken);
     // sem PII e sem float
     expect(bytes.toString('utf8')).not.toMatch(/cpf|email|@|\d\.\d+[,}\]](?!")/i);
+  });
+
+  it('itens públicos: hashValidacao e emissaoTxHash; regraMarcacao e notaDenominador no arquivo; testnet mantém valorCarta', async () => {
+    m.cotas.mockResolvedValue([{ id: 'c1', status: 'DISPONIVEL', valorCarta: D('100000.00'), desagioAquisicao: D('0.2000'), tokensEmitidos: D('80000'), hashValidacao: 'h'.repeat(64), emissaoTxHash: 't'.repeat(64) }]);
+    await publicarSnapshotNav({ agora: AGORA });
+    const arq = JSON.parse(m.rows[0].conteudo) as ArquivoSnapshotNav;
+    expect(arq.numerador.regraMarcacao).toBe('CUSTO_DE_AQUISICAO');
+    expect(arq.numerador.cotasAtivas.itens[0]).toMatchObject({ hashValidacao: 'h'.repeat(64), emissaoTxHash: 't'.repeat(64), valorCarta: '100000.00', desagioAquisicao: '0.2000' });
+    expect(arq.nav.notaDenominador).toMatch(/aporte da Plina/);
+  });
+
+  it('mainnet (PUBLIC): valorCarta e deságio NÃO vão ao arquivo público, e o NAV é o mesmo', async () => {
+    m.rede.v = 'PUBLIC';
+    await publicarSnapshotNav({ agora: AGORA });
+    const arq = JSON.parse(m.rows[0].conteudo) as ArquivoSnapshotNav;
+    expect(arq.numerador.cotasAtivas.itens[0]).not.toHaveProperty('valorCarta');
+    expect(arq.numerador.cotasAtivas.itens[0]).not.toHaveProperty('desagioAquisicao');
+    expect(arq.numerador.total).toBe('82000.0000000');
+  });
+
+  it('com distributor com saldo: nav.porToken usa o emitido e porTokenSobreCirculante vai só como informação', async () => {
+    m.supply.mockResolvedValue({ senior: sup('PLINARF', '82000', '20000'), subordinada: sup('PLINARFB', '0', '0') });
+    m.conc.mockResolvedValue({ senior: conc('PLINARF', '62000', 3), subordinada: conc('PLINARFB', '0', 0) });
+    await publicarSnapshotNav({ agora: AGORA });
+    const arq = JSON.parse(m.rows[0].conteudo) as ArquivoSnapshotNav;
+    expect(arq.nav.porToken).toBe('1.00000000');
+    expect(arq.nav.porTokenSobreCirculante).toBe('1.32258065');
+    expect(arq.nav.denominador).toBe('82000.0000000');
+  });
+
+  it('supply 0 com ativo > 0: NÃO publica (R$ 1,00 daria o pool ao 1º investidor)', async () => {
+    m.supply.mockResolvedValue({ senior: sup('PLINARF', '0', '0'), subordinada: sup('PLINARFB', '0', '0') });
+    m.conc.mockResolvedValue({ senior: conc('PLINARF', '0', 0), subordinada: conc('PLINARFB', '0', 0) });
+    await expect(publicarSnapshotNav({ agora: AGORA })).rejects.toMatchObject({ code: 'NAV_INDISPONIVEL', causa: 'SUPPLY_ZERO_COM_ATIVO' });
+    expect(m.rows).toHaveLength(0);
+    expect(m.ancora).not.toHaveBeenCalled();
+  });
+
+  it('supply 0 e ativo 0: publica NAV_INICIAL rotulado como preço inicial de emissão', async () => {
+    m.supply.mockResolvedValue({ senior: sup('PLINARF', '0', '0'), subordinada: sup('PLINARFB', '0', '0') });
+    m.conc.mockResolvedValue({ senior: conc('PLINARF', '0', 0), subordinada: conc('PLINARFB', '0', 0) });
+    m.cotas.mockResolvedValue([]);
+    m.grupos.mockResolvedValue([]);
+    await publicarSnapshotNav({ agora: AGORA });
+    const arq = JSON.parse(m.rows[0].conteudo) as ArquivoSnapshotNav;
+    expect(arq.nav).toMatchObject({ regra: 'NAV_INICIAL', porToken: '1.00000000', porTokenSobreCirculante: null });
+    expect(arq.nav.nota).toMatch(/preço inicial de emissão/);
   });
 
   it('2ª chamada no mesmo dia: reutilizada, sem gates, sem Blob e sem 2ª âncora', async () => {
