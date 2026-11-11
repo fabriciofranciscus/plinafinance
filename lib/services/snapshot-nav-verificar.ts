@@ -62,7 +62,7 @@ const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 export async function verificarSnapshot(
   bytes: Buffer,
   leitor: LeitorHorizon,
-  opts: { txHash?: string; issuerEsperado?: string; distributorEsperado?: string } = {},
+  opts: { txHash?: string; issuerEsperado?: string; distributorEsperado?: string; redeEsperada?: string } = {},
 ): Promise<ResultadoVerificacao> {
   const conf: Conferencia[] = [];
   const add = (id: string, estado: Estado, detalhe: string) => conf.push({ id, estado, detalhe });
@@ -96,6 +96,13 @@ export async function verificarSnapshot(
   // 1b. As contas são da Plina? Issuer, distributor e rede vêm do PRÓPRIO arquivo; sem fixá-los, um arquivo forjado
   // com contas e âncora de outra parte sairia conferido (F-E31-2). O revisor informa as contas da Plina (as do pacote
   // de evidência); se não informar, o resultado nunca é "conferido".
+  let identidadeFalhou = false;
+  if (opts.redeEsperada) {
+    if (arq.rede.toUpperCase() !== opts.redeEsperada.toUpperCase()) {
+      identidadeFalhou = true;
+      add('rede', 'falhou', `rede do arquivo (${arq.rede}) ≠ rede informada (${opts.redeEsperada})`);
+    } else add('rede', 'ok', `rede ${arq.rede} = a informada`);
+  }
   const contas = Object.entries(arq.circulante).map(([code, a]) => ({ code, issuer: a.issuer, distributor: a.distributor }));
   const lista = contas.map((c) => `${c.code}: issuer ${c.issuer}, distributor ${c.distributor}`).join(' | ');
   if (opts.issuerEsperado || opts.distributorEsperado) {
@@ -105,6 +112,7 @@ export async function verificarSnapshot(
         (opts.distributorEsperado && c.distributor !== opts.distributorEsperado),
     );
     if (erradas.length > 0) {
+      identidadeFalhou = true;
       add('contas-da-plina', 'falhou', `contas do arquivo ≠ contas esperadas da Plina (issuer esperado ${opts.issuerEsperado ?? '—'}, distributor esperado ${opts.distributorEsperado ?? '—'}); no arquivo: ${lista}`);
     } else {
       add('contas-da-plina', 'ok', `contas do arquivo = as esperadas da Plina (${lista})`);
@@ -113,20 +121,35 @@ export async function verificarSnapshot(
   if (!opts.issuerEsperado || !opts.distributorEsperado) {
     add('contas-da-plina-fixadas', 'nao_conferido', `issuer/distributor da Plina NÃO foram fixados (use --issuer e --distributor, ou STELLAR_ISSUER_PUBLIC/STELLAR_DISTRIBUTOR_PUBLIC): um arquivo forjado com contas de terceiros também conferiria. Contas no arquivo: ${lista}`);
   }
-  add('numerador', 'ok', `o numerador (cotas + caixa) NÃO está no Horizon: é a declaração da Plina (${arq.numerador.fonte ?? "fonte não declarada neste arquivo"}); aqui só a soma é conferida contra o próprio arquivo`);
+  add('numerador', 'ok', `denominador e conciliação refeitos do Horizon; numerador = insumos publicados (cotas + caixa, NÃO estão no Horizon), cada cota com o seu hash de validação ancorado. Fonte declarada: ${arq.numerador.fonte ?? 'não declarada neste arquivo'}; aqui só a soma é conferida contra o próprio arquivo`);
 
   // 2. A âncora: memo hash da tx do distributor = SHA-256 do arquivo.
   const memoB64 = Buffer.from(sha256, 'hex').toString('base64');
-  const txs = (await leitor.buscarPorMemo(classe.distributor, memoB64)).filter(
-    (t) => t.successful && t.source_account === classe.distributor && t.memo_type === 'hash' && t.memo === memoB64,
+  const distAncora = opts.distributorEsperado ?? classe.distributor; // a âncora tem de sair do distributor INFORMADO, não do declarado no arquivo
+  let candidatas: TxHorizon[] = [];
+  let leituraAncoraFalhou = false;
+  try {
+    candidatas = await leitor.buscarPorMemo(distAncora, memoB64);
+  } catch {
+    // Conta inexistente nessa rede (ex.: --network errada) ou Horizon fora: a âncora não foi provada.
+    leituraAncoraFalhou = true;
+    add('ancora', 'falhou', `não foi possível ler as transações do distributor ${distAncora} no Horizon da rede informada`);
+  }
+  const txs = candidatas.filter(
+    (t) => t.successful && t.source_account === distAncora && t.memo_type === 'hash' && t.memo === memoB64,
   );
-  if (txs.length === 0) add('ancora', 'falhou', `nenhuma tx do distributor ${classe.distributor} com Memo.hash = SHA-256 do arquivo`);
+  if (leituraAncoraFalhou) {
+    /* já reportado acima */
+  } else if (txs.length === 0) add('ancora', 'falhou', `nenhuma tx do distributor ${distAncora} com Memo.hash = SHA-256 do arquivo`);
   else if (opts.txHash && !txs.some((t) => t.hash === opts.txHash)) {
     add('ancora', 'falhou', `a tx ${opts.txHash} não tem esse memo (âncora(s) achada(s): ${txs.map((t) => t.hash).join(', ')})`);
   } else {
     add('ancora', 'ok', `tx ${txs[0].hash} (${txs[0].created_at}): Memo.hash = SHA-256 do arquivo, source = distributor`);
     if (txs.length > 1) add('ancora-unica', 'nao_conferido', `${txs.length} âncoras com o mesmo hash (inofensivo, mas operador confere)`);
   }
+
+  // Contas ou rede diferentes das informadas: o resto (NAV e leituras no Horizon) seria sobre contas de terceiros.
+  if (identidadeFalhou) return fim();
 
   // 3. O NAV refeito só com o conteúdo do arquivo (sem confiar em total pré-somado).
   const r = recalcularNav(arq);

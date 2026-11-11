@@ -50,7 +50,7 @@ function leitor(over: Partial<{ ledger: number; emitido: string; dist: string; s
       (o.txs ?? ((m) => [{ hash: 'tx1', successful: true, source_account: DIST, memo_type: 'hash', memo: m, created_at: '2026-11-12T09:00:06Z' }]))(memo),
   };
 }
-const PLINA = { issuerEsperado: 'GISS', distributorEsperado: DIST };
+const PLINA = { issuerEsperado: 'GISS', distributorEsperado: DIST, redeEsperada: 'testnet' };
 const estado = (r: Awaited<ReturnType<typeof verificarSnapshot>>, id: string) => r.conferencias.find((c) => c.id === id)?.estado;
 
 describe('verificarSnapshot (a prova do avaliador)', () => {
@@ -60,7 +60,6 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
     expect(r.codigoSaida).toBe(0);
     expect(r.sha256).toBe(sha(bytes));
     expect(r.conferencias.every((c) => c.estado === 'ok')).toBe(true);
-    expect(r.conferencias.find((c) => c.id === 'numerador')?.detalhe).toMatch(/NÃO está no Horizon/);
   });
 
   it('F-E31-2: sem fixar issuer/distributor da Plina o resultado NUNCA é "conferido" (saída 2) e imprime as contas do arquivo', async () => {
@@ -147,6 +146,32 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
     a.nav = { ...a.nav, regra: 'NAV_INICIAL', denominador: '0.0000000', porToken: '1.00000000', porTokenSobreCirculante: null };
     const r = await verificarSnapshot(bytesDe(a), leitor({ emitido: '0', soma: '0', contas: 0 }));
     expect(estado(r, 'nav-do-arquivo')).toBe('falhou');
+  });
+
+  it('rede do arquivo ≠ rede informada: falha', async () => {
+    const r = await verificarSnapshot(bytesDe({ ...arquivoBase(), rede: 'PUBLIC' }), leitor(), PLINA);
+    expect(estado(r, 'rede')).toBe('falhou');
+    expect(r.codigoSaida).toBe(1);
+  });
+
+  it('âncora de outra conta que não o distributor INFORMADO (o arquivo declara a conta do atacante e ela ancorou): falha', async () => {
+    const a = arquivoBase();
+    a.circulante.PLINARF.distributor = 'GATACANTE_DIST';
+    const r = await verificarSnapshot(
+      bytesDe(a),
+      leitor({ txs: (m) => [{ hash: 'tx1', successful: true, source_account: 'GATACANTE_DIST', memo_type: 'hash', memo: m, created_at: 'x' }] }),
+      PLINA,
+    );
+    expect(estado(r, 'ancora')).toBe('falhou'); // busca/exige source = distributor informado
+    expect(estado(r, 'contas-da-plina')).toBe('falhou');
+    expect(r.codigoSaida).toBe(1);
+  });
+
+  it('F-E31-3: a saída diz que denominador e conciliação vêm do Horizon e o numerador são insumos publicados com hash ancorado', async () => {
+    const r = await verificarSnapshot(bytesDe(arquivoBase()), leitor(), PLINA);
+    expect(r.conferencias.find((c) => c.id === 'numerador')?.detalhe).toMatch(
+      /denominador e conciliação refeitos do Horizon; numerador = insumos publicados.*hash de validação ancorado/,
+    );
   });
 
   it('não é JSON: falha sem lançar', async () => {
