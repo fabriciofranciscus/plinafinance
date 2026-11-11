@@ -10,6 +10,7 @@
 
 import { NextResponse } from 'next/server';
 import { requireOpsCron } from '@/lib/auth/ops-cron';
+import { enviarAlertaOps } from '@/lib/services/alerta-ops';
 import { reconciliarSwapsOrfaos } from '@/lib/services/swap-escrituracao';
 
 export const dynamic = 'force-dynamic';
@@ -19,10 +20,23 @@ export async function GET(req: Request) {
   const negado = await requireOpsCron(req);
   if (negado) return negado;
   try {
-    const r = await reconciliarSwapsOrfaos();
-    // Alarme imediato: tx liberada por tempo que entrou depois com o quote já consumido por OUTRA tx (emissão
-    // dupla) ou erro no lote. O agendador (workflow do Farol) deve falhar o job quando `alerta` for true.
-    return NextResponse.json({ ...r, alerta: r.vigiaConflitos > 0 });
+    const { conflitoQuoteIds, ...contagens } = await reconciliarSwapsOrfaos();
+    // Alarme imediato (mesmo canal do alarme de emissão: e-mail da caixa de incidentes): conflito NOVO da vigia
+    // de 24 h = emissão dupla. Um e-mail por quote (dedupe no reconciliador). O corpo leva só ids internos.
+    let alertaEnviado = false;
+    if (conflitoQuoteIds.length > 0) {
+      alertaEnviado = await enviarAlertaOps({
+        assunto: 'swap liberado por tempo entrou na chain com o quote já consumido (possível emissão dupla)',
+        linhas: [
+          'A vigia de 24 h achou uma tx de swap, liberada por tempo, que entrou on-chain com sucesso enquanto o quote',
+          'já foi consumido por OUTRA tx. NÃO foi escriturada. O operador/Atlas decide (runbook).',
+          '',
+          ...conflitoQuoteIds.map((id) => `quote: ${id}`),
+        ],
+      });
+    }
+    // `alerta` também fica na resposta: o workflow agendado deve falhar o job quando for true.
+    return NextResponse.json({ ...contagens, alerta: contagens.vigiaConflitos > 0, alertaEnviado });
   } catch (err) {
     console.error('[ops/reconciliar-subscricoes]', (err as { name?: string })?.name ?? 'erro');
     return NextResponse.json({ error: 'erro interno' }, { status: 500 });

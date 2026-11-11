@@ -465,6 +465,8 @@ model Quote {
   /// 1ª varredura que viu S livre depois de maxTime + espera: a liberação por tempo exige uma 2ª, ≥ 5 min depois
   /// (um nó atrasado do Horizon não decide sozinho).
   livreExpiradaVistaEm DateTime?
+  /// Dedupe do alerta de conflito da vigia (tx liberada por tempo entrou e o quote já tem outra tx): 1 e-mail por quote.
+  conflitoAlertadoEm DateTime?
   liberadaTxHash     String?
   liberadaPorTempoEm DateTime?
   criadoEm       DateTime       @default(now())
