@@ -560,14 +560,6 @@ describe('POST /api/investidor/buy/swap/submit', () => {
       return tx.toXDR();
     };
 
-    it('XDR com memo diferente do build → 400, sem reservar nem assinar', async () => {
-      quoteFindUnique.mockResolvedValueOnce(baseQuote());
-      const r = await POST(req({ quoteId: 'q_1', signedXdr: txCom({ memo: 'oi' }) }));
-      expect(r.status).toBe(400);
-      expect(quoteUpdateMany).not.toHaveBeenCalled();
-      expect(submitWithPrivySignature).not.toHaveBeenCalled();
-    });
-
     it('fee abaixo do mínimo da rede → 400, sem reservar nem assinar', async () => {
       quoteFindUnique.mockResolvedValueOnce(baseQuote());
       const r = await POST(req({ quoteId: 'q_1', signedXdr: txCom({ fee: '50' }) })); // 1 op × 50 < 100
@@ -577,12 +569,13 @@ describe('POST /api/investidor/buy/swap/submit', () => {
       expect(submitWithPrivySignature).not.toHaveBeenCalled();
     });
 
-    it('memo igual ao do build (q:<quoteId>) e XDR sem memo passam', async () => {
+    it('o validador recebe o prazo do quote e o memo do build (memo/prazo são conferidos lá)', async () => {
       quoteFindUnique.mockResolvedValueOnce(baseQuote());
-      expect((await POST(req({ quoteId: 'q_1', signedXdr: txCom({ memo: 'q:q_1' }) }))).status).toBe(200);
-      quoteFindUnique.mockResolvedValueOnce(baseQuote());
-      quoteUpdateMany.mockResolvedValue({ count: 1 });
-      expect((await POST(req({ quoteId: 'q_1', signedXdr: txCom({}) }))).status).toBe(200);
+      const r = await POST(req({ quoteId: 'q_1', signedXdr: txCom({ memo: 'q:q_1' }) }));
+      expect(r.status).toBe(200);
+      const expectativa = assertSwapXdrMatchesQuote.mock.calls[0][1];
+      expect(expectativa.memoTexto).toBe('q:q_1');
+      expect(expectativa.quoteExpiresAt).toBeInstanceOf(Date);
     });
 
     it('fee igual ou acima do mínimo passa', async () => {

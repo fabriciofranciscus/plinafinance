@@ -190,6 +190,9 @@ export const POST = withAuth(async (req, { user }) => {
         expectedBridgeAmount,
         expectedPlinarfAmount,
         plinarfCode,
+        // N1-S1: o envelope só vale até o prazo do quote (+120 s) e leva o memo do build.
+        quoteExpiresAt: quote.expiresAt,
+        memoTexto: `q:${quote.id.slice(0, 24)}`,
       });
     } catch (err) {
       return NextResponse.json(
@@ -200,19 +203,11 @@ export const POST = withAuth(async (req, { user }) => {
       );
     }
 
-    // N1-S1(c) (Argus/Atlas): recusa memo estranho e fee baixo ANTES de reservar e assinar: uma tx com fee
-    // abaixo do mínimo da rede volta tx_insufficient_fee/tx_bad_seq e deixa uma reserva órfã. O memo é o do
-    // build (`q:<quoteId>`, texto) ou nenhum — o Argus pediu "none", mas o build real usa esse memo.
-    // O fee só vale em reserva NOVA: numa órfã a tx pode já estar no ledger com o fee de antes e precisa
-    // ser reconciliada, não recusada.
+    // N1-S1(c) (Argus/Atlas): o fee abaixo do mínimo da rede volta tx_insufficient_fee/tx_bad_seq e deixa uma
+    // reserva órfã: recusa ANTES de reservar e assinar. O memo e o prazo são conferidos pelo validador
+    // (memoTexto = o do build, quoteExpiresAt). O fee só vale em reserva NOVA: numa órfã a tx pode já estar
+    // no ledger com o fee de antes e precisa ser reconciliada, não recusada.
     const txRecebida = new Transaction(signedXdr, networkPassphrase);
-    const memoDoBuild = `q:${quote.id.slice(0, 24)}`;
-    const memoOk =
-      txRecebida.memo.type === 'none' ||
-      (txRecebida.memo.type === 'text' && String(txRecebida.memo.value) === memoDoBuild);
-    if (!memoOk) {
-      return NextResponse.json({ error: 'memo do xdr diferente do build — refaça o swap' }, { status: 400 });
-    }
     if (!quote.submitXdrHash) {
       const feeMinimo = BigInt(await getDynamicFee()) * BigInt(txRecebida.operations.length);
       if (BigInt(txRecebida.fee) < feeMinimo) {
