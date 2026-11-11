@@ -17,7 +17,10 @@ const BRIDGE_ISSUER = Keypair.random().publicKey();
 const QUOTE_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
 
 async function construir(quoteId = QUOTE_ID) {
-  vi.spyOn(horizon, 'loadAccount').mockResolvedValue(new Account(INV, '100') as never);
+  vi.spyOn(horizon, 'loadAccount').mockResolvedValue(
+    // N1-at: investidor com trustline PLINARF autorizada.
+    Object.assign(new Account(INV, '100'), { balances: [{ asset_type: 'credit_alphanum12', asset_code: 'PLINARF', asset_issuer: ISSUER, balance: '0', is_authorized: true }] }) as never,
+  );
   vi.spyOn(horizon, 'feeStats').mockResolvedValue({ fee_charged: { p70: '100' } } as never);
   return buildSwapBridgeForPlinarfXdr({
     investorPubkey: INV,

@@ -18,7 +18,10 @@ describe('build do swap → validador (contrato N1)', () => {
   it('o envelope do buildSwapBridgeForPlinarfXdr passa com quoteExpiresAt e memoTexto', async () => {
     _resetFeeCacheForTests();
     vi.spyOn(horizon, 'feeStats').mockResolvedValue({ fee_charged: { p70: '100' } } as never);
-    vi.spyOn(horizon, 'loadAccount').mockResolvedValue(new Account(INVESTOR, '42') as never);
+    vi.spyOn(horizon, 'loadAccount').mockResolvedValue(
+      // N1-at: investidor com trustline PLINARF autorizada.
+      Object.assign(new Account(INVESTOR, '42'), { balances: [{ asset_type: 'credit_alphanum12', asset_code: 'PLINARF', asset_issuer: ISSUER, balance: '0', is_authorized: true }] }) as never,
+    );
     const memo = 'q:quote-abc-123';
 
     const { xdr } = await buildSwapBridgeForPlinarfXdr({

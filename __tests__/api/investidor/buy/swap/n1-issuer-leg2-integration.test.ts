@@ -76,7 +76,12 @@ const req = (body: object) =>
   new Request('http://x/submit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
 async function build() {
-  m.loadAccount.mockResolvedValue(new Account(USER.publicKey(), '10'));
+  m.loadAccount.mockResolvedValue(
+    // N1-at: investidor com trustline PLINARF autorizada.
+    Object.assign(new Account(USER.publicKey(), '10'), {
+      balances: [{ asset_type: 'credit_alphanum12', asset_code: 'PLINARF', asset_issuer: ISSUER.publicKey(), balance: '0', is_authorized: true }],
+    }),
+  );
   return buildSwapBridgeForPlinarfXdr({
     investorPubkey: USER.publicKey(),
     bridgeAsset: new Asset(BRIDGE.code, BRIDGE.issuer),
