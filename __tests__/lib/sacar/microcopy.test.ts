@@ -99,8 +99,8 @@ describe('microcopy do resgate (E2-6): erros da Norma §2.8–2.9', () => {
   it('502: "não confirmou, estamos conferindo", nunca "não foram resgatados"; genérico e conflito mandam conferir antes de tentar de novo', () => {
     const r = erroResgate('rede_nao_confirmou', 'submit', 'q-9');
     expect(r.titulo).toBe('A rede não confirmou o resgate');
-    expect(r.texto).toMatch(/não confirmou este resgate e estamos conferindo/);
-    expect(r.texto).toMatch(/confira seu saldo/);
+    expect(r.texto).toMatch(/Estamos conferindo automaticamente\. Não repita o resgate agora/);
+    expect(r.texto).toMatch(/Consulte sua posição mais tarde/);
     expect(r.texto).toContain('número do pedido (q-9)');
     for (const t of ['rede_nao_confirmou', 'generico', 'conflito'] as const) {
       expect(erroResgate(t, 'submit', 'q-9').texto).not.toMatch(/não foram resgatados|gere uma nova cotação|tente novamente;/i);
@@ -133,6 +133,10 @@ describe('microcopy do resgate (E2-6): erros da Norma §2.8–2.9', () => {
     expect(rec.titulo).toBe('A rede recusou o resgate');
     expect(rec.texto).toBe('A rede de testes não aceitou este resgate, e seus tokens de demonstração não foram resgatados. Você pode tentar de novo.');
     expect(erroResgate('rede_nao_confirmou', 'submit', 'q-1').texto).toMatch(/Não há prazo definido\.$/);
+    // 504 (Norma §2.9): orienta a NÃO repetir e a consultar a posição
+    const inc = erroResgate('rede_nao_confirmou', 'submit', 'q-1');
+    expect(inc.texto).toBe('Não conseguimos confirmar o resultado na rede de testes. Estamos conferindo automaticamente. Não repita o resgate agora: um novo pedido ficaria em conferência. Consulte sua posição mais tarde; seus tokens de demonstração só saem se a rede confirmar. Se demorar, fale conosco em contato@plina.finance informando o número do pedido (q-1). Não há prazo definido.');
+    expect(RESGATE.verPosicao).toBe('Ver minha posição');
     expect(erroResgate('rede_nao_confirmou', 'submit', 'q-1').texto).not.toMatch(/não foram resgatados/);
   });
 

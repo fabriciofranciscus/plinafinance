@@ -151,7 +151,7 @@ export function erroResgate(
       // NÃO dizer "não foram resgatados".
       return {
         titulo: 'A rede não confirmou o resgate',
-        texto: `A rede de testes não confirmou este resgate e estamos conferindo. Seus tokens de demonstração só saem se a rede confirmar. Antes de tentar de novo, confira seu saldo. Se você iniciar outro resgate agora, pode aparecer que há um resgate em conferência; fale conosco em ${EQUIPE}${numero}. Não há prazo definido.`,
+        texto: `Não conseguimos confirmar o resultado na rede de testes. Estamos conferindo automaticamente. Não repita o resgate agora: um novo pedido ficaria em conferência. Consulte sua posição mais tarde; seus tokens de demonstração só saem se a rede confirmar. Se demorar, fale conosco em ${EQUIPE}${numero}. Não há prazo definido.`,
       };
     case 'rede_recusou':
       // SÓ com o código novo do Bento (STELLAR_SUBMIT_FAILED separado de INCERTO): rejeição real, reserva liberada.
@@ -190,6 +190,7 @@ export const RESGATE = {
   cancelar: 'Cancelar',
   /** Rótulos de erro do resgate: ver `erroResgate`. Norma §2.8–2.9; o 502 aguarda o Bento. */
   acaoSemLiquidez: 'Tentar outro valor',
+  verPosicao: 'Ver minha posição',
   jaTemTesouro: 'Já tem TESOURO na carteira? Ir direto para o saque (Pix simulado) →',
   detalhesResumo: 'Detalhes técnicos',
   codigo: 'Código',

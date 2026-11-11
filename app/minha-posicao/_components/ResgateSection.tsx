@@ -23,7 +23,8 @@ export function ResgateSection({
 }: { plinarfQty: number } & UseResgateArgs) {
   const r = useResgate(args);
   const amountRef = useRef<HTMLInputElement | null>(null);
-  const ocupado = r.passo === 'building' || r.passo === 'signing' || r.passo === 'submitting';
+  const ocupado =
+    r.passo === 'building' || r.passo === 'signing' || r.passo === 'submitting' || r.emConferencia;
 
   if (r.passo === 'done' && r.txHash) {
     return (
@@ -179,6 +180,18 @@ export function ResgateSection({
                 </>
               );
             })()}
+            {r.emConferencia && (
+              <button
+                type="button"
+                onClick={() => {
+                  args.onDone?.();
+                  window.scrollTo({ top: 0 });
+                }}
+                className="mt-3 min-h-[44px] px-4 border border-red-900/50 font-details text-[10px] tracking-[0.2em] uppercase text-red-900 hover:bg-red-900 hover:text-white"
+              >
+                {RESGATE.verPosicao}
+              </button>
+            )}
             {(r.erro.tipo === 'sem_liquidez' || r.erro.tipo === 'acima_do_teto') && (
               <button
                 type="button"

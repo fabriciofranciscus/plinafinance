@@ -200,6 +200,21 @@ describe('useResgate (contrato E2-4)', () => {
     }
   });
 
+  it('depois de um resultado incerto (504) o resgate fica bloqueado nesta sessão: nem nova cotação nem novo envio', async () => {
+    fetchMock.mockResolvedValueOnce(json(BUILD)).mockResolvedValueOnce(json({ error: 'x', code: 'STELLAR_SUBMIT_INCERTO' }, 504));
+    const { result } = setup();
+    act(() => result.current.setAmount('100'));
+    await act(async () => result.current.gerarCotacao());
+    await act(async () => result.current.confirmar());
+    await flush();
+    expect(result.current.emConferencia).toBe(true);
+    const chamadas = fetchMock.mock.calls.length;
+    act(() => result.current.setAmount('50'));
+    await act(async () => result.current.gerarCotacao());
+    await act(async () => result.current.confirmar());
+    expect(fetchMock.mock.calls.length).toBe(chamadas);
+  });
+
   it('recotar depois de NAV_MUDOU refaz o build e usa o quoteId novo', async () => {
     fetchMock
       .mockResolvedValueOnce(json(BUILD))
