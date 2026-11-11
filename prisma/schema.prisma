@@ -446,6 +446,10 @@ model Quote {
   /// retry com o mesmo XDR não re-submete; com XDR diferente o quote
   /// já está "lacrado" e retorna 409.
   submitXdrHash  String?        @unique
+  /// N1: hash da tx e maxTime do envelope reservado (gravados junto com `submitXdrHash`). Permitem
+  /// escriturar/liberar uma reserva órfã sem o investidor (reconciliarSwapsOrfaos).
+  submitTxHash   String?
+  submitMaxTime  DateTime?
   criadoEm       DateTime       @default(now())
 
   onRampOrder  OnRampOrder?

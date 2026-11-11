@@ -29,8 +29,10 @@ import {
   fetchTransactionByHash,
 } from '@/lib/stellar/transactions';
 import { issuerSigner } from '@/lib/stellar/signer';
+import { getDynamicFee } from '@/lib/stellar/fee';
 import { NavMudouError, revalidarNavDaCotacao } from '@/lib/services/emissao';
-import { assertClasseDisponivel, valorLiquidoDaCotacao } from '@/lib/services/regras-swap';
+import { assertClasseDisponivel } from '@/lib/services/regras-swap';
+import { escriturarSwap, liberarReservaDoSwap } from '@/lib/services/swap-escrituracao';
 import { ApiError } from '@/lib/api/errors';
 import { navUnavailableResponse } from '@/lib/api/nav-unavailable';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
@@ -47,8 +49,6 @@ import { resolveTesouroAsset } from '@/lib/anchors/etherfuse/tesouro';
 
 export const dynamic = 'force-dynamic';
 
-/** Folga depois do maxTime do envelope para o ledger fechar e o Horizon ingerir (antes de liberar a reserva). */
-const MARGEM_FECHAMENTO_LEDGER_SEC = 120;
 
 /**
  * Assinatura do investidor no envelope: exatamente UMA assinatura, com o hint da
@@ -200,6 +200,29 @@ export const POST = withAuth(async (req, { user }) => {
       );
     }
 
+    // N1-S1(c) (Argus/Atlas): recusa memo estranho e fee baixo ANTES de reservar e assinar: uma tx com fee
+    // abaixo do mínimo da rede volta tx_insufficient_fee/tx_bad_seq e deixa uma reserva órfã. O memo é o do
+    // build (`q:<quoteId>`, texto) ou nenhum — o Argus pediu "none", mas o build real usa esse memo.
+    // O fee só vale em reserva NOVA: numa órfã a tx pode já estar no ledger com o fee de antes e precisa
+    // ser reconciliada, não recusada.
+    const txRecebida = new Transaction(signedXdr, networkPassphrase);
+    const memoDoBuild = `q:${quote.id.slice(0, 24)}`;
+    const memoOk =
+      txRecebida.memo.type === 'none' ||
+      (txRecebida.memo.type === 'text' && String(txRecebida.memo.value) === memoDoBuild);
+    if (!memoOk) {
+      return NextResponse.json({ error: 'memo do xdr diferente do build — refaça o swap' }, { status: 400 });
+    }
+    if (!quote.submitXdrHash) {
+      const feeMinimo = BigInt(await getDynamicFee()) * BigInt(txRecebida.operations.length);
+      if (BigInt(txRecebida.fee) < feeMinimo) {
+        return NextResponse.json(
+          { error: 'fee abaixo do mínimo da rede — refaça o swap (rebuild)' },
+          { status: 400 },
+        );
+      }
+    }
+
     // L1-S2: relê o NAV e recusa se divergiu da cotação além de 1 bp. Só em reserva
     // nova: numa reserva órfã a tx pode já estar no ledger e o NAV de agora (com o
     // supply novo e o caixa ainda não escriturado) não é o da cotação.
@@ -222,9 +245,17 @@ export const POST = withAuth(async (req, { user }) => {
 
     // C-04: reserva o xdrHash ANTES do submit. Race window de 2 chamadas
     // simultâneas: a primeira ganha (count=1), a segunda 409.
+    // N1: guarda também o hash da tx e o maxTime do envelope, para escriturar ou liberar uma
+    // reserva órfã sem esperar o investidor (reconciliarSwapsOrfaos).
+    const expectedTxHash = txHashFromXdr(signedXdr);
+    const maxTimeEnvelope = Number(txRecebida.timeBounds?.maxTime ?? 0);
     const reserved = await db.quote.updateMany({
       where: { id: quote.id, submitXdrHash: null },
-      data: { submitXdrHash: xdrHash },
+      data: {
+        submitXdrHash: xdrHash,
+        submitTxHash: expectedTxHash,
+        submitMaxTime: maxTimeEnvelope > 0 ? new Date(maxTimeEnvelope * 1000) : null,
+      },
     });
     if (reserved.count !== 1) {
       const fresh = await db.quote.findUnique({
@@ -254,17 +285,12 @@ export const POST = withAuth(async (req, { user }) => {
     // submetida; numa reserva órfã (recovery), o hash é determinístico a partir
     // da XDR, então consultamos o Horizon — se a tx já está on-chain com sucesso,
     // os tokens já foram mintados e só falta escriturar (sem re-submeter).
-    const expectedTxHash = txHashFromXdr(signedXdr);
     const onchain =
       reserved.count === 1 ? null : await fetchTransactionByHash(expectedTxHash);
 
-    // Libera a reserva (só desta XDR e só enquanto não consumida): sem isso o quote fica "em voo"
-    // para sempre e o gate do NAV (SWAP_EM_VOO) fecha a plataforma inteira.
-    const liberarReserva = () =>
-      db.quote.updateMany({
-        where: { id: quote.id, submitXdrHash: xdrHash, consumedAt: null },
-        data: { submitXdrHash: null },
-      });
+    // Libera a reserva (só desta XDR e só enquanto não consumida): sem isso o quote fica "em voo" para
+    // sempre e o gate do NAV (SWAP_EM_VOO) fecha a plataforma inteira.
+    const liberarReserva = () => liberarReservaDoSwap(quote.id, xdrHash);
 
     let finalHash: string;
     if (onchain?.successful) {
@@ -277,27 +303,23 @@ export const POST = withAuth(async (req, { user }) => {
         { status: 409 },
       );
     } else {
-      // N1-S1 (Argus): reserva órfã com a tx fora da chain só pode ser RE-ASSINADA enquanto o
-      // envelope ainda vale (antes do maxTime). Depois disso a Plina não assina mais: o preço
-      // (NAV congelado) e o quote já venceram, e re-assinar emitiria ao preço velho.
+      // N1-S1 (Argus/Atlas): reserva órfã com a tx fora da chain só pode ser RE-ASSINADA enquanto o
+      // envelope ainda vale (antes do maxTime). Depois disso a Plina NUNCA assina de novo (410): o preço
+      // (NAV congelado) e o quote já venceram, e re-assinar emitiria ao preço velho. A reserva NÃO é
+      // liberada por "não achei a tx" (um Horizon atrasado pode não mostrar uma tx que entrou): fica
+      // órfã, com o gate do NAV fechado, até haver prova positiva (reconciliarSwapsOrfaos: sucesso →
+      // escritura; falha → libera) ou decisão do operador pelo runbook.
       if (reserved.count !== 1) {
-        const maxTime = Number(
-          new Transaction(signedXdr, networkPassphrase).timeBounds?.maxTime ?? 0,
-        );
+        const maxTime = Number(txRecebida.timeBounds?.maxTime ?? 0);
         const agora = Math.floor(Date.now() / 1000);
-        if (!maxTime || agora > maxTime + MARGEM_FECHAMENTO_LEDGER_SEC) {
-          await liberarReserva();
+        if (!maxTime || agora > maxTime) {
           return NextResponse.json(
-            { error: 'tx expirada — refaça o swap (rebuild)', code: 'GONE' },
+            {
+              error:
+                'envelope expirado — a Plina não assina mais este swap; a conferência na rede é feita pela operação',
+              code: 'GONE',
+            },
             { status: 410 },
-          );
-        }
-        if (agora > maxTime) {
-          // Venceu, mas dentro da margem de fechamento/ingestão do ledger: a tx pode ter entrado e o
-          // Horizon ainda não a mostra. Não assina, não libera: tente de novo em instantes.
-          return NextResponse.json(
-            { error: 'aguardando o fechamento do ledger — tente novamente em instantes' },
-            { status: 409 },
           );
         }
       }
@@ -321,61 +343,18 @@ export const POST = withAuth(async (req, { user }) => {
       finalHash = submitRes.hash;
     }
 
-    const stellarAmount = expectedPlinarfAmount;
-
-    await db.$transaction(async (tx) => {
-      const consumed = await tx.quote.updateMany({
-        where: { id: quote.id, consumedAt: null },
-        data: {
-          consumedAt: new Date(),
-          consumedTxHash: finalHash,
-        },
-      });
-      if (consumed.count !== 1) {
-        throw new Error('quote consumido concorrentemente — abortando');
-      }
-      await tx.investidor.update({
-        where: { id: quote.investidorId },
-        data: {
-          saldoEsperado: {
-            increment: new Prisma.Decimal(stellarAmount),
-          },
-        },
-      });
-      await incrementarHolding(tx, {
+    await escriturarSwap({
+      quote: {
+        id: quote.id,
         investidorId: quote.investidorId,
-        classe,
-        amount: stellarAmount,
-        txHash: finalHash,
-      });
-      // E2-5: o BRL integralizado entra no caixa do fundo (numerador do NAV)
-      // junto com os q tokens emitidos — senão a subscrição dilui todos.
-      await registrarMovimentoFundo(tx, {
-        tipo: 'SUBSCRICAO',
-        // N1: o caixa recebe o valor LÍQUIDO (BRL − fee da Etherfuse), o mesmo V que gerou q.
-        valorBrl: valorLiquidoDaCotacao(quote),
-        tokens: stellarAmount,
-        chave: `subscricao:${quote.id}`,
-        quoteId: quote.id,
-        refHash: finalHash,
-      });
-      await tx.eventoAudit.create({
-        data: {
-          acao: 'SWAP_EXECUTADO',
-          operador: 'investidor-self-service',
-          investidorId: quote.investidorId,
-          privyId: user.privyId,
-          stellarTxHash: finalHash,
-          payloadJson: {
-            quoteId: quote.id,
-            orderId: onRampOrder.id,
-            amount: stellarAmount,
-            classe,
-            assetCode: plinarfCode,
-            mock: false,
-          } as Prisma.InputJsonValue,
-        },
-      });
+        fromAmount: quote.fromAmount,
+        fee: quote.fee,
+        classe: quote.classe,
+      },
+      plinarfAmount: expectedPlinarfAmount,
+      finalHash,
+      orderId: onRampOrder.id,
+      privyId: user.privyId,
     });
 
     return NextResponse.json({ swapTxHash: finalHash });
