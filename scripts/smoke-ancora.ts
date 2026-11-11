@@ -18,10 +18,11 @@ async function main() {
 
   const arquivo = JSON.stringify({ tipo: 'snapshot-smoke', id: randomUUID() });
   const sha = createHash('sha256').update(arquivo).digest('hex');
-  const a = await ancorarSha256({ sha256Hex: sha, contexto: 'SNAPSHOT_NAV' });
+  const inicio = new Date(); // criação do 'claim' do smoke (desde, S3)
+  const a = await ancorarSha256({ sha256Hex: sha, contexto: 'SNAPSHOT_NAV', desde: inicio });
   ok(`âncora — ${txExplorerUrl(a.txHash)} (memo = ${sha})`);
   await new Promise((r) => setTimeout(r, 6000));
-  const b = await ancorarSha256({ sha256Hex: sha, contexto: 'SNAPSHOT_NAV' });
+  const b = await ancorarSha256({ sha256Hex: sha, contexto: 'SNAPSHOT_NAV', desde: inicio });
   if (!b.reutilizada || b.txHash !== a.txHash) throw new Error('reancorar deveria reutilizar a mesma tx');
   ok('reancorar o mesmo hash reutilizou a tx (sem 2ª âncora)');
   const v = await verificarAncora({ txHash: a.txHash, sha256Hex: sha });
