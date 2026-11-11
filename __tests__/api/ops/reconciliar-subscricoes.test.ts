@@ -138,9 +138,11 @@ describe('GET /api/ops/reconciliar-subscricoes', () => {
     expect(m.alerta).not.toHaveBeenCalled();
   });
 
-  it('swap vencidasSemProva sozinho NÃO liga o alerta (regra só do resgate)', async () => {
+  it('swap órfão SEM prova (vencidasSemProva > 0) também liga alerta (fecha o NAV; o job falha)', async () => {
     m.reconciliar.mockResolvedValue({ ...RESULTADO, vencidasSemProva: 1, resgatesSemProva: 0 });
-    expect((await (await GET(req(`Bearer ${SECRET}`))).json()).alerta).toBe(false);
+    const body = await (await GET(req(`Bearer ${SECRET}`))).json();
+    expect(body).toMatchObject({ alerta: true, alertaEnviado: false, vencidasSemProva: 1 });
+    expect(m.alerta).not.toHaveBeenCalled();
   });
 
   it('a resposta traz vigiaRestantes (só contagem)', async () => {

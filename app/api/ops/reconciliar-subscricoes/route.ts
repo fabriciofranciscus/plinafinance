@@ -71,8 +71,12 @@ export async function GET(req: Request) {
     // O workflow agendado deve falhar o job quando for true.
     return NextResponse.json({
       ...contagens,
-      // Resgate órfão SEM prova (INDETERMINADO / sem XDR) não se resolve sozinho: o job tem de falhar para a operação agir.
-      alerta: contagens.vigiaConflitos > 0 || contagens.resgatesVigiaConflitos > 0 || contagens.resgatesSemProva > 0,
+      // Órfã (resgate ou swap) SEM prova (INDETERMINADO / sem XDR) fecha o NAV e não se resolve sozinha: o job tem de falhar.
+      alerta:
+        contagens.vigiaConflitos > 0 ||
+        contagens.resgatesVigiaConflitos > 0 ||
+        contagens.resgatesSemProva > 0 ||
+        contagens.vencidasSemProva > 0,
       alertaEnviado: alertaEnviado || alertaResgateEnviado,
     });
   } catch (err) {
