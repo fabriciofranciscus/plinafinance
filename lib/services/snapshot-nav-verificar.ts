@@ -62,6 +62,8 @@ export interface ResultadoVerificacao {
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 
+export const DOMINIO_DA_PLINA = 'plina.finance';
+
 /** Folga antes do `geradoEm` (relógios, ordem de fechamento): a âncora nunca é anterior a ele. */
 export function desdeDaAncora(geradoEm: string): string {
   const t = Date.parse(geradoEm);
@@ -71,7 +73,14 @@ export function desdeDaAncora(geradoEm: string): string {
 export async function verificarSnapshot(
   bytes: Buffer,
   leitor: LeitorHorizon,
-  opts: { txHash?: string; issuerEsperado?: string; distributorEsperado?: string; redeEsperada?: string } = {},
+  opts: {
+    txHash?: string;
+    issuerEsperado?: string;
+    distributorEsperado?: string;
+    redeEsperada?: string;
+    /** stellar.toml público usado como âncora de confiança (S4): domínio e `ACCOUNTS` (null = não lido/sem a lista). */
+    toml?: { dominio: string; accounts: string[] | null };
+  } = {},
 ): Promise<ResultadoVerificacao> {
   const conf: Conferencia[] = [];
   const add = (id: string, estado: Estado, detalhe: string) => conf.push({ id, estado, detalhe });
@@ -155,6 +164,21 @@ export async function verificarSnapshot(
   } else {
     add('ancora', 'ok', `tx ${txs[0].hash} (${txs[0].created_at}): Memo.hash = SHA-256 do arquivo, source = distributor`);
     if (txs.length > 1) add('ancora-unica', 'nao_conferido', `${txs.length} âncoras com o mesmo hash (inofensivo, mas operador confere)`);
+  }
+
+  // S4: o distributor informado por argumento tem de constar em ACCOUNTS do stellar.toml PÚBLICO da Plina; domínio
+  // trocado (--toml-domain) não vale como prova.
+  if (opts.toml) {
+    if (opts.toml.dominio.toLowerCase() !== DOMINIO_DA_PLINA) {
+      add('toml-dominio', 'nao_conferido', `o stellar.toml usado é de ${opts.toml.dominio}, não de ${DOMINIO_DA_PLINA}: não vale como âncora de confiança da Plina`);
+    }
+    if (opts.distributorEsperado) {
+      if (opts.toml.accounts?.includes(opts.distributorEsperado)) {
+        add('distributor-no-toml', 'ok', `o distributor consta em ACCOUNTS do stellar.toml de ${opts.toml.dominio}`);
+      } else {
+        add('distributor-no-toml', 'nao_conferido', `o distributor informado NÃO consta em ACCOUNTS do stellar.toml de ${opts.toml.dominio} (${opts.toml.accounts ? 'lista sem ele' : 'sem ACCOUNTS ou toml ilegível'}): vem só do argumento`);
+      }
+    }
   }
 
   // Contas ou rede diferentes das informadas: o resto (NAV e leituras no Horizon) seria sobre contas de terceiros.

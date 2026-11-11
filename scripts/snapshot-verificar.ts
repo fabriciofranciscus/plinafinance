@@ -9,7 +9,7 @@
  *     domínio padrão plina.finance, troque com --toml-domain).
  * A saída diz de onde veio cada conta. Confere: (1) o arquivo é o JSON canônico; (2) contas e rede = as informadas;
  * (3) Memo.hash da tx com source = distributor informado = SHA-256 do arquivo; (4) o NAV refeito do conteúdo;
- * (5) circulante, saldo do distributor e Σ trustlines autorizadas refeitos no Horizon. Saída 0 = tudo conferido ·
+ * (5) o distributor consta em ACCOUNTS do stellar.toml da Plina (domínio ≠ plina.finance = aviso); (6) circulante, saldo do distributor e Σ trustlines autorizadas refeitos no Horizon. Saída 0 = tudo conferido ·
  * 1 = NÃO CONFERIDO (alguma conferência falhou) · 2 = nada falhou, mas há itens não conferidos (saldos mudaram
  * depois do snapshot: o Horizon não guarda saldo histórico).
  *
@@ -97,11 +97,14 @@ const ICONE = { ok: '✓', falhou: '✗', nao_conferido: '?' } as const;
 const uso =
   'uso: pnpm snapshot:verificar <https://url-do-json> --distributor <G…> --network <testnet|public> [--issuer <G…>] [--toml-domain <dominio>] [--tx <hash>]';
 
-async function issuerDoToml(dominio: string, code: string): Promise<string> {
-  const toml = await StellarToml.Resolver.resolve(dominio, { timeout: 10_000 });
-  const achado = (toml.CURRENCIES ?? []).find((c: { code?: string; issuer?: string }) => c.code === code && c.issuer);
-  if (!achado?.issuer) throw new Error(`stellar.toml de ${dominio} não lista ${code} em [[CURRENCIES]]; informe --issuer`);
-  return achado.issuer;
+type Toml = { CURRENCIES?: Array<{ code?: string; issuer?: string }>; ACCOUNTS?: string[] };
+
+async function lerToml(dominio: string): Promise<Toml | null> {
+  try {
+    return (await StellarToml.Resolver.resolve(dominio, { timeout: 10_000 })) as Toml;
+  } catch {
+    return null; // sem toml: o issuer vem de --issuer e o distributor fica "não conferido" no toml
+  }
 }
 
 async function main() {
@@ -116,13 +119,13 @@ async function main() {
     process.exit(64);
   }
   const dominio = opcao('--toml-domain') ?? 'plina.finance';
+  const toml = await lerToml(dominio);
   let issuerEsperado = opcao('--issuer');
   const fonteIssuer = issuerEsperado ? '--issuer (argumento)' : `stellar.toml de ${dominio}`;
   if (!issuerEsperado) {
-    try {
-      issuerEsperado = await issuerDoToml(dominio, 'PLINARF');
-    } catch (e) {
-      console.error(`ERRO: não foi possível obter o issuer da Plina (${e instanceof Error ? e.message : 'erro'}).\n${uso}`);
+    issuerEsperado = (toml?.CURRENCIES ?? []).find((c) => c.code === 'PLINARF' && c.issuer)?.issuer;
+    if (!issuerEsperado) {
+      console.error(`ERRO: não foi possível obter o issuer da Plina (stellar.toml de ${dominio} ilegível ou sem PLINARF em [[CURRENCIES]]); informe --issuer.\n${uso}`);
       process.exit(64);
     }
   }
@@ -143,6 +146,7 @@ async function main() {
     issuerEsperado,
     distributorEsperado,
     redeEsperada: rede,
+    toml: { dominio, accounts: Array.isArray(toml?.ACCOUNTS) ? toml.ACCOUNTS : null },
   });
   for (const c of r.conferencias) console.log(`${ICONE[c.estado]} ${c.id}: ${c.detalhe}`);
   console.log(

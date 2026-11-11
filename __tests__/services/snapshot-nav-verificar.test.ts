@@ -184,6 +184,24 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
     expect(desdeDaAncora('lixo')).toBe('1970-01-01T00:00:00.000Z');
   });
 
+  it('S4: distributor em ACCOUNTS do stellar.toml da Plina → ok; ausente ou toml sem ACCOUNTS → não conferido (saída 2)', async () => {
+    const bytes = bytesDe(arquivoBase());
+    const ok = await verificarSnapshot(bytes, leitor(), { ...PLINA, toml: { dominio: 'plina.finance', accounts: [DIST] } });
+    expect(estado(ok, 'distributor-no-toml')).toBe('ok');
+    expect(ok.codigoSaida).toBe(0);
+    for (const accounts of [['GOUTRA'], null]) {
+      const r = await verificarSnapshot(bytes, leitor(), { ...PLINA, toml: { dominio: 'plina.finance', accounts } });
+      expect(estado(r, 'distributor-no-toml')).toBe('nao_conferido');
+      expect(r.codigoSaida).toBe(2);
+    }
+  });
+
+  it('S4: toml de outro domínio (--toml-domain trocado) não vale como âncora de confiança', async () => {
+    const r = await verificarSnapshot(bytesDe(arquivoBase()), leitor(), { ...PLINA, toml: { dominio: 'atacante.example', accounts: [DIST] } });
+    expect(estado(r, 'toml-dominio')).toBe('nao_conferido');
+    expect(r.codigoSaida).toBe(2);
+  });
+
   it('não é JSON: falha sem lançar', async () => {
     const r = await verificarSnapshot(Buffer.from('não é json'), leitor());
     expect(r.codigoSaida).toBe(1);
