@@ -17,7 +17,7 @@ import { getDynamicFee } from './fee';
 import { buscarTxPorHash, submitEnvelope } from './issuer';
 import { distributorSigner } from './signer';
 
-export type AncoraContexto = 'SNAPSHOT_NAV' | 'DOCUSIGN_PDF';
+export type AncoraContexto = 'SNAPSHOT_NAV' | 'DOCUSIGN_PDF' | 'COMPROVANTE_PIX';
 export type AncoraErrorCode =
   | 'ANCORA_HASH_INVALIDO'
   | 'ANCORA_FALHOU'
