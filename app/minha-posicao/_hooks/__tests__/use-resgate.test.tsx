@@ -147,7 +147,7 @@ describe('useResgate (contrato E2-4)', () => {
     expect(JSON.stringify(result.current.erro)).not.toMatch(/stack/);
   });
 
-  it('502 STELLAR_SUBMIT_FAILED: "rede não confirmou", mantém a cotação (retry do mesmo envio é idempotente) e não mostra result_codes', async () => {
+  it('502 STELLAR_SUBMIT_FAILED: "rede recusou", mantém a cotação (retry do mesmo envio é idempotente) e não mostra result_codes', async () => {
     fetchMock
       .mockResolvedValueOnce(json(BUILD))
       .mockResolvedValueOnce(json({ error: 'a rede recusou', code: 'STELLAR_SUBMIT_FAILED', title: 'Bad', resultCodes: { transaction: 'tx_bad_seq' } }, 502));
@@ -156,7 +156,7 @@ describe('useResgate (contrato E2-4)', () => {
     await act(async () => result.current.gerarCotacao());
     await act(async () => result.current.confirmar());
     await flush();
-    expect(result.current.erro).toEqual({ tipo: 'rede_nao_confirmou', codigo: 'STELLAR_SUBMIT_FAILED', fase: 'submit' });
+    expect(result.current.erro).toEqual({ tipo: 'rede_recusou', codigo: 'STELLAR_SUBMIT_FAILED', fase: 'submit' });
     expect(result.current.passo).toBe('ready');
     expect(result.current.ultimoPedido).toBe('q-1');
     expect(JSON.stringify(result.current.erro)).not.toMatch(/tx_bad_seq/);
@@ -182,15 +182,21 @@ describe('useResgate (contrato E2-4)', () => {
     }
   });
 
-  it('STELLAR_SUBMIT_INCERTO é sempre "não confirmou"; enquanto a separação não for entregue, o FAILED também (nunca "não foram resgatados")', async () => {
-    for (const [status, code] of [[502, 'STELLAR_SUBMIT_INCERTO'], [502, 'STELLAR_SUBMIT_FAILED']] as const) {
-      fetchMock.mockResolvedValueOnce(json(BUILD)).mockResolvedValueOnce(json({ error: 'x', code }, status));
+  it('502 STELLAR_SUBMIT_FAILED = "A rede recusou" (reserva liberada: pode tentar de novo); 504 INCERTO e 502/504 sem código = "não confirmou"', async () => {
+    for (const [status, code, tipo] of [
+      [502, 'STELLAR_SUBMIT_FAILED', 'rede_recusou'],
+      [504, 'STELLAR_SUBMIT_INCERTO', 'rede_nao_confirmou'],
+      [504, undefined, 'rede_nao_confirmou'],
+      [502, undefined, 'rede_nao_confirmou'],
+    ] as const) {
+      fetchMock.mockResolvedValueOnce(json(BUILD)).mockResolvedValueOnce(json({ error: 'x', ...(code ? { code } : {}) }, status));
       const { result } = setup();
       act(() => result.current.setAmount('100'));
       await act(async () => result.current.gerarCotacao());
       await act(async () => result.current.confirmar());
       await flush();
-      expect(result.current.erro?.tipo).toBe('rede_nao_confirmou');
+      expect(result.current.erro?.tipo).toBe(tipo);
+      expect(result.current.passo).toBe('ready');
     }
   });
 

@@ -9,7 +9,9 @@
  *   409 SWAP_EM_CONFERENCIA, 409 CONFLICT (cotação já usada com outro XDR),
  *   409 LIQUIDEZ_INSUFICIENTE (Atlas: caixa do fundo ou TESOURO do distributor
  *   não cobrem o valor), 400 VALIDATION_FAILED, 422 CLASSE_INDISPONIVEL,
- *   503 LEDGER_UNAVAILABLE (só com o código: um 503 sem código é ambíguo → genérico).
+ *   503 LEDGER_UNAVAILABLE (só com o código: um 503 sem código é ambíguo → genérico),
+ *   502 STELLAR_SUBMIT_FAILED (rejeição definitiva), 504 STELLAR_SUBMIT_INCERTO (ambíguo),
+ *   409 PRECO_FORA_DA_FAIXA, 409 RESGATE_ACIMA_DO_TETO.
  *
  * O cliente só exibe os valores do servidor: nada é calculado aqui. Erros viram
  * tipos (nunca o texto cru da resposta); o código fica para os detalhes técnicos.
@@ -22,7 +24,7 @@ import { unwrapEnvelope } from '@/lib/http/client';
  * Só pode ser `true` quando o Bento entregar STELLAR_SUBMIT_INCERTO separado e a reserva
  * liberada na hora (Atlas aprovou; falta o código no backend).
  */
-export const SEPARACAO_502_ENTREGUE = false;
+export const SEPARACAO_502_ENTREGUE = true; // entregue (Bento, E2-6 e2f54bc)
 
 export interface ResgateBuild {
   quoteId: string;
@@ -90,14 +92,13 @@ async function post<T>(
     if (codigo === 'RESGATE_ACIMA_DO_TETO') throw new ResgateError('acima_do_teto', codigo);
     if (codigo === 'CLASSE_INDISPONIVEL') throw new ResgateError('classe_indisponivel', codigo);
     if (codigo === 'LEDGER_UNAVAILABLE') throw new ResgateError('indisponivel', codigo);
-    // 502 cobre rejeição real E resposta ambígua (a tx pode ter entrado): nunca "não resgatado"
-    // STELLAR_SUBMIT_INCERTO (timeout/5xx/rede) é sempre ambíguo. STELLAR_SUBMIT_FAILED só vira
-    // "recusou" quando o Bento entregar a separação (SEPARACAO_502_ENTREGUE); até lá o 502
-    // ainda cobre os dois casos e o texto é o de "não confirmou" (Norma §2.9).
+    // 504 STELLAR_SUBMIT_INCERTO (timeout/5xx/429/rede): a tx PODE ter entrado; reserva em conferência.
+    // 502 STELLAR_SUBMIT_FAILED: SÓ rejeição definitiva (reserva liberada na hora) → "recusou".
+    // Qualquer 502/504 sem código reconhecido é ambíguo: "não confirmou", nunca "não resgatado".
     if (codigo === 'STELLAR_SUBMIT_INCERTO') throw new ResgateError('rede_nao_confirmou', codigo);
     if (codigo === 'STELLAR_SUBMIT_FAILED' && SEPARACAO_502_ENTREGUE) throw new ResgateError('rede_recusou', codigo);
-    if (codigo === 'STELLAR_SUBMIT_FAILED' || res.status === 502)
-      throw new ResgateError('rede_nao_confirmou', codigo ?? 'STELLAR_SUBMIT_FAILED');
+    if (res.status === 502 || res.status === 504 || codigo === 'STELLAR_SUBMIT_FAILED')
+      throw new ResgateError('rede_nao_confirmou', codigo ?? `HTTP_${res.status}`);
     throw new ResgateError('generico', codigo ?? `HTTP_${res.status}`);
   }
   try {
