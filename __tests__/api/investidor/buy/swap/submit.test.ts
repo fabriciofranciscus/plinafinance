@@ -15,6 +15,7 @@ const ISSUER = Keypair.random();
 const {
   quoteFindUnique,
   quoteUpdateMany,
+  quoteFindFirst,
   investidorUpdate,
   eventoAuditCreate,
   movimentoCreateMany,
@@ -30,6 +31,7 @@ const {
 } = vi.hoisted(() => ({
   quoteFindUnique: vi.fn(),
   quoteUpdateMany: vi.fn(),
+  quoteFindFirst: vi.fn(),
   investidorUpdate: vi.fn(),
   eventoAuditCreate: vi.fn(),
   movimentoCreateMany: vi.fn(),
@@ -65,7 +67,7 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
 
 vi.mock('@/lib/db', () => ({
   db: {
-    quote: { findUnique: quoteFindUnique, updateMany: quoteUpdateMany },
+    quote: { findUnique: quoteFindUnique, updateMany: quoteUpdateMany, findFirst: quoteFindFirst },
     $transaction: async (
       cb: (tx: {
         quote: { updateMany: typeof quoteUpdateMany };
@@ -160,6 +162,7 @@ function baseQuote(overrides: Partial<Record<string, unknown>> = {}) {
 beforeEach(() => {
   quoteFindUnique.mockReset();
   quoteUpdateMany.mockReset().mockResolvedValue({ count: 1 });
+  quoteFindFirst.mockReset().mockResolvedValue(null); // sem outro swap em conferência
   investidorUpdate.mockReset().mockResolvedValue({});
   eventoAuditCreate.mockReset().mockResolvedValue({});
   movimentoCreateMany.mockReset().mockResolvedValue({ count: 1 });
@@ -545,7 +548,38 @@ describe('POST /api/investidor/buy/swap/submit', () => {
       const r = await POST(req({ quoteId: 'q_1', signedXdr: xdr }));
       expect(r.status).toBe(409);
       expect(submitWithPrivySignature).not.toHaveBeenCalled();
-      expect(quoteUpdateMany.mock.calls[1][0].data).toEqual({ submitXdrHash: null, submitTxHash: null, submitMaxTime: null });
+      expect(quoteUpdateMany.mock.calls[1][0].data).toEqual({ submitXdrHash: null, submitTxHash: null, submitMaxTime: null, submitXdr: null });
+    });
+  });
+
+  describe('swap em conferência do mesmo investidor (mitigação de disponibilidade)', () => {
+    it('reserva NOVA com outro swap órfão do mesmo investidor → 409 SWAP_EM_CONFERENCIA, sem reservar nem assinar', async () => {
+      quoteFindUnique.mockResolvedValueOnce(baseQuote());
+      quoteFindFirst.mockResolvedValueOnce({ id: 'q_outro' });
+      const r = await POST(req(FULL_BODY));
+      expect(r.status).toBe(409);
+      expect((await r.json()).code).toBe('SWAP_EM_CONFERENCIA');
+      expect(quoteFindFirst.mock.calls[0][0].where).toMatchObject({ investidorId: 'inv_1', id: { not: 'q_1' }, consumedAt: null });
+      expect(quoteUpdateMany).not.toHaveBeenCalled();
+      expect(submitWithPrivySignature).not.toHaveBeenCalled();
+    });
+
+    it('o retry da PRÓPRIA reserva (quote já reservado por esta XDR) não é bloqueado', async () => {
+      quoteFindUnique
+        .mockResolvedValueOnce(baseQuote({ submitXdrHash: XDR_HASH }))
+        .mockResolvedValueOnce({ submitXdrHash: XDR_HASH, consumedTxHash: null, consumedAt: null });
+      quoteUpdateMany.mockResolvedValueOnce({ count: 0 });
+      fetchTransactionByHash.mockResolvedValueOnce({ hash: 'tx_ja_onchain', successful: true });
+      const r = await POST(req(FULL_BODY));
+      expect(r.status).toBe(200);
+      expect(quoteFindFirst).not.toHaveBeenCalled();
+    });
+
+    it('a reserva grava o XDR do envelope (para a prova pela conta do investidor)', async () => {
+      quoteFindUnique.mockResolvedValueOnce(baseQuote());
+      const r = await POST(req(FULL_BODY));
+      expect(r.status).toBe(200);
+      expect(quoteUpdateMany.mock.calls[0][0].data.submitXdr).toBe(FULL_BODY.signedXdr);
     });
   });
 

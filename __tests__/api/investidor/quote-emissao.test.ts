@@ -17,7 +17,8 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
         user: { privyId: 'did:privy:abc', investidorId: 'inv_1', publicKey: USER_PK, email: 'x@y.z', etherfuseCustomerId: 'cust_1' },
       }),
 }));
-vi.mock('@/lib/db', () => ({ db: { quote: { create: quoteCreate } } }));
+const quoteFindFirst = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/db', () => ({ db: { quote: { create: quoteCreate, findFirst: quoteFindFirst } } }));
 vi.mock('@/lib/services/emissao', () => ({ calcularPrecoDeEmissao }));
 vi.mock('@/lib/anchors/etherfuse', () => ({ EtherfuseClient: class { getQuote = getQuote; } }));
 process.env.ETHERFUSE_API_KEY = 'test';
@@ -34,6 +35,7 @@ beforeEach(async () => {
   await sensitiveAuthLimiter.reset();
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   quoteCreate.mockReset().mockResolvedValue({});
+  quoteFindFirst.mockReset().mockResolvedValue(null);
   getQuote.mockReset().mockResolvedValue({
     id: 'q_1', fromCurrency: 'BRL', fromAmount: '400', toCurrency: 'TESOURO', toAmount: '342.16',
     exchangeRate: '0.8554', fee: '0', expiresAt: new Date(Date.now() + 60_000).toISOString(), createdAt: new Date().toISOString(),
@@ -76,6 +78,16 @@ describe('POST /api/investidor/quote — preço de emissão ao NAV', () => {
     expect((await r.json()).code).toBe('CLASSE_INDISPONIVEL');
     expect(getQuote).not.toHaveBeenCalled();
     expect(calcularPrecoDeEmissao).not.toHaveBeenCalled();
+    expect(quoteCreate).not.toHaveBeenCalled();
+  });
+
+  it('swap em conferência: o investidor com reserva órfã não cria cotação nova (409), sem chamar a Etherfuse', async () => {
+    quoteFindFirst.mockResolvedValueOnce({ id: 'q_orfa' });
+    const r = await POST(req(onramp));
+    expect(r.status).toBe(409);
+    expect((await r.json()).code).toBe('SWAP_EM_CONFERENCIA');
+    expect(quoteFindFirst.mock.calls[0][0].where).toMatchObject({ investidorId: 'inv_1', consumedAt: null });
+    expect(getQuote).not.toHaveBeenCalled();
     expect(quoteCreate).not.toHaveBeenCalled();
   });
 

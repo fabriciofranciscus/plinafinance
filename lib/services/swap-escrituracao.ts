@@ -3,14 +3,14 @@
  *
  * `escriturarSwap` é o commit de domínio DEPOIS da tx on-chain (usado pelo /swap/submit e pelo
  * reconciliador). `reconciliarSwapsOrfaos` resolve reservas órfãs (XDR reservada, sem `consumedAt`)
- * sem esperar o investidor, só com prova on-chain (decisão do Atlas):
- *   - tx on-chain com SUCESSO → escritura;
- *   - tx on-chain com FALHA → libera a reserva (a sequence foi consumida, nada emitido);
- *   - tx fora da chain → NUNCA libera por "não achei" (um Horizon atrasado pode não mostrar uma tx que
- *     entrou: liberar seria mint sem escrituração e o NAV cairia). Dentro do prazo = aguardando; vencida =
- *     sem prova, fica órfã (gate do NAV fechado) para o operador decidir pelo runbook.
- *     Follow-up N1-orfa-prova: provar a não-entrada pela sequence do investidor consumida por OUTRA tx.
- * Reserva sem `submitTxHash` (anterior à migration) não é tocada: fica para o operador.
+ * sem esperar o investidor, com a prova pela CONTA DO INVESTIDOR (`situacaoEnvelopeSwap`, Estela):
+ *   - ENTROU com sucesso → escritura;
+ *   - ENTROU com falha, ou S consumida por OUTRA tx do investidor → a nossa não emitiu: libera;
+ *   - S livre e a rede já passou de maxTime + espera (10 min) → libera POR TEMPO e o hash entra numa vigia
+ *     de 24 h (sucesso on-chain depois → escritura + alerta);
+ *   - AGUARDANDO → consulta depois; INDETERMINADO ou erro → fica órfã (gate do NAV fechado), operador.
+ * Reserva sem o XDR guardado (anterior à migration) usa só o hash: sucesso → escritura, falha → libera,
+ * senão fica para o operador (sem prova de não-entrada não libera).
  */
 
 import { Prisma } from '@prisma/client';
@@ -20,6 +20,10 @@ import { registrarMovimentoFundo } from './razao-fundo';
 import { valorLiquidoDaCotacao } from './regras-swap';
 import { assetCodeForClasse, classeOrDefault } from '../stellar/classes';
 import { fetchTransactionByHash } from '../stellar/transactions';
+import { situacaoEnvelopeSwap } from '../stellar/orfa-swap';
+
+/** Janela da vigia dos hashes liberados por tempo. */
+export const VIGIA_LIBERADAS_MS = 24 * 3600_000;
 
 export interface EscriturarSwapInput {
   quote: { id: string; investidorId: string; fromAmount: Prisma.Decimal; fee?: string | null; classe: 'SENIOR' | 'SUBORDINADA' | null };
@@ -83,68 +87,122 @@ export async function escriturarSwap(input: EscriturarSwapInput): Promise<void> 
   });
 }
 
-/** Libera a reserva (só desta XDR e só enquanto não consumida). */
-export function liberarReservaDoSwap(quoteId: string, xdrHash: string) {
+/**
+ * Libera a reserva (só desta XDR e só enquanto não consumida). `porTempo` guarda o hash liberado na vigia
+ * de 24 h: a liberação por tempo não prova que a tx não entrou, só que a rede passou do prazo dela.
+ */
+export function liberarReservaDoSwap(
+  quoteId: string,
+  xdrHash: string,
+  opts: { porTempo?: { txHash: string } } = {},
+) {
   return db.quote.updateMany({
     where: { id: quoteId, submitXdrHash: xdrHash, consumedAt: null },
-    data: { submitXdrHash: null, submitTxHash: null, submitMaxTime: null },
+    data: {
+      submitXdrHash: null,
+      submitTxHash: null,
+      submitMaxTime: null,
+      submitXdr: null,
+      ...(opts.porTempo
+        ? { liberadaTxHash: opts.porTempo.txHash, liberadaPorTempoEm: new Date() }
+        : {}),
+    },
   });
 }
 
 export interface ResultadoReconciliacao {
   escriturados: number;
+  /** Liberadas com prova (falha on-chain ou S consumida por outra tx) ou por tempo. */
   liberados: number;
-  /** Fora da chain e ainda dentro do prazo do envelope. */
+  /** Dentro do prazo (ou da espera depois dele): consulta de novo depois. */
   aguardando: number;
-  /** Fora da chain e vencida: sem prova de não-entrada; fica órfã até decisão do operador. */
+  /** Sem prova (INDETERMINADO, ou sem XDR e fora da chain): fica órfã, gate do NAV fechado, operador. */
   vencidasSemProva: number;
   /** Reservas sem submitTxHash (anteriores à migration): precisam do operador. */
   semHash: number;
+  /** Vigia de 24 h: tx liberada por tempo que entrou depois (escriturada + alerta). */
+  vigiaEscrituradas: number;
+  /** Vigia: tx liberada por tempo entrou, mas o quote já foi consumido por OUTRA tx (emissão dupla). */
+  vigiaConflitos: number;
   erros: number;
+}
+
+type Orfa = {
+  id: string;
+  investidorId: string;
+  fromAmount: Prisma.Decimal;
+  fee: string;
+  classe: 'SENIOR' | 'SUBORDINADA' | null;
+  plinarfAmount: Prisma.Decimal | null;
+  submitXdrHash: string | null;
+  submitTxHash: string | null;
+  submitMaxTime: Date | null;
+  submitXdr: string | null;
+  onRampOrder: { id: string } | null;
+};
+
+async function escriturarOrfa(q: Orfa, hash: string, operador: string): Promise<boolean> {
+  if (!q.plinarfAmount || !q.onRampOrder) return false; // sem preço ou sem ordem: não escritura às cegas
+  await escriturarSwap({
+    quote: { id: q.id, investidorId: q.investidorId, fromAmount: q.fromAmount, fee: q.fee, classe: q.classe },
+    plinarfAmount: new Prisma.Decimal(q.plinarfAmount).toFixed(7),
+    finalHash: hash,
+    orderId: q.onRampOrder.id,
+    operador,
+  });
+  return true;
 }
 
 export async function reconciliarSwapsOrfaos(
   opts: { agora?: number } = {},
 ): Promise<ResultadoReconciliacao> {
-  const agoraSec = Math.floor((opts.agora ?? Date.now()) / 1000);
-  const r: ResultadoReconciliacao = { escriturados: 0, liberados: 0, aguardando: 0, vencidasSemProva: 0, semHash: 0, erros: 0 };
+  const agora = opts.agora ?? Date.now();
+  const agoraSec = Math.floor(agora / 1000);
+  const r: ResultadoReconciliacao = {
+    escriturados: 0, liberados: 0, aguardando: 0, vencidasSemProva: 0, semHash: 0,
+    vigiaEscrituradas: 0, vigiaConflitos: 0, erros: 0,
+  };
 
-  const orfas = await db.quote.findMany({
+  const orfas = (await db.quote.findMany({
     where: { submitXdrHash: { not: null }, consumedAt: null, plinarfAmount: { not: null } },
     select: {
-      id: true,
-      investidorId: true,
-      fromAmount: true,
-      fee: true,
-      classe: true,
-      plinarfAmount: true,
-      submitXdrHash: true,
-      submitTxHash: true,
-      submitMaxTime: true,
+      id: true, investidorId: true, fromAmount: true, fee: true, classe: true, plinarfAmount: true,
+      submitXdrHash: true, submitTxHash: true, submitMaxTime: true, submitXdr: true,
       onRampOrder: { select: { id: true } },
     },
-  });
+  })) as Orfa[];
 
   for (const q of orfas) {
-    if (!q.submitTxHash || !q.submitXdrHash) {
+    if (!q.submitXdrHash || (!q.submitTxHash && !q.submitXdr)) {
       r.semHash++;
       continue;
     }
     try {
-      const onchain = await fetchTransactionByHash(q.submitTxHash);
-      if (onchain?.successful) {
-        if (!q.plinarfAmount || !q.onRampOrder) {
-          r.erros++; // sem preço ou sem ordem: dado inconsistente, não escritura às cegas
-          continue;
+      if (q.submitXdr) {
+        // Prova pela conta do INVESTIDOR (Estela, contrato n1-orfa-prova). Erro do Horizon propaga = sem decisão.
+        const sit = await situacaoEnvelopeSwap(q.submitXdr);
+        if (sit.status === 'ENTROU' && sit.successful) {
+          if (await escriturarOrfa(q, sit.hash, 'reconciliador-swap')) r.escriturados++;
+          else r.erros++;
+        } else if (sit.status === 'ENTROU' || sit.status === 'OUTRA_TX') {
+          await liberarReservaDoSwap(q.id, q.submitXdrHash); // a nossa não emitiu: prova positiva
+          r.liberados++;
+        } else if (sit.status === 'LIVRE_EXPIRADA') {
+          // S livre e a rede passou de maxTime + espera: libera POR TEMPO e vigia o hash por 24 h.
+          await liberarReservaDoSwap(q.id, q.submitXdrHash, { porTempo: { txHash: q.submitTxHash ?? '' } });
+          r.liberados++;
+        } else if (sit.status === 'AGUARDANDO') {
+          r.aguardando++;
+        } else {
+          r.vencidasSemProva++; // INDETERMINADO: operador (runbook)
         }
-        await escriturarSwap({
-          quote: { id: q.id, investidorId: q.investidorId, fromAmount: q.fromAmount, fee: q.fee, classe: q.classe },
-          plinarfAmount: new Prisma.Decimal(q.plinarfAmount).toFixed(7),
-          finalHash: onchain.hash,
-          orderId: q.onRampOrder.id,
-          operador: 'reconciliador-swap',
-        });
-        r.escriturados++;
+        continue;
+      }
+      // Reserva sem o XDR guardado (anterior à migration): só o hash.
+      const onchain = await fetchTransactionByHash(q.submitTxHash as string);
+      if (onchain?.successful) {
+        if (await escriturarOrfa(q, onchain.hash, 'reconciliador-swap')) r.escriturados++;
+        else r.erros++;
       } else if (onchain) {
         await liberarReservaDoSwap(q.id, q.submitXdrHash); // falhou on-chain: prova positiva
         r.liberados++;
@@ -156,6 +214,47 @@ export async function reconciliarSwapsOrfaos(
     } catch (err) {
       // Horizon fora ou commit falhou: mantém a reserva (o gate do NAV segue fechado) e conta o erro.
       console.error('[swap-reconciliacao] reserva', q.id, (err as { name?: string })?.name ?? 'erro');
+      r.erros++;
+    }
+  }
+
+  // Vigia de 24 h: hashes liberados por TEMPO. Sucesso on-chain depois → escritura + alerta.
+  const vigiadas = await db.quote.findMany({
+    where: {
+      liberadaTxHash: { not: null },
+      liberadaPorTempoEm: { gte: new Date(agora - VIGIA_LIBERADAS_MS) },
+    },
+    select: {
+      id: true, investidorId: true, fromAmount: true, fee: true, classe: true, plinarfAmount: true,
+      liberadaTxHash: true, consumedAt: true, consumedTxHash: true,
+      onRampOrder: { select: { id: true } },
+    },
+  });
+  for (const v of vigiadas) {
+    if (!v.liberadaTxHash) continue;
+    if (v.consumedTxHash === v.liberadaTxHash) continue; // já escriturada
+    try {
+      const onchain = await fetchTransactionByHash(v.liberadaTxHash);
+      if (!onchain?.successful) continue;
+      if (v.consumedAt) {
+        // O quote já foi consumido por OUTRA tx e a liberada também entrou: emissão dupla. Alerta, sem escriturar.
+        console.error('[swap-reconciliacao] ALERTA vigia: tx liberada por tempo entrou e o quote já tem outra tx', v.id);
+        r.vigiaConflitos++;
+        continue;
+      }
+      const ok = await escriturarOrfa(
+        { ...v, submitXdrHash: null, submitTxHash: null, submitMaxTime: null, submitXdr: null } as Orfa,
+        onchain.hash,
+        'reconciliador-swap-vigia',
+      );
+      if (ok) {
+        console.error('[swap-reconciliacao] ALERTA vigia: tx liberada por tempo entrou on-chain e foi escriturada', v.id);
+        r.vigiaEscrituradas++;
+      } else {
+        r.erros++;
+      }
+    } catch (err) {
+      console.error('[swap-reconciliacao] vigia', v.id, (err as { name?: string })?.name ?? 'erro');
       r.erros++;
     }
   }

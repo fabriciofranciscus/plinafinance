@@ -450,6 +450,12 @@ model Quote {
   /// escriturar/liberar uma reserva órfã sem o investidor (reconciliarSwapsOrfaos).
   submitTxHash   String?
   submitMaxTime  DateTime?
+  /// Envelope reservado (assinado só pelo investidor): a prova do desfecho (situacaoEnvelopeSwap) precisa dele.
+  submitXdr      String?        @db.Text
+  /// Reserva liberada por TEMPO (sequence livre depois de maxTime + espera): o hash fica numa vigia de 24 h;
+  /// se aparecer sucesso on-chain, escritura + alerta.
+  liberadaTxHash     String?
+  liberadaPorTempoEm DateTime?
   criadoEm       DateTime       @default(now())
 
   onRampOrder  OnRampOrder?

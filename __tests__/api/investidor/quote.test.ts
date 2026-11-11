@@ -29,7 +29,7 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
 }));
 
 vi.mock('@/lib/db', () => ({
-  db: { quote: { create: quoteCreate } },
+  db: { quote: { create: quoteCreate, findFirst: async () => null } },
 }));
 
 vi.mock('@/lib/services/emissao', async () => {

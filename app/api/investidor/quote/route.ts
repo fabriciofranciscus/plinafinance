@@ -32,6 +32,7 @@ import { ticketMinimoFor } from '@/lib/config/suitability';
 import { sensitiveAuthLimiter, clientIp } from '@/lib/rate-limit/config';
 import { calcularPrecoDeEmissao } from '@/lib/services/emissao';
 import { assertClasseDisponivel, valorLiquidoDaCotacao } from '@/lib/services/regras-swap';
+import { assertSemSwapEmConferencia } from '@/lib/services/swap-orfao';
 import { navUnavailableResponse } from '@/lib/api/nav-unavailable';
 import { internalErrorResponse } from '@/lib/api/internal-error';
 import { ApiError } from '@/lib/api/errors';
@@ -75,6 +76,8 @@ export const POST = withAuth(async (req, { user }) => {
     const direction = body.direction ?? 'onramp';
     // N1: Subordinada sem NAV próprio → recusada antes de qualquer chamada ao anchor.
     if (direction === 'onramp') assertClasseDisponivel(body.classe);
+    // Mitigação de disponibilidade: com swap em conferência (reserva órfã), não cria cotação nova.
+    if (direction === 'onramp') await assertSemSwapEmConferencia(user.investidorId);
 
     let sourceAmount: string;
     let fromCurrency: string;
