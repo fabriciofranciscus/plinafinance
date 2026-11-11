@@ -1,61 +1,60 @@
 /**
- * POST /api/investidor/liquidar/submit
+ * POST /api/investidor/liquidar/submit  (E2-6; contrato contratos/2026-11-11-e2-4-resgate-api.md)
  *
- * Submete XDR de liquidação assinada pelo investidor via Privy rawSign.
- * Após sucesso on-chain, registra hash de auditoria e decrementa
- * saldoEsperado.
+ * Submete o resgate com queima. O envelope vem assinado SÓ pelo investidor; a Plina (distributor) assina por último,
+ * depois de conferir o XDR contra a cotação persistida. Idempotente por XDR; ownership pela sessão.
  *
- * Body: { xdr, pubkey, signatureHex, amount, investidorId? }
+ * Body: { quoteId, signedXdr }
+ * Resposta: { txHash }
  */
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { submitLiquidacao } from '@/lib/services/liquidacao';
-import { withAuth } from '@/lib/wallet/auth-guard';
-import { navUnavailableResponse } from '@/lib/api/nav-unavailable';
+import { ApiError } from '@/lib/api/errors';
 import { internalErrorResponse } from '@/lib/api/internal-error';
+import { navUnavailableResponse } from '@/lib/api/nav-unavailable';
+import { submeterResgate } from '@/lib/services/resgate';
+import { withAuth } from '@/lib/wallet/auth-guard';
 import { parseBody } from '@/lib/http/parse-body';
-import {
-  stellarPubkey,
-  stellarSignatureHex,
-  stellarXdr,
-} from '@/lib/http/zod-stellar';
+import { stellarXdr } from '@/lib/http/zod-stellar';
+import { extractSafeError } from '@/lib/stellar/log-error';
 
 export const dynamic = 'force-dynamic';
+// O submit pode esperar a rede (envio + confirmação); o limite padrão da função é curto.
+export const maxDuration = 60;
 
-// C-03: amount no body é ignorado — amount autoritativo sai da própria XDR
-// em submitLiquidacao. Aceito no schema só pra clientes legados não quebrarem.
 const Schema = z
   .object({
-    xdr: stellarXdr(),
-    pubkey: stellarPubkey(),
-    signatureHex: stellarSignatureHex(),
-    amount: z.string().max(40).optional(),
+    quoteId: z.string().min(1).max(60),
+    signedXdr: stellarXdr(),
   })
   .strict();
 
 export const POST = withAuth(async (req, { user }) => {
   const parsed = await parseBody(req, Schema);
   if ('response' in parsed) return parsed.response;
-  const { xdr, pubkey, signatureHex } = parsed.data;
   try {
-    if (pubkey !== user.publicKey) {
-      return NextResponse.json(
-        { error: 'pubkey não corresponde ao investidor autenticado' },
-        { status: 403 },
-      );
-    }
-    const result = await submitLiquidacao({
-      xdr,
-      investorPubkey: pubkey,
-      signatureHex,
-      investidorId: user.investidorId,
-      privyId: user.privyId,
+    const result = await submeterResgate({
+      investidor: { id: user.investidorId, publicKey: user.publicKey, privyId: user.privyId },
+      quoteId: parsed.data.quoteId,
+      signedXdr: parsed.data.signedXdr,
     });
     return NextResponse.json(result);
   } catch (err) {
-    const indisponivel = navUnavailableResponse(err, 'liquidar:submit');
+    const indisponivel = navUnavailableResponse(err, 'liquidar/submit');
     if (indisponivel) return indisponivel;
-    return internalErrorResponse(err, 'liquidar:submit');
+    if (err instanceof ApiError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
+    // Falha do Horizon: só title e result_codes (ajudam o cliente sem vazar internos); o resto é 500 fixo.
+    const safe = extractSafeError(err);
+    if (safe.result_codes || safe.title) {
+      console.error('[liquidar/submit] rede recusou', safe);
+      return NextResponse.json(
+        { error: 'a rede recusou a transação', code: 'STELLAR_SUBMIT_FAILED', title: safe.title, resultCodes: safe.result_codes },
+        { status: 502 },
+      );
+    }
+    return internalErrorResponse(err, 'liquidar/submit');
   }
 });

@@ -1,14 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Prisma } from '@prisma/client';
 
-const { fetchSupplyDasClasses, tentativaFindFirst, quoteFindFirst } = vi.hoisted(() => ({
+const { fetchSupplyDasClasses, tentativaFindFirst, quoteFindFirst, resgateFindFirst } = vi.hoisted(() => ({
   fetchSupplyDasClasses: vi.fn(),
   tentativaFindFirst: vi.fn(),
   quoteFindFirst: vi.fn(),
+  resgateFindFirst: vi.fn(),
 }));
 vi.mock('@/lib/stellar/supply', () => ({ fetchSupplyDasClasses }));
 vi.mock('@/lib/db', () => ({
-  db: { tentativaEmissao: { findFirst: tentativaFindFirst }, quote: { findFirst: quoteFindFirst } },
+  db: {
+    tentativaEmissao: { findFirst: tentativaFindFirst },
+    quote: { findFirst: quoteFindFirst },
+    resgateCotacao: { findFirst: resgateFindFirst },
+  },
 }));
 
 import {
@@ -34,6 +39,7 @@ beforeEach(() => {
   fetchSupplyDasClasses.mockReset().mockResolvedValue(ledger());
   tentativaFindFirst.mockReset().mockResolvedValue(null);
   quoteFindFirst.mockReset().mockResolvedValue(null);
+  resgateFindFirst.mockReset().mockResolvedValue(null);
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -201,3 +207,30 @@ describe('lerSupplyDoNav — swap em voo (quote com XDR reservada e sem consumed
     expect(err.message).not.toMatch(/ECONNREFUSED|db\.internal/);
   });
 });
+
+describe('lerSupplyDoNav — resgate com queima em voo (E2-6)', () => {
+  it('resgate reservado e não escriturado → NAV indisponível (a queima já tirou token do supply sem baixar o caixa)', async () => {
+    fetchSupplyDasClasses.mockResolvedValue(ledger('900'));
+    resgateFindFirst.mockResolvedValue({ id: 'r1' });
+    const err = await lerSupplyDoNav().catch((e) => e);
+    expect(err).toBeInstanceOf(NavIndisponivelError);
+    expect(err.motivo).toBe('SWAP_EM_VOO');
+    expect(resgateFindFirst).toHaveBeenCalledWith({
+      where: { submitXdrHash: { not: null }, consumedAt: null },
+      select: { id: true },
+    });
+  });
+
+  it('vale com a leitura fresca; escriturado, o NAV volta', async () => {
+    resgateFindFirst.mockResolvedValue({ id: 'r1' });
+    await expect(lerSupplyDoNav({ fresh: true })).rejects.toMatchObject({ motivo: 'SWAP_EM_VOO' });
+    resgateFindFirst.mockResolvedValue(null);
+    await expect(lerSupplyDoNav()).resolves.toMatchObject({ senior: { code: 'PLINARF' } });
+  });
+
+  it('falha ao ler os resgates é fail-closed', async () => {
+    resgateFindFirst.mockRejectedValue(new Error('db fora'));
+    await expect(lerSupplyDoNav()).rejects.toMatchObject({ motivo: 'LEDGER_LEITURA_FALHOU' });
+  });
+});
+

@@ -718,6 +718,36 @@ model LeadEoi {
   @@index([criadoEm])
 }
 
+/// Cotação do resgate com queima (E2-6, contrato 2026-11-11-e2-4-resgate-api). Persistida no build; o submit confere o
+/// XDR contra ela, reserva (`submitXdrHash` único) e só então a Plina (distributor) assina. Sem relação declarada com
+/// Investidor (só `investidorId` indexado) para não tocar o model dele.
+model ResgateCotacao {
+  id                   String        @id @default(cuid())
+  investidorId         String
+  classe               ClassePLINARF @default(SENIOR)
+  /// PLINARF a QUEIMAR (perna 1).
+  plinarfAmount        Decimal       @db.Decimal(20, 7)
+  /// plinarfAmount × NAV, informativo e valor que sai do caixa do fundo (RESGATE_PAGO).
+  brlEquivalente       Decimal       @db.Decimal(20, 2)
+  /// TESOURO a pagar (perna 2) = brlEquivalente × taxaBridge (7 casas, para baixo).
+  bridgeAmount         Decimal       @db.Decimal(20, 7)
+  taxaBridge           String
+  bridgeCode           String
+  bridgeIssuer         String
+  navPorTokenNaCotacao Decimal       @db.Decimal(20, 8)
+  expiresAt            DateTime
+  submitXdrHash        String?       @unique
+  submitTxHash         String?
+  submitMaxTime        DateTime?
+  submitXdr            String?       @db.Text
+  consumedAt           DateTime?
+  consumedTxHash       String?
+  criadoEm             DateTime      @default(now())
+
+  @@index([investidorId])
+  @@index([expiresAt])
+}
+
 /// Reserva de cota pelo comprador-usuário. 72h por default (PRD_MVP §6.8).
 /// Sinal simulado no testnet.
 ///

@@ -18,7 +18,7 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
       }),
 }));
 const quoteFindFirst = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/db', () => ({ db: { quote: { create: quoteCreate, findFirst: quoteFindFirst } } }));
+vi.mock('@/lib/db', () => ({ db: { resgateCotacao: { findFirst: async () => null }, quote: { create: quoteCreate, findFirst: quoteFindFirst } } }));
 vi.mock('@/lib/services/emissao', () => ({ calcularPrecoDeEmissao }));
 vi.mock('@/lib/anchors/etherfuse', () => ({ EtherfuseClient: class { getQuote = getQuote; } }));
 process.env.ETHERFUSE_API_KEY = 'test';

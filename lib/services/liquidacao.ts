@@ -1,52 +1,19 @@
 /**
- * Liquidação service — investidor vende PLINARF de volta pro distributor.
+ * Liquidação service — preço do resgate ao NAV do ledger.
  *
- * Whitepaper §6.4 — "janelas periódicas de liquidez via claimable balance".
- * MVP testnet implementa o caminho mais simples (venda direta com BRL
- * simulado), preservando a economia: NAV por token = (NAV total do pool) /
- * (tokens vivos). Investidor recebe `amount × NAV/token` em BRL fictício.
- *
- * Fluxo on-chain (3 txs):
- *   1. Investor → Distributor: payment de PLINARF (assinado via Privy).
- *   2. Issuer: clawback (ou null se preferirmos NÃO queimar — POC mantém
- *      no distributor pra revenda futura, mantendo total emitido estável).
- *   3. Audit on-chain do hash da liquidação.
- *
- * Decisão MVP: NÃO queima. PLINARF volta pro distributor disponível pra
- * próxima rodada de captação. Mais limpo arquiteturalmente.
+ * O resgate com QUEIMA (E2-6) vive em `./resgate.ts` (build/submit atômicos de 2 pernas: o investidor devolve o
+ * PLINARF ao issuer, que o destrói, e o distributor paga o ativo-ponte). Este módulo só calcula o preço
+ * (`calcularPrecoDeResgate` / `calcularValorLiquidacao`). O fluxo antigo (PLINARF de volta ao distributor, sem
+ * queima, que derrubava o NAV a cada resgate) foi removido.
  */
 
-import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import {
-  Asset,
-  Horizon,
-  Memo,
-  Operation,
-  Transaction,
-  TransactionBuilder,
-} from '@stellar/stellar-sdk';
 import { db } from '../db';
-import {
-  STELLAR_TX_TIMEOUT_SEC,
-  assetCode,
-  networkPassphrase,
-} from '../stellar/config';
-import { buildAsset, horizon } from '../stellar/account';
+import { Transaction } from '@stellar/stellar-sdk';
+import { networkPassphrase } from '../stellar/config';
 import { distributorSigner } from '../stellar/signer';
-import { getDynamicFee } from '../stellar/fee';
-import { privySignatureToBase64 } from '../wallet/privy';
-import { parseStellarAmount } from '../format/parse-stellar-amount';
 import { caixaParaNav } from './razao-fundo';
 import { NavIndisponivelError, lerSupplyDoNav } from './nav-supply';
-import { extractLiquidacaoAmount } from '../stellar/parse-liquidacao-xdr';
-import { classeFromAssetCode } from '../stellar/classes';
-import { decrementarHolding } from './holdings';
-import { logStellarError } from '../stellar/log-error';
-import {
-  buildAuditPayload,
-  registerOnChainHash,
-} from '../stellar/audit';
 import {
   navPorToken,
   navPorTokenAsDecimal,
@@ -66,18 +33,17 @@ export interface CalcularLiquidacaoResult {
   tokensVivosPool: number;
 }
 
-/**
- * Calcula BRL simulado equivalente a uma quantidade de PLINA-RF a NAV atual.
- *
- * NAV/token = ativo atribuível / supply circulante **lido do ledger**. A
- * leitura do Horizon falha fechada de propósito: precificar um resgate com o
- * denominador antigo (estado da aplicação) era a dupla contagem que este
- * cálculo passou a evitar, e recusar a cotação é melhor que entregar um
- * número errado.
- */
-export async function calcularValorLiquidacao(
-  input: CalcularLiquidacaoInput,
-): Promise<CalcularLiquidacaoResult> {
+export interface PrecoDeResgate {
+  /** NAV/token, 8 casas. */
+  navPorToken: Prisma.Decimal;
+  /** BRL equivalente à quantidade, 2 casas. */
+  brlEquivalente: Prisma.Decimal;
+  navTotal: number;
+  tokensVivos: number;
+}
+
+/** Preço do resgate em `Decimal` (E2-6): mesma conta e mesmas travas do `calcularValorLiquidacao`. */
+export async function calcularPrecoDeResgate(input: CalcularLiquidacaoInput): Promise<PrecoDeResgate> {
   const amount = Number(input.amountPlinarf);
   if (!isFinite(amount) || amount <= 0) {
     throw new Error('amountPlinarf inválido');
@@ -110,221 +76,33 @@ export async function calcularValorLiquidacao(
   const brlEquivalenteDec = unitDec
     .mul(new Prisma.Decimal(input.amountPlinarf))
     .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_EVEN);
+  return { navPorToken: unitDec, brlEquivalente: brlEquivalenteDec, navTotal, tokensVivos };
+}
+
+
+/**
+ * Calcula BRL simulado equivalente a uma quantidade de PLINA-RF a NAV atual.
+ *
+ * NAV/token = ativo atribuível / supply circulante **lido do ledger**. A
+ * leitura do Horizon falha fechada de propósito: precificar um resgate com o
+ * denominador antigo (estado da aplicação) era a dupla contagem que este
+ * cálculo passou a evitar, e recusar a cotação é melhor que entregar um
+ * número errado.
+ */
+export async function calcularValorLiquidacao(
+  input: CalcularLiquidacaoInput,
+): Promise<CalcularLiquidacaoResult> {
+  const amount = Number(input.amountPlinarf);
+  if (!isFinite(amount) || amount <= 0) {
+    throw new Error('amountPlinarf inválido');
+  }
+  const p = await calcularPrecoDeResgate(input);
   return {
     amountPlinarf: amount,
-    navPorTokenAtual: unitDec.toNumber(),
-    brlEquivalente: brlEquivalenteDec.toNumber(),
-    navTotalPool: navTotal,
-    tokensVivosPool: tokensVivos,
-  };
-}
-
-/**
- * Monta XDR pro investidor pagar `amount` PLINARF ao distributor.
- * Investor assina via Privy rawSign no client; backend submete.
- */
-export async function buildLiquidarPlinarfXdr(input: {
-  investorPubkey: string;
-  amount: string;
-}): Promise<{ xdr: string; hashHex: string }> {
-  const issuerPubkey = process.env.STELLAR_ISSUER_PUBLIC;
-  const distributorPubkey = process.env.STELLAR_DISTRIBUTOR_PUBLIC;
-  if (!issuerPubkey || !distributorPubkey) {
-    throw new Error('Stellar issuer/distributor não configurados.');
-  }
-  const stellarAmount = parseStellarAmount(input.amount).toFixed(7);
-
-  const account = await horizon.loadAccount(input.investorPubkey);
-  const plinarf: Asset = buildAsset(issuerPubkey, assetCode);
-
-  const tx = new TransactionBuilder(account, {
-    fee: await getDynamicFee(),
-    networkPassphrase,
-  })
-    .addOperation(
-      Operation.payment({
-        destination: distributorPubkey,
-        asset: plinarf,
-        amount: stellarAmount,
-      }),
-    )
-    .setTimeout(STELLAR_TX_TIMEOUT_SEC)
-    .build();
-
-  return { xdr: tx.toXDR(), hashHex: '0x' + tx.hash().toString('hex') };
-}
-
-/**
- * Submete tx assinada pelo investidor (via Privy rawSign). Após sucesso:
- *   - Atualiza Investidor.saldoEsperado (decrement)
- *   - Cria EventoAudit PLINARF_LIQUIDADO com hash on-chain do payload
- *     (incluindo NAV/token usado, BRL equivalente, etc).
- *
- * BRL é simulado — no MVP testnet não há TED real. Em mainnet futuro,
- * adapter Pix-out (Celcoin) executa o desembolso paralelo.
- */
-export async function submitLiquidacao(input: {
-  xdr: string;
-  investorPubkey: string;
-  signatureHex: string;
-  /** @deprecated mantido pra retrocompat; amount autoritativo vem do XDR (C-03). */
-  amount?: string;
-  investidorId: string;
-  privyId: string;
-}): Promise<{
-  liquidationTxHash: string;
-  auditTxHash: string;
-  brlEquivalente: number;
-  navPorTokenAtual: number;
-}> {
-  // C-03: amount autoritativo vem da própria XDR assinada — não do body.
-  // Body podia divergir do que o investor realmente assinou; chain processa
-  // o XDR, DB decrementava o body, gap "perdido" no saldo.
-  const issuerPubkey = process.env.STELLAR_ISSUER_PUBLIC;
-  const distributorPubkey = process.env.STELLAR_DISTRIBUTOR_PUBLIC;
-  if (!issuerPubkey || !distributorPubkey) {
-    throw new Error('Stellar issuer/distributor não configurados.');
-  }
-  const xdrAmount = extractLiquidacaoAmount(input.xdr, {
-    investorPubkey: input.investorPubkey,
-    distributorPubkey,
-    issuerPubkey,
-  });
-  const stellarAmount = parseStellarAmount(xdrAmount).toFixed(7);
-
-  // C-04: idempotência. xdrHash unique → P2002 em retry; tabela própria
-  // (liquidação não tem Quote persistido). Reserve antes do submit; se
-  // já existe e tem txHash, retorna sem re-submeter.
-  const xdrHash = createHash('sha256').update(input.xdr).digest('hex');
-  try {
-    await db.liquidacaoSubmit.create({
-      data: { xdrHash, investidorId: input.investidorId },
-    });
-  } catch (err) {
-    if (
-      err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === 'P2002'
-    ) {
-      const existing = await db.liquidacaoSubmit.findUnique({
-        where: { xdrHash },
-        select: { txHash: true, investidorId: true },
-      });
-      if (existing?.investidorId !== input.investidorId) {
-        throw new Error('xdr já reservada por outro investidor');
-      }
-      if (existing.txHash) {
-        const auditExisting = await db.eventoAudit.findFirst({
-          where: {
-            acao: 'PLINARF_LIQUIDADO',
-            investidorId: input.investidorId,
-            payloadJson: {
-              path: ['liquidationTxHash'],
-              equals: existing.txHash,
-            },
-          },
-          select: { stellarTxHash: true, payloadJson: true },
-        });
-        const payload = auditExisting?.payloadJson as
-          | { brlEquivalente?: number; navPorTokenAtual?: number }
-          | null;
-        return {
-          liquidationTxHash: existing.txHash,
-          auditTxHash: auditExisting?.stellarTxHash ?? existing.txHash,
-          brlEquivalente: payload?.brlEquivalente ?? 0,
-          navPorTokenAtual: payload?.navPorTokenAtual ?? 0,
-        };
-      }
-      throw new Error('liquidação já em flight pra esse XDR');
-    }
-    throw err;
-  }
-
-  // 1) Calcula NAV/token ANTES de submeter (preço justo da liquidação).
-  //
-  // N-15 sinalização: NAV usado no payload é snapshot pré-submit. Em
-  // concorrência (duas liquidações no mesmo segundo) o segundo payload
-  // reflete supply pré-primeira tx — divergência pequena no MVP testnet
-  // (estimativa de BRL fictício) mas precisa virar epoch-snapshot
-  // on-chain antes de venda real em mainnet. Telemetria abaixo flagga
-  // janelas longas que aumentam o risco.
-  const calcStartedAt = performance.now();
-  const valor = await calcularValorLiquidacao({ amountPlinarf: stellarAmount });
-
-  // 2) Submete payment Investidor → Distributor (Privy signature).
-  const tx = new Transaction(input.xdr, networkPassphrase);
-  tx.addSignature(
-    input.investorPubkey,
-    privySignatureToBase64(input.signatureHex),
-  );
-  const submitRes = await (
-    horizon as Horizon.Server
-  ).submitTransaction(tx);
-  const liquidationTxHash = submitRes.hash;
-  const navWindowMs = performance.now() - calcStartedAt;
-  if (navWindowMs > 2_000) {
-    logStellarError(
-      '[liquidacao] janela NAV→submit longa',
-      new Error(`${navWindowMs.toFixed(0)}ms — payload pode refletir NAV stale`),
-    );
-  }
-
-  // 3) Audit on-chain do hash da liquidação (Memo.hash da Plina assinando
-  //    o ato — não confunde com a tx do payment do investidor).
-  const payload = buildAuditPayload(
-    'plinarf_liquidado',
-    input.investidorId,
-    {
-      investorPubkey: input.investorPubkey,
-      amountPlinarf: stellarAmount,
-      navPorTokenAtual: valor.navPorTokenAtual,
-      brlEquivalente: valor.brlEquivalente,
-      liquidationTxHash,
-    },
-  );
-  const onChain = await registerOnChainHash(payload);
-
-  // 4) Persist + audit log + saldoEsperado decrement. investidorId é
-  // required agora (vem do auth-guard), então grava incondicionalmente.
-  await db.$transaction(async (tx) => {
-    await tx.eventoAudit.create({
-      data: {
-        acao: 'PLINARF_LIQUIDADO',
-        operador: 'investidor-self-service',
-        investidorId: input.investidorId,
-        privyId: input.privyId,
-        stellarTxHash: onChain.txHash,
-        payloadHash: onChain.payloadHash,
-        payloadJson: payload as unknown as Prisma.InputJsonValue,
-      },
-    });
-    await tx.investidor.update({
-      where: { id: input.investidorId },
-      data: {
-        saldoEsperado: {
-          decrement: new Prisma.Decimal(stellarAmount),
-        },
-      },
-    });
-    // Debita o ledger por-classe junto com o saldoEsperado (PRD §M3). A
-    // liquidação é SENIOR-only enquanto o parser (parse-liquidacao-xdr) pina
-    // PLINARF; quando SUBORDINADA for habilitada, a classe sai do asset da XDR.
-    await decrementarHolding(tx, {
-      investidorId: input.investidorId,
-      classe: classeFromAssetCode(assetCode),
-      amount: stellarAmount,
-      txHash: liquidationTxHash,
-    });
-    await tx.liquidacaoSubmit.update({
-      where: { xdrHash },
-      data: { txHash: liquidationTxHash },
-    });
-  });
-
-  return {
-    liquidationTxHash,
-    auditTxHash: onChain.txHash,
-    brlEquivalente: valor.brlEquivalente,
-    navPorTokenAtual: valor.navPorTokenAtual,
+    navPorTokenAtual: p.navPorToken.toNumber(),
+    brlEquivalente: p.brlEquivalente.toNumber(),
+    navTotalPool: p.navTotal,
+    tokensVivosPool: p.tokensVivos,
   };
 }
 
@@ -340,6 +118,3 @@ export function preSignDistributor(xdr: string): {
   const tx = new Transaction(xdr, networkPassphrase);
   return { pubkey: signer.publicKey(), sigBase64: signer.signatureBase64(tx) };
 }
-
-// Memo import keeper (unused but pre-imported pra adicionar Memo.text futuro).
-void Memo;

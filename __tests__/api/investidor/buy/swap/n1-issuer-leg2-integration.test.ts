@@ -29,7 +29,7 @@ vi.mock('@/lib/db', () => {
     movimentoFundo: { createMany: vi.fn(async () => ({ count: 1 })) },
     holdingPLINARF: { upsert: vi.fn() },
   };
-  return { db: { quote: { findUnique: m.quoteFindUnique, updateMany: m.quoteUpdateMany, findFirst: async () => null }, $transaction: async (cb: (t: typeof tx) => unknown) => cb(tx) } };
+  return { db: { resgateCotacao: { findFirst: async () => null }, quote: { findUnique: m.quoteFindUnique, updateMany: m.quoteUpdateMany, findFirst: async () => null }, $transaction: async (cb: (t: typeof tx) => unknown) => cb(tx) } };
 });
 vi.mock('@/lib/stellar/account', () => ({
   horizon: { loadAccount: m.loadAccount },

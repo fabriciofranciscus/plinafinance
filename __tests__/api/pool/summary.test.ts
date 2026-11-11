@@ -14,6 +14,7 @@ vi.mock('@/lib/db', () => ({
     parametrosPool: { findUnique: m.parametros },
     tentativaEmissao: { findFirst: async () => null },
     quote: { findFirst: async () => null },
+    resgateCotacao: { findFirst: async () => null },
     cota: { findMany: m.cotas },
     realizacaoCaminho: { findMany: m.realizacoes },
     movimentoFundo: { aggregate: async () => ({ _sum: { deltaCaixa: null } }), createMany: async () => ({ count: 1 }) },
