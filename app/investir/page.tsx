@@ -118,6 +118,8 @@ export default function InvestirPage() {
                   onTrackChange={flow.setTrack}
                   institutionalProfile={flow.institutionalProfile}
                   onInstitutionalChange={flow.setInstitutionalProfile}
+                  kycPending={flow.onboard.kycPending}
+                  kycTimedOut={flow.onboard.kycTimedOut}
                 />
               )}
               {screen === 'banking' && onboard && (
@@ -178,6 +180,7 @@ export default function InvestirPage() {
                   onRamp={onRamp}
                   claimResult={flow.claim.claimResult}
                   claiming={flow.claim.claiming}
+                  regenerated={flow.claim.claimRegenerated}
                   swapLoading={flow.swap.swapLoading}
                   onClaim={flow.claim.doClaim}
                   onContinue={flow.swap.goToConfirm}

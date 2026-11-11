@@ -61,6 +61,8 @@ export function useInvestirFlow() {
     getAccessToken,
     onError,
     clearError,
+    // E2-3: o claim abre a trustline do TESOURO (changeTrust patrocinado pelo anchor).
+    skipTesouroTrustline: true,
   });
 
   const onRegisteredBank = useCallback(() => setScreen('classe'), []);

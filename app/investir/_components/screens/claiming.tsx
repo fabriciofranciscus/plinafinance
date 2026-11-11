@@ -10,6 +10,7 @@ export function ClaimingScreen({
   onRamp,
   claimResult,
   claiming,
+  regenerated = false,
   swapLoading,
   onClaim,
   onContinue,
@@ -17,6 +18,8 @@ export function ClaimingScreen({
   onRamp: OnRampData;
   claimResult: ClaimResult | null;
   claiming: boolean;
+  /** O XDR do resgate venceu e foi regenerado: a assinatura é nova. */
+  regenerated?: boolean;
   swapLoading: boolean;
   onClaim: () => void;
   onContinue: () => void;
@@ -36,9 +39,10 @@ export function ClaimingScreen({
       </h1>
       <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
         A Etherfuse emitiu TESOURO num <Term>ClaimableBalance</Term> Stellar
-        (PLINA-MOD-007). Pra ele entrar na sua wallet, você precisa assinar
-        um <Term>claimClaimableBalance</Term>. Sem isso, o swap atômico
-        falha por saldo zero.
+        (PLINA-MOD-007). Pra ele entrar na sua wallet, você assina uma única
+        transação: ela abre a trustline do TESOURO (reserva patrocinada pela
+        anchor) e executa o <Term>claimClaimableBalance</Term>. Sem isso, o
+        swap atômico falha por saldo zero.
       </p>
 
       <div className="mt-10 border-y border-light-hairline">
@@ -86,6 +90,17 @@ export function ClaimingScreen({
         </p>
       </div>
 
+      {regenerated && !claimed && (
+        <p
+          role="status"
+          data-testid="claim-regenerado"
+          className="mt-8 font-text text-sm text-base/80"
+        >
+          A transação de resgate venceu e foi gerada de novo. Confirme a nova
+          assinatura.
+        </p>
+      )}
+
       <div className="mt-12 flex gap-4">
         {!claimed && (
           <button
@@ -96,7 +111,7 @@ export function ClaimingScreen({
             {claiming && (
               <span className="w-2 h-2 bg-primary rounded-full animate-pulse" aria-hidden />
             )}
-            {claiming ? 'Assinando claim…' : 'Assinar e reclamar TESOURO'}
+            {claiming ? 'Assinando claim…' : regenerated ? 'Assinar o novo resgate' : 'Assinar e reclamar TESOURO'}
           </button>
         )}
         {claimed && (
