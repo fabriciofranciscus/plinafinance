@@ -268,3 +268,78 @@ export async function fetchSupplyOnChainFromEnv(
 ): Promise<SupplyOnChain> {
   return fetchSupplyDoAsset(code ?? assetCodeForClasse('SENIOR'));
 }
+
+/**
+ * Saldo real do distributor num asset da Plina (TES-1). Só leitura: nada é
+ * queimado nem movido. Lê só a conta do distributor — não depende do `/assets`
+ * agregado (Horizon EOL).
+ */
+export interface SaldoTesouraria {
+  code: string;
+  issuer: string;
+  distributor: string;
+  /** Saldo do distributor nesse asset; zero sem trustline. */
+  saldo: Prisma.Decimal;
+  temTrustline: boolean;
+  /** Trustline autorizada pelo issuer (AUTH_REQUIRED). */
+  autorizada: boolean;
+  lidoEm: Date;
+}
+
+export interface SaldoTesourariaDasClasses {
+  senior: SaldoTesouraria;
+  subordinada: SaldoTesouraria;
+}
+
+type BalanceLine = {
+  asset_code?: string;
+  asset_issuer?: string;
+  balance: string;
+  is_authorized?: boolean;
+};
+
+function saldoNaConta(
+  balances: ReadonlyArray<BalanceLine>,
+  code: string,
+  chaves: { issuerPubkey: string; distributorPubkey: string },
+  lidoEm: Date,
+): SaldoTesouraria {
+  const linha = balances.find(
+    (b) => b.asset_code === code && b.asset_issuer === chaves.issuerPubkey,
+  );
+  return {
+    code,
+    issuer: chaves.issuerPubkey,
+    distributor: chaves.distributorPubkey,
+    saldo: linha ? dec(linha.balance) : ZERO,
+    temTrustline: Boolean(linha),
+    autorizada: linha?.is_authorized === true,
+    lidoEm,
+  };
+}
+
+async function balancesDoDistributor(distributorPubkey: string) {
+  const conta = await horizon.loadAccount(distributorPubkey);
+  return conta.balances as ReadonlyArray<BalanceLine>;
+}
+
+/** Saldo do distributor num code da Plina. Code fora da Plina é recusado. */
+export async function fetchSaldoTesouraria(code: string): Promise<SaldoTesouraria> {
+  if (!codesDaPlina().includes(code)) {
+    throw new SupplyConfigError('SUPPLY_ASSET_UNKNOWN');
+  }
+  const chaves = chavesDoAmbiente();
+  const balances = await balancesDoDistributor(chaves.distributorPubkey);
+  return saldoNaConta(balances, code, chaves, new Date());
+}
+
+/** Saldo do distributor nas duas classes, numa leitura só da conta. */
+export async function fetchSaldoTesourariaDasClasses(): Promise<SaldoTesourariaDasClasses> {
+  const chaves = chavesDoAmbiente();
+  const balances = await balancesDoDistributor(chaves.distributorPubkey);
+  const lidoEm = new Date();
+  return {
+    senior: saldoNaConta(balances, assetCodeForClasse('SENIOR'), chaves, lidoEm),
+    subordinada: saldoNaConta(balances, assetCodeForClasse('SUBORDINADA'), chaves, lidoEm),
+  };
+}

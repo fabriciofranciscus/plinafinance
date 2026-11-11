@@ -10,7 +10,8 @@ import { db } from '../db';
 import { ApiError } from '../api/errors';
 import { NavIndisponivelError, lerSupplyDoNav } from './nav-supply';
 import { caixaParaNav } from './razao-fundo';
-import { navParaEmissao, quantidadeEmitida } from './pool';
+import { navMudou, navParaEmissao, quantidadeEmitida } from './pool';
+import { valorLiquidoDaCotacao } from './regras-swap';
 
 export interface PrecoDeEmissao {
   /** NAV/token usado, 8 casas (precisão do NAV em pool.ts). */
@@ -49,4 +50,31 @@ export async function calcularPrecoDeEmissao(input: {
     throw new ApiError('VALIDATION_FAILED', 400, 'valor abaixo do mínimo emitível ao NAV atual');
   }
   return { navPorTokenNaCotacao: nav, plinarfAmount };
+}
+
+/** O NAV relido divergiu do congelado na cotação além da tolerância (409 NAV_MUDOU). */
+export class NavMudouError extends Error {
+  readonly code = 'NAV_MUDOU' as const;
+  constructor() {
+    super('O NAV mudou; gere uma nova cotação.');
+    this.name = 'NavMudouError';
+  }
+}
+
+/**
+ * L1-S2: relê o NAV (mesma conta da cotação, leitura `fresh` do ledger, trava D3)
+ * e recusa se divergir de `navPorTokenNaCotacao` em mais de 1 bp. Sem NAV
+ * (ledger fora, PLINARFB circulando) lança `NavIndisponivelError`.
+ */
+export async function revalidarNavDaCotacao(quote: {
+  fromAmount: Prisma.Decimal | string | number;
+  /** Fee da Etherfuse (BRL): o NAV é revalidado sobre o valor LÍQUIDO, como na cotação. */
+  fee?: string | null;
+  navPorTokenNaCotacao: Prisma.Decimal | string | number;
+}): Promise<Prisma.Decimal> {
+  const atual = await calcularPrecoDeEmissao({ valorBrl: valorLiquidoDaCotacao(quote) });
+  if (navMudou(quote.navPorTokenNaCotacao, atual.navPorTokenNaCotacao)) {
+    throw new NavMudouError();
+  }
+  return atual.navPorTokenNaCotacao;
 }

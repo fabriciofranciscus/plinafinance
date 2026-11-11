@@ -46,7 +46,8 @@ function xdr(amount1: string, amount2: string): string {
     )
     .addOperation(
       Operation.payment({
-        source: DISTRIBUTOR,
+        // N1: a perna 2 é emissão nova (issuer → investidor).
+        source: ISSUER,
         destination: INVESTOR,
         asset: PLINARF,
         amount: amount2,

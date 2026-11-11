@@ -202,6 +202,7 @@ vi.mock('@/lib/db', () => {
   return {
     db: {
       eventoAudit: { findFirst: st.eventoFind, create: eventoAudit.create },
+      quote: { findFirst: async () => null }, // lerSupplyDoNav: nenhum swap em voo (gate do N1)
       cota,
       movimentoFundo,
       tentativaEmissao,

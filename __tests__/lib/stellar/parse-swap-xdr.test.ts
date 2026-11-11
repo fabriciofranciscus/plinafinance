@@ -54,7 +54,8 @@ function buildXdr(opts: {
     );
     builder.addOperation(
       Operation.payment({
-        source: opts.source2 ?? DISTRIBUTOR,
+        // N1: a perna 2 é emissão nova (issuer → investidor).
+        source: opts.source2 ?? ISSUER,
         destination: opts.dest2 ?? INVESTOR,
         asset: opts.asset2 ?? PLINARF,
         amount: opts.amount2 ?? '99.5000000',
