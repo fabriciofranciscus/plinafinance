@@ -8,6 +8,9 @@ import {
   bridgeAmountDoResgate,
   precoLiquidoDoTesouro,
   memoHashDoResgate,
+  precoNaFaixa,
+  tetoResgateBrl,
+  TETO_RESGATE_BRL_PADRAO,
 } from '@/lib/services/regras-resgate';
 
 const D = (v: string) => new Prisma.Decimal(v);
@@ -90,5 +93,39 @@ describe('assinaturaUnicaDoInvestidor', () => {
     const dupla = tx([0, AGORA + 100], inv);
     dupla.sign(Keypair.random());
     expect(assinaturaUnicaDoInvestidor(dupla, inv.publicKey())).toBeNull();
+  });
+});
+
+describe('precoNaFaixa (Argus R2: ±2% contra a referência independente)', () => {
+  const REF = '1.25';
+  it('dentro da faixa (inclusive nas bordas exatas)', () => {
+    expect(precoNaFaixa('1.25', REF)).toBe(true);
+    expect(precoNaFaixa('1.275', REF)).toBe(true); // +2,00%
+    expect(precoNaFaixa('1.225', REF)).toBe(true); // −2,00%
+  });
+  it('fora da faixa: acima, abaixo e preço inflado/zerado', () => {
+    expect(precoNaFaixa('1.2751', REF)).toBe(false);
+    expect(precoNaFaixa('1.2249', REF)).toBe(false);
+    expect(precoNaFaixa('12.5', REF)).toBe(false);
+    expect(precoNaFaixa('0.0001', REF)).toBe(false);
+  });
+  it('inválido → false (fail-closed): zero, negativo, lixo, referência inválida', () => {
+    for (const bad of ['0', '-1', 'abc', '', 'NaN', 'Infinity']) {
+      expect(precoNaFaixa(bad, REF)).toBe(false);
+      expect(precoNaFaixa('1.25', bad)).toBe(false);
+    }
+  });
+  it('a faixa é configurável em bps', () => {
+    expect(precoNaFaixa('1.26', REF, 50)).toBe(false); // +0,8% > 0,5%
+    expect(precoNaFaixa('1.26', REF, 100)).toBe(true);
+  });
+});
+
+describe('tetoResgateBrl (Argus R2)', () => {
+  it('config válida manda; inválida/ausente → padrão provisório (nunca "sem teto")', () => {
+    expect(tetoResgateBrl('2500.50').toString()).toBe('2500.5');
+    for (const bad of [undefined, '', '  ', 'abc', '0', '-5', 'Infinity']) {
+      expect(tetoResgateBrl(bad).toString()).toBe(TETO_RESGATE_BRL_PADRAO);
+    }
   });
 });

@@ -23,6 +23,7 @@ import { navMudou } from './pool';
 import { getAssetBalance } from '../stellar/account';
 import { caixaDoFundo } from './razao-fundo';
 import { escriturarResgate, liberarReservaDoResgate } from './resgate-escrituracao';
+import { obterPrecoReferenciaTesouro } from './preco-referencia-tesouro';
 import { assertSemSwapEmConferencia } from './swap-orfao';
 import {
   COTACAO_RESGATE_TTL_MS,
@@ -30,6 +31,8 @@ import {
   assinaturaUnicaDoInvestidor,
   bridgeAmountDoResgate,
   memoHashDoResgate,
+  precoNaFaixa,
+  tetoResgateBrl,
 } from './regras-resgate';
 
 export interface CotarResgateInput {
@@ -125,6 +128,22 @@ async function reservarComLiquidez(i: {
   });
 }
 
+/**
+ * Guardas do preço e do tamanho (Argus R2): (a) o preço da Etherfuse tem de estar a ±2% de uma referência
+ * INDEPENDENTE (último swap escriturado ou config) — sem referência ou fora da faixa, recusa (fail-closed); (b) teto de
+ * BRL por resgate. Roda no build e de novo no submit (reserva nova).
+ */
+async function exigirPrecoETeto(i: { precoTesouroBrl: string | Prisma.Decimal; brl: Prisma.Decimal }): Promise<void> {
+  if (i.brl.gt(tetoResgateBrl())) {
+    throw new ApiError('LIQUIDEZ_INSUFICIENTE', 409, 'Este valor está acima do limite por resgate. Tente um valor menor.');
+  }
+  const ref = await obterPrecoReferenciaTesouro();
+  if (!ref || !precoNaFaixa(i.precoTesouroBrl, ref)) {
+    console.error('[resgate] preço do ativo-ponte fora da faixa ou sem referência independente');
+    throw new ApiError('ETHERFUSE_ERROR', 502, 'Preço do ativo-ponte indisponível agora. Tente novamente.');
+  }
+}
+
 export async function cotarResgate(input: CotarResgateInput): Promise<CotacaoDeResgate> {
   const amount = amountPlinarfValido(input.amountPlinarf);
   if (!amount) throw new ApiError('VALIDATION_FAILED', 400, 'amountPlinarf inválido: decimal > 0 com até 7 casas.');
@@ -137,6 +156,7 @@ export async function cotarResgate(input: CotarResgateInput): Promise<CotacaoDeR
   }
   const bridge = bridgeAmountDoResgate(preco.brlEquivalente, input.precoTesouroBrl);
   if (!bridge) throw new ApiError('ETHERFUSE_ERROR', 502, 'Preço do ativo-ponte indisponível agora. Tente novamente.');
+  await exigirPrecoETeto({ precoTesouroBrl: input.precoTesouroBrl, brl: preco.brlEquivalente });
 
   const { issuerPubkey, distributorPubkey } = chavesStellar();
   await exigirLiquidez({
@@ -280,6 +300,8 @@ async function submeterResgateInterno(input: SubmeterResgateInput): Promise<{ tx
     if (navMudou(cot.taxaBridge, precoAgora)) {
       throw new ApiError('NAV_MUDOU', 409, 'O preço mudou desde a cotação. Gere uma nova cotação.');
     }
+    // Preço atual também na faixa da referência independente, e o teto (pode ter mudado desde a cotação).
+    await exigirPrecoETeto({ precoTesouroBrl: precoAgora, brl: new Prisma.Decimal(cot.brlEquivalente) });
     // Liquidez relida (outras operações podem ter consumido o caixa desde a cotação). A checagem DEFINITIVA, junto com
     // a reserva e sob lock, é `reservarComLiquidez` abaixo (cotações simultâneas).
     saldoTesouro = await exigirLiquidez({

@@ -125,6 +125,8 @@ describe.skipIf(!PG)('resgate — liquidez sob concorrência real no Postgres', 
   beforeEach(async () => {
     process.env.STELLAR_ISSUER_PUBLIC = ISSUER.publicKey();
     process.env.STELLAR_DISTRIBUTOR_PUBLIC = DIST.publicKey();
+    process.env.RESGATE_PRECO_TESOURO_REF = '1.25'; // referência independente (faixa ±2%)
+    delete process.env.RESGATE_TETO_BRL;
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     st.assinados = []; st.submits = []; st.saldoTesouro = '1000.0000000';
     await db.$executeRawUnsafe('TRUNCATE "ResgateCotacao", "MovimentoFundo", "EventoAudit", "Investidor" RESTART IDENTITY CASCADE');

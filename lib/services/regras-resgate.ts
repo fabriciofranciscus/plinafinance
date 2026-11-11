@@ -48,6 +48,40 @@ export function bridgeAmountDoResgate(brl: Prisma.Decimal, precoTesouroBrl: stri
   return v.gt(0) ? v : null;
 }
 
+/** Faixa de plausibilidade do preço do TESOURO contra a referência independente (Argus R2; Atlas: ±2%). */
+export const FAIXA_PRECO_TESOURO_BPS = 200;
+
+/**
+ * O preço da Etherfuse só vale se estiver dentro de ±`bps` da referência INDEPENDENTE (último swap escriturado ou
+ * config). Sem isso o 1 bp do submit compara a Etherfuse com ela mesma e um preço inflado (ou zerado) esvaziaria o
+ * distributor. Valor inválido → false (fail-closed).
+ */
+export function precoNaFaixa(preco: string | Prisma.Decimal, referencia: string | Prisma.Decimal, bps: number = FAIXA_PRECO_TESOURO_BPS): boolean {
+  try {
+    const p = new Prisma.Decimal(preco);
+    const r = new Prisma.Decimal(referencia);
+    if (!p.isFinite() || !r.isFinite() || !p.gt(0) || !r.gt(0)) return false;
+    return p.minus(r).abs().div(r).lte(new Prisma.Decimal(bps).div(10_000));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Teto de BRL por resgate (Argus R2). `RESGATE_TETO_BRL` (decimal > 0) manda; sem ele vale o padrão PROVISÓRIO abaixo
+ * (o teto por janela de liquidez é decisão do CEO, depois). Valor de env inválido → o padrão (nunca "sem teto").
+ */
+export const TETO_RESGATE_BRL_PADRAO = '10000';
+export function tetoResgateBrl(env: string | undefined = process.env.RESGATE_TETO_BRL): Prisma.Decimal {
+  try {
+    const d = new Prisma.Decimal((env ?? '').trim());
+    if (d.isFinite() && d.gt(0)) return d;
+  } catch {
+    /* cai no padrão */
+  }
+  return new Prisma.Decimal(TETO_RESGATE_BRL_PADRAO);
+}
+
 /** Memo.hash do envelope do resgate. NÃO usa o prefixo `plina:incorporacao:` (exclusivo da emissão). */
 export function memoHashDoResgate(quoteId: string): Buffer {
   return createHash('sha256').update(`plina:resgate:${quoteId}`).digest();

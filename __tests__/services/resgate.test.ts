@@ -14,7 +14,7 @@ const AGORA_SEC = AGORA / 1000;
 const m = vi.hoisted(() => ({
   create: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn(),
   preco: vi.fn(), buildResgate: vi.fn(), fetchTx: vi.fn(), preSign: vi.fn(), submitPrivy: vi.fn(),
-  caixa: vi.fn(), saldo: vi.fn(), precoAgora: vi.fn(), agregado: vi.fn(), lockRaw: vi.fn(),
+  caixa: vi.fn(), ref: vi.fn(), saldo: vi.fn(), precoAgora: vi.fn(), agregado: vi.fn(), lockRaw: vi.fn(),
   conferencia: vi.fn(), decrementar: vi.fn(), investidorUpdate: vi.fn(), eventoCreate: vi.fn(), movCreateMany: vi.fn(),
 }));
 
@@ -34,6 +34,7 @@ vi.mock('@/lib/db', () => {
   };
 });
 vi.mock('@/lib/services/liquidacao', () => ({ calcularPrecoDeResgate: m.preco }));
+vi.mock('@/lib/services/preco-referencia-tesouro', () => ({ obterPrecoReferenciaTesouro: m.ref }));
 vi.mock('@/lib/services/razao-fundo', async (orig) => ({ ...(await orig<typeof import('@/lib/services/razao-fundo')>()), caixaDoFundo: m.caixa }));
 vi.mock('@/lib/stellar/account', () => ({ getAssetBalance: m.saldo }));
 vi.mock('@/lib/services/holdings', () => ({ decrementarHolding: m.decrementar }));
@@ -88,6 +89,8 @@ beforeEach(() => {
   m.preco.mockResolvedValue({ navPorToken: NAV, brlEquivalente: D('100.00'), navTotal: 1, tokensVivos: 1 });
   m.buildResgate.mockResolvedValue({ xdr: 'XDR_BUILD', hashHex: '0xabc', maxTime: AGORA_SEC + 120 });
   m.conferencia.mockResolvedValue(undefined);
+  m.ref.mockResolvedValue(D('1.25'));
+  delete process.env.RESGATE_TETO_BRL;
   m.lockRaw.mockResolvedValue(1);
   m.agregado.mockResolvedValue({ _sum: { brlEquivalente: null, bridgeAmount: null } });
   m.caixa.mockResolvedValue(D('1000.00'));
@@ -158,6 +161,7 @@ describe('cotarResgate (build)', () => {
 
 describe('cotarResgate — preço líquido e liquidez (Consuelo/Atlas)', () => {
   it('TESOURO = BRL ÷ preço líquido, truncado PARA BAIXO, e o preço fica gravado na cotação', async () => {
+    m.ref.mockResolvedValue(D('1.17')); // referência independente próxima do preço real do sandbox (faixa ±2%)
     await cotarResgate(cotarIn({ precoTesouroBrl: '1.1693333' })); // 100 ÷ 1,1693333 = 85,5144… → 85,5144...
     const dados = m.create.mock.calls[0][0].data;
     expect(dados.taxaBridge).toBe('1.1693333');
@@ -230,6 +234,73 @@ describe('submeterResgate — caminho feliz', () => {
   it('cotação já consumida com OUTRO xdr → 409', async () => {
     m.findFirst.mockResolvedValue(cotacao({ consumedAt: new Date(), consumedTxHash: 'tx_antigo', submitXdrHash: 'outro' }));
     await expect(submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: envelope().toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA })).rejects.toMatchObject({ code: 'CONFLICT', status: 409 });
+  });
+});
+
+describe('guardas de preço e teto (Argus R2)', () => {
+  const tentaSubmit = (tx = envelope()) =>
+    submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA });
+
+  it('BUILD: preço da Etherfuse acima da faixa (+2,1%) → 502 ETHERFUSE_ERROR, nada persistido', async () => {
+    m.ref.mockResolvedValue(D('1.00'));
+    await expect(cotarResgate(cotarIn({ precoTesouroBrl: '1.021' }))).rejects.toMatchObject({ code: 'ETHERFUSE_ERROR', status: 502 });
+    expect(m.create).not.toHaveBeenCalled();
+    expect(m.buildResgate).not.toHaveBeenCalled();
+  });
+
+  it('BUILD: preço dentro da faixa (+2,0% e −2,0%) passa', async () => {
+    m.ref.mockResolvedValue(D('1.25'));
+    await expect(cotarResgate(cotarIn({ precoTesouroBrl: '1.275' }))).resolves.toMatchObject({ quoteId: expect.any(String) });
+    await expect(cotarResgate(cotarIn({ precoTesouroBrl: '1.225' }))).resolves.toBeDefined();
+  });
+
+  it('BUILD: sem referência independente (nenhum swap escriturado e sem config) → recusa (fail-closed)', async () => {
+    m.ref.mockResolvedValue(null);
+    await expect(cotarResgate(cotarIn())).rejects.toMatchObject({ code: 'ETHERFUSE_ERROR', status: 502 });
+    expect(m.create).not.toHaveBeenCalled();
+  });
+
+  it('BUILD: acima do teto por resgate (RESGATE_TETO_BRL) → 409 LIQUIDEZ_INSUFICIENTE, nada persistido', async () => {
+    process.env.RESGATE_TETO_BRL = '99.99';
+    await expect(cotarResgate(cotarIn())).rejects.toMatchObject({ code: 'LIQUIDEZ_INSUFICIENTE', status: 409 });
+    expect(m.create).not.toHaveBeenCalled();
+  });
+
+  it('BUILD: teto padrão provisório (R$ 10.000) vale sem env; igual ao teto passa', async () => {
+    m.caixa.mockResolvedValue(D('1000000.00'));
+    m.saldo.mockResolvedValue('1000000.0000000');
+    m.preco.mockResolvedValue({ navPorToken: NAV, brlEquivalente: D('10000.01'), navTotal: 1, tokensVivos: 1 });
+    await expect(cotarResgate(cotarIn())).rejects.toMatchObject({ code: 'LIQUIDEZ_INSUFICIENTE' });
+    m.preco.mockResolvedValue({ navPorToken: NAV, brlEquivalente: D('10000.00'), navTotal: 1, tokensVivos: 1 });
+    await expect(cotarResgate(cotarIn())).resolves.toBeDefined();
+  });
+
+  it('SUBMIT (reserva nova): preço de agora fora da faixa da referência → 502, sem reservar nem assinar', async () => {
+    m.findFirst.mockResolvedValue(cotacao());
+    m.precoAgora.mockResolvedValue('1.25'); // igual ao da cotação: o 1 bp passa
+    m.ref.mockResolvedValue(D('1.00')); // mas a referência independente discorda (+25%)
+    await expect(tentaSubmit()).rejects.toMatchObject({ code: 'ETHERFUSE_ERROR', status: 502 });
+    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(m.preSign).not.toHaveBeenCalled();
+    expect(m.submitPrivy).not.toHaveBeenCalled();
+  });
+
+  it('SUBMIT (reserva nova): teto reduzido depois da cotação → 409, sem reservar nem assinar', async () => {
+    m.findFirst.mockResolvedValue(cotacao());
+    process.env.RESGATE_TETO_BRL = '50';
+    await expect(tentaSubmit()).rejects.toMatchObject({ code: 'LIQUIDEZ_INSUFICIENTE', status: 409 });
+    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(m.submitPrivy).not.toHaveBeenCalled();
+  });
+
+  it('SUBMIT de reserva ÓRFÃ não relê preço/teto/referência (já reservada)', async () => {
+    const tx = envelope();
+    m.findFirst.mockResolvedValue(cotacao({ submitXdrHash: createHash('sha256').update(tx.hash()).digest('hex') }));
+    m.updateMany.mockResolvedValueOnce({ count: 0 });
+    m.ref.mockResolvedValue(null);
+    process.env.RESGATE_TETO_BRL = '1';
+    await expect(tentaSubmit(tx)).resolves.toBeDefined();
+    expect(m.ref).not.toHaveBeenCalled();
   });
 });
 
