@@ -131,6 +131,18 @@ describe('GET /api/ops/reconciliar-subscricoes', () => {
     expect(m.marcarResgate).not.toHaveBeenCalled();
   });
 
+  it('resgate órfão SEM prova (resgatesSemProva > 0) liga alerta, sem e-mail de conflito (o job do agendador falha)', async () => {
+    m.reconciliar.mockResolvedValue({ ...RESULTADO, resgatesSemProva: 2 });
+    const body = await (await GET(req(`Bearer ${SECRET}`))).json();
+    expect(body).toMatchObject({ alerta: true, alertaEnviado: false, resgatesSemProva: 2 });
+    expect(m.alerta).not.toHaveBeenCalled();
+  });
+
+  it('swap vencidasSemProva sozinho NÃO liga o alerta (regra só do resgate)', async () => {
+    m.reconciliar.mockResolvedValue({ ...RESULTADO, vencidasSemProva: 1, resgatesSemProva: 0 });
+    expect((await (await GET(req(`Bearer ${SECRET}`))).json()).alerta).toBe(false);
+  });
+
   it('a resposta traz vigiaRestantes (só contagem)', async () => {
     m.reconciliar.mockResolvedValue({ ...RESULTADO, vigiaRestantes: 70 });
     const body = await (await GET(req(`Bearer ${SECRET}`))).json();

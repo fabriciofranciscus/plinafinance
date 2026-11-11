@@ -67,11 +67,12 @@ export async function GET(req: Request) {
         }
       }
     }
-    // `alerta` = há conflito em aberto (sem alerta entregue ainda): fica true a cada varredura até o e-mail sair.
+    // `alerta` = há conflito em aberto (sem alerta entregue ainda) OU resgate órfão sem prova: fica true a cada varredura até resolver.
     // O workflow agendado deve falhar o job quando for true.
     return NextResponse.json({
       ...contagens,
-      alerta: contagens.vigiaConflitos > 0 || contagens.resgatesVigiaConflitos > 0,
+      // Resgate órfão SEM prova (INDETERMINADO / sem XDR) não se resolve sozinho: o job tem de falhar para a operação agir.
+      alerta: contagens.vigiaConflitos > 0 || contagens.resgatesVigiaConflitos > 0 || contagens.resgatesSemProva > 0,
       alertaEnviado: alertaEnviado || alertaResgateEnviado,
     });
   } catch (err) {
