@@ -51,7 +51,7 @@ jobs:
         run: pnpm test
 
       - name: Ops workflow contract tests
-        run: node --test .github/scripts/call-ops-route.test.mjs
+        run: node --test .github/scripts/*.test.mjs
 
       # Redundante com o `prebuild`, mas isolado dá sinal de falha legível:
       # "rota nova sem auth-guard" em vez de "build falhou".

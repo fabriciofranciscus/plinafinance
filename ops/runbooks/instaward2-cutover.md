@@ -45,6 +45,7 @@ Estado consolidado em 2026-11-11. Este checklist prepara a decisão; não autori
 - [ ] Snapshot diário só publica depois de `Σ trustlines autorizadas = circulante` por asset code.
 - [ ] Alarme de emissão e reconciliação rodam a cada 10 min; `alerta: true` falha o job.
 - [ ] Snapshot E3-1 é idempotente por data; reexecução não cria segunda âncora.
+- [ ] O monitor de 10 min encontra um snapshot publicado há menos de 26 h; ausência, arquivo inválido ou idade maior/igual a 26 h falha o job mesmo se o agendamento diário não executou.
 
 ## 5. Horizon em fim de vida
 

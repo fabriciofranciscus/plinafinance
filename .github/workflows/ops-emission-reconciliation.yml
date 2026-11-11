@@ -38,3 +38,7 @@ jobs:
           OPS_ROUTE_LABEL: orphan subscription reconciliation
           OPS_ROUTE_PATH: /api/ops/reconciliar-subscricoes
         run: node .github/scripts/call-ops-route.mjs
+
+      - name: Check NAV snapshot freshness
+        if: always()
+        run: node .github/scripts/check-nav-snapshot-freshness.mjs
