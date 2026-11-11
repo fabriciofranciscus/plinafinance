@@ -22,6 +22,12 @@ import { assetCodeForClasse, classeOrDefault } from '../stellar/classes';
 import { fetchTransactionByHash } from '../stellar/transactions';
 import { situacaoEnvelopeSwap } from '../stellar/orfa-swap';
 
+/**
+ * A liberação por TEMPO exige duas varreduras seguidas vendo a sequence livre depois do prazo, com este
+ * intervalo mínimo entre elas: um nó do Horizon atrasado mais que a espera não decide sozinho (Argus a).
+ */
+export const INTERVALO_MIN_ENTRE_VARREDURAS_MS = 5 * 60_000;
+
 /** Janela da vigia dos hashes liberados por tempo. */
 export const VIGIA_LIBERADAS_MS = 24 * 3600_000;
 
@@ -103,6 +109,7 @@ export function liberarReservaDoSwap(
       submitTxHash: null,
       submitMaxTime: null,
       submitXdr: null,
+      livreExpiradaVistaEm: null,
       ...(opts.porTempo
         ? { liberadaTxHash: opts.porTempo.txHash, liberadaPorTempoEm: new Date() }
         : {}),
@@ -138,6 +145,7 @@ type Orfa = {
   submitTxHash: string | null;
   submitMaxTime: Date | null;
   submitXdr: string | null;
+  livreExpiradaVistaEm?: Date | null;
   onRampOrder: { id: string } | null;
 };
 
@@ -168,6 +176,7 @@ export async function reconciliarSwapsOrfaos(
     select: {
       id: true, investidorId: true, fromAmount: true, fee: true, classe: true, plinarfAmount: true,
       submitXdrHash: true, submitTxHash: true, submitMaxTime: true, submitXdr: true,
+      livreExpiradaVistaEm: true,
       onRampOrder: { select: { id: true } },
     },
   })) as Orfa[];
@@ -188,13 +197,32 @@ export async function reconciliarSwapsOrfaos(
           await liberarReservaDoSwap(q.id, q.submitXdrHash); // a nossa não emitiu: prova positiva
           r.liberados++;
         } else if (sit.status === 'LIVRE_EXPIRADA') {
-          // S livre e a rede passou de maxTime + espera: libera POR TEMPO e vigia o hash por 24 h.
-          await liberarReservaDoSwap(q.id, q.submitXdrHash, { porTempo: { txHash: q.submitTxHash ?? '' } });
-          r.liberados++;
+          // S livre e a rede passou de maxTime + espera. Um nó atrasado pode dizer isto de uma tx que entrou:
+          // só libera na 2ª varredura seguida, ≥ 5 min depois da 1ª; a 1ª só marca. Vigia de 24 h depois.
+          const vista = q.livreExpiradaVistaEm;
+          if (!vista) {
+            await db.quote.updateMany({
+              where: { id: q.id, submitXdrHash: q.submitXdrHash, consumedAt: null },
+              data: { livreExpiradaVistaEm: new Date(agora) },
+            });
+            r.aguardando++;
+          } else if (agora - vista.getTime() >= INTERVALO_MIN_ENTRE_VARREDURAS_MS) {
+            await liberarReservaDoSwap(q.id, q.submitXdrHash, { porTempo: { txHash: q.submitTxHash ?? '' } });
+            r.liberados++;
+          } else {
+            r.aguardando++; // 2ª varredura cedo demais (disparo manual em sequência): não conta
+          }
         } else if (sit.status === 'AGUARDANDO') {
           r.aguardando++;
         } else {
           r.vencidasSemProva++; // INDETERMINADO: operador (runbook)
+        }
+        // A marca da 1ª varredura só vale enquanto o estado seguir LIVRE_EXPIRADA: qualquer outro resultado a apaga.
+        if (sit.status !== 'LIVRE_EXPIRADA' && q.livreExpiradaVistaEm && sit.status !== 'ENTROU' && sit.status !== 'OUTRA_TX') {
+          await db.quote.updateMany({
+            where: { id: q.id, submitXdrHash: q.submitXdrHash, consumedAt: null },
+            data: { livreExpiradaVistaEm: null },
+          });
         }
         continue;
       }

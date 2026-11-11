@@ -548,7 +548,7 @@ describe('POST /api/investidor/buy/swap/submit', () => {
       const r = await POST(req({ quoteId: 'q_1', signedXdr: xdr }));
       expect(r.status).toBe(409);
       expect(submitWithPrivySignature).not.toHaveBeenCalled();
-      expect(quoteUpdateMany.mock.calls[1][0].data).toEqual({ submitXdrHash: null, submitTxHash: null, submitMaxTime: null, submitXdr: null });
+      expect(quoteUpdateMany.mock.calls[1][0].data).toEqual({ submitXdrHash: null, submitTxHash: null, submitMaxTime: null, submitXdr: null, livreExpiradaVistaEm: null });
     });
   });
 

@@ -19,7 +19,10 @@ export async function GET(req: Request) {
   const negado = await requireOpsCron(req);
   if (negado) return negado;
   try {
-    return NextResponse.json(await reconciliarSwapsOrfaos());
+    const r = await reconciliarSwapsOrfaos();
+    // Alarme imediato: tx liberada por tempo que entrou depois com o quote já consumido por OUTRA tx (emissão
+    // dupla) ou erro no lote. O agendador (workflow do Farol) deve falhar o job quando `alerta` for true.
+    return NextResponse.json({ ...r, alerta: r.vigiaConflitos > 0 });
   } catch (err) {
     console.error('[ops/reconciliar-subscricoes]', (err as { name?: string })?.name ?? 'erro');
     return NextResponse.json({ error: 'erro interno' }, { status: 500 });

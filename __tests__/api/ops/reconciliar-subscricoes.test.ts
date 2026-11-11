@@ -31,8 +31,15 @@ describe('GET /api/ops/reconciliar-subscricoes', () => {
   it('com o Bearer certo → 200 e só as contagens', async () => {
     const r = await GET(req(`Bearer ${SECRET}`));
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual(RESULTADO);
+    expect(await r.json()).toEqual({ ...RESULTADO, alerta: false });
     expect(m.reconciliar).toHaveBeenCalledOnce();
+  });
+
+  it('vigiaConflitos > 0 (emissão dupla) liga o alerta imediato na resposta', async () => {
+    m.reconciliar.mockResolvedValue({ ...RESULTADO, vigiaConflitos: 1 });
+    const body = await (await GET(req(`Bearer ${SECRET}`))).json();
+    expect(body.alerta).toBe(true);
+    expect(body.vigiaConflitos).toBe(1);
   });
 
   it('sem header, com secret errado, sem o prefixo Bearer ou de tamanho diferente → 404, sem reconciliar', async () => {

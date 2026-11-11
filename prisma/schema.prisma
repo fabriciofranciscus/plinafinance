@@ -462,6 +462,9 @@ model Quote {
   submitXdr      String?        @db.Text
   /// Reserva liberada por TEMPO (sequence livre depois de maxTime + espera): o hash fica numa vigia de 24 h;
   /// se aparecer sucesso on-chain, escritura + alerta.
+  /// 1ª varredura que viu S livre depois de maxTime + espera: a liberação por tempo exige uma 2ª, ≥ 5 min depois
+  /// (um nó atrasado do Horizon não decide sozinho).
+  livreExpiradaVistaEm DateTime?
   liberadaTxHash     String?
   liberadaPorTempoEm DateTime?
   criadoEm       DateTime       @default(now())
