@@ -2,6 +2,14 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OnRampData, OnboardData } from '../../_types';
+import {
+  Account,
+  BASE_FEE,
+  Keypair,
+  Networks,
+  Operation,
+  TransactionBuilder,
+} from '@stellar/stellar-sdk';
 import { useClaim } from '../use-claim';
 
 const onboard: OnboardData = {
@@ -133,5 +141,118 @@ describe('useClaim — build → sign → submit', () => {
     expect(onError).toHaveBeenCalled();
     expect(onClaimed).not.toHaveBeenCalled();
     expect(result.current.claimResult).toBeNull();
+  });
+
+  describe('E2-3 — XDR expirado é regenerado, nunca submetido', () => {
+    const NOW = 1_800_000_000;
+    // XDR real com maxTime controlado: o hook lê o prazo do envelope.
+    function xdrComMax(maxTime: number): string {
+      const kp = Keypair.random();
+      return new TransactionBuilder(new Account(kp.publicKey(), '1'), {
+        fee: BASE_FEE,
+        networkPassphrase: Networks.TESTNET,
+        timebounds: { minTime: 0, maxTime },
+      })
+        .addOperation(Operation.bumpSequence({ bumpTo: '10' }))
+        .build()
+        .toXDR();
+    }
+    const built = (maxTime: number) => ({
+      xdr: xdrComMax(maxTime),
+      hashHex: '0xh',
+      balanceId: 'cb-xyz',
+    });
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(NOW * 1000);
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it('build devolve XDR já vencido: pede outro build e só assina o novo', async () => {
+      const velho = built(NOW - 60);
+      const novo = built(NOW + 300);
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(velho))
+        .mockResolvedValueOnce(jsonResponse(novo))
+        .mockResolvedValueOnce(jsonResponse({ claimTxHash: 'claim-tx-2' }));
+      const { result, onClaimed, signRawHash } = setup();
+      await act(async () => {
+        await result.current.doClaim();
+      });
+      expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([
+        '/api/investidor/buy/claim/build',
+        '/api/investidor/buy/claim/build',
+        '/api/investidor/buy/claim/submit',
+      ]);
+      expect(signRawHash).toHaveBeenCalledTimes(1);
+      const body = JSON.parse(String((fetchMock.mock.calls[2]![1] as RequestInit).body));
+      expect(body.xdr).toBe(novo.xdr);
+      expect(result.current.claimRegenerated).toBe(true);
+      expect(onClaimed).toHaveBeenCalledWith('claim-tx-2');
+    });
+
+    it('build devolve vencido duas vezes: erro, nada assinado nem submetido', async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(built(NOW - 60)))
+        .mockResolvedValueOnce(jsonResponse(built(NOW - 30)));
+      const { result, onError, signRawHash, onClaimed } = setup();
+      await act(async () => {
+        await result.current.doClaim();
+      });
+      expect(signRawHash).not.toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(onError).toHaveBeenCalled();
+      expect(onClaimed).not.toHaveBeenCalled();
+    });
+
+    it('submit 409 XDR_EXPIRADO: refaz o build, reassina uma vez e conclui', async () => {
+      const a = built(NOW + 300);
+      const b = built(NOW + 600);
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(a))
+        .mockResolvedValueOnce(jsonResponse({ error: 'expirou', code: 'XDR_EXPIRADO' }, 409))
+        .mockResolvedValueOnce(jsonResponse(b))
+        .mockResolvedValueOnce(jsonResponse({ claimTxHash: 'claim-tx-3' }));
+      const { result, onClaimed, signRawHash, onError } = setup();
+      await act(async () => {
+        await result.current.doClaim();
+      });
+      expect(signRawHash).toHaveBeenCalledTimes(2);
+      const last = JSON.parse(String((fetchMock.mock.calls[3]![1] as RequestInit).body));
+      expect(last.xdr).toBe(b.xdr);
+      expect(result.current.claimRegenerated).toBe(true);
+      expect(onClaimed).toHaveBeenCalledWith('claim-tx-3');
+      expect(onError).not.toHaveBeenCalled();
+    });
+
+    it('XDR_EXPIRADO de novo na segunda tentativa: para com mensagem fixa (sem loop)', async () => {
+      const exp = jsonResponse({ error: 'expirou', code: 'XDR_EXPIRADO' }, 409);
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(built(NOW + 300)))
+        .mockResolvedValueOnce(exp)
+        .mockResolvedValueOnce(jsonResponse(built(NOW + 600)))
+        .mockResolvedValueOnce(jsonResponse({ error: 'expirou', code: 'XDR_EXPIRADO' }, 409));
+      const { result, onError, onClaimed } = setup();
+      await act(async () => {
+        await result.current.doClaim();
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onClaimed).not.toHaveBeenCalled();
+    });
+
+    it('outro 409 não regenera: segue o erro normal', async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(built(NOW + 300)))
+        .mockResolvedValueOnce(jsonResponse({ error: 'já reclamado' }, 409));
+      const { result, onError } = setup();
+      await act(async () => {
+        await result.current.doClaim();
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(result.current.claimRegenerated).toBe(false);
+      expect(onError).toHaveBeenCalled();
+    });
   });
 });
