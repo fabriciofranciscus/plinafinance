@@ -66,7 +66,7 @@ const FOLGA_RELOGIO_MIN_SEC = 5;
  * 0 < maxTime ≤ agora + 120 s (build) + 60 s; minTime ≤ agora + 5 s. Tx já
  * expirada passa: quem barra é a rede. Relógio do servidor (não do Horizon).
  */
-function assertJanelaDeValidade(tx: Transaction, agoraSec: number): void {
+export function assertJanelaDeValidade(tx: Transaction, agoraSec: number): void {
   const tb = tx.timeBounds;
   if (!tb) throw new Error('xdr sem timeBounds: a janela de validade é obrigatória');
   const maxTime = Number(tb.maxTime);
@@ -107,7 +107,7 @@ export function assertSemPrecondicoesV2(tx: Transaction): void {
 }
 
 /** maxTime do envelope não pode passar do prazo do quote + 120 s (N1-S1). */
-function assertDentroDoQuote(tx: Transaction, quoteExpiresAt: Date): void {
+export function assertDentroDoQuote(tx: Transaction, quoteExpiresAt: Date): void {
   const expira = quoteExpiresAt instanceof Date ? quoteExpiresAt.getTime() : NaN;
   if (!Number.isFinite(expira)) throw new Error('expectativa quoteExpiresAt inválida');
   const limite = Math.floor(expira / 1000) + STELLAR_TX_TIMEOUT_SEC;

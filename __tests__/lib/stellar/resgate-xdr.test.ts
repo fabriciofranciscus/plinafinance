@@ -43,6 +43,7 @@ const EXPECT: ResgateXdrExpectation = {
   expectedPlinarfAmount: PLINARF_AMOUNT,
   expectedBridgeAmount: BRIDGE_AMOUNT,
   memoHash: MEMO,
+  quoteExpiresAt: new Date(Date.now() + 5 * 60_000), // cotação de 5 min (E2-6)
 };
 
 function conta(balances: unknown[]) {

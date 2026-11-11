@@ -19,7 +19,7 @@ import { buildAsset, horizon } from './account';
 import { STELLAR_TX_TIMEOUT_SEC, networkPassphrase } from './config';
 import { assetCodeForClasse } from './classes';
 import { getDynamicFee } from './fee';
-import { assertSemPrecondicoesV2 } from './parse-swap-xdr';
+import { assertDentroDoQuote, assertJanelaDeValidade, assertSemPrecondicoesV2 } from './parse-swap-xdr';
 import { exigirTrustlineAutorizada } from './trustline';
 
 export type ResgateErrorCode = 'RESGATE_ENTRADA_INVALIDA';
@@ -128,6 +128,11 @@ export interface ResgateXdrExpectation {
   expectedPlinarfAmount: string;
   expectedBridgeAmount: string;
   memoHash?: Buffer;
+  /**
+   * Prazo da cotação (OBRIGATÓRIO, N1-S1 no resgate): maxTime do envelope ≤
+   * quoteExpiresAt + 120 s. Ausente ou inválido → recusa.
+   */
+  quoteExpiresAt: Date;
 }
 
 function fmt(a: Asset): string {
@@ -138,7 +143,11 @@ function fmt(a: Asset): string {
  * Confere o XDR assinado pelo investidor contra o pedido de resgate, antes
  * de a Plina (distributor) assinar. Lança `Error` com a perna divergente.
  */
-export function assertResgateXdrMatchesQuote(xdr: string, expected: ResgateXdrExpectation): void {
+export function assertResgateXdrMatchesQuote(
+  xdr: string,
+  expected: ResgateXdrExpectation,
+  opts?: { agoraSec?: number },
+): void {
   if (!amountValido(expected.expectedPlinarfAmount) || !amountValido(expected.expectedBridgeAmount)) {
     throw new Error('expectativa de resgate inválida: amounts precisam ser > 0 com até 7 casas');
   }
@@ -149,6 +158,10 @@ export function assertResgateXdrMatchesQuote(xdr: string, expected: ResgateXdrEx
     throw new Error('xdr inválida ou networkPassphrase divergente');
   }
   if (tx.source !== expected.investorPubkey) throw new Error(`xdr.source=${tx.source} ≠ investidor`);
+  // Janela curta e já aberta + prazo da cotação: quem co-assina é o distributor (paga TESOURO).
+  assertJanelaDeValidade(tx, opts?.agoraSec ?? Math.floor(Date.now() / 1000));
+  if (expected.quoteExpiresAt === undefined) throw new Error('expectativa quoteExpiresAt ausente');
+  assertDentroDoQuote(tx, expected.quoteExpiresAt);
   assertSemPrecondicoesV2(tx);
   if (tx.operations.length !== 2) {
     throw new Error(`xdr de resgate deve ter exatamente 2 ops, tem ${tx.operations.length}`);

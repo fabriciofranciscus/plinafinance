@@ -50,6 +50,7 @@ async function main() {
     investorPubkey: investor.publicKey(), issuerPubkey: issuer.publicKey(), distributorPubkey: distributor.publicKey(),
     bridgeAsset: { code: 'TESOURO', issuer: bridgeIssuer.publicKey() }, plinarfCode: 'PLINARF',
     expectedPlinarfAmount: '376.4705882', expectedBridgeAmount: '340.2300000', memoHash,
+    quoteExpiresAt: new Date(Date.now() + 5 * 60_000), // cotação de 5 min (E2-6)
   };
   const { xdr } = await buildResgateXdr({
     investorPubkey: exp.investorPubkey, issuerPubkey: exp.issuerPubkey, distributorPubkey: exp.distributorPubkey,
