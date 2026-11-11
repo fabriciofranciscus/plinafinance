@@ -476,13 +476,18 @@ describe('submeterResgate — recusas antes de a Plina assinar', () => {
       expect(String(e.message)).not.toMatch(/Timeout|horizon|socket/i);
     });
 
-    it('reenvio de reserva ÓRFÃ que a rede recusa: também libera na hora', async () => {
+    it.each([
+      ['tx_insufficient_fee (core checa a taxa antes da sequence)', { transaction: 'tx_insufficient_fee' }],
+      ['tx_failed', { transaction: 'tx_failed', operations: ['op_no_trust'] }],
+      ['tx_bad_auth', { transaction: 'tx_bad_auth' }],
+    ])('REENVIO de reserva ÓRFÃ com recusa definitiva (%s): NÃO libera — 504 INCERTO e o varredor decide (Argus R4)', async (_n, codes) => {
       const tx = envelope();
       m.findFirst.mockResolvedValue(cotacao({ submitXdrHash: hashDe(tx), submitMaxTime: new Date((AGORA_SEC + 100) * 1000) }));
-      m.updateMany.mockResolvedValueOnce({ count: 0 }); // a reserva já existe
-      m.submitPrivy.mockRejectedValue(horizon(400, 'Transaction Failed', { transaction: 'tx_failed', operations: ['op_no_trust'] }));
-      await expect(tenta(tx)).rejects.toMatchObject({ response: { status: 400 } });
-      expect(liberou()).toBe(true);
+      m.updateMany.mockResolvedValueOnce({ count: 0 }); // a reserva já existe: este é um REENVIO
+      m.submitPrivy.mockRejectedValue(horizon(400, 'Transaction Failed', codes));
+      await expect(tenta(tx)).rejects.toMatchObject({ code: 'STELLAR_SUBMIT_INCERTO', status: 504 });
+      expect(liberou()).toBe(false);
+      expect(m.movCreateMany).not.toHaveBeenCalled();
     });
   });
 

@@ -364,7 +364,10 @@ async function submeterResgateInterno(input: SubmeterResgateInput): Promise<{ tx
         extraSignatures: [{ pubkey: distSig.pubkey, sigBase64: distSig.sigBase64 }],
       });
     } catch (err) {
-      if (classificarErroDeEnvio(err) === 'RECUSADO') {
+      // Só no 1º ENVIO da reserva (esta chamada a criou): no REENVIO de uma órfã a tx pode JÁ ter entrado e o core checa
+      // taxa/operação/conta-fonte antes da sequence (um reenvio pode voltar tx_insufficient_fee em vez de tx_bad_seq);
+      // liberar ali deixaria queima e pagamento na chain sem escrituração (Argus R4). Reenvio → sempre INCERTO.
+      if (reserved.count === 1 && classificarErroDeEnvio(err) === 'RECUSADO') {
         // A rede RECUSOU (result_codes definitivos): a tx não vai a lugar nenhum → libera a reserva na hora (o gate do
         // NAV não fecha) e propaga o erro original (a rota o devolve como 502 STELLAR_SUBMIT_FAILED).
         await liberarReservaDoResgate(cot.id, xdrHash);
