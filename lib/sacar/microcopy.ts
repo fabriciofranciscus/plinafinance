@@ -91,6 +91,9 @@ export const RESGATE = {
   erro: {
     nav_mudou: 'O valor por token mudou. Gere uma nova cotação para continuar.',
     cotacao_expirada: 'A cotação expirou. Gere uma nova cotação para continuar.',
+    conflito: 'Esta cotação já foi usada em outro envio. Gere uma nova cotação para continuar.',
+    indisponivel:
+      'Resgate indisponível por enquanto. Tente novamente mais tarde.',
     em_conferencia:
       'Resgate indisponível por enquanto: o valor por token está em conferência. Tente novamente mais tarde.',
     generico:

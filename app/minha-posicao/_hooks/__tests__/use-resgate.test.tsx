@@ -87,6 +87,24 @@ describe('useResgate (contrato E2-4)', () => {
     }
   });
 
+  it('409 CONFLICT pede nova cotação; 503 LEDGER_UNAVAILABLE e 422 CLASSE_INDISPONIVEL são "indisponível" (mantêm a cotação)', async () => {
+    fetchMock.mockResolvedValueOnce(json(BUILD)).mockResolvedValueOnce(json({ error: 'x', code: 'CONFLICT' }, 409));
+    const a = setup();
+    act(() => a.result.current.setAmount('100'));
+    await act(async () => a.result.current.gerarCotacao());
+    await act(async () => a.result.current.confirmar());
+    await flush();
+    expect(a.result.current.erro?.tipo).toBe('conflito');
+    expect(a.result.current.build).toBeNull();
+    for (const [status, code] of [[503, 'LEDGER_UNAVAILABLE'], [422, 'CLASSE_INDISPONIVEL']] as const) {
+      fetchMock.mockResolvedValueOnce(json({ error: 'x', code }, status));
+      const b = setup();
+      act(() => b.result.current.setAmount('100'));
+      await act(async () => b.result.current.gerarCotacao());
+      expect(b.result.current.erro).toEqual({ tipo: 'indisponivel', codigo: code });
+    }
+  });
+
   it('409 SWAP_EM_CONFERENCIA: bloqueio próprio, mantém a cotação', async () => {
     fetchMock.mockResolvedValueOnce(json(BUILD)).mockResolvedValueOnce(json({ error: 'x', code: 'SWAP_EM_CONFERENCIA' }, 409));
     const { result } = setup();

@@ -26,8 +26,9 @@ export interface UseResgateArgs {
 
 /**
  * Fluxo do resgate: build (já devolve a cotação) -> assinatura do investidor ->
- * submit `{ quoteId, signedXdr }`. NAV_MUDOU e COTACAO_EXPIRADA pedem nova
- * cotação (refaz o build); SWAP_EM_CONFERENCIA bloqueia até o servidor liberar.
+ * submit `{ quoteId, signedXdr }`. NAV_MUDOU, COTACAO_EXPIRADA e CONFLICT pedem
+ * nova cotação (refaz o build); SWAP_EM_CONFERENCIA e LEDGER_UNAVAILABLE /
+ * CLASSE_INDISPONIVEL são bloqueios até o servidor liberar.
  */
 export function useResgate({ stellarAddress, signRawHash, getAccessToken, onDone }: UseResgateArgs) {
   const [amount, setAmountState] = useState('');
@@ -40,8 +41,9 @@ export function useResgate({ stellarAddress, signRawHash, getAccessToken, onDone
     const r = e instanceof ResgateError ? e : new ResgateError('generico', null);
     setErro({ tipo: r.tipo, codigo: r.codigo });
     // quote velho não pode ser assinado de novo: exige nova cotação
-    setPasso(r.tipo === 'nav_mudou' || r.tipo === 'cotacao_expirada' ? 'idle' : voltarPara);
-    if (r.tipo === 'nav_mudou' || r.tipo === 'cotacao_expirada') setBuild(null);
+    const pedeNovaCotacao = r.tipo === 'nav_mudou' || r.tipo === 'cotacao_expirada' || r.tipo === 'conflito';
+    setPasso(pedeNovaCotacao ? 'idle' : voltarPara);
+    if (pedeNovaCotacao) setBuild(null);
   }, []);
 
   const setAmount = useCallback((v: string) => {

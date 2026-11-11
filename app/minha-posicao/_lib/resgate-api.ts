@@ -1,10 +1,13 @@
 /**
- * Cliente do resgate (E2-6), contra o contrato do Atlas/Bento (E2-4):
+ * Cliente do resgate (E2-6), contra o contrato do Bento
+ * (contratos/2026-11-11-e2-4-resgate-api.md):
  *   POST /api/investidor/liquidar/build  { amountPlinarf }
  *     -> { quoteId, xdr, hashHex, amountPlinarf, brlEquivalente,
  *          navPorTokenNaCotacao, expiresAt }   (valores em string decimal)
  *   POST /api/investidor/liquidar/submit { quoteId, signedXdr } -> { txHash }
- *   Erros: 409 NAV_MUDOU (recotar), 410 COTACAO_EXPIRADA, 409 SWAP_EM_CONFERENCIA.
+ *   Erros { error, code }: 409 NAV_MUDOU (recotar), 410 COTACAO_EXPIRADA,
+ *   409 SWAP_EM_CONFERENCIA, 409 CONFLICT (cotação já usada com outro XDR),
+ *   400 VALIDATION_FAILED, 422 CLASSE_INDISPONIVEL, 503 LEDGER_UNAVAILABLE.
  *
  * O cliente só exibe os valores do servidor: nada é calculado aqui. Erros viram
  * tipos (nunca o texto cru da resposta); o código fica para os detalhes técnicos.
@@ -22,7 +25,13 @@ export interface ResgateBuild {
   expiresAt: string;
 }
 
-export type ResgateErroTipo = 'nav_mudou' | 'cotacao_expirada' | 'em_conferencia' | 'generico';
+export type ResgateErroTipo =
+  | 'nav_mudou'
+  | 'cotacao_expirada'
+  | 'conflito'
+  | 'em_conferencia'
+  | 'indisponivel'
+  | 'generico';
 
 export class ResgateError extends Error {
   constructor(
@@ -60,6 +69,9 @@ async function post<T>(
     if (res.status === 410 || codigo === 'COTACAO_EXPIRADA') throw new ResgateError('cotacao_expirada', codigo);
     if (codigo === 'NAV_MUDOU') throw new ResgateError('nav_mudou', codigo);
     if (codigo === 'SWAP_EM_CONFERENCIA') throw new ResgateError('em_conferencia', codigo);
+    if (codigo === 'CONFLICT') throw new ResgateError('conflito', codigo);
+    if (codigo === 'LEDGER_UNAVAILABLE' || codigo === 'CLASSE_INDISPONIVEL' || res.status === 503 || res.status === 422)
+      throw new ResgateError('indisponivel', codigo);
     throw new ResgateError('generico', codigo ?? `HTTP_${res.status}`);
   }
   try {
