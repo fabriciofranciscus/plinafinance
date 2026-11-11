@@ -19,6 +19,8 @@ import { usePrivy, useLogin } from '@privy-io/react-auth';
 import { useSignRawHash } from '@privy-io/react-auth/extended-chains';
 import { useCallback, useEffect, useState } from 'react';
 import { StrKey } from '@stellar/stellar-sdk';
+import { ResgateSection } from './_components/ResgateSection';
+import type { UseResgateArgs } from './_hooks/use-resgate';
 
 interface BalanceRow {
   asset_code?: string;
@@ -113,24 +115,6 @@ export default function MinhaPosicaoPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
 
-  // Liquidação state
-  const [liqAmount, setLiqAmount] = useState('');
-  const [liqQuote, setLiqQuote] = useState<{
-    amountPlinarf: number;
-    navPorTokenAtual: number;
-    brlEquivalente: number;
-  } | null>(null);
-  const [liqStep, setLiqStep] = useState<
-    'idle' | 'quoting' | 'ready' | 'signing' | 'submitting' | 'done'
-  >('idle');
-  const [liqResult, setLiqResult] = useState<{
-    liquidationTxHash: string;
-    auditTxHash: string;
-    brlEquivalente: number;
-    navPorTokenAtual: number;
-  } | null>(null);
-  const [liqError, setLiqError] = useState<string | null>(null);
-
   const stellarAddress =
     (user?.linkedAccounts ?? [])
       .filter((a): a is typeof a & { address: string } => 'address' in a)
@@ -183,84 +167,6 @@ export default function MinhaPosicaoPage() {
     if (ready && authenticated && stellarAddress) refresh();
   }, [ready, authenticated, stellarAddress, refresh]);
 
-  const fetchLiqQuote = useCallback(async () => {
-    if (!liqAmount) return;
-    setLiqError(null);
-    setLiqStep('quoting');
-    try {
-      const token = await getAccessToken();
-      const res = await fetch('/api/investidor/liquidar/quote', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ amountPlinarf: liqAmount }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      setLiqQuote(await res.json());
-      setLiqStep('ready');
-    } catch (err) {
-      setLiqError(err instanceof Error ? err.message : String(err));
-      setLiqStep('idle');
-    }
-  }, [liqAmount, getAccessToken]);
-
-  const runLiquidate = useCallback(async () => {
-    if (!stellarAddress || !liqAmount) return;
-    setLiqError(null);
-    setLiqStep('signing');
-    try {
-      const token = await getAccessToken();
-      const authHeaders: Record<string, string> = token
-        ? { Authorization: `Bearer ${token}` }
-        : {};
-      const buildRes = await fetch('/api/investidor/liquidar/build', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ pubkey: stellarAddress, amount: liqAmount }),
-      });
-      if (!buildRes.ok) throw new Error(await buildRes.text());
-      const { xdr, hashHex } = (await buildRes.json()) as {
-        xdr: string;
-        hashHex: string;
-      };
-
-      const { signature } = await signRawHash({
-        address: stellarAddress,
-        chainType: 'stellar',
-        hash: hashHex as `0x${string}`,
-      });
-
-      setLiqStep('submitting');
-      const submitRes = await fetch('/api/investidor/liquidar/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({
-          xdr,
-          pubkey: stellarAddress,
-          signatureHex: signature,
-          amount: liqAmount,
-        }),
-      });
-      if (!submitRes.ok) throw new Error(await submitRes.text());
-      setLiqResult(await submitRes.json());
-      setLiqStep('done');
-      // Atualiza saldos + events depois de liquidar
-      refresh();
-    } catch (err) {
-      setLiqError(err instanceof Error ? err.message : String(err));
-      setLiqStep('ready');
-    }
-  }, [stellarAddress, liqAmount, signRawHash, refresh, getAccessToken]);
-
-  function resetLiq() {
-    setLiqAmount('');
-    setLiqQuote(null);
-    setLiqResult(null);
-    setLiqStep('idle');
-    setLiqError(null);
-  }
 
   if (!ready) {
     return <PageWrap>{null}</PageWrap>;
@@ -482,164 +388,15 @@ export default function MinhaPosicaoPage() {
             )}
           </section>
 
-          {/* 1.5 Liquidar posição — loop fechado */}
+          {/* 1.5 Resgate (E2-6): passo 1 de 2; o passo 2 é o /sacar */}
           {hasPosition && (
-            <section className="mb-16">
-              <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 mb-4">
-                Liquidar posição · venda reversa ao distributor
-              </p>
-              <div className="border border-light-hairline">
-                {liqStep !== 'done' ? (
-                  <div className="p-6 md:p-8 space-y-5">
-                    <p className="font-text text-sm text-base/80 max-w-2xl leading-relaxed">
-                      Vender PLINA-RF de volta ao distributor a NAV corrente.
-                      No POC, o BRL equivalente é simulado — em produção, a
-                      anchor desembolsa via PIX após a venda reversa on-chain.
-                      Whitepaper §6.4: janelas periódicas de liquidez.
-                    </p>
-
-                    <div className="flex flex-col md:flex-row md:items-end gap-3">
-                      <label className="block flex-1">
-                        <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-                          Quantidade PLINA-RF a liquidar
-                        </span>
-                        <div className="flex gap-2 mt-2">
-                          <input
-                            type="number"
-                            min="1"
-                            max={plinarfQty}
-                            step="1"
-                            value={liqAmount}
-                            onChange={(e) => {
-                              setLiqAmount(e.target.value);
-                              setLiqQuote(null);
-                              setLiqStep('idle');
-                            }}
-                            placeholder={`Máx. ${NUMBER_INT.format(plinarfQty)}`}
-                            className="flex-1 bg-white border border-light-hairline px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                          />
-                          <button
-                            onClick={() => {
-                              setLiqAmount(String(Math.floor(plinarfQty)));
-                              setLiqQuote(null);
-                              setLiqStep('idle');
-                            }}
-                            className="font-details text-[10px] tracking-[0.2em] uppercase border border-light-hairline px-3 hover:bg-base hover:text-lightBg"
-                          >
-                            Máx
-                          </button>
-                        </div>
-                      </label>
-                      <button
-                        onClick={fetchLiqQuote}
-                        disabled={
-                          !liqAmount ||
-                          Number(liqAmount) <= 0 ||
-                          Number(liqAmount) > plinarfQty ||
-                          liqStep === 'quoting'
-                        }
-                        className="bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-primary-deep transition-colors disabled:opacity-40"
-                      >
-                        {liqStep === 'quoting' ? 'Calculando…' : 'Cotar liquidação'}
-                      </button>
-                    </div>
-
-                    {liqQuote && (
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-base/15 border border-light-hairline">
-                        <Metric
-                          label="Você entrega"
-                          value={`${NUMBER_INT.format(liqQuote.amountPlinarf)} PLINARF`}
-                        />
-                        <Metric
-                          label="NAV / token"
-                          value={BRL.format(liqQuote.navPorTokenAtual).replace(
-                            'R$',
-                            'R$ ',
-                          )}
-                        />
-                        <Metric
-                          label="BRL simulado"
-                          value={BRL.format(liqQuote.brlEquivalente)}
-                        />
-                      </div>
-                    )}
-
-                    {liqQuote && (
-                      <div className="flex flex-wrap gap-3 pt-2 border-t border-light-hairline">
-                        <button
-                          onClick={runLiquidate}
-                          disabled={liqStep === 'signing' || liqStep === 'submitting'}
-                          className="bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors disabled:opacity-50"
-                        >
-                          {liqStep === 'signing'
-                            ? 'Assinando via Privy…'
-                            : liqStep === 'submitting'
-                              ? 'Submetendo on-chain…'
-                              : 'Confirmar liquidação'}
-                        </button>
-                        <button
-                          onClick={resetLiq}
-                          disabled={liqStep === 'signing' || liqStep === 'submitting'}
-                          className="font-details text-[10px] tracking-[0.2em] uppercase border border-light-hairline px-4 py-3 hover:bg-base hover:text-lightBg disabled:opacity-40"
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    )}
-
-                    {liqError && (
-                      <p className="font-text text-sm text-red-700 border border-red-300 bg-red-50 p-3">
-                        ✗ {liqError}
-                      </p>
-                    )}
-                  </div>
-                ) : liqResult ? (
-                  <div className="bg-base text-lightBg px-6 md:px-10 py-8 md:py-10">
-                    <p className="font-details text-[10px] tracking-[0.2em] uppercase text-primary">
-                      Liquidação confirmada
-                    </p>
-                    <p className="font-title text-3xl md:text-5xl font-semibold mt-3 tracking-tight">
-                      {BRL.format(liqResult.brlEquivalente)}{' '}
-                      <span className="font-mono text-xl md:text-2xl text-lightBg/70">
-                        BRL (simulado)
-                      </span>
-                    </p>
-                    <p className="font-text text-sm text-lightBg/70 mt-2 max-w-xl">
-                      PLINARF retornado ao distributor a NAV de{' '}
-                      <span className="font-mono">
-                        {BRL.format(liqResult.navPorTokenAtual)}
-                      </span>{' '}
-                      por token. Em produção, este passo dispara a TED/PIX da
-                      anchor pra conta do investidor.
-                    </p>
-                    <div className="mt-6 pt-6 border-t border-lightBg/10 space-y-1.5">
-                      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-lightBg/50">
-                        Transações on-chain
-                      </p>
-                      <TxRowDark
-                        label="liquidação"
-                        hash={liqResult.liquidationTxHash}
-                      />
-                      <TxRowDark label="audit" hash={liqResult.auditTxHash} />
-                    </div>
-                    <div className="mt-6 flex flex-wrap gap-3">
-                      <button
-                        onClick={resetLiq}
-                        className="bg-primary text-base font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-secondaryLight transition-colors"
-                      >
-                        Nova liquidação
-                      </button>
-                      <a
-                        href="/investir"
-                        className="border border-lightBg/30 text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-lightBg/10 transition-colors"
-                      >
-                        Comprar PLINA-RF
-                      </a>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </section>
+            <ResgateSection
+              plinarfQty={plinarfQty}
+              stellarAddress={stellarAddress}
+              signRawHash={signRawHash as UseResgateArgs['signRawHash']}
+              getAccessToken={getAccessToken}
+              onDone={refresh}
+            />
           )}
 
           {/* 2. Custódia & Compliance */}
@@ -949,23 +706,6 @@ function NextStep({
   );
 }
 
-function TxRowDark({ label, hash }: { label: string; hash: string }) {
-  return (
-    <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-3">
-      <span className="font-details text-[10px] tracking-[0.2em] uppercase text-lightBg/50 min-w-[80px]">
-        {label}
-      </span>
-      <a
-        href={explorerTx(hash)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="font-mono text-[10px] text-lightBg/85 hover:text-primary break-all"
-      >
-        {hash}
-      </a>
-    </div>
-  );
-}
 
 function Skeletons() {
   return (
