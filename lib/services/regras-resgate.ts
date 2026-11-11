@@ -68,11 +68,11 @@ export function precoNaFaixa(preco: string | Prisma.Decimal, referencia: string 
 }
 
 /**
- * Teto de BRL por resgate (Argus R2). `RESGATE_TETO_BRL` (decimal > 0) manda; sem ele vale o padrão PROVISÓRIO abaixo
- * (o teto por janela de liquidez é decisão do CEO, depois). Valor de env inválido → o padrão (nunca "sem teto").
+ * Teto de BRL por resgate (Argus R2; Atlas): `RESGATE_MAX_BRL` (decimal > 0) manda; sem ela ou inválida vale o padrão de
+ * testnet abaixo — nunca "sem teto". (O teto por janela de liquidez é decisão do CEO, depois.)
  */
-export const TETO_RESGATE_BRL_PADRAO = '10000';
-export function tetoResgateBrl(env: string | undefined = process.env.RESGATE_TETO_BRL): Prisma.Decimal {
+export const TETO_RESGATE_BRL_PADRAO = '50000';
+export function tetoResgateBrl(env: string | undefined = process.env.RESGATE_MAX_BRL): Prisma.Decimal {
   try {
     const d = new Prisma.Decimal((env ?? '').trim());
     if (d.isFinite() && d.gt(0)) return d;

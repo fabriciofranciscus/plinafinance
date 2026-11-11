@@ -90,7 +90,7 @@ beforeEach(() => {
   m.buildResgate.mockResolvedValue({ xdr: 'XDR_BUILD', hashHex: '0xabc', maxTime: AGORA_SEC + 120 });
   m.conferencia.mockResolvedValue(undefined);
   m.ref.mockResolvedValue(D('1.25'));
-  delete process.env.RESGATE_TETO_BRL;
+  delete process.env.RESGATE_MAX_BRL;
   m.lockRaw.mockResolvedValue(1);
   m.agregado.mockResolvedValue({ _sum: { brlEquivalente: null, bridgeAmount: null } });
   m.caixa.mockResolvedValue(D('1000.00'));
@@ -241,9 +241,9 @@ describe('guardas de preço e teto (Argus R2)', () => {
   const tentaSubmit = (tx = envelope()) =>
     submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA });
 
-  it('BUILD: preço da Etherfuse acima da faixa (+2,1%) → 502 ETHERFUSE_ERROR, nada persistido', async () => {
+  it('BUILD: preço da Etherfuse acima da faixa (+2,1%) → 409 PRECO_FORA_DA_FAIXA, nada persistido', async () => {
     m.ref.mockResolvedValue(D('1.00'));
-    await expect(cotarResgate(cotarIn({ precoTesouroBrl: '1.021' }))).rejects.toMatchObject({ code: 'ETHERFUSE_ERROR', status: 502 });
+    await expect(cotarResgate(cotarIn({ precoTesouroBrl: '1.021' }))).rejects.toMatchObject({ code: 'PRECO_FORA_DA_FAIXA', status: 409 });
     expect(m.create).not.toHaveBeenCalled();
     expect(m.buildResgate).not.toHaveBeenCalled();
   });
@@ -256,39 +256,39 @@ describe('guardas de preço e teto (Argus R2)', () => {
 
   it('BUILD: sem referência independente (nenhum swap escriturado e sem config) → recusa (fail-closed)', async () => {
     m.ref.mockResolvedValue(null);
-    await expect(cotarResgate(cotarIn())).rejects.toMatchObject({ code: 'ETHERFUSE_ERROR', status: 502 });
+    await expect(cotarResgate(cotarIn())).rejects.toMatchObject({ code: 'PRECO_FORA_DA_FAIXA', status: 409 });
     expect(m.create).not.toHaveBeenCalled();
   });
 
-  it('BUILD: acima do teto por resgate (RESGATE_TETO_BRL) → 409 LIQUIDEZ_INSUFICIENTE, nada persistido', async () => {
-    process.env.RESGATE_TETO_BRL = '99.99';
-    await expect(cotarResgate(cotarIn())).rejects.toMatchObject({ code: 'LIQUIDEZ_INSUFICIENTE', status: 409 });
+  it('BUILD: acima do teto por resgate (RESGATE_MAX_BRL) → 409 RESGATE_ACIMA_DO_TETO, nada persistido', async () => {
+    process.env.RESGATE_MAX_BRL = '99.99';
+    await expect(cotarResgate(cotarIn())).rejects.toMatchObject({ code: 'RESGATE_ACIMA_DO_TETO', status: 409 });
     expect(m.create).not.toHaveBeenCalled();
   });
 
-  it('BUILD: teto padrão provisório (R$ 10.000) vale sem env; igual ao teto passa', async () => {
+  it('BUILD: teto padrão de testnet (R$ 50.000) vale sem env; igual ao teto passa', async () => {
     m.caixa.mockResolvedValue(D('1000000.00'));
     m.saldo.mockResolvedValue('1000000.0000000');
-    m.preco.mockResolvedValue({ navPorToken: NAV, brlEquivalente: D('10000.01'), navTotal: 1, tokensVivos: 1 });
-    await expect(cotarResgate(cotarIn())).rejects.toMatchObject({ code: 'LIQUIDEZ_INSUFICIENTE' });
-    m.preco.mockResolvedValue({ navPorToken: NAV, brlEquivalente: D('10000.00'), navTotal: 1, tokensVivos: 1 });
+    m.preco.mockResolvedValue({ navPorToken: NAV, brlEquivalente: D('50000.01'), navTotal: 1, tokensVivos: 1 });
+    await expect(cotarResgate(cotarIn())).rejects.toMatchObject({ code: 'RESGATE_ACIMA_DO_TETO' });
+    m.preco.mockResolvedValue({ navPorToken: NAV, brlEquivalente: D('50000.00'), navTotal: 1, tokensVivos: 1 });
     await expect(cotarResgate(cotarIn())).resolves.toBeDefined();
   });
 
-  it('SUBMIT (reserva nova): preço de agora fora da faixa da referência → 502, sem reservar nem assinar', async () => {
+  it('SUBMIT (reserva nova): preço de agora fora da faixa da referência → 409 PRECO_FORA_DA_FAIXA, sem reservar nem assinar', async () => {
     m.findFirst.mockResolvedValue(cotacao());
     m.precoAgora.mockResolvedValue('1.25'); // igual ao da cotação: o 1 bp passa
     m.ref.mockResolvedValue(D('1.00')); // mas a referência independente discorda (+25%)
-    await expect(tentaSubmit()).rejects.toMatchObject({ code: 'ETHERFUSE_ERROR', status: 502 });
+    await expect(tentaSubmit()).rejects.toMatchObject({ code: 'PRECO_FORA_DA_FAIXA', status: 409 });
     expect(m.updateMany).not.toHaveBeenCalled();
     expect(m.preSign).not.toHaveBeenCalled();
     expect(m.submitPrivy).not.toHaveBeenCalled();
   });
 
-  it('SUBMIT (reserva nova): teto reduzido depois da cotação → 409, sem reservar nem assinar', async () => {
+  it('SUBMIT (reserva nova): teto reduzido depois da cotação → 409 RESGATE_ACIMA_DO_TETO, sem reservar nem assinar', async () => {
     m.findFirst.mockResolvedValue(cotacao());
-    process.env.RESGATE_TETO_BRL = '50';
-    await expect(tentaSubmit()).rejects.toMatchObject({ code: 'LIQUIDEZ_INSUFICIENTE', status: 409 });
+    process.env.RESGATE_MAX_BRL = '50';
+    await expect(tentaSubmit()).rejects.toMatchObject({ code: 'RESGATE_ACIMA_DO_TETO', status: 409 });
     expect(m.updateMany).not.toHaveBeenCalled();
     expect(m.submitPrivy).not.toHaveBeenCalled();
   });
@@ -298,7 +298,7 @@ describe('guardas de preço e teto (Argus R2)', () => {
     m.findFirst.mockResolvedValue(cotacao({ submitXdrHash: createHash('sha256').update(tx.hash()).digest('hex') }));
     m.updateMany.mockResolvedValueOnce({ count: 0 });
     m.ref.mockResolvedValue(null);
-    process.env.RESGATE_TETO_BRL = '1';
+    process.env.RESGATE_MAX_BRL = '1';
     await expect(tentaSubmit(tx)).resolves.toBeDefined();
     expect(m.ref).not.toHaveBeenCalled();
   });
