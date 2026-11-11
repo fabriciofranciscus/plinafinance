@@ -1,0 +1,40 @@
+name: Ops emission and subscription alarms
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ops-emission-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      OPS_BASE_URL: ${{ vars.OPS_BASE_URL || 'https://plina.finance' }}
+      OPS_CRON_SECRET: ${{ secrets.OPS_CRON_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Check pending issuance
+        env:
+          OPS_ROUTE_LABEL: pending issuance
+          OPS_ROUTE_PATH: /api/ops/emissao-pendente
+        run: node .github/scripts/call-ops-route.mjs
+
+      - name: Reconcile orphan subscriptions
+        if: always()
+        env:
+          OPS_ROUTE_LABEL: orphan subscription reconciliation
+          OPS_ROUTE_PATH: /api/ops/reconciliar-subscricoes
+        run: node .github/scripts/call-ops-route.mjs
