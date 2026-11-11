@@ -1,0 +1,213 @@
+/**
+ * E1-P — núcleo puro do script de evidência da cota (`pnpm evidencia:cota <cotaId>`).
+ *
+ * Para 1 cota, monta a trilha em ordem
+ *   validação → cessão → liquidação → incorporação → emissão
+ * e, em cada passo, CONFERE (não apenas lista): SHA-256 recalculado do documento ==
+ * hash registrado no banco == Memo.hash lido da tx no Horizon. Todo acesso externo entra por
+ * `Fontes` (banco, Blob, Horizon), então o núcleo roda em teste com dublês e o `main` só liga as portas.
+ *
+ * Regras: só leitura; nenhum segredo; nenhuma escrita em banco/chain; testnet apenas.
+ */
+import { createHash } from 'node:crypto';
+
+export type PassoId = 'VALIDACAO' | 'CESSAO' | 'LIQUIDACAO' | 'INCORPORACAO' | 'EMISSAO';
+
+export interface TxLida {
+  /** Tx existe e foi bem-sucedida no ledger. */
+  sucesso: boolean;
+  /** Memo.hash em hex minúsculo (64), ou null se a tx não tem memo do tipo hash. */
+  memoHex: string | null;
+}
+
+export interface Fontes {
+  cota(id: string): Promise<{
+    id: string;
+    cessaoId: string | null;
+    hashValidacao: string | null;
+    validacaoTxHash: string | null;
+    emissaoTxHash: string | null;
+    tokensEmitidos: string;
+  } | null>;
+  /** EventoAudit COTA_VALIDADA com payloadHash == hashValidacao. */
+  laudo(hashValidacao: string): Promise<{ payloadJson: unknown; payloadHash: string | null } | null>;
+  cessao(cessaoId: string): Promise<{
+    status: string;
+    hashDocumento: string | null;
+    onChainTxHash: string | null;
+  } | null>;
+  /** Bytes GUARDADOS do PDF assinado (Blob privado, DS3). Nunca baixa de novo no DocuSign. */
+  pdfCessao(cessaoId: string): Promise<Buffer | null>;
+  pagamento(cessaoId: string): Promise<{ status: string; onChainTxHash: string | null } | null>;
+  /** Bytes GUARDADOS do comprovante do PSP (E1-2). */
+  comprovante(cessaoId: string): Promise<Buffer | null>;
+  /** MovimentoFundo APORTE_COTA da cota. */
+  aporte(cotaId: string): Promise<{
+    txHash: string | null;
+    hashValidacao: string | null;
+    valorBrl: string;
+    navPorToken: string | null;
+  } | null>;
+  /** Horizon: null = tx não encontrada. Erro de rede PROPAGA (nunca vira "não achou"). */
+  tx(txHash: string): Promise<TxLida | null>;
+  /** sha256 do payload canônico do laudo (`sha256OfPayload` de lib/stellar/audit). */
+  hashPayload(payload: unknown): string;
+}
+
+export interface PassoEvidencia {
+  ordem: number;
+  passo: PassoId;
+  rotulo: string;
+  txHash: string | null;
+  explorerUrl: string | null;
+  /** O que foi hasheado (descrição, sem dado pessoal). */
+  documento: string | null;
+  /** SHA-256 recalculado a partir do documento guardado. */
+  sha256Documento: string | null;
+  /** SHA-256 que o banco diz ter registrado. */
+  sha256Registrado: string | null;
+  /** Memo.hash lido da tx. */
+  memoOnChain: string | null;
+  confere: boolean;
+  /** Preenchido sempre que confere=false: por que a prova não fecha. */
+  motivo?: string;
+}
+
+export interface EvidenciaCota {
+  cotaId: string;
+  geradaEm: string;
+  network: 'TESTNET';
+  passos: PassoEvidencia[];
+  todosConferem: boolean;
+}
+
+export const sha256Hex = (b: Buffer | string): string => createHash('sha256').update(b).digest('hex');
+const HEX64 = /^[0-9a-f]{64}$/;
+export const explorerTx = (h: string): string => `https://stellar.expert/explorer/testnet/tx/${h}`;
+
+/** Mesma fórmula de `memoHashDaIncorporacao` (tokenizacao.ts); um teste trava a igualdade. */
+export const memoDaIncorporacao = (chave: string): string => sha256Hex(`plina:incorporacao:${chave}`);
+
+function base(ordem: number, passo: PassoId, rotulo: string): PassoEvidencia {
+  return {
+    ordem, passo, rotulo, txHash: null, explorerUrl: null, documento: null,
+    sha256Documento: null, sha256Registrado: null, memoOnChain: null, confere: false,
+  };
+}
+
+/** Fecha um passo: todos os hashes presentes, válidos e IGUAIS; tx bem-sucedida. */
+async function conferir(p: PassoEvidencia, f: Fontes, esperado: { doc: string | null; reg: string | null; tx: string | null }): Promise<PassoEvidencia> {
+  p.sha256Documento = esperado.doc;
+  p.sha256Registrado = esperado.reg;
+  p.txHash = esperado.tx;
+  if (esperado.tx) p.explorerUrl = explorerTx(esperado.tx);
+  if (!esperado.tx) return { ...p, motivo: 'SEM_TX: passo sem tx on-chain registrada' };
+  if (!esperado.doc) return { ...p, motivo: 'SEM_DOCUMENTO: documento guardado não encontrado' };
+  if (!esperado.reg) return { ...p, motivo: 'SEM_HASH_REGISTRADO: o banco não tem o hash deste passo' };
+  const t = await f.tx(esperado.tx);
+  if (!t) return { ...p, motivo: 'TX_NAO_ENCONTRADA: Horizon não conhece a tx' };
+  p.memoOnChain = t.memoHex;
+  if (!t.sucesso) return { ...p, motivo: 'TX_FALHOU: tx existe mas não foi bem-sucedida' };
+  if (!t.memoHex) return { ...p, motivo: 'SEM_MEMO_HASH: a tx não carrega Memo.hash' };
+  if (![esperado.doc, esperado.reg, t.memoHex].every((h) => HEX64.test(h))) {
+    return { ...p, motivo: 'HASH_MALFORMADO: esperado 64 hex minúsculos' };
+  }
+  if (esperado.doc !== esperado.reg) return { ...p, motivo: 'DOCUMENTO_DIVERGE_DO_REGISTRO: sha256(documento) ≠ hash no banco' };
+  if (esperado.doc !== t.memoHex) return { ...p, motivo: 'MEMO_DIVERGE: Memo.hash on-chain ≠ sha256(documento)' };
+  return { ...p, confere: true };
+}
+
+export async function montarEvidencia(cotaId: string, f: Fontes, agora: () => Date = () => new Date()): Promise<EvidenciaCota> {
+  const cota = await f.cota(cotaId);
+  if (!cota) throw new Error(`Cota ${cotaId} não encontrada.`);
+  const passos: PassoEvidencia[] = [];
+
+  // 1. Validação: documento = laudo (payload canônico).
+  {
+    const p = base(1, 'VALIDACAO', 'Validação legal (laudo)');
+    const laudo = cota.hashValidacao ? await f.laudo(cota.hashValidacao) : null;
+    p.documento = laudo ? 'laudo de validação (payload canônico)' : null;
+    const doc = laudo ? f.hashPayload(laudo.payloadJson) : null;
+    // O registro precisa ser o MESMO nos dois lugares do banco (Cota e EventoAudit).
+    const reg = laudo && laudo.payloadHash === cota.hashValidacao ? cota.hashValidacao : null;
+    const r = await conferir(p, f, { doc, reg, tx: cota.validacaoTxHash });
+    if (!laudo && !r.motivo) r.motivo = 'SEM_DOCUMENTO';
+    passos.push(r);
+  }
+
+  // 2. Cessão: documento = bytes GUARDADOS do PDF assinado.
+  {
+    const p = base(2, 'CESSAO', 'Cessão assinada (DocuSign)');
+    const cessao = cota.cessaoId ? await f.cessao(cota.cessaoId) : null;
+    const pdf = cota.cessaoId ? await f.pdfCessao(cota.cessaoId) : null;
+    p.documento = pdf ? 'PDF assinado guardado (Blob privado)' : null;
+    const r = await conferir(p, f, {
+      doc: pdf ? sha256Hex(pdf) : null,
+      reg: cessao?.hashDocumento ?? null,
+      tx: cessao?.onChainTxHash ?? null,
+    });
+    if (cessao && cessao.status !== 'ASSINADA' && r.confere) {
+      r.confere = false;
+      r.motivo = `CESSAO_NAO_ASSINADA: status=${cessao.status}`;
+    }
+    if (!cota.cessaoId) r.motivo = 'COTA_SEM_CESSAO: cota incorporada direto, sem funil de cessão';
+    passos.push(r);
+  }
+
+  // 3. Liquidação: documento = bytes GUARDADOS do comprovante do PSP. O hash registrado É o memo
+  //    esperado: sem campo próprio no banco, o memo da tx do pagamento é a única fonte, então exigimos
+  //    que ele bata com sha256(comprovante guardado).
+  {
+    const p = base(3, 'LIQUIDACAO', 'Liquidação ao cedente (comprovante do PSP)');
+    const pg = cota.cessaoId ? await f.pagamento(cota.cessaoId) : null;
+    const comp = cota.cessaoId ? await f.comprovante(cota.cessaoId) : null;
+    p.documento = comp ? 'comprovante do PSP guardado' : null;
+    const doc = comp ? sha256Hex(comp) : null;
+    const tx = pg?.onChainTxHash ?? null;
+    const memo = tx ? (await f.tx(tx))?.memoHex ?? null : null;
+    passos.push(await conferir(p, f, { doc, reg: memo, tx }));
+  }
+
+  // 4. Incorporação ao NAV: registro do razão (APORTE_COTA) amarrado ao laudo e à tx de emissão.
+  //    Não tem memo próprio: a prova on-chain é a tx do passo 5. Aqui conferimos o amarrado.
+  {
+    const p = base(4, 'INCORPORACAO', 'Incorporação ao NAV (MovimentoFundo APORTE_COTA)');
+    const a = await f.aporte(cotaId);
+    p.documento = a ? `APORTE_COTA valorBrl=${a.valorBrl} navPorToken=${a.navPorToken ?? '—'}` : null;
+    p.txHash = a?.txHash ?? null;
+    p.explorerUrl = a?.txHash ? explorerTx(a.txHash) : null;
+    p.sha256Registrado = a?.hashValidacao ?? null;
+    p.sha256Documento = cota.hashValidacao;
+    if (!a) p.motivo = 'SEM_APORTE: MovimentoFundo APORTE_COTA não registrado';
+    else if (!a.txHash || a.txHash !== cota.emissaoTxHash) p.motivo = 'APORTE_FORA_DA_TX_DE_EMISSAO: txHash do aporte ≠ emissaoTxHash da cota';
+    else if (a.hashValidacao !== cota.hashValidacao) p.motivo = 'APORTE_SEM_O_LAUDO: hashValidacao do aporte ≠ da cota';
+    else p.confere = true;
+    passos.push(p);
+  }
+
+  // 5. Emissão: memo = sha256("plina:incorporacao:" + chave) (chave = cessaoId ?? hashValidacao).
+  //    NÃO é hash de arquivo: o "documento" é a chave de incorporação. Ver nota no contrato do E1-P.
+  {
+    const p = base(5, 'EMISSAO', 'Emissão de PLINARF à posição da Plina');
+    const chave = cota.cessaoId ?? cota.hashValidacao;
+    p.documento = chave ? 'chave de incorporação (cessaoId ?? hashValidacao) → memo plina:incorporacao:<chave>' : null;
+    const esperado = chave ? memoDaIncorporacao(chave) : null;
+    passos.push(await conferir(p, f, { doc: esperado, reg: esperado, tx: cota.emissaoTxHash }));
+  }
+
+  return { cotaId, geradaEm: agora().toISOString(), network: 'TESTNET', passos, todosConferem: passos.every((x) => x.confere) };
+}
+
+export function paraMarkdown(e: EvidenciaCota): string {
+  const linhas = [
+    `# Evidência da cota ${e.cotaId}`,
+    '',
+    `Rede: ${e.network} · gerada em ${e.geradaEm} · resultado: **${e.todosConferem ? 'TODOS CONFEREM' : 'HÁ PASSO SEM PROVA'}**`,
+    '',
+    '| # | Passo | Tx (explorer) | SHA-256 do documento | Memo on-chain | Confere |',
+    '|---|---|---|---|---|---|',
+    ...e.passos.map((p) =>
+      `| ${p.ordem} | ${p.rotulo} | ${p.txHash ? `[${p.txHash.slice(0, 12)}…](${p.explorerUrl})` : '—'} | ${p.sha256Documento ?? '—'} | ${p.memoOnChain ?? '—'} | ${p.confere ? '✓' : `✗ ${p.motivo ?? ''}`} |`),
+  ];
+  return linhas.join('\n') + '\n';
+}
