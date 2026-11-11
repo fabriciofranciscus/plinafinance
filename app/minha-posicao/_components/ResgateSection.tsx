@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
+import { normalizarQuantidade, quantidadeMaxima, quantidadeValida } from '../_lib/resgate-amount';
 import { useResgate, type UseResgateArgs } from '../_hooks/use-resgate';
 import { RESGATE, SACAR } from '@/lib/sacar/microcopy';
 
@@ -86,22 +87,20 @@ export function ResgateSection({
             </span>
             <div className="flex gap-2 mt-2">
               <input
-                type="number"
-                min="1"
-                max={plinarfQty}
-                step="1"
-                inputMode="numeric"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
                 ref={amountRef}
                 value={r.amount}
                 disabled={ocupado}
-                onChange={(e) => r.setAmount(e.target.value)}
+                onChange={(e) => r.setAmount(normalizarQuantidade(e.target.value))}
                 placeholder={`Máx. ${fmt(String(plinarfQty), NUM)}`}
                 className="flex-1 min-h-[44px] bg-white border border-base/55 px-3 py-2 font-mono tabular-nums text-sm"
               />
               <button
                 type="button"
                 disabled={ocupado}
-                onClick={() => r.setAmount(String(Math.floor(plinarfQty)))}
+                onClick={() => r.setAmount(quantidadeMaxima(plinarfQty))}
                 className="min-h-[44px] min-w-[44px] font-details text-[10px] tracking-[0.2em] uppercase border border-base/55 px-3 hover:bg-base hover:text-lightBg disabled:opacity-40"
               >
                 {RESGATE.maximo}
@@ -111,7 +110,7 @@ export function ResgateSection({
           <button
             type="button"
             onClick={r.gerarCotacao}
-            disabled={!r.amount || Number(r.amount) <= 0 || Number(r.amount) > plinarfQty || ocupado}
+            disabled={!quantidadeValida(r.amount, plinarfQty) || ocupado}
             className="min-h-[48px] rounded-full bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase font-bold px-6 hover:bg-primary-deep transition-colors disabled:opacity-40"
           >
             {r.passo === 'building' ? RESGATE.gerando : RESGATE.gerar}
