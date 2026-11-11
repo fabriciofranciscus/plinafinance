@@ -175,6 +175,8 @@ enum AcaoAudit {
   TESOURARIA_LEGADA_REGISTRADA
   // Webhook assinado do anchor atualizou o KYC (E2-2)
   KYC_ATUALIZADO_WEBHOOK
+  // Envelope DocuSign da cessão criado (DS2); sem memo on-chain neste passo
+  CESSAO_ENVIADA_DOCUSIGN
 }
 
 // Funil vendedor
@@ -612,6 +614,10 @@ model Cessao {
   hashDocumento       String? // SHA-256 do PDF assinado
   onChainTxHash       String? // tx Stellar com memo hash
   assinadaEm          DateTime?
+  /// DS2: marca de "envio ao DocuSign em curso" (claim no banco). Serializa o envio:
+  /// só quem a grava (updateMany condicionado) chama a API; marca velha = envio
+  /// anterior morreu ou ficou incerto → quem assume consulta o transactionId antes.
+  docusignEnvioIniciadoEm DateTime?
   status              CessaoStatus  @default(PENDENTE)
   /// PRD v1.0 §M1 — caminho preferencial (API administradora) vs fallback
   /// (cartório digital). Default CARTORIO_DIGITAL pra cessões pré-M1.
