@@ -260,7 +260,11 @@ describe('POST /api/investidor/buy/swap/build', () => {
     expect(preSignWithSigner).not.toHaveBeenCalled();
     expect(issuerSigner).not.toHaveBeenCalled();
     const data = (await r.json()).data;
-    expect(data).toEqual({ xdr: 'XDR', hashHex: '0xabc', quoteId: 'q_1', mock: false });
+    // sem assinatura nem chave pública (N1); + os dois campos do contrato Atlas/Flora (aditivos).
+    expect(data).toEqual({
+      xdr: 'XDR', hashHex: '0xabc', quoteId: 'q_1', mock: false,
+      plinarfAmount: args.plinarfAmount, navPorTokenNaCotacao: expect.stringMatching(/^\d+\.\d{8}$/),
+    });
     // o distributor segue só como destino da perna ponte
     expect(args.distributorPubkey).toBe('GDIST');
     expect(args.issuerPubkey).toBe('GISSUER');
@@ -318,6 +322,28 @@ describe('POST /api/investidor/buy/swap/build', () => {
     expect(r.status).toBe(200);
     expect((await r.json()).data.quoteId).toBe('q_novo');
     expect(buildSwapBridgeForPlinarfXdr.mock.calls[0][0].memo).toBe('q:q_novo');
+  });
+
+  it('contrato Atlas/Flora: a resposta traz plinarfAmount e navPorTokenNaCotacao do quote VIGENTE (string decimal)', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote({
+      expiresAt: new Date(Date.now() - 1_000),
+      onRampOrder: { id: 'ord_1', status: 'completed', paymentInstructionsJson: {} },
+    }));
+    renovarCotacao.mockResolvedValueOnce({
+      id: 'q_novo', navPorTokenNaCotacao: new Prisma.Decimal('1.0650'), plinarfAmount: new Prisma.Decimal('93.4579439'), renovada: true,
+    });
+    resolveTesouroAsset.mockResolvedValueOnce({ code: 'TESOURO', issuer: 'GTES', identifier: 'TESOURO:GTES' });
+    loadAccount.mockResolvedValueOnce({ balances: [{ asset_code: 'TESOURO', asset_issuer: 'GTES' }] });
+    buildSwapBridgeForPlinarfXdr.mockResolvedValueOnce({ xdr: 'XDR', hashHex: '0xabc' });
+    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+    expect(r.status).toBe(200);
+    const data = (await r.json()).data;
+    expect(data).toMatchObject({
+      xdr: 'XDR', hashHex: '0xabc', quoteId: 'q_novo', mock: false,
+      plinarfAmount: '93.4579439', navPorTokenNaCotacao: '1.06500000',
+    });
+    expect(typeof data.plinarfAmount).toBe('string');
+    expect(data.plinarfAmount).toBe(buildSwapBridgeForPlinarfXdr.mock.calls[0][0].plinarfAmount); // o mesmo valor do envelope
   });
 
   it('recotar: o mock path grava SUBSCRICAO e consome o quote NOVO (não o expirado)', async () => {
