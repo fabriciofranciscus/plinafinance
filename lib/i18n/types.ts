@@ -4,7 +4,7 @@ export interface Caminho {
   letra: string;
   titulo: string[];
   duration: string;
-  yieldLabel: string;
+  estagio: string;
   mix: string;
   body: string;
 }
@@ -58,10 +58,9 @@ export interface Dictionary {
   hero: {
     linha1: string;
     linha2: string;
-    yieldDestaque: string;
+    destaque: string;
     linha3Fim: string;
-    subPrefix: string;
-    subSuffix: string;
+    sub: string;
   };
   produto: {
     numMarker: string;
@@ -78,9 +77,8 @@ export interface Dictionary {
     tableCaption: string;
     colCaminho: string;
     rowDuration: string;
-    rowYield: string;
+    rowEstagio: string;
     rowMix: string;
-    rowCurva: string;
     caminhos: Caminho[];
     rodape: string;
   };
@@ -122,21 +120,12 @@ export interface Dictionary {
       perfil: string;
       jurisdicao: string;
       jurisdicaoPlaceholder: string;
-      ticket: string;
-      moeda: string;
-      classe: string;
-      prazo: string;
       observacoes: string;
       observacoesPlaceholder: string;
       selecione: string;
-      selecioneOpcional: string;
     };
     selectOptions: {
       profile: Record<string, string>;
-      ticket: Record<string, string>;
-      currency: Record<string, string>;
-      classe: Record<string, string>;
-      timeline: Record<string, string>;
     };
     lgpdNotice: string;
     submitIdle: string;

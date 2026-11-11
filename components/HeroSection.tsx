@@ -27,14 +27,12 @@ export default function HeroSection({ dict }: { dict: Dictionary['hero'] }) {
           {dict.linha2}
           <br />
           <span style={{ color: 'var(--color-auditable-cyan)' }}>
-            {dict.yieldDestaque}
+            {dict.destaque}
           </span>{' '}
           {dict.linha3Fim}
         </h1>
-        <p className="font-details text-base sm:text-lg leading-relaxed text-white/70 mt-10 whitespace-normal lg:whitespace-nowrap">
-          {dict.subPrefix}{' '}
-          <span className="font-mono text-white">PLINA-RF</span>
-          {dict.subSuffix}
+        <p className="font-details text-base sm:text-lg leading-relaxed text-white/70 mt-10 max-w-3xl whitespace-normal">
+          {dict.sub}
         </p>
       </div>
 
