@@ -279,7 +279,8 @@ async function concluir(row: SnapshotNav): Promise<SnapshotNav> {
     const bytes = Buffer.from(row.conteudo, 'utf8');
     if (sha256Hex(bytes) !== row.sha256) throw new SnapshotNavError('CONTEUDO_ADULTERADO');
     const { url } = await publicarArquivoSnapshot({ data: row.data, bytes });
-    const ancora = await ancorarSha256({ sha256Hex: row.sha256, contexto: 'SNAPSHOT_NAV' });
+    // `desde` = criação do claim: a âncora, se existir, é posterior a ele (a busca não varre o histórico todo).
+    const ancora = await ancorarSha256({ sha256Hex: row.sha256, contexto: 'SNAPSHOT_NAV', desde: row.criadoEm });
     return await db.snapshotNav.update({
       where: { id: row.id },
       data: { status: 'PUBLICADO', url, txHash: ancora.txHash, publicadoEm: new Date(), travaAte: null },

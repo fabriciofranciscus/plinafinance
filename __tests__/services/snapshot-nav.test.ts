@@ -31,7 +31,7 @@ vi.mock('@/lib/db', () => ({
           m.rows.push({ id: 'rival', status: 'PUBLICANDO', url: null, txHash: null, ...data, travaAte: new Date(Date.now() + 60_000) });
           throw Object.assign(new Error('unique'), { code: 'P2002' });
         }
-        const row = { id: `s${m.rows.length + 1}`, status: 'PUBLICANDO', url: null, txHash: null, publicadoEm: null, ...data };
+        const row = { id: `s${m.rows.length + 1}`, status: 'PUBLICANDO', url: null, txHash: null, publicadoEm: null, criadoEm: new Date('2026-11-12T09:00:01.000Z'), ...data };
         m.rows.push(row);
         return row;
       },
@@ -130,7 +130,8 @@ describe('publicarSnapshotNav', () => {
 
     const bytes: Buffer = m.blob.mock.calls[0][0].bytes;
     expect(sha(bytes.toString('utf8'))).toBe(r.sha256);
-    expect(m.ancora).toHaveBeenCalledWith({ sha256Hex: r.sha256, contexto: 'SNAPSHOT_NAV' });
+    // desde = criação do claim (S3 do Argus: a busca da âncora existente não varre o histórico todo)
+    expect(m.ancora).toHaveBeenCalledWith({ sha256Hex: r.sha256, contexto: 'SNAPSHOT_NAV', desde: new Date('2026-11-12T09:00:01.000Z') });
     expect(m.rows[0]).toMatchObject({ status: 'PUBLICADO', sha256: r.sha256, txHash: 'a'.repeat(64), travaAte: null, ledger: 5000 });
     expect(m.rows[0].conteudo).toBe(bytes.toString('utf8'));
 
