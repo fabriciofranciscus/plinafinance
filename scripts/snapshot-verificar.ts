@@ -1,7 +1,9 @@
 /**
  * Prova do avaliador (E3-1): refaz a conferência de um snapshot do NAV publicado, SÓ com o arquivo público e o Horizon.
  *
- *   pnpm snapshot:verificar <url-do-json> [--tx <hash-da-ancora>]
+ *   pnpm snapshot:verificar <url-do-json> --issuer <G…> --distributor <G…> [--tx <hash-da-ancora>]
+ *   (issuer/distributor da Plina: os do pacote de evidência; sem eles o resultado nunca é "conferido".
+ *    Também aceita STELLAR_ISSUER_PUBLIC / STELLAR_DISTRIBUTOR_PUBLIC.)
  *
  * Não usa banco nem segredo; a rede vem do próprio arquivo (`rede`) e o Horizon é o público dela
  * (`STELLAR_HORIZON_URL` troca). Confere: (1) o arquivo é o JSON canônico; (2) o Memo.hash da tx do distributor = SHA-256
@@ -88,10 +90,14 @@ const ICONE = { ok: '✓', falhou: '✗', nao_conferido: '?' } as const;
 
 async function main() {
   const args = process.argv.slice(2);
-  const url = args.find((a) => !a.startsWith('--') && args[args.indexOf(a) - 1] !== '--tx');
-  const tx = args.includes('--tx') ? args[args.indexOf('--tx') + 1] : undefined;
+  const opcao = (n: string) => (args.includes(n) ? args[args.indexOf(n) + 1] : undefined);
+  const valores = new Set(['--tx', '--issuer', '--distributor'].map(opcao).filter(Boolean));
+  const url = args.find((a) => !a.startsWith('--') && !valores.has(a));
+  const tx = opcao('--tx');
+  const issuerEsperado = opcao('--issuer') ?? process.env.STELLAR_ISSUER_PUBLIC;
+  const distributorEsperado = opcao('--distributor') ?? process.env.STELLAR_DISTRIBUTOR_PUBLIC;
   if (!url || !/^https?:\/\//.test(url)) {
-    console.error('uso: pnpm snapshot:verificar <https://url-do-json> [--tx <hash>]');
+    console.error('uso: pnpm snapshot:verificar <https://url-do-json> --issuer <G…> --distributor <G…> [--tx <hash>]');
     process.exit(64);
   }
   const resp = await fetch(url, { redirect: 'follow' });
@@ -109,13 +115,13 @@ async function main() {
     (rede === 'PUBLIC' ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org');
   console.log(`Arquivo: ${url}\nRede: ${rede} · Horizon: ${horizonUrl}\n`);
 
-  const r = await verificarSnapshot(bytes, leitor(new Horizon.Server(horizonUrl)), { txHash: tx });
+  const r = await verificarSnapshot(bytes, leitor(new Horizon.Server(horizonUrl)), { txHash: tx, issuerEsperado, distributorEsperado });
   for (const c of r.conferencias) console.log(`${ICONE[c.estado]} ${c.id}: ${c.detalhe}`);
   console.log(
     r.codigoSaida === 0
       ? '\nCONFERIDO: o Memo.hash da âncora é o SHA-256 do arquivo e o NAV foi refeito só com o arquivo e o Horizon.'
       : r.codigoSaida === 2
-        ? '\nNADA FALHOU, mas há itens que o Horizon já não permite refazer (saldos mudaram depois do snapshot). Veja os "?" acima.'
+        ? '\nNADA FALHOU, mas há itens NÃO conferidos (contas da Plina não fixadas e/ou saldos que mudaram depois do snapshot). Veja os "?" acima.'
         : '\nFALHOU: veja os "✗" acima.',
   );
   process.exit(r.codigoSaida);

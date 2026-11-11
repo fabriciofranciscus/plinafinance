@@ -1,10 +1,10 @@
 /**
- * Armazenamento do arquivo do snapshot do NAV (E3-1) no Vercel Blob. O store da Plina é PRIVADO: o arquivo sobe
- * privado e a URL pública é a rota `GET /api/nav-snapshot/<data>`, que devolve os mesmos bytes (e só depois de
- * conferir o SHA-256 contra o banco). Pathname determinístico por dia, sem sufixo aleatório: reenviar os MESMOS
+ * Espelho do arquivo do snapshot do NAV (E3-1) no Vercel Blob. O store da Plina é PRIVADO: o arquivo sobe privado
+ * e a URL pública é a rota `GET /api/nav-snapshot/<data>`, que serve os bytes de `SnapshotNav.conteudo` (fonte da
+ * verdade, conferida contra o SHA-256); o Blob não é lido pela rota. Pathname determinístico por dia, sem sufixo aleatório: reenviar os MESMOS
  * bytes é idempotente (`allowOverwrite`). Fail-closed: sem token não há publicação.
  */
-import { get, put } from '@vercel/blob';
+import { put } from '@vercel/blob';
 
 export class PublicacaoSnapshotError extends Error {
   constructor(readonly motivo: 'SEM_TOKEN' | 'FALHOU', options?: { cause?: unknown }) {
@@ -40,11 +40,4 @@ export async function publicarArquivoSnapshot(input: {
   } catch (cause) {
     throw new PublicacaoSnapshotError('FALHOU', { cause });
   }
-}
-
-/** Bytes do arquivo do dia, ou `null` se o blob não existe. */
-export async function lerArquivoSnapshot(data: string): Promise<Buffer | null> {
-  const res = await get(snapshotNavPathname(data), { access: 'private' });
-  if (!res || res.statusCode !== 200) return null;
-  return Buffer.from(await new Response(res.stream).arrayBuffer());
 }

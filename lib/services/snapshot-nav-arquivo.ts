@@ -35,6 +35,8 @@ export interface ArquivoSnapshotNav {
   numerador: {
     /** valorMarcado = valorCarta × (1 − deságio): custo de aquisição, sem saldo devedor, correção nem provisão. */
     regraMarcacao: 'CUSTO_DE_AQUISICAO';
+    /** De onde vem o numerador: não está no Horizon (o revisor refaz o denominador e a conciliação, não esta parte). */
+    fonte: string;
     cotasAtivas: {
       quantidade: number;
       valorMarcado: string;
@@ -76,6 +78,8 @@ export const f8 = (v: Prisma.Decimal.Value) => D(v).toFixed(8);
 
 export const NOTA_DENOMINADOR =
   'o preço usa o supply emitido (circulante + distributor): tokens do distributor são aporte da Plina, com direito ao ativo; porTokenSobreCirculante é só informação (circulante do SOW)';
+export const FONTE_NUMERADOR =
+  'declaração da Plina: cotas ativas e razão do fundo (banco); fora do Horizon; cada cota se liga à prova on-chain por hashValidacao e emissaoTxHash';
 export const NOTA_NAV_INICIAL = 'sem tokens em circulação: preço inicial de emissão, não um NAV medido';
 
 export interface CotaDoNumerador {
@@ -119,6 +123,7 @@ export function montarNumerador(
   }
   return {
     regraMarcacao: 'CUSTO_DE_AQUISICAO',
+    fonte: FONTE_NUMERADOR,
     cotasAtivas: { quantidade: itens.length, valorMarcado: valorMarcado.toFixed(2), itens },
     caixaRealizado: { total: f7(total), movimentos: caixa.movimentos, porTipo },
     total: f7(valorMarcado.plus(total)),

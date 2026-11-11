@@ -62,7 +62,7 @@ const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 export async function verificarSnapshot(
   bytes: Buffer,
   leitor: LeitorHorizon,
-  opts: { txHash?: string } = {},
+  opts: { txHash?: string; issuerEsperado?: string; distributorEsperado?: string } = {},
 ): Promise<ResultadoVerificacao> {
   const conf: Conferencia[] = [];
   const add = (id: string, estado: Estado, detalhe: string) => conf.push({ id, estado, detalhe });
@@ -92,6 +92,28 @@ export async function verificarSnapshot(
     add('arquivo', 'falhou', `classe ${arq.nav.classe} ausente em circulante`);
     return fim();
   }
+
+  // 1b. As contas são da Plina? Issuer, distributor e rede vêm do PRÓPRIO arquivo; sem fixá-los, um arquivo forjado
+  // com contas e âncora de outra parte sairia conferido (F-E31-2). O revisor informa as contas da Plina (as do pacote
+  // de evidência); se não informar, o resultado nunca é "conferido".
+  const contas = Object.entries(arq.circulante).map(([code, a]) => ({ code, issuer: a.issuer, distributor: a.distributor }));
+  const lista = contas.map((c) => `${c.code}: issuer ${c.issuer}, distributor ${c.distributor}`).join(' | ');
+  if (opts.issuerEsperado || opts.distributorEsperado) {
+    const erradas = contas.filter(
+      (c) =>
+        (opts.issuerEsperado && c.issuer !== opts.issuerEsperado) ||
+        (opts.distributorEsperado && c.distributor !== opts.distributorEsperado),
+    );
+    if (erradas.length > 0) {
+      add('contas-da-plina', 'falhou', `contas do arquivo ≠ contas esperadas da Plina (issuer esperado ${opts.issuerEsperado ?? '—'}, distributor esperado ${opts.distributorEsperado ?? '—'}); no arquivo: ${lista}`);
+    } else {
+      add('contas-da-plina', 'ok', `contas do arquivo = as esperadas da Plina (${lista})`);
+    }
+  }
+  if (!opts.issuerEsperado || !opts.distributorEsperado) {
+    add('contas-da-plina-fixadas', 'nao_conferido', `issuer/distributor da Plina NÃO foram fixados (use --issuer e --distributor, ou STELLAR_ISSUER_PUBLIC/STELLAR_DISTRIBUTOR_PUBLIC): um arquivo forjado com contas de terceiros também conferiria. Contas no arquivo: ${lista}`);
+  }
+  add('numerador', 'ok', `o numerador (cotas + caixa) NÃO está no Horizon: é a declaração da Plina (${arq.numerador.fonte ?? "fonte não declarada neste arquivo"}); aqui só a soma é conferida contra o próprio arquivo`);
 
   // 2. A âncora: memo hash da tx do distributor = SHA-256 do arquivo.
   const memoB64 = Buffer.from(sha256, 'hex').toString('base64');

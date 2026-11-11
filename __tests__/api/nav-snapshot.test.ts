@@ -1,9 +1,8 @@
 import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const m = vi.hoisted(() => ({ find: vi.fn(), ler: vi.fn(), consume: vi.fn() }));
+const m = vi.hoisted(() => ({ find: vi.fn(), consume: vi.fn() }));
 vi.mock('@/lib/db', () => ({ db: { snapshotNav: { findUnique: m.find } } }));
-vi.mock('@/lib/integrations/blob/nav-snapshot', () => ({ lerArquivoSnapshot: m.ler }));
 vi.mock('@/lib/rate-limit/config', () => ({ publicLimiter: { consume: m.consume }, clientIp: () => '203.0.113.9' }));
 
 import { GET } from '@/app/api/nav-snapshot/[data]/route';
@@ -15,8 +14,7 @@ const chamar = (data: string) => GET(new Request('http://x'), { params: Promise.
 beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   m.consume.mockReset().mockResolvedValue(true);
-  m.find.mockReset().mockResolvedValue({ status: 'PUBLICADO', sha256: SHA });
-  m.ler.mockReset().mockResolvedValue(Buffer.from(CORPO, 'utf8'));
+  m.find.mockReset().mockResolvedValue({ status: 'PUBLICADO', sha256: SHA, conteudo: CORPO });
 });
 
 describe('GET /api/nav-snapshot/[data]', () => {
@@ -34,14 +32,16 @@ describe('GET /api/nav-snapshot/[data]', () => {
   it('snapshot inexistente ou ainda PUBLICANDO → 404', async () => {
     m.find.mockResolvedValue(null);
     expect((await chamar('2026-11-12')).status).toBe(404);
-    m.find.mockResolvedValue({ status: 'PUBLICANDO', sha256: SHA });
+    m.find.mockResolvedValue({ status: 'PUBLICANDO', sha256: SHA, conteudo: CORPO });
     expect((await chamar('2026-11-12')).status).toBe(404);
-    expect(m.ler).not.toHaveBeenCalled();
   });
-  it('blob ausente → 404; blob que não bate com o hash gravado → 503 (nunca serve)', async () => {
-    m.ler.mockResolvedValue(null);
-    expect((await chamar('2026-11-12')).status).toBe(404);
-    m.ler.mockResolvedValue(Buffer.from('{"adulterado":true}'));
+  it('serve do banco: não lê o Blob (queda/sobrescrita do Blob não derruba a prova)', async () => {
+    const r = await chamar('2026-11-12');
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe(CORPO);
+  });
+  it('conteúdo gravado que não bate com o hash gravado → 503 (nunca serve)', async () => {
+    m.find.mockResolvedValue({ status: 'PUBLICADO', sha256: SHA, conteudo: '{"adulterado":true}' });
     expect((await chamar('2026-11-12')).status).toBe(503);
   });
   it('rate limit → 429', async () => {

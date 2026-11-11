@@ -50,15 +50,33 @@ function leitor(over: Partial<{ ledger: number; emitido: string; dist: string; s
       (o.txs ?? ((m) => [{ hash: 'tx1', successful: true, source_account: DIST, memo_type: 'hash', memo: m, created_at: '2026-11-12T09:00:06Z' }]))(memo),
   };
 }
+const PLINA = { issuerEsperado: 'GISS', distributorEsperado: DIST };
 const estado = (r: Awaited<ReturnType<typeof verificarSnapshot>>, id: string) => r.conferencias.find((c) => c.id === id)?.estado;
 
 describe('verificarSnapshot (a prova do avaliador)', () => {
   it('arquivo honesto, âncora com memo = SHA-256, Horizon igual: tudo ✓, saída 0', async () => {
     const bytes = bytesDe(arquivoBase());
-    const r = await verificarSnapshot(bytes, leitor());
+    const r = await verificarSnapshot(bytes, leitor(), PLINA);
     expect(r.codigoSaida).toBe(0);
     expect(r.sha256).toBe(sha(bytes));
     expect(r.conferencias.every((c) => c.estado === 'ok')).toBe(true);
+    expect(r.conferencias.find((c) => c.id === 'numerador')?.detalhe).toMatch(/NÃO está no Horizon/);
+  });
+
+  it('F-E31-2: sem fixar issuer/distributor da Plina o resultado NUNCA é "conferido" (saída 2) e imprime as contas do arquivo', async () => {
+    const r = await verificarSnapshot(bytesDe(arquivoBase()), leitor());
+    expect(r.codigoSaida).toBe(2);
+    expect(estado(r, 'contas-da-plina-fixadas')).toBe('nao_conferido');
+    expect(r.conferencias.find((c) => c.id === 'contas-da-plina-fixadas')?.detalhe).toMatch(/GISS.*GDIST/);
+  });
+
+  it('F-E31-2: arquivo forjado com contas de outra parte é reprovado quando as da Plina são fixadas', async () => {
+    const a = arquivoBase();
+    a.circulante.PLINARF.issuer = 'GATACANTE_ISSUER';
+    a.circulante.PLINARF.distributor = 'GATACANTE_DIST';
+    const r = await verificarSnapshot(bytesDe(a), leitor({ txs: (m) => [{ hash: 'tx1', successful: true, source_account: 'GATACANTE_DIST', memo_type: 'hash', memo: m, created_at: 'x' }] }), PLINA);
+    expect(estado(r, 'contas-da-plina')).toBe('falhou');
+    expect(r.codigoSaida).toBe(1);
   });
 
   it('memo da âncora ≠ SHA-256 do arquivo (arquivo trocado depois de ancorar): falha', async () => {
