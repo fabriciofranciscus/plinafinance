@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { en } from '../lib/i18n/dictionaries/en';
+import { ptBR } from '../lib/i18n/dictionaries/pt-BR';
 
 /**
  * Smoke das superfícies públicas — cada rota renderiza 200 e contém um
@@ -26,7 +28,18 @@ for (const { path, expectText } of ROUTES) {
   });
 }
 
-test('stellar.toml é servido com CORS, PLINARF, PRINCIPALS e SEPs planejados', async ({
+/** Caixa e acento não escondem um nome ("Fabrício" = "fabricio"). */
+const semAcento = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+/** Nomes das pessoas da equipe nos dicionários da landing, mais os fundadores como piso fixo. */
+function nomesDePessoas(): string[] {
+  const doDicionario = [ptBR, en].flatMap((d) => d.equipe.membros.map((m) => m.nome));
+  return [...new Set([...doDicionario, 'Thais Reis', 'Fabricio Santos'].map(semAcento))];
+}
+
+const EMAIL_OFICIAL = 'contato@plina.finance';
+
+test('stellar.toml é servido com CORS e PLINARF, sem principais, nomes de pessoa nem e-mails pessoais', async ({
   request,
 }) => {
   const res = await request.get('/.well-known/stellar.toml');
@@ -35,9 +48,18 @@ test('stellar.toml é servido com CORS, PLINARF, PRINCIPALS e SEPs planejados', 
   expect(body).toMatch(/PLINARF/);
   expect(body).toMatch(/ORG_OFFICIAL_EMAIL = "contato@plina\.finance"/);
   expect(body).toMatch(/ORG_LOGO/);
-  expect(body).toMatch(/\[\[PRINCIPALS\]\]/);
-  expect(body).toMatch(/Thais Reis/);
-  expect(body).toMatch(/Fabricio Santos/);
+  // Decisão da Thais (Z16): sem a seção de principais, sem nome de pessoa e sem e-mail pessoal
+  // no arquivo público. O único contato é o e-mail oficial da organização.
+  expect(body, 'seção [[PRINCIPALS]] não pode voltar').not.toMatch(/\[\[\s*PRINCIPALS\s*\]\]/i);
+  const texto = semAcento(body);
+  for (const nome of nomesDePessoas()) {
+    expect(texto, `nome de pessoa no stellar.toml: ${nome}`).not.toContain(nome);
+  }
+  const emails = body.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) ?? [];
+  expect(
+    emails.filter((e) => e.toLowerCase() !== EMAIL_OFICIAL),
+    'só o e-mail oficial da organização pode aparecer',
+  ).toEqual([]);
   // SEPs documentados como comentário (Fase 1)
   expect(body).toMatch(/SEP-6|SEP-10|SEP-38/);
   expect(res.headers()['access-control-allow-origin']).toBeTruthy();
