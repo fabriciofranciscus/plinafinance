@@ -645,7 +645,7 @@ model LeadEoi {
   telefone     String?
   perfil       String
   jurisdiction String?
-  ticket       String
+  ticket       String?
   currency     String?
   classe       String?
   timeline     String?

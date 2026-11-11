@@ -1,12 +1,15 @@
 'use server';
 
+import { headers } from 'next/headers';
 import nodemailer from 'nodemailer';
+import { z } from 'zod';
 import {
   renderInternalNotification,
   renderInvestorReply,
   type LeadData,
 } from './email-templates';
 import { db } from '@/lib/db';
+import { leadLimiter } from '@/lib/rate-limit/config';
 
 export type LeadState = {
   status: 'idle' | 'success' | 'error';
@@ -80,6 +83,61 @@ const TICKET_LABELS: Record<string, string> = {
   '10m+brl': 'R$ 10M+',
 };
 
+/**
+ * Causa segura para log: só `name` e `code` do erro, nunca a mensagem nem o objeto inteiro —
+ * erros do Prisma e do nodemailer carregam destinatário, nome e telefone (PII).
+ */
+function causaSegura(err: unknown): string {
+  const e = err as { name?: unknown; code?: unknown; responseCode?: unknown } | null;
+  const parte = (v: unknown) => (typeof v === 'string' && /^[\w.-]{1,40}$/.test(v) ? v : undefined);
+  // responseCode do SMTP (ex.: 550) é só um número; a mensagem e o destinatário ficam de fora.
+  const resposta =
+    typeof e?.responseCode === 'number' && Number.isInteger(e.responseCode) ? String(e.responseCode) : undefined;
+  return [parte(e?.name), parte(e?.code), resposta].filter(Boolean).join(':') || 'desconhecido';
+}
+
+async function getClientIp(): Promise<string> {
+  const h = await headers();
+  const xff = h.get('x-forwarded-for');
+  if (xff) return xff.split(',')[0]!.trim();
+  return h.get('x-real-ip')?.trim() ?? 'unknown';
+}
+
+const PROFILES = [...PROFILES_VALIDOS] as [string, ...string[]];
+const TICKETS = [...TICKETS_VALIDOS] as [string, ...string[]];
+
+/** Obrigatórios: name, org, email, profile (+ aceite LGPD). Tíquete é opcional, mas segue a lista fechada. */
+const LeadSchema = z
+  .object({
+    name: z.string().max(200),
+    org: z.string().max(200),
+    email: z.string().max(254).regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'email'),
+    phone: z.string().max(50).optional(),
+    profile: z.enum(PROFILES),
+    jurisdiction: z.string().max(100).optional(),
+    ticket: z.enum(TICKETS).optional(),
+    currency: z.string().max(30).optional(),
+    classe: z.string().max(30).optional(),
+    timeline: z.string().max(30).optional(),
+    notes: z.string().max(1000).optional(),
+    lgpd: z.literal('on'),
+  })
+  .strict();
+
+/** Mantém as mensagens de antes, na mesma ordem de prioridade. */
+function mensagemDeValidacao(erro: z.ZodError): string {
+  const por = new Map(erro.issues.map((i) => [String(i.path[0]), i]));
+  const obrigatorioAusente = ['name', 'org', 'email', 'profile'].some(
+    (k) => por.get(k)?.code === 'invalid_type',
+  );
+  if (obrigatorioAusente) return 'Preencha todos os campos obrigatórios.';
+  if (por.has('email')) return 'E-mail inválido.';
+  if (por.has('profile')) return 'Selecione um perfil de investidor válido.';
+  if (por.has('ticket')) return 'Selecione um tíquete indicativo válido.';
+  if (por.has('lgpd')) return 'É necessário aceitar os termos de privacidade (LGPD).';
+  return 'Verifique os dados informados e tente novamente.';
+}
+
 export async function submitLead(
   _prev: LeadState,
   formData: FormData
@@ -89,38 +147,29 @@ export async function submitLead(
     return { status: 'success' };
   }
 
-  const name = sanitize(formData.get('name'), 200);
-  const org = sanitize(formData.get('org'), 200);
-  const email = sanitize(formData.get('email'), 200);
-  const phone = sanitize(formData.get('phone'), 50);
-  const profile = sanitize(formData.get('profile'), 60);
-  const jurisdiction = sanitize(formData.get('jurisdiction'), 100);
-  const ticket = sanitize(formData.get('ticket'), 30);
-  const currency = sanitize(formData.get('currency'), 30);
-  const classe = sanitize(formData.get('classe'), 30);
-  const timeline = sanitize(formData.get('timeline'), 30);
-  const notes = sanitize(formData.get('notes'), 1000);
-  const lgpd = formData.get('lgpd');
-
-  if (!name || !org || !email || !profile || !ticket) {
-    return { status: 'error', message: 'Preencha todos os campos obrigatórios.' };
+  // Rota pública: limite por IP antes de qualquer trabalho (SMTP, banco).
+  if (!(await leadLimiter.consume(await getClientIp()))) {
+    return { status: 'error', message: 'Muitas tentativas. Aguarde um instante e tente de novo.' };
   }
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { status: 'error', message: 'E-mail inválido.' };
+  // Todas as chaves do FormData vão ao schema strict: campo desconhecido é recusado. Só as
+  // chaves internas do Next ($ACTION_*) e o honeypot (já tratado acima) ficam de fora.
+  const bruto: Record<string, unknown> = {};
+  for (const [chave, valor] of formData.entries()) {
+    if (chave.startsWith('$ACTION') || chave === 'website') continue;
+    if (typeof valor !== 'string') {
+      bruto[chave] = valor; // arquivo: o schema recusa
+      continue;
+    }
+    const v = valor.trim();
+    bruto[chave] = v === '' ? undefined : v;
   }
-
-  if (!PROFILES_VALIDOS.has(profile)) {
-    return { status: 'error', message: 'Selecione um perfil de investidor válido.' };
+  const parsed = LeadSchema.safeParse(bruto);
+  if (!parsed.success) {
+    return { status: 'error', message: mensagemDeValidacao(parsed.error) };
   }
-
-  if (!TICKETS_VALIDOS.has(ticket)) {
-    return { status: 'error', message: 'Selecione um tíquete indicativo válido.' };
-  }
-
-  if (lgpd !== 'on') {
-    return { status: 'error', message: 'É necessário aceitar os termos de privacidade (LGPD).' };
-  }
+  const { name, org, email, phone, profile, jurisdiction, ticket, currency, classe, timeline, notes } =
+    parsed.data;
 
   const lead: LeadData = {
     name,
@@ -129,7 +178,7 @@ export async function submitLead(
     phone: phone || undefined,
     profile: PROFILE_LABELS[profile] ?? profile,
     jurisdiction: jurisdiction || undefined,
-    ticket: TICKET_LABELS[ticket] ?? ticket,
+    ticket: ticket ? (TICKET_LABELS[ticket] ?? ticket) : undefined,
     currency: currency || undefined,
     classe: classe || undefined,
     timeline: timeline || undefined,
@@ -137,30 +186,19 @@ export async function submitLead(
     recebido: new Date().toISOString(),
   };
 
-  // Persiste no banco. Upsert por email — resubmissão atualiza sem duplicar.
+  // Persiste no banco. NÃO sobrescreve lead existente: quem conhece o e-mail de outra pessoa
+  // não pode trocar nome, organização e telefone dela (F1-c do Argus). Resubmissão do mesmo
+  // e-mail mantém o registro original; a manifestação nova chega no e-mail interno.
   try {
-    await db.leadEoi.upsert({
-      where: { email: lead.email },
-      update: {
-        nome: lead.name,
-        org: lead.org,
-        telefone: lead.phone ?? null,
-        perfil: lead.profile,
-        jurisdiction: lead.jurisdiction ?? null,
-        ticket: lead.ticket,
-        currency: lead.currency ?? null,
-        classe: lead.classe ?? null,
-        timeline: lead.timeline ?? null,
-        notes: lead.notes ?? null,
-      },
-      create: {
+    await db.leadEoi.create({
+      data: {
         nome: lead.name,
         org: lead.org,
         email: lead.email,
         telefone: lead.phone ?? null,
         perfil: lead.profile,
         jurisdiction: lead.jurisdiction ?? null,
-        ticket: lead.ticket,
+        ticket: lead.ticket ?? null,
         currency: lead.currency ?? null,
         classe: lead.classe ?? null,
         timeline: lead.timeline ?? null,
@@ -168,15 +206,23 @@ export async function submitLead(
       },
     });
   } catch (err) {
-    console.error('[submitLead] DB upsert error', err);
-    // Não bloqueia o fluxo — e-mail ainda vai.
+    // Só o código do erro: a mensagem do Prisma carrega e-mail, nome e telefone (PII).
+    const codigo = (err as { code?: unknown } | null)?.code;
+    if (codigo === 'P2002') {
+      // E-mail já cadastrado: o banco só cria, nunca altera (nem parcial, nem carimbo). O e-mail
+      // interno marca o reenvio e leva o conteúdo novo como NÃO verificado; sem auto-resposta.
+      lead.reenvio = true;
+    } else {
+      console.error('[submitLead] DB create error', causaSegura(err));
+    }
+    // Não bloqueia o fluxo — o e-mail ainda vai.
   }
 
   let tx: nodemailer.Transporter;
   try {
     tx = getTransporter();
   } catch (err) {
-    console.error('[submitLead] SMTP config error', err);
+    console.error('[submitLead] SMTP config error', causaSegura(err));
     return {
       status: 'error',
       message:
@@ -195,7 +241,7 @@ export async function submitLead(
       html: internal.html,
     });
   } catch (err) {
-    console.error('[submitLead] SMTP error (notificação interna)', err);
+    console.error('[submitLead] SMTP error (notificação interna)', causaSegura(err));
     return {
       status: 'error',
       message:
@@ -203,20 +249,26 @@ export async function submitLead(
     };
   }
 
-  // Auto-reply pro investidor. Se falhar, o lead já foi recebido — não devolvemos erro.
-  const reply = renderInvestorReply(lead);
-  try {
-    await tx.sendMail({
-      from: `"Plina Finance" <${process.env.SMTP_USER}>`,
-      to: email,
-      replyTo: process.env.SMTP_USER!,
-      subject: reply.subject,
-      text: reply.text,
-      html: reply.html,
-    });
-  } catch (err) {
-    console.error('[submitLead] SMTP error (auto-reply)', err);
-    // Não devolvemos erro pro usuário — a notificação interna já foi enviada.
+  // Auto-reply ao lead. NÃO sai no reenvio de e-mail já cadastrado: o lead já recebeu uma, e
+  // quem digita o e-mail de outra pessoa não pode usar o form para escrever a ela nem ver o
+  // resumo ecoado (decisão da Norma). Outros erros do banco seguem o fluxo normal.
+  if (!lead.reenvio) {
+    // Auto-reply pro investidor. Se falhar, o lead já foi recebido — não devolvemos erro.
+    const reply = renderInvestorReply(lead);
+    try {
+      await tx.sendMail({
+        from: `"Plina Finance" <${process.env.SMTP_USER}>`,
+        to: email,
+        replyTo: process.env.SMTP_USER!,
+        subject: reply.subject,
+        text: reply.text,
+        html: reply.html,
+      });
+    } catch (err) {
+      console.error('[submitLead] SMTP error (auto-reply)', causaSegura(err));
+      // Não devolvemos erro pro usuário — a notificação interna já foi enviada.
+    }
+
   }
 
   return { status: 'success' };
