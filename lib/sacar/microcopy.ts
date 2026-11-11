@@ -92,9 +92,9 @@ export const RESGATE = {
     nav_mudou: 'O valor por token mudou. Gere uma nova cotação para continuar.',
     cotacao_expirada: 'A cotação expirou. Gere uma nova cotação para continuar.',
     conflito: 'Esta cotação já foi usada em outro envio. Gere uma nova cotação para continuar.',
-    // Atlas (11/11): sem prometer prazo; Norma confere o texto.
+    // Norma §2.8 (11/11). Sem "nova janela": não existe no código.
     sem_liquidez:
-      'No momento não há liquidez disponível para este valor. Tente um valor menor ou fale com o time.',
+      'No momento não há liquidez disponível para este valor. Tente um valor menor ou fale com a equipe em contato@plina.finance. Rede de testes, sem valor financeiro real.',
     indisponivel:
       'Resgate indisponível por enquanto. Tente novamente mais tarde.',
     em_conferencia:
@@ -103,6 +103,13 @@ export const RESGATE = {
       'Não foi possível concluir o resgate. Tente novamente; se persistir, fale com a equipe em contato@plina.finance.',
   },
   jaTemTesouro: 'Já tem TESOURO na carteira? Ir direto para o saque (Pix simulado) →',
+  /** 409 LIQUIDEZ_INSUFICIENTE: título e ação; o texto depende de onde veio (build ou submit). */
+  semLiquidez: {
+    titulo: 'Resgate indisponível para este valor',
+    submit:
+      'A disponibilidade mudou desde a cotação. Nada foi enviado. Tente de novo com um valor menor.',
+    acao: 'Tentar outro valor',
+  },
   detalhesResumo: 'Detalhes técnicos',
   codigo: 'Código',
   concluido: {

@@ -71,9 +71,16 @@ describe('microcopy do /sacar (Norma)', () => {
 describe('microcopy do resgate (E2-6)', () => {
   it('sem liquidez: texto do Atlas, sem prometer prazo; todo erro tem mensagem', async () => {
     const { RESGATE } = await import('@/lib/sacar/microcopy');
+    expect(RESGATE.semLiquidez.titulo).toBe('Resgate indisponível para este valor');
     expect(RESGATE.erro.sem_liquidez).toBe(
-      'No momento não há liquidez disponível para este valor. Tente um valor menor ou fale com o time.',
+      'No momento não há liquidez disponível para este valor. Tente um valor menor ou fale com a equipe em contato@plina.finance. Rede de testes, sem valor financeiro real.',
     );
+    expect(RESGATE.semLiquidez.submit).toBe(
+      'A disponibilidade mudou desde a cotação. Nada foi enviado. Tente de novo com um valor menor.',
+    );
+    expect(RESGATE.semLiquidez.acao).toBe('Tentar outro valor');
+    // não promete janela (não existe no código)
+    expect(JSON.stringify(RESGATE.semLiquidez) + RESGATE.erro.sem_liquidez).not.toMatch(/janela/i);
     for (const t of ['nav_mudou', 'cotacao_expirada', 'conflito', 'sem_liquidez', 'em_conferencia', 'indisponivel', 'generico'] as const) {
       expect(RESGATE.erro[t].length).toBeGreaterThan(10);
       expect(RESGATE.erro[t]).not.toMatch(/\b(burn|queima|em até|minutos|48h)\b/i);

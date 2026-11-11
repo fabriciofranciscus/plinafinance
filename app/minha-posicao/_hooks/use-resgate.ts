@@ -35,11 +35,16 @@ export function useResgate({ stellarAddress, signRawHash, getAccessToken, onDone
   const [passo, setPasso] = useState<ResgatePasso>('idle');
   const [build, setBuild] = useState<ResgateBuild | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
-  const [erro, setErro] = useState<{ tipo: ResgateErroTipo; codigo: string | null } | null>(null);
+  const [erro, setErro] = useState<{
+    tipo: ResgateErroTipo;
+    codigo: string | null;
+    /** Onde o erro veio: ao cotar (build) ou ao enviar (submit). */
+    fase: 'build' | 'submit';
+  } | null>(null);
 
-  const falhar = useCallback((e: unknown, voltarPara: ResgatePasso) => {
+  const falhar = useCallback((e: unknown, voltarPara: ResgatePasso, fase: 'build' | 'submit') => {
     const r = e instanceof ResgateError ? e : new ResgateError('generico', null);
-    setErro({ tipo: r.tipo, codigo: r.codigo });
+    setErro({ tipo: r.tipo, codigo: r.codigo, fase });
     // quote velho não pode ser assinado de novo: exige nova cotação
     const pedeNovaCotacao = r.tipo === 'nav_mudou' || r.tipo === 'cotacao_expirada' || r.tipo === 'conflito' || r.tipo === 'sem_liquidez';
     setPasso(pedeNovaCotacao ? 'idle' : voltarPara);
@@ -61,7 +66,7 @@ export function useResgate({ stellarAddress, signRawHash, getAccessToken, onDone
       setBuild(await buildResgate(amount, getAccessToken));
       setPasso('ready');
     } catch (e) {
-      falhar(e, 'idle');
+      falhar(e, 'idle', 'build');
     }
   }, [amount, getAccessToken, falhar]);
 
@@ -82,9 +87,11 @@ export function useResgate({ stellarAddress, signRawHash, getAccessToken, onDone
       setPasso('done');
       onDone?.();
     } catch (e) {
-      falhar(e, 'ready');
+      falhar(e, 'ready', 'submit');
     }
   }, [build, stellarAddress, signRawHash, getAccessToken, onDone, falhar]);
+
+  const limparErro = useCallback(() => setErro(null), []);
 
   const reset = useCallback(() => {
     setAmountState('');
@@ -94,5 +101,5 @@ export function useResgate({ stellarAddress, signRawHash, getAccessToken, onDone
     setPasso('idle');
   }, []);
 
-  return { amount, setAmount, passo, build, txHash, erro, gerarCotacao, confirmar, reset };
+  return { amount, setAmount, passo, build, txHash, erro, gerarCotacao, confirmar, reset, limparErro };
 }

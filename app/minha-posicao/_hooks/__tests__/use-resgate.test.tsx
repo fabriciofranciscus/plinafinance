@@ -101,7 +101,7 @@ describe('useResgate (contrato E2-4)', () => {
       const b = setup();
       act(() => b.result.current.setAmount('100'));
       await act(async () => b.result.current.gerarCotacao());
-      expect(b.result.current.erro).toEqual({ tipo: 'indisponivel', codigo: code });
+      expect(b.result.current.erro).toEqual({ tipo: 'indisponivel', codigo: code, fase: 'build' });
     }
   });
 
@@ -111,7 +111,7 @@ describe('useResgate (contrato E2-4)', () => {
     const a = setup();
     act(() => a.result.current.setAmount('1000'));
     await act(async () => a.result.current.gerarCotacao());
-    expect(a.result.current.erro).toEqual({ tipo: 'sem_liquidez', codigo: 'LIQUIDEZ_INSUFICIENTE' });
+    expect(a.result.current.erro).toEqual({ tipo: 'sem_liquidez', codigo: 'LIQUIDEZ_INSUFICIENTE', fase: 'build' });
     expect(a.result.current.amount).toBe('1000');
     expect(a.result.current.passo).toBe('idle');
     // revalidado no submit
@@ -122,6 +122,7 @@ describe('useResgate (contrato E2-4)', () => {
     await act(async () => b.result.current.confirmar());
     await flush();
     expect(b.result.current.erro?.tipo).toBe('sem_liquidez');
+    expect(b.result.current.erro?.fase).toBe('submit');
     expect(b.result.current.build).toBeNull();
     expect(b.result.current.txHash).toBeNull();
   });
@@ -133,7 +134,7 @@ describe('useResgate (contrato E2-4)', () => {
     await act(async () => result.current.gerarCotacao());
     await act(async () => result.current.confirmar());
     await flush();
-    expect(result.current.erro).toEqual({ tipo: 'em_conferencia', codigo: 'SWAP_EM_CONFERENCIA' });
+    expect(result.current.erro).toEqual({ tipo: 'em_conferencia', codigo: 'SWAP_EM_CONFERENCIA', fase: 'submit' });
     expect(result.current.passo).toBe('ready');
   });
 
@@ -142,7 +143,7 @@ describe('useResgate (contrato E2-4)', () => {
     const { result } = setup();
     act(() => result.current.setAmount('100'));
     await act(async () => result.current.gerarCotacao());
-    expect(result.current.erro).toEqual({ tipo: 'generico', codigo: 'HTTP_500' });
+    expect(result.current.erro).toEqual({ tipo: 'generico', codigo: 'HTTP_500', fase: 'build' });
     expect(JSON.stringify(result.current.erro)).not.toMatch(/stack/);
   });
 

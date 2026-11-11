@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef } from 'react';
 import { useResgate, type UseResgateArgs } from '../_hooks/use-resgate';
 import { RESGATE, SACAR } from '@/lib/sacar/microcopy';
 
@@ -20,6 +21,7 @@ export function ResgateSection({
   ...args
 }: { plinarfQty: number } & UseResgateArgs) {
   const r = useResgate(args);
+  const amountRef = useRef<HTMLInputElement | null>(null);
   const ocupado = r.passo === 'building' || r.passo === 'signing' || r.passo === 'submitting';
 
   if (r.passo === 'done' && r.txHash) {
@@ -89,6 +91,7 @@ export function ResgateSection({
                 max={plinarfQty}
                 step="1"
                 inputMode="numeric"
+                ref={amountRef}
                 value={r.amount}
                 disabled={ocupado}
                 onChange={(e) => r.setAmount(e.target.value)}
@@ -168,7 +171,28 @@ export function ResgateSection({
 
         {r.erro && (
           <div role="alert" className="border border-red-300 bg-red-50 p-4">
-            <p className="font-text text-sm text-red-900">{RESGATE.erro[r.erro.tipo]}</p>
+            {r.erro.tipo === 'sem_liquidez' && (
+              <p className="font-title text-base font-semibold text-red-900 mb-1">
+                {RESGATE.semLiquidez.titulo}
+              </p>
+            )}
+            <p className="font-text text-sm text-red-900">
+              {r.erro.tipo === 'sem_liquidez' && r.erro.fase === 'submit'
+                ? RESGATE.semLiquidez.submit
+                : RESGATE.erro[r.erro.tipo]}
+            </p>
+            {r.erro.tipo === 'sem_liquidez' && (
+              <button
+                type="button"
+                onClick={() => {
+                  r.limparErro();
+                  amountRef.current?.focus();
+                }}
+                className="mt-3 min-h-[44px] px-4 border border-red-900/50 font-details text-[10px] tracking-[0.2em] uppercase text-red-900 hover:bg-red-900 hover:text-white"
+              >
+                {RESGATE.semLiquidez.acao}
+              </button>
+            )}
             {r.erro.codigo && (
               <details className="mt-2">
                 <summary className="min-h-[44px] flex items-center cursor-pointer font-details text-[10px] tracking-[0.2em] uppercase text-red-900/80">
