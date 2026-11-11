@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import { Account, Asset, Keypair, Operation, Transaction, TransactionBuilder } from '@stellar/stellar-sdk';
+import { Account, Asset, Memo, Keypair, Operation, Transaction, TransactionBuilder } from '@stellar/stellar-sdk';
 import { NavMudouError } from '@/lib/services/emissao';
 import { NavIndisponivelError } from '@/lib/services/nav-supply';
 import { networkPassphrase } from '@/lib/stellar/config';
@@ -95,6 +95,7 @@ vi.mock('@/lib/stellar/transactions', () => ({
   fetchTransactionByHash,
 }));
 vi.mock('@/lib/stellar/signer', () => ({ issuerSigner: () => ({ id: 'issuer' }) }));
+vi.mock('@/lib/stellar/fee', () => ({ getDynamicFee: vi.fn().mockResolvedValue('100') }));
 vi.mock('@/lib/services/emissao', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/services/emissao')>();
   return { ...actual, revalidarNavDaCotacao: revalidarNav };
@@ -467,8 +468,25 @@ describe('POST /api/investidor/buy/swap/submit', () => {
     expect(submitWithPrivySignature).not.toHaveBeenCalled();
   });
 
+  it('N1: a reserva grava o hash da tx e o maxTime do envelope (para reconciliar sem o investidor)', async () => {
+    const maxSec = Math.floor(Date.now() / 1000) + 100;
+    const tx = new TransactionBuilder(new Account(USER_PK, '1'), { fee: '100', networkPassphrase })
+      .addOperation(Operation.payment({ source: USER_PK, destination: DIST_PK, asset: Asset.native(), amount: '1' }))
+      .setTimebounds(0, maxSec)
+      .build();
+    tx.sign(USER);
+    txHashFromXdr.mockReturnValueOnce('tx_hash_do_envelope');
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    const r = await POST(req({ quoteId: 'q_1', signedXdr: tx.toXDR() }));
+    expect(r.status).toBe(200);
+    const reserva = quoteUpdateMany.mock.calls[0][0];
+    expect(reserva.where.submitXdrHash).toBeNull();
+    expect(reserva.data.submitTxHash).toBe('tx_hash_do_envelope');
+    expect(reserva.data.submitMaxTime).toEqual(new Date(maxSec * 1000));
+  });
+
   // N1-S1 (Argus): reserva órfã só pode ser re-assinada enquanto o envelope vale.
-  describe('reserva órfã × prazo do envelope (N1-S1)', () => {
+  describe('reserva órfã × prazo do envelope (N1-S1: re-assina só antes do maxTime; nunca libera por "não achei")', () => {
     const txComPrazo = (maxTimeSec: number | 'sem') => {
       const b = new TransactionBuilder(new Account(USER_PK, '1'), { fee: '100', networkPassphrase })
         .addOperation(Operation.payment({ source: USER_PK, destination: DIST_PK, asset: Asset.native(), amount: '1' }));
@@ -495,29 +513,26 @@ describe('POST /api/investidor/buy/swap/submit', () => {
       expect(submitWithPrivySignature).toHaveBeenCalledOnce();
     });
 
-    it('depois do maxTime + margem e 404: 410, NÃO assina e LIBERA a reserva', async () => {
-      const { r, hash } = await orfa(agoraSec() - 600);
+    it('depois do maxTime e 404: 410, NUNCA assina e NÃO libera a reserva (sem prova de não-entrada)', async () => {
+      const { r } = await orfa(agoraSec() - 600);
+      expect(r.status).toBe(410);
+      expect((await r.json()).code).toBe('GONE');
+      expect(submitWithPrivySignature).not.toHaveBeenCalled();
+      expect(quoteUpdateMany).toHaveBeenCalledTimes(1); // só a tentativa de reserva: NADA liberado
+    });
+
+    it('logo depois do maxTime (mesmo dentro da folga do ledger) também não assina e não libera', async () => {
+      const { r } = await orfa(agoraSec() - 10);
       expect(r.status).toBe(410);
       expect(submitWithPrivySignature).not.toHaveBeenCalled();
-      expect(quoteUpdateMany).toHaveBeenCalledTimes(2); // tentativa de reserva + liberação
-      expect(quoteUpdateMany.mock.calls[1][0]).toEqual({
-        where: { id: 'q_1', submitXdrHash: hash, consumedAt: null },
-        data: { submitXdrHash: null },
-      });
+      expect(quoteUpdateMany).toHaveBeenCalledTimes(1);
     });
 
-    it('depois do maxTime mas dentro da margem do ledger: 409, NÃO assina e mantém a reserva', async () => {
-      const { r } = await orfa(agoraSec() - 10);
-      expect(r.status).toBe(409);
-      expect(submitWithPrivySignature).not.toHaveBeenCalled();
-      expect(quoteUpdateMany).toHaveBeenCalledTimes(1); // só a tentativa de reserva: nada liberado
-    });
-
-    it('envelope SEM maxTime em reserva órfã: nunca re-assina (410 + libera)', async () => {
+    it('envelope SEM maxTime em reserva órfã: nunca re-assina (410, sem liberar)', async () => {
       const { r } = await orfa('sem');
       expect(r.status).toBe(410);
       expect(submitWithPrivySignature).not.toHaveBeenCalled();
-      expect(quoteUpdateMany).toHaveBeenCalledTimes(2);
+      expect(quoteUpdateMany).toHaveBeenCalledTimes(1);
     });
 
     it('órfã + a tx falhou on-chain (prova positiva): 409 e LIBERA a reserva', async () => {
@@ -530,7 +545,50 @@ describe('POST /api/investidor/buy/swap/submit', () => {
       const r = await POST(req({ quoteId: 'q_1', signedXdr: xdr }));
       expect(r.status).toBe(409);
       expect(submitWithPrivySignature).not.toHaveBeenCalled();
-      expect(quoteUpdateMany.mock.calls[1][0].data).toEqual({ submitXdrHash: null });
+      expect(quoteUpdateMany.mock.calls[1][0].data).toEqual({ submitXdrHash: null, submitTxHash: null, submitMaxTime: null });
+    });
+  });
+
+  describe('memo e fee do envelope (N1-S1 c)', () => {
+    const txCom = (opts: { fee?: string; memo?: string }) => {
+      const b = new TransactionBuilder(new Account(USER_PK, '1'), { fee: opts.fee ?? '100', networkPassphrase })
+        .addOperation(Operation.payment({ source: USER_PK, destination: DIST_PK, asset: Asset.native(), amount: '1' }))
+        .setTimeout(120);
+      if (opts.memo) b.addMemo(Memo.text(opts.memo));
+      const tx = b.build();
+      tx.sign(USER);
+      return tx.toXDR();
+    };
+
+    it('XDR com memo diferente do build → 400, sem reservar nem assinar', async () => {
+      quoteFindUnique.mockResolvedValueOnce(baseQuote());
+      const r = await POST(req({ quoteId: 'q_1', signedXdr: txCom({ memo: 'oi' }) }));
+      expect(r.status).toBe(400);
+      expect(quoteUpdateMany).not.toHaveBeenCalled();
+      expect(submitWithPrivySignature).not.toHaveBeenCalled();
+    });
+
+    it('fee abaixo do mínimo da rede → 400, sem reservar nem assinar', async () => {
+      quoteFindUnique.mockResolvedValueOnce(baseQuote());
+      const r = await POST(req({ quoteId: 'q_1', signedXdr: txCom({ fee: '50' }) })); // 1 op × 50 < 100
+      expect(r.status).toBe(400);
+      expect((await r.json()).error).toMatch(/fee/);
+      expect(quoteUpdateMany).not.toHaveBeenCalled();
+      expect(submitWithPrivySignature).not.toHaveBeenCalled();
+    });
+
+    it('memo igual ao do build (q:<quoteId>) e XDR sem memo passam', async () => {
+      quoteFindUnique.mockResolvedValueOnce(baseQuote());
+      expect((await POST(req({ quoteId: 'q_1', signedXdr: txCom({ memo: 'q:q_1' }) }))).status).toBe(200);
+      quoteFindUnique.mockResolvedValueOnce(baseQuote());
+      quoteUpdateMany.mockResolvedValue({ count: 1 });
+      expect((await POST(req({ quoteId: 'q_1', signedXdr: txCom({}) }))).status).toBe(200);
+    });
+
+    it('fee igual ou acima do mínimo passa', async () => {
+      quoteFindUnique.mockResolvedValueOnce(baseQuote());
+      const r = await POST(req({ quoteId: 'q_1', signedXdr: txCom({ fee: '100' }) }));
+      expect(r.status).toBe(200);
     });
   });
 });
