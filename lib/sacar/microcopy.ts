@@ -83,6 +83,7 @@ export type ResgateErroTipoTexto =
   | 'indisponivel'
   | 'classe_indisponivel'
   | 'rede_nao_confirmou'
+  | 'rede_recusou'
   | 'preco_fora_da_faixa'
   | 'acima_do_teto'
   | 'generico';
@@ -146,10 +147,17 @@ export function erroResgate(
         texto: `Este valor está acima do limite por resgate. Nada foi enviado.${assinatura} Tente um valor menor ou fale com a equipe em ${EQUIPE}.`,
       };
     case 'rede_nao_confirmou':
-      // 502 cobre rejeição real E resposta ambígua (a tx pode ter entrado): NÃO dizer "não foram resgatados".
+      // Caso ambíguo (STELLAR_SUBMIT_INCERTO, ou 502 enquanto cobrir os dois): a tx pode ter entrado.
+      // NÃO dizer "não foram resgatados".
       return {
         titulo: 'A rede não confirmou o resgate',
-        texto: `A rede de testes não confirmou este resgate e estamos conferindo. Seus tokens de demonstração só saem se a rede confirmar. Antes de tentar de novo, confira seu saldo. Se você iniciar outro resgate agora, pode aparecer que há um resgate em conferência; fale conosco em ${EQUIPE}${numero}.`,
+        texto: `A rede de testes não confirmou este resgate e estamos conferindo. Seus tokens de demonstração só saem se a rede confirmar. Antes de tentar de novo, confira seu saldo. Se você iniciar outro resgate agora, pode aparecer que há um resgate em conferência; fale conosco em ${EQUIPE}${numero}. Não há prazo definido.`,
+      };
+    case 'rede_recusou':
+      // SÓ com o código novo do Bento (STELLAR_SUBMIT_FAILED separado de INCERTO): rejeição real, reserva liberada.
+      return {
+        titulo: 'A rede recusou o resgate',
+        texto: 'A rede de testes não aceitou este resgate, e seus tokens de demonstração não foram resgatados. Você pode tentar de novo.',
       };
     case 'conflito':
       return {

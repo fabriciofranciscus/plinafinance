@@ -182,6 +182,18 @@ describe('useResgate (contrato E2-4)', () => {
     }
   });
 
+  it('STELLAR_SUBMIT_INCERTO é sempre "não confirmou"; enquanto a separação não for entregue, o FAILED também (nunca "não foram resgatados")', async () => {
+    for (const [status, code] of [[502, 'STELLAR_SUBMIT_INCERTO'], [502, 'STELLAR_SUBMIT_FAILED']] as const) {
+      fetchMock.mockResolvedValueOnce(json(BUILD)).mockResolvedValueOnce(json({ error: 'x', code }, status));
+      const { result } = setup();
+      act(() => result.current.setAmount('100'));
+      await act(async () => result.current.gerarCotacao());
+      await act(async () => result.current.confirmar());
+      await flush();
+      expect(result.current.erro?.tipo).toBe('rede_nao_confirmou');
+    }
+  });
+
   it('recotar depois de NAV_MUDOU refaz o build e usa o quoteId novo', async () => {
     fetchMock
       .mockResolvedValueOnce(json(BUILD))

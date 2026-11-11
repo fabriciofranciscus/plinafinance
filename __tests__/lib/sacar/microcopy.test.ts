@@ -69,7 +69,7 @@ describe('microcopy do /sacar (Norma)', () => {
 });
 
 describe('microcopy do resgate (E2-6): erros da Norma §2.8–2.9', () => {
-  const TIPOS = ['nav_mudou', 'cotacao_expirada', 'conflito', 'sem_liquidez', 'em_conferencia', 'indisponivel', 'classe_indisponivel', 'rede_nao_confirmou', 'preco_fora_da_faixa', 'acima_do_teto', 'generico'] as const;
+  const TIPOS = ['nav_mudou', 'cotacao_expirada', 'conflito', 'sem_liquidez', 'em_conferencia', 'indisponivel', 'classe_indisponivel', 'rede_nao_confirmou', 'rede_recusou', 'preco_fora_da_faixa', 'acima_do_teto', 'generico'] as const;
 
   it('sem liquidez: build e submit têm textos próprios, sem prometer prazo nem janela', () => {
     const b = erroResgate('sem_liquidez', 'build');
@@ -126,6 +126,14 @@ describe('microcopy do resgate (E2-6): erros da Norma §2.8–2.9', () => {
         if (fase === 'build') expect(x).not.toMatch(/assinatura/);
       }
     }
+  });
+
+  it('502 separado (Norma §2.9 final): "recusou" só diz não resgatados; "não confirmou" fecha com "Não há prazo definido."', () => {
+    const rec = erroResgate('rede_recusou', 'submit', 'q-1');
+    expect(rec.titulo).toBe('A rede recusou o resgate');
+    expect(rec.texto).toBe('A rede de testes não aceitou este resgate, e seus tokens de demonstração não foram resgatados. Você pode tentar de novo.');
+    expect(erroResgate('rede_nao_confirmou', 'submit', 'q-1').texto).toMatch(/Não há prazo definido\.$/);
+    expect(erroResgate('rede_nao_confirmou', 'submit', 'q-1').texto).not.toMatch(/não foram resgatados/);
   });
 
   it('nenhum texto usa jargão, código cru, prazo ou janela', () => {
