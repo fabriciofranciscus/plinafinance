@@ -87,7 +87,7 @@ function assertJanelaDeValidade(tx: Transaction, agoraSec: number): void {
  * Precondições v2 (N1-S1): a nossa tx não usa nenhuma. minAccountSequence foi o
  * vetor do HIGH (tx_bad_seq → reserva órfã → reenvio dias depois com NAV velho).
  */
-function assertSemPrecondicoesV2(tx: Transaction): void {
+export function assertSemPrecondicoesV2(tx: Transaction): void {
   const lb = tx.ledgerBounds;
   if (lb && (Number(lb.minLedger) !== 0 || Number(lb.maxLedger) !== 0)) {
     throw new Error('xdr com precondição ledgerBounds: não permitida');
