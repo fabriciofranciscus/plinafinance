@@ -35,6 +35,8 @@ export function useResgate({ stellarAddress, signRawHash, getAccessToken, onDone
   const [passo, setPasso] = useState<ResgatePasso>('idle');
   const [build, setBuild] = useState<ResgateBuild | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
+  // número do pedido (quoteId) do último build: sobrevive à limpeza da cotação para o texto do erro
+  const [ultimoPedido, setUltimoPedido] = useState<string | null>(null);
   const [erro, setErro] = useState<{
     tipo: ResgateErroTipo;
     codigo: string | null;
@@ -63,7 +65,9 @@ export function useResgate({ stellarAddress, signRawHash, getAccessToken, onDone
     setErro(null);
     setPasso('building');
     try {
-      setBuild(await buildResgate(amount, getAccessToken));
+      const b = await buildResgate(amount, getAccessToken);
+      setUltimoPedido(b.quoteId);
+      setBuild(b);
       setPasso('ready');
     } catch (e) {
       falhar(e, 'idle', 'build');
@@ -101,5 +105,5 @@ export function useResgate({ stellarAddress, signRawHash, getAccessToken, onDone
     setPasso('idle');
   }, []);
 
-  return { amount, setAmount, passo, build, txHash, erro, gerarCotacao, confirmar, reset, limparErro };
+  return { amount, setAmount, passo, build, txHash, erro, gerarCotacao, confirmar, reset, limparErro, ultimoPedido };
 }

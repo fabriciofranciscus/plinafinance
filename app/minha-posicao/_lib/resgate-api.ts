@@ -34,6 +34,7 @@ export type ResgateErroTipo =
   | 'sem_liquidez'
   | 'em_conferencia'
   | 'indisponivel'
+  | 'classe_indisponivel'
   | 'generico';
 
 export class ResgateError extends Error {
@@ -74,8 +75,8 @@ async function post<T>(
     if (codigo === 'SWAP_EM_CONFERENCIA') throw new ResgateError('em_conferencia', codigo);
     if (codigo === 'CONFLICT') throw new ResgateError('conflito', codigo);
     if (codigo === 'LIQUIDEZ_INSUFICIENTE') throw new ResgateError('sem_liquidez', codigo);
-    if (codigo === 'LEDGER_UNAVAILABLE' || codigo === 'CLASSE_INDISPONIVEL' || res.status === 503 || res.status === 422)
-      throw new ResgateError('indisponivel', codigo);
+    if (codigo === 'CLASSE_INDISPONIVEL') throw new ResgateError('classe_indisponivel', codigo);
+    if (codigo === 'LEDGER_UNAVAILABLE' || res.status === 503) throw new ResgateError('indisponivel', codigo);
     throw new ResgateError('generico', codigo ?? `HTTP_${res.status}`);
   }
   try {

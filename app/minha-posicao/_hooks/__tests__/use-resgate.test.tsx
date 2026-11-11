@@ -96,12 +96,12 @@ describe('useResgate (contrato E2-4)', () => {
     await flush();
     expect(a.result.current.erro?.tipo).toBe('conflito');
     expect(a.result.current.build).toBeNull();
-    for (const [status, code] of [[503, 'LEDGER_UNAVAILABLE'], [422, 'CLASSE_INDISPONIVEL']] as const) {
+    for (const [status, code, tipo] of [[503, 'LEDGER_UNAVAILABLE', 'indisponivel'], [422, 'CLASSE_INDISPONIVEL', 'classe_indisponivel']] as const) {
       fetchMock.mockResolvedValueOnce(json({ error: 'x', code }, status));
       const b = setup();
       act(() => b.result.current.setAmount('100'));
       await act(async () => b.result.current.gerarCotacao());
-      expect(b.result.current.erro).toEqual({ tipo: 'indisponivel', codigo: code, fase: 'build' });
+      expect(b.result.current.erro).toEqual({ tipo, codigo: code, fase: 'build' });
     }
   });
 

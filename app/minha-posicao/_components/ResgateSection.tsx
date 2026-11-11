@@ -3,7 +3,7 @@
 import { useRef } from 'react';
 import { normalizarQuantidade, quantidadeMaxima, quantidadeValida } from '../_lib/resgate-amount';
 import { useResgate, type UseResgateArgs } from '../_hooks/use-resgate';
-import { RESGATE, SACAR } from '@/lib/sacar/microcopy';
+import { RESGATE, SACAR, erroResgate } from '@/lib/sacar/microcopy';
 
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const NUM = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 7 });
@@ -170,16 +170,15 @@ export function ResgateSection({
 
         {r.erro && (
           <div role="alert" className="border border-red-300 bg-red-50 p-4">
-            {r.erro.tipo === 'sem_liquidez' && (
-              <p className="font-title text-base font-semibold text-red-900 mb-1">
-                {RESGATE.semLiquidez.titulo}
-              </p>
-            )}
-            <p className="font-text text-sm text-red-900">
-              {r.erro.tipo === 'sem_liquidez' && r.erro.fase === 'submit'
-                ? RESGATE.semLiquidez.submit
-                : RESGATE.erro[r.erro.tipo]}
-            </p>
+            {(() => {
+              const e = erroResgate(r.erro.tipo, r.erro.fase, r.build?.quoteId ?? r.ultimoPedido);
+              return (
+                <>
+                  <p className="font-title text-base font-semibold text-red-900 mb-1">{e.titulo}</p>
+                  <p className="font-text text-sm text-red-900">{e.texto}</p>
+                </>
+              );
+            })()}
             {r.erro.tipo === 'sem_liquidez' && (
               <button
                 type="button"
@@ -189,7 +188,7 @@ export function ResgateSection({
                 }}
                 className="mt-3 min-h-[44px] px-4 border border-red-900/50 font-details text-[10px] tracking-[0.2em] uppercase text-red-900 hover:bg-red-900 hover:text-white"
               >
-                {RESGATE.semLiquidez.acao}
+                {RESGATE.acaoSemLiquidez}
               </button>
             )}
             {r.erro.codigo && (

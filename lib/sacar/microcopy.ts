@@ -72,6 +72,76 @@ export const SACAR = {
  * textos abaixo, exceto `passo`/`aviso` (Norma §2.7, também provisórios), são da
  * implementação e precisam da conferência da Norma/Consuelo. Sem "queima/burn".
  */
+const EQUIPE = 'contato@plina.finance';
+
+export type ResgateErroTipoTexto =
+  | 'nav_mudou'
+  | 'cotacao_expirada'
+  | 'conflito'
+  | 'sem_liquidez'
+  | 'em_conferencia'
+  | 'indisponivel'
+  | 'classe_indisponivel'
+  | 'generico';
+
+/**
+ * Título e texto de cada erro do resgate (Norma §2.8–2.9). `pedido` é o número do
+ * pedido (quoteId da cotação) quando existe; sem ele a frase do número sai.
+ * O código cru nunca aparece aqui (só em "Detalhes técnicos").
+ */
+export function erroResgate(
+  tipo: ResgateErroTipoTexto,
+  fase: 'build' | 'submit',
+  pedido?: string | null,
+): { titulo: string; texto: string } {
+  const numero = pedido ? ` informando o número do pedido (${pedido})` : '';
+  switch (tipo) {
+    case 'sem_liquidez':
+      return {
+        titulo: 'Resgate indisponível para este valor',
+        texto:
+          fase === 'submit'
+            ? 'A disponibilidade mudou desde a cotação. Nada foi enviado à rede e a assinatura que você fez não será usada. Tente de novo com um valor menor.'
+            : `No momento não há liquidez disponível para este valor. Tente um valor menor ou fale com a equipe em ${EQUIPE}. Rede de testes, sem valor financeiro real.`,
+      };
+    case 'em_conferencia':
+      return {
+        titulo: 'Há um resgate seu em conferência',
+        texto: `Não é possível iniciar outro resgate agora, porque o anterior ainda está em conferência. Nossa equipe verifica o pedido. Se demorar, fale conosco em ${EQUIPE}${numero}. Não há prazo definido.`,
+      };
+    case 'nav_mudou':
+      return {
+        titulo: 'O valor por token mudou',
+        texto: 'O valor por token foi atualizado desde a cotação. Nada foi enviado. Veja o novo valor e confirme de novo.',
+      };
+    case 'cotacao_expirada':
+      return {
+        titulo: 'A cotação expirou',
+        texto: 'O tempo desta cotação acabou. Nada foi enviado. Peça uma nova cotação para continuar.',
+      };
+    case 'indisponivel':
+      return {
+        titulo: 'Resgate indisponível no momento',
+        texto: `Não conseguimos calcular o valor por token agora. Nada foi enviado. Tente de novo mais tarde ou fale com a equipe em ${EQUIPE}.`,
+      };
+    case 'classe_indisponivel':
+      return {
+        titulo: 'Resgate indisponível para esta subclasse',
+        texto: 'O resgate desta subclasse ainda não está disponível na rede de testes.',
+      };
+    case 'conflito':
+      return {
+        titulo: 'Cotação já usada',
+        texto: 'Esta cotação já foi usada em outro envio. Gere uma nova cotação para continuar.',
+      };
+    default:
+      return {
+        titulo: 'Não foi possível concluir o resgate',
+        texto: `Tente novamente; se persistir, fale com a equipe em ${EQUIPE}${numero}.`,
+      };
+  }
+}
+
 export const RESGATE = {
   eyebrow: 'Resgate · tokens de demonstração → TESOURO',
   quantidade: 'Quantidade de tokens a resgatar',
@@ -88,28 +158,9 @@ export const RESGATE = {
   assinando: 'Assinando…',
   enviando: 'Enviando…',
   cancelar: 'Cancelar',
-  erro: {
-    nav_mudou: 'O valor por token mudou. Gere uma nova cotação para continuar.',
-    cotacao_expirada: 'A cotação expirou. Gere uma nova cotação para continuar.',
-    conflito: 'Esta cotação já foi usada em outro envio. Gere uma nova cotação para continuar.',
-    // Norma §2.8 (11/11). Sem "nova janela": não existe no código.
-    sem_liquidez:
-      'No momento não há liquidez disponível para este valor. Tente um valor menor ou fale com a equipe em contato@plina.finance. Rede de testes, sem valor financeiro real.',
-    indisponivel:
-      'Resgate indisponível por enquanto. Tente novamente mais tarde.',
-    em_conferencia:
-      'Resgate indisponível por enquanto: o valor por token está em conferência. Tente novamente mais tarde.',
-    generico:
-      'Não foi possível concluir o resgate. Tente novamente; se persistir, fale com a equipe em contato@plina.finance.',
-  },
+  /** Rótulos de erro do resgate: ver `erroResgate`. Norma §2.8–2.9; o 502 aguarda o Bento. */
+  acaoSemLiquidez: 'Tentar outro valor',
   jaTemTesouro: 'Já tem TESOURO na carteira? Ir direto para o saque (Pix simulado) →',
-  /** 409 LIQUIDEZ_INSUFICIENTE: título e ação; o texto depende de onde veio (build ou submit). */
-  semLiquidez: {
-    titulo: 'Resgate indisponível para este valor',
-    submit:
-      'A disponibilidade mudou desde a cotação. Nada foi enviado. Tente de novo com um valor menor.',
-    acao: 'Tentar outro valor',
-  },
   detalhesResumo: 'Detalhes técnicos',
   codigo: 'Código',
   concluido: {

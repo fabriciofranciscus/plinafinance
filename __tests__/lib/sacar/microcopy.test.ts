@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SACAR, resultadoSaque, situacaoSaque } from '@/lib/sacar/microcopy';
+import { RESGATE, SACAR, erroResgate, resultadoSaque, situacaoSaque } from '@/lib/sacar/microcopy';
 
 function textos(o: unknown): string[] {
   if (typeof o === 'string') return [o];
@@ -68,22 +68,41 @@ describe('microcopy do /sacar (Norma)', () => {
   });
 });
 
-describe('microcopy do resgate (E2-6)', () => {
-  it('sem liquidez: texto do Atlas, sem prometer prazo; todo erro tem mensagem', async () => {
-    const { RESGATE } = await import('@/lib/sacar/microcopy');
-    expect(RESGATE.semLiquidez.titulo).toBe('Resgate indisponível para este valor');
-    expect(RESGATE.erro.sem_liquidez).toBe(
+describe('microcopy do resgate (E2-6): erros da Norma §2.8–2.9', () => {
+  const TIPOS = ['nav_mudou', 'cotacao_expirada', 'conflito', 'sem_liquidez', 'em_conferencia', 'indisponivel', 'classe_indisponivel', 'generico'] as const;
+
+  it('sem liquidez: build e submit têm textos próprios, sem prometer prazo nem janela', () => {
+    const b = erroResgate('sem_liquidez', 'build');
+    expect(b.titulo).toBe('Resgate indisponível para este valor');
+    expect(b.texto).toBe(
       'No momento não há liquidez disponível para este valor. Tente um valor menor ou fale com a equipe em contato@plina.finance. Rede de testes, sem valor financeiro real.',
     );
-    expect(RESGATE.semLiquidez.submit).toBe(
-      'A disponibilidade mudou desde a cotação. Nada foi enviado. Tente de novo com um valor menor.',
+    expect(erroResgate('sem_liquidez', 'submit').texto).toBe(
+      'A disponibilidade mudou desde a cotação. Nada foi enviado à rede e a assinatura que você fez não será usada. Tente de novo com um valor menor.',
     );
-    expect(RESGATE.semLiquidez.acao).toBe('Tentar outro valor');
-    // não promete janela (não existe no código)
-    expect(JSON.stringify(RESGATE.semLiquidez) + RESGATE.erro.sem_liquidez).not.toMatch(/janela/i);
-    for (const t of ['nav_mudou', 'cotacao_expirada', 'conflito', 'sem_liquidez', 'em_conferencia', 'indisponivel', 'generico'] as const) {
-      expect(RESGATE.erro[t].length).toBeGreaterThan(10);
-      expect(RESGATE.erro[t]).not.toMatch(/\b(burn|queima|em até|minutos|48h)\b/i);
+    expect(RESGATE.acaoSemLiquidez).toBe('Tentar outro valor');
+  });
+
+  it('em conferência cita o número do pedido quando existe e omite a frase quando não existe', () => {
+    expect(erroResgate('em_conferencia', 'submit', 'q-123').texto).toContain('informando o número do pedido (q-123)');
+    expect(erroResgate('em_conferencia', 'build').texto).not.toMatch(/número do pedido/);
+    expect(erroResgate('em_conferencia', 'build').texto).toMatch(/Não há prazo definido\./);
+  });
+
+  it('LEDGER_UNAVAILABLE e CLASSE_INDISPONIVEL têm textos distintos; nav/expirada dizem "Nada foi enviado"', () => {
+    expect(erroResgate('indisponivel', 'build').titulo).toBe('Resgate indisponível no momento');
+    expect(erroResgate('classe_indisponivel', 'build').titulo).toBe('Resgate indisponível para esta subclasse');
+    expect(erroResgate('nav_mudou', 'submit').texto).toMatch(/Nada foi enviado/);
+    expect(erroResgate('cotacao_expirada', 'submit').texto).toMatch(/Nada foi enviado/);
+  });
+
+  it('nenhum texto usa jargão, código cru, prazo ou janela', () => {
+    for (const t of TIPOS) {
+      for (const fase of ['build', 'submit'] as const) {
+        const { titulo, texto } = erroResgate(t, fase, 'p-1');
+        expect(`${titulo} ${texto}`).not.toMatch(/\b(burn|queima|order|result_codes|LEDGER_|CLASSE_|NAV_MUDOU|janela|minutos|48h)\b/i);
+        expect(texto.length).toBeGreaterThan(20);
+      }
     }
   });
 });
