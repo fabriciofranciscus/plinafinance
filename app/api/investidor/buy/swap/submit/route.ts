@@ -33,6 +33,7 @@ import { getDynamicFee } from '@/lib/stellar/fee';
 import { NavMudouError, revalidarNavDaCotacao } from '@/lib/services/emissao';
 import { assertClasseDisponivel } from '@/lib/services/regras-swap';
 import { escriturarSwap, liberarReservaDoSwap } from '@/lib/services/swap-escrituracao';
+import { assertSemSwapEmConferencia } from '@/lib/services/swap-orfao';
 import { ApiError } from '@/lib/api/errors';
 import { navUnavailableResponse } from '@/lib/api/nav-unavailable';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
@@ -203,6 +204,12 @@ export const POST = withAuth(async (req, { user }) => {
       );
     }
 
+    // Mitigação de disponibilidade (Argus/Atlas): com outro swap do MESMO investidor em conferência (reserva
+    // órfã), não abre reserva nova. A reserva desta mesma cotação (retry) segue.
+    if (!quote.submitXdrHash) {
+      await assertSemSwapEmConferencia(quote.investidorId, { ignorarQuoteId: quote.id });
+    }
+
     // N1-S1(c) (Argus/Atlas): o fee abaixo do mínimo da rede volta tx_insufficient_fee/tx_bad_seq e deixa uma
     // reserva órfã: recusa ANTES de reservar e assinar. O memo e o prazo são conferidos pelo validador
     // (memoTexto = o do build, quoteExpiresAt). O fee só vale em reserva NOVA: numa órfã a tx pode já estar
@@ -250,6 +257,9 @@ export const POST = withAuth(async (req, { user }) => {
         submitXdrHash: xdrHash,
         submitTxHash: expectedTxHash,
         submitMaxTime: maxTimeEnvelope > 0 ? new Date(maxTimeEnvelope * 1000) : null,
+        // O envelope reservado é assinado SÓ pelo investidor (sem assinatura da Plina): a prova do desfecho
+        // pela conta dele (situacaoEnvelopeSwap) precisa do XDR.
+        submitXdr: signedXdr,
       },
     });
     if (reserved.count !== 1) {

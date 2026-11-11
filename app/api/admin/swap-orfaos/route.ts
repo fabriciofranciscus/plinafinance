@@ -1,9 +1,10 @@
 /**
  * POST /api/admin/swap-orfaos — reconcilia reservas órfãs do swap de subscrição (N1).
  *
- * Só com prova on-chain: tx com sucesso → escritura; com falha, ou vencida e fora da chain → libera a
- * reserva. Enquanto houver reserva órfã o NAV fica indisponível (SWAP_EM_VOO), então o operador roda
- * isto quando o alarme/`/pool` indicar. Resposta: contagens (sem PII). Auth admin + CSRF.
+ * Prova pela conta do investidor: sucesso → escritura; falha, ou sequence consumida por outra tx → libera;
+ * sequence livre depois de maxTime + espera → libera por tempo e vigia o hash por 24 h (sucesso depois →
+ * escritura + alerta); sem dado conclusivo → fica órfã (operador, runbook). Enquanto houver reserva órfã o
+ * NAV fica indisponível (SWAP_EM_VOO). Resposta: contagens (sem PII). Auth admin + CSRF.
  */
 
 import { NextResponse } from 'next/server';
