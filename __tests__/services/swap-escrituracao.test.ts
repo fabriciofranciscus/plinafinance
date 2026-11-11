@@ -34,7 +34,7 @@ import { reconciliarSwapsOrfaos } from '@/lib/services/swap-escrituracao';
 
 const D = (v: string) => new Prisma.Decimal(v);
 const AGORA = Date.parse('2026-11-10T12:00:00Z');
-const LIBERA = { submitXdrHash: null, submitTxHash: null, submitMaxTime: null, submitXdr: null };
+const LIBERA = { submitXdrHash: null, submitTxHash: null, submitMaxTime: null, submitXdr: null, livreExpiradaVistaEm: null };
 
 function orfa(over: Record<string, unknown> = {}) {
   return {
@@ -84,14 +84,44 @@ describe('reconciliarSwapsOrfaos — prova pela conta do investidor (N1)', () =>
     expect(m.investidorUpdate).not.toHaveBeenCalled();
   });
 
-  it('S livre e a rede passou de maxTime + espera (LIVRE_EXPIRADA): libera POR TEMPO e põe o hash na vigia de 24 h', async () => {
-    orfas([orfa()]);
+  it('LIVRE_EXPIRADA na 1ª varredura: só MARCA (não libera); aguardando', async () => {
+    orfas([orfa()]); // sem livreExpiradaVistaEm
+    m.situacao.mockResolvedValue({ status: 'LIVRE_EXPIRADA', sequenceConta: '5', ledger: 9, fechadoEm: 'x' });
+    const r = await reconciliarSwapsOrfaos({ agora: AGORA });
+    expect(r).toMatchObject({ aguardando: 1, liberados: 0 });
+    expect(m.updateMany).toHaveBeenCalledTimes(1);
+    expect(m.updateMany.mock.calls[0][0]).toEqual({
+      where: { id: 'q_1', submitXdrHash: 'xh1', consumedAt: null },
+      data: { livreExpiradaVistaEm: new Date(AGORA) },
+    });
+  });
+
+  it('LIVRE_EXPIRADA na 2ª varredura (≥ 5 min depois da 1ª): libera POR TEMPO e põe o hash na vigia de 24 h', async () => {
+    orfas([orfa({ livreExpiradaVistaEm: new Date(AGORA - 6 * 60_000) })]);
     m.situacao.mockResolvedValue({ status: 'LIVRE_EXPIRADA', sequenceConta: '5', ledger: 9, fechadoEm: 'x' });
     const r = await reconciliarSwapsOrfaos({ agora: AGORA });
     expect(r).toMatchObject({ liberados: 1 });
     const data = m.updateMany.mock.calls[0][0].data;
     expect(data).toMatchObject({ ...LIBERA, liberadaTxHash: 'th1' });
     expect(data.liberadaPorTempoEm).toBeInstanceOf(Date);
+  });
+
+  it('2ª varredura cedo demais (< 5 min, disparo manual em sequência): NÃO libera, nem remarca', async () => {
+    orfas([orfa({ livreExpiradaVistaEm: new Date(AGORA - 60_000) })]);
+    m.situacao.mockResolvedValue({ status: 'LIVRE_EXPIRADA', sequenceConta: '5', ledger: 9, fechadoEm: 'x' });
+    const r = await reconciliarSwapsOrfaos({ agora: AGORA });
+    expect(r).toMatchObject({ aguardando: 1, liberados: 0 });
+    expect(m.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('a marca da 1ª varredura é apagada se o estado deixa de ser LIVRE_EXPIRADA (ex.: AGUARDANDO, INDETERMINADO)', async () => {
+    orfas([orfa({ livreExpiradaVistaEm: new Date(AGORA - 6 * 60_000) })]);
+    m.situacao.mockResolvedValue({ status: 'AGUARDANDO', liberaApos: 1 });
+    await reconciliarSwapsOrfaos({ agora: AGORA });
+    expect(m.updateMany).toHaveBeenCalledWith({
+      where: { id: 'q_1', submitXdrHash: 'xh1', consumedAt: null },
+      data: { livreExpiradaVistaEm: null },
+    });
   });
 
   it('AGUARDANDO: nada muda; INDETERMINADO: fica órfã (operador), nunca libera', async () => {
