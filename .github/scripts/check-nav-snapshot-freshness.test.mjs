@@ -31,6 +31,10 @@ before(async () => {
       res.end('{"private":"must-not-leak"}');
     } else if (req.url === '/invalid/api/nav-snapshot/2026-11-12') {
       res.end('{"data":"2026-11-12","geradoEm":"not-a-date","private":"must-not-leak"}');
+    } else if (req.url === '/skew/api/nav-snapshot/2026-11-12') {
+      res.end('{"data":"2026-11-12","geradoEm":"2026-11-12T10:00:03.000Z"}');
+    } else if (req.url === '/future/api/nav-snapshot/2026-11-12') {
+      res.end('{"data":"2026-11-12","geradoEm":"2026-11-12T10:06:00.000Z"}');
     } else {
       res.statusCode = 404;
       res.end('{}');
@@ -92,4 +96,17 @@ test('recusa snapshot fora do contrato sem vazar o corpo', async () => {
   assert.equal(result.code, 1);
   assert.match(result.output, /fora do contrato/);
   assert.doesNotMatch(result.output, /must-not-leak/);
+});
+
+test('tolera geradoEm poucos segundos no futuro (skew de relógio)', async () => {
+  const result = await run('skew');
+  assert.equal(result.code, 0);
+  assert.match(result.output, /freshness: ok \(2026-11-12\)/);
+});
+
+test('recusa geradoEm além de 5 min no futuro com mensagem própria', async () => {
+  const result = await run('future');
+  assert.equal(result.code, 1);
+  assert.match(result.output, /no futuro/);
+  assert.doesNotMatch(result.output, /26 h ou mais/);
 });

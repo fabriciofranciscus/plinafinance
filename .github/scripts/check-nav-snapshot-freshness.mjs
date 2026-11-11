@@ -1,4 +1,5 @@
 const MAX_AGE_MS = 26 * 60 * 60 * 1_000;
+const MAX_CLOCK_SKEW_MS = 5 * 60 * 1_000;
 const TIMEOUT_MS = 15_000;
 
 function fail(message) {
@@ -57,7 +58,9 @@ if (!baseUrl || Number.isNaN(now.getTime())) {
       }
 
       const ageMs = now.getTime() - generatedAt.getTime();
-      if (ageMs < 0 || ageMs >= MAX_AGE_MS) {
+      if (ageMs < -MAX_CLOCK_SKEW_MS) {
+        fail('geradoEm está no futuro além da tolerância de relógio');
+      } else if (ageMs >= MAX_AGE_MS) {
         fail('último snapshot tem 26 h ou mais');
       } else {
         console.log(`NAV snapshot freshness: ok (${date})`);

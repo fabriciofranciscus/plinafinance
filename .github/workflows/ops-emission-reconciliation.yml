@@ -18,7 +18,6 @@ jobs:
     timeout-minutes: 5
     env:
       OPS_BASE_URL: ${{ vars.OPS_BASE_URL || 'https://plina.finance' }}
-      OPS_CRON_SECRET: ${{ secrets.OPS_CRON_SECRET }}
     steps:
       - uses: actions/checkout@v4
 
@@ -28,6 +27,7 @@ jobs:
 
       - name: Check pending issuance
         env:
+          OPS_CRON_SECRET: ${{ secrets.OPS_CRON_SECRET }}
           OPS_ROUTE_LABEL: pending issuance
           OPS_ROUTE_PATH: /api/ops/emissao-pendente
         run: node .github/scripts/call-ops-route.mjs
@@ -35,6 +35,7 @@ jobs:
       - name: Reconcile orphan subscriptions
         if: always()
         env:
+          OPS_CRON_SECRET: ${{ secrets.OPS_CRON_SECRET }}
           OPS_ROUTE_LABEL: orphan subscription reconciliation
           OPS_ROUTE_PATH: /api/ops/reconciliar-subscricoes
         run: node .github/scripts/call-ops-route.mjs
