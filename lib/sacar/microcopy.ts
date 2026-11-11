@@ -92,6 +92,9 @@ export const RESGATE = {
     nav_mudou: 'O valor por token mudou. Gere uma nova cotação para continuar.',
     cotacao_expirada: 'A cotação expirou. Gere uma nova cotação para continuar.',
     conflito: 'Esta cotação já foi usada em outro envio. Gere uma nova cotação para continuar.',
+    // Atlas (11/11): sem prometer prazo; Norma confere o texto.
+    sem_liquidez:
+      'No momento não há liquidez disponível para este valor. Tente um valor menor ou fale com o time.',
     indisponivel:
       'Resgate indisponível por enquanto. Tente novamente mais tarde.',
     em_conferencia:

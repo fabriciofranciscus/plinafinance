@@ -67,3 +67,16 @@ describe('microcopy do /sacar (Norma)', () => {
     expect(todos).not.toMatch(/\b48h\b|minutos|à vista/i);
   });
 });
+
+describe('microcopy do resgate (E2-6)', () => {
+  it('sem liquidez: texto do Atlas, sem prometer prazo; todo erro tem mensagem', async () => {
+    const { RESGATE } = await import('@/lib/sacar/microcopy');
+    expect(RESGATE.erro.sem_liquidez).toBe(
+      'No momento não há liquidez disponível para este valor. Tente um valor menor ou fale com o time.',
+    );
+    for (const t of ['nav_mudou', 'cotacao_expirada', 'conflito', 'sem_liquidez', 'em_conferencia', 'indisponivel', 'generico'] as const) {
+      expect(RESGATE.erro[t].length).toBeGreaterThan(10);
+      expect(RESGATE.erro[t]).not.toMatch(/\b(burn|queima|em até|minutos|48h)\b/i);
+    }
+  });
+});

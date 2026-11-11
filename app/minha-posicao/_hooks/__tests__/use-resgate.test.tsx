@@ -105,6 +105,27 @@ describe('useResgate (contrato E2-4)', () => {
     }
   });
 
+  it('409 LIQUIDEZ_INSUFICIENTE (build ou submit): mensagem própria, limpa a cotação e mantém a quantidade para tentar um valor menor', async () => {
+    // no build
+    fetchMock.mockResolvedValueOnce(json({ error: 'x', code: 'LIQUIDEZ_INSUFICIENTE' }, 409));
+    const a = setup();
+    act(() => a.result.current.setAmount('1000'));
+    await act(async () => a.result.current.gerarCotacao());
+    expect(a.result.current.erro).toEqual({ tipo: 'sem_liquidez', codigo: 'LIQUIDEZ_INSUFICIENTE' });
+    expect(a.result.current.amount).toBe('1000');
+    expect(a.result.current.passo).toBe('idle');
+    // revalidado no submit
+    fetchMock.mockResolvedValueOnce(json(BUILD)).mockResolvedValueOnce(json({ error: 'x', code: 'LIQUIDEZ_INSUFICIENTE' }, 409));
+    const b = setup();
+    act(() => b.result.current.setAmount('100'));
+    await act(async () => b.result.current.gerarCotacao());
+    await act(async () => b.result.current.confirmar());
+    await flush();
+    expect(b.result.current.erro?.tipo).toBe('sem_liquidez');
+    expect(b.result.current.build).toBeNull();
+    expect(b.result.current.txHash).toBeNull();
+  });
+
   it('409 SWAP_EM_CONFERENCIA: bloqueio próprio, mantém a cotação', async () => {
     fetchMock.mockResolvedValueOnce(json(BUILD)).mockResolvedValueOnce(json({ error: 'x', code: 'SWAP_EM_CONFERENCIA' }, 409));
     const { result } = setup();
