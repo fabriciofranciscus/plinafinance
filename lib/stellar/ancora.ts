@@ -54,6 +54,8 @@ const PAGINA = 200;
 const MAX_PAGINAS = 50;
 const INTERVALO_MS = 5_000;
 const FOLGA_SEC = 10;
+/** Folga antes do `desde` (criação do claim) na busca de âncora existente (S3 do Argus). */
+const FOLGA_DESDE_MS = 60 * 60 * 1000;
 
 type Relogio = { agora: () => number; dormir: (ms: number) => Promise<void> };
 const REAL: Relogio = { agora: () => Date.now(), dormir: (ms) => new Promise((r) => setTimeout(r, ms)) };
@@ -79,11 +81,23 @@ type TxRec = {
 };
 type PaginaTx = { records: TxRec[]; next(): Promise<PaginaTx> };
 
-/** Âncora já feita para este hash, ou `null` depois de ler o histórico todo. */
+/**
+ * Âncora já feita para este hash, ou `null`. Com `desde` (criação do claim),
+ * lê as txs do distributor em ordem decrescente e PARA na primeira anterior a
+ * `desde − 1 h` (S3 do Argus): o custo não cresce com o histórico. Sem `desde`,
+ * lê até 10.000 txs e, passando disso, ANCORA_HISTORICO_EXCEDE_LIMITE.
+ */
 export async function buscarAncora(
   sha256Hex: string,
+  opts?: { desde?: Date },
 ): Promise<{ txHash: string; ledgerCloseTime: string } | null> {
   exigirHash(sha256Hex);
+  let corte: number | null = null;
+  if (opts?.desde !== undefined) {
+    const t = opts.desde instanceof Date ? opts.desde.getTime() : NaN;
+    if (!Number.isFinite(t)) throw new Error('buscarAncora: desde inválido');
+    corte = t - FOLGA_DESDE_MS;
+  }
   const dist = distributorSigner().publicKey();
   const memoB64 = Buffer.from(sha256Hex, 'hex').toString('base64');
   const achadas: TxRec[] = [];
@@ -93,9 +107,10 @@ export async function buscarAncora(
     .order('desc')
     .limit(PAGINA)
     .call()) as unknown as PaginaTx;
-  for (let n = 1; pagina.records.length > 0; n++) {
-    if (n > MAX_PAGINAS) throw new AncoraError('ANCORA_HISTORICO_EXCEDE_LIMITE');
+  ler: for (let n = 1; pagina.records.length > 0; n++) {
+    if (corte === null && n > MAX_PAGINAS) throw new AncoraError('ANCORA_HISTORICO_EXCEDE_LIMITE');
     for (const tx of pagina.records) {
+      if (corte !== null && Date.parse(tx.created_at) < corte) break ler;
       if (tx.successful && tx.source_account === dist && tx.memo_type === 'hash' && tx.memo === memoB64) {
         achadas.push(tx);
       }
@@ -111,9 +126,11 @@ export async function buscarAncora(
 export async function ancorarSha256(input: {
   sha256Hex: string;
   contexto: AncoraContexto;
+  /** Criação do claim (S3): limita a busca de âncora existente. Recomendado. */
+  desde?: Date;
 }): Promise<{ txHash: string; reutilizada: boolean; ledgerCloseTime: string }> {
   exigirHash(input.sha256Hex);
-  const existente = await buscarAncora(input.sha256Hex);
+  const existente = await buscarAncora(input.sha256Hex, { desde: input.desde });
   if (existente) return { ...existente, reutilizada: true };
 
   const signer = distributorSigner();
