@@ -117,7 +117,8 @@ describe('caixa do NAV vem do razão', () => {
     const navAntes = navPorTokenAsDecimal([cota], await caixaParaNav(r.client as never), { circulante: '100000', tesouraria: '0' });
     const q = D(40000);
     await registrarMovimentoFundo(r.client as never, { tipo: 'RESGATE_PAGO', valorBrl: q.mul(navAntes), tokens: q, chave: 'resgate:xdr2' });
-    // tokens voltam ao distributor (tesouraria ao par) em vez de serem queimados
+    // tokens voltam ao distributor em vez de serem queimados: o caixa pago saiu de A
+    // mas o token continua em N (posição da Plina) — por isso a queima (D2) é necessária
     const navSemBurn = navPorTokenAsDecimal([cota], await caixaParaNav(r.client as never), { circulante: '60000', tesouraria: '40000' });
     expect(navSemBurn.lt(navAntes)).toBe(true);
   });

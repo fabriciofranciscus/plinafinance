@@ -37,7 +37,8 @@ export type NavIndisponivelMotivo =
   | 'LEDGER_LEITURA_FALHOU'
   | 'SUBORDINADA_CIRCULANDO'
   | 'EMISSAO_PENDENTE'
-  | 'NAV_NAO_POSITIVO';
+  | 'NAV_NAO_POSITIVO'
+  | 'SWAP_EM_VOO';
 
 export class NavIndisponivelError extends Error {
   readonly code = 'LEDGER_UNAVAILABLE' as const;
@@ -111,8 +112,33 @@ async function exigirSemEmissaoEmVoo(): Promise<void> {
  *
  * Falha de leitura nunca é cacheada: a próxima chamada tenta de novo.
  */
+/**
+ * Swap em voo (N1, Atlas/Consuelo O4): um quote de SWAP com a XDR reservada (`submitXdrHash`) e ainda
+ * sem `consumedAt` pode já ter emitido o token na chain sem a escrituração no banco; o supply do ledger
+ * tem +q e o caixa do fundo ainda não tem +V, e o NAV cairia (ex.: R$ 100 mil na chain sem escrituração
+ * → NAV −9%). Fail-closed: sem NAV até a escrituração (ou a reserva ser liberada). Consulta o banco a
+ * cada chamada (não passa pelo cache) e falha de leitura também fecha. Só quote de swap (`plinarfAmount`).
+ */
+async function exigirSemSwapEmVoo(): Promise<void> {
+  let emVooRow: { id: string } | null;
+  try {
+    emVooRow = await db.quote.findFirst({
+      where: { submitXdrHash: { not: null }, consumedAt: null, plinarfAmount: { not: null } },
+      select: { id: true },
+    });
+  } catch (err) {
+    console.error('[nav-supply] leitura dos swaps em voo falhou', extractSafeError(err));
+    throw new NavIndisponivelError('LEDGER_LEITURA_FALHOU', { cause: err });
+  }
+  if (emVooRow) throw new NavIndisponivelError('SWAP_EM_VOO');
+}
+
 export async function lerSupplyDoNav(opts: { fresh?: boolean } = {}): Promise<SupplyDoNav> {
+  // Dois gates fail-closed (cada um consulta o banco a cada chamada, fora do cache): emissão de cota em voo
+  // (E1-4: TentativaEmissao PENDENTE/CONFIRMADA sem aplicadaEm) e swap de subscrição em voo (N1: Quote
+  // reservado e sem consumedAt). Qualquer um fecha o NAV.
   await exigirSemEmissaoEmVoo();
+  await exigirSemSwapEmVoo();
   if (!opts.fresh) {
     if (cache && Date.now() < cache.expiraEm) return aplicarTravaD3(cache.value);
     if (emVoo) return aplicarTravaD3(await emVoo);

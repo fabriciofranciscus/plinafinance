@@ -13,6 +13,7 @@ vi.mock('@/lib/db', () => ({
   db: {
     parametrosPool: { findUnique: m.parametros },
     tentativaEmissao: { findFirst: async () => null },
+    quote: { findFirst: async () => null },
     cota: { findMany: m.cotas },
     realizacaoCaminho: { findMany: m.realizacoes },
     movimentoFundo: { aggregate: async () => ({ _sum: { deltaCaixa: null } }), createMany: async () => ({ count: 1 }) },
@@ -111,5 +112,27 @@ describe('GET /api/pool/summary', () => {
     for (let i = 0; i < 25; i++) calls.push((await GET(req('10.9.9.9'))).status);
     expect(calls.filter((s) => s === 429).length).toBeGreaterThan(0);
     expect(calls[0]).toBe(200);
+  });
+
+  it('NAV do summary é o mesmo com a tesouraria legada no distributor ou movida para a posição da Plina', async () => {
+    // 80.000 emitidos; antes: 60.000 circulante + 20.000 no distributor.
+    m.fetchSupplyDasClasses.mockResolvedValue({
+      senior: supply('PLINARF', '60000', '20000'),
+      subordinada: supply('PLINARFB', '0'),
+    });
+    const a = (await (await GET(req('10.7.7.1'))).json()).data;
+
+    resetNavSupplyCache();
+    // depois: os 20.000 foram para a conta de posição da Plina (circulante), distributor zerado.
+    m.fetchSupplyDasClasses.mockResolvedValue({
+      senior: supply('PLINARF', '80000', '0'),
+      subordinada: supply('PLINARFB', '0'),
+    });
+    const b = (await (await GET(req('10.7.7.2'))).json()).data;
+
+    expect(a.navPorToken).toBeCloseTo(1, 6);
+    expect(b.navPorToken).toBe(a.navPorToken);
+    expect(b.navAtribuivel).toBe(a.navAtribuivel);
+    expect(a.navAtribuivel).toBe(a.navTotal); // sem dedução da tesouraria
   });
 });

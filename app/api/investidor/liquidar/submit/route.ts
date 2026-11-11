@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { submitLiquidacao } from '@/lib/services/liquidacao';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { navUnavailableResponse } from '@/lib/api/nav-unavailable';
+import { internalErrorResponse } from '@/lib/api/internal-error';
 import { parseBody } from '@/lib/http/parse-body';
 import {
   stellarPubkey,
@@ -55,9 +56,6 @@ export const POST = withAuth(async (req, { user }) => {
   } catch (err) {
     const indisponivel = navUnavailableResponse(err, 'liquidar:submit');
     if (indisponivel) return indisponivel;
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'unknown' },
-      { status: 500 },
-    );
+    return internalErrorResponse(err, 'liquidar:submit');
   }
 });
