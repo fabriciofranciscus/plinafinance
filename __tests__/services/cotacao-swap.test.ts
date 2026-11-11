@@ -7,13 +7,14 @@ const m = vi.hoisted(() => ({
   quoteUpdateMany: vi.fn(),
   quoteCreate: vi.fn(),
   orderUpdateMany: vi.fn(),
+  tentativaEmFlight: vi.fn(),
 }));
 vi.mock('@/lib/stellar/supply', () => ({ fetchSupplyDasClasses: m.fetchSupplyDasClasses }));
 vi.mock('@/lib/db', () => {
   const tx = { quote: { create: m.quoteCreate }, onRampOrder: { updateMany: m.orderUpdateMany } };
   return {
     db: {
-      tentativaEmissao: { findFirst: async () => null }, // gate de emissão em voo (E1-4)
+      tentativaEmissao: { findFirst: m.tentativaEmFlight }, // gate de emissão em voo (E1-4)
       cota: { findMany: m.cotas },
       movimentoFundo: { aggregate: async () => ({ _sum: { deltaCaixa: null } }) },
       quote: { updateMany: m.quoteUpdateMany, findFirst: async () => null }, // findFirst: nenhum swap em voo
@@ -43,6 +44,7 @@ beforeEach(() => {
   // A = 85.000 (cota), 80.000 emitidos → NAV 1,0625
   m.cotas.mockReset().mockResolvedValue([{ valorCarta: '100000', desagioAquisicao: '0.15', tokensEmitidos: '80000', status: 'DISPONIVEL' }]);
   m.fetchSupplyDasClasses.mockReset().mockResolvedValue({ senior: supply('80000'), subordinada: supply('0') });
+  m.tentativaEmFlight.mockReset().mockResolvedValue(null);
   m.quoteUpdateMany.mockReset().mockResolvedValue({ count: 1 });
   m.quoteCreate.mockReset().mockResolvedValue({});
   m.orderUpdateMany.mockReset().mockResolvedValue({ count: 1 });
@@ -118,6 +120,13 @@ describe('renovarCotacaoParaSwap (recotar)', () => {
   it('sem NAV (ledger fora / PLINARFB circulando) → NavIndisponivelError e nada é gravado', async () => {
     m.fetchSupplyDasClasses.mockResolvedValue({ senior: supply('80000'), subordinada: supply('1') });
     await expect(renovarCotacaoParaSwap(quote(), AGORA)).rejects.toBeInstanceOf(NavIndisponivelError);
+    expect(m.quoteUpdateMany).not.toHaveBeenCalled();
+    expect(m.quoteCreate).not.toHaveBeenCalled();
+  });
+
+  it('E1-4 × N1: com uma emissão em voo o recotar falha fechado (EMISSAO_PENDENTE), sem tocar no quote', async () => {
+    m.tentativaEmFlight.mockResolvedValue({ memoHash: 'abc' });
+    await expect(renovarCotacaoParaSwap(quote(), AGORA)).rejects.toMatchObject({ name: 'NavIndisponivelError', motivo: 'EMISSAO_PENDENTE' });
     expect(m.quoteUpdateMany).not.toHaveBeenCalled();
     expect(m.quoteCreate).not.toHaveBeenCalled();
   });

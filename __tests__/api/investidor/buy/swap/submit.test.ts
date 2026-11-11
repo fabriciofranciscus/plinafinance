@@ -111,6 +111,7 @@ process.env.STELLAR_ISSUER_PUBLIC = ISSUER.publicKey();
 process.env.STELLAR_DISTRIBUTOR_PUBLIC = DIST_PK;
 
 import { POST } from '@/app/api/investidor/buy/swap/submit/route';
+import { ApiError } from '@/lib/api/errors';
 
 function req(body: object): Request {
   return new Request('http://x/submit', {
@@ -620,3 +621,87 @@ describe('POST /api/investidor/buy/swap/submit', () => {
   });
 });
 
+
+// ── QA do N1 (Vera): falha do Horizon, retry, investidor inelegível e erro interno ──
+describe('POST /api/investidor/buy/swap/submit — falhas e inelegibilidade (QA N1)', () => {
+  const agoraSec = () => Math.floor(Date.now() / 1000);
+  function txJanela(maxTimeSec: number) {
+    const t = new TransactionBuilder(new Account(USER_PK, '1'), { fee: '100', networkPassphrase })
+      .addOperation(Operation.payment({ source: USER_PK, destination: DIST_PK, asset: Asset.native(), amount: '1' }))
+      .setTimebounds(0, maxTimeSec)
+      .build();
+    t.sign(USER);
+    return { xdr: t.toXDR(), hash: createHash('sha256').update(t.hash()).digest('hex') };
+  }
+  const erroHorizon = (codes: unknown) =>
+    Object.assign(new Error('Request failed with status code 400'), {
+      response: {
+        data: {
+          status: 400,
+          title: 'Transaction Failed',
+          extras: { result_codes: codes, envelope_xdr: 'ENVELOPE_COM_A_ASSINATURA_DO_ISSUER' },
+        },
+      },
+    });
+
+  it('falha do submit (op_no_trust): 500 com os result_codes, SEM vazar o envelope co-assinado, quote NÃO consumido', async () => {
+    const { xdr } = txJanela(agoraSec() + 100);
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    submitWithPrivySignature.mockRejectedValueOnce(erroHorizon({ transaction: 'tx_failed', operations: ['op_no_trust'] }));
+    const r = await POST(req({ quoteId: 'q_1', signedXdr: xdr }));
+    expect(r.status).toBe(500);
+    const texto = await r.text();
+    expect(texto).toContain('op_no_trust');
+    expect(texto).not.toContain('ENVELOPE_COM_A_ASSINATURA_DO_ISSUER');
+    expect(texto).not.toContain(ISSUER_SIG);
+    expect(investidorUpdate).not.toHaveBeenCalled();
+    expect(eventoAuditCreate).not.toHaveBeenCalled();
+    expect(movimentoCreateMany).not.toHaveBeenCalled();
+  });
+
+  it('falha ambígua do submit e retry com a MESMA XDR (ainda no prazo): consulta a chain e escritura UMA vez', async () => {
+    const { xdr, hash } = txJanela(agoraSec() + 100);
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    submitWithPrivySignature.mockRejectedValueOnce(new Error('timeout'));
+    expect((await POST(req({ quoteId: 'q_1', signedXdr: xdr }))).status).toBe(500);
+
+    quoteUpdateMany.mockResolvedValueOnce({ count: 0 });
+    quoteFindUnique
+      .mockResolvedValueOnce(baseQuote({ submitXdrHash: hash }))
+      .mockResolvedValueOnce({ submitXdrHash: hash, consumedTxHash: null, consumedAt: null });
+    fetchTransactionByHash.mockResolvedValueOnce(null);
+    const r2 = await POST(req({ quoteId: 'q_1', signedXdr: xdr }));
+    expect(r2.status).toBe(200);
+    expect(fetchTransactionByHash).toHaveBeenCalled();
+    expect(submitWithPrivySignature).toHaveBeenCalledTimes(2);
+    expect(investidorUpdate).toHaveBeenCalledTimes(1);
+    expect(movimentoCreateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('investidor inelegível (KYC pendente): ApiError 403 com a mensagem de negócio; a Plina não assina nem reserva', async () => {
+    const { xdr } = txJanela(agoraSec() + 100);
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    assertElegivelParaTrustline.mockRejectedValueOnce(new ApiError('FORBIDDEN', 403, 'KYC pendente — trustline negada (whitepaper §6.5).'));
+    const r = await POST(req({ quoteId: 'q_1', signedXdr: xdr }));
+    expect(r.status).toBe(403);
+    const corpo = await r.json();
+    expect(corpo.code).toBe('FORBIDDEN');
+    expect(corpo.error).toContain('KYC pendente');
+    expect(preSignWithSigner).not.toHaveBeenCalled();
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+    expect(quoteUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('erro interno (banco/config) NÃO devolve a mensagem crua ao cliente (L1-S5)', async () => {
+    const { xdr } = txJanela(agoraSec() + 100);
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    quoteUpdateMany.mockRejectedValueOnce(
+      new Error("Invalid `prisma.quote.updateMany()` invocation in /srv/app/route.ts:229 Can't reach database server at postgresql://plina:SEGREDO@db.interno:5432/plina"),
+    );
+    const r = await POST(req({ quoteId: 'q_1', signedXdr: xdr }));
+    const texto = await r.text();
+    expect(r.status).toBe(500);
+    expect(texto).not.toContain('SEGREDO');
+    expect(texto).not.toContain('/srv/app');
+  });
+});
