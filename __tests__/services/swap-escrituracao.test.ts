@@ -193,7 +193,7 @@ describe('reconciliarSwapsOrfaos — reserva sem XDR guardado (só o hash)', () 
 describe('reconciliarSwapsOrfaos — vigia de 24 h dos hashes liberados por tempo', () => {
   const vigiada = (over: Record<string, unknown> = {}) => ({
     id: 'q_v', investidorId: 'inv_1', fromAmount: D('150'), fee: '50', classe: 'SENIOR',
-    plinarfAmount: D('99.5'), liberadaTxHash: 'th_lib', consumedAt: null, consumedTxHash: null,
+    plinarfAmount: D('99.5'), liberadaTxHash: 'th_lib', consumedAt: null, consumedTxHash: null, conflitoAlertadoEm: null,
     onRampOrder: { id: 'ord_1' }, ...over,
   });
 
@@ -230,12 +230,26 @@ describe('reconciliarSwapsOrfaos — vigia de 24 h dos hashes liberados por temp
     expect(r.vigiaEscrituradas).toBe(0);
   });
 
-  it('a liberada entrou MAS o quote já foi consumido por OUTRA tx: conflito (emissão dupla), alerta e NÃO escritura', async () => {
+  it('a liberada entrou MAS o quote já foi consumido por OUTRA tx: conflito NOVO (emissão dupla), marca o alerta, NÃO escritura', async () => {
     orfas([], [vigiada({ consumedAt: new Date(), consumedTxHash: 'outra' })]);
     m.fetchTx.mockResolvedValue({ hash: 'th_lib', successful: true });
     const r = await reconciliarSwapsOrfaos({ agora: AGORA });
     expect(r.vigiaConflitos).toBe(1);
+    expect(r.conflitoQuoteIds).toEqual(['q_v']);
+    expect(m.updateMany).toHaveBeenCalledWith({
+      where: { id: 'q_v', conflitoAlertadoEm: null },
+      data: { conflitoAlertadoEm: expect.any(Date) },
+    });
     expect(m.investidorUpdate).not.toHaveBeenCalled();
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('ALERTA vigia'), 'q_v');
+  });
+
+  it('conflito JÁ alertado: não conta de novo nem repete o alerta (dedupe, senão 1 e-mail por varredura por 24 h)', async () => {
+    orfas([], [vigiada({ consumedAt: new Date(), consumedTxHash: 'outra', conflitoAlertadoEm: new Date() })]);
+    m.fetchTx.mockResolvedValue({ hash: 'th_lib', successful: true });
+    const r = await reconciliarSwapsOrfaos({ agora: AGORA });
+    expect(r.vigiaConflitos).toBe(0);
+    expect(r.conflitoQuoteIds).toEqual([]);
+    expect(m.updateMany).not.toHaveBeenCalled();
   });
 });

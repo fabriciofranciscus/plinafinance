@@ -131,6 +131,8 @@ export interface ResultadoReconciliacao {
   vigiaEscrituradas: number;
   /** Vigia: tx liberada por tempo entrou, mas o quote já foi consumido por OUTRA tx (emissão dupla). */
   vigiaConflitos: number;
+  /** Ids (internos) dos quotes com conflito NOVO (ainda sem alerta): para o e-mail; a rota não os devolve. */
+  conflitoQuoteIds: string[];
   erros: number;
 }
 
@@ -168,7 +170,7 @@ export async function reconciliarSwapsOrfaos(
   const agoraSec = Math.floor(agora / 1000);
   const r: ResultadoReconciliacao = {
     escriturados: 0, liberados: 0, aguardando: 0, vencidasSemProva: 0, semHash: 0,
-    vigiaEscrituradas: 0, vigiaConflitos: 0, erros: 0,
+    vigiaEscrituradas: 0, vigiaConflitos: 0, conflitoQuoteIds: [], erros: 0,
   };
 
   const orfas = (await db.quote.findMany({
@@ -254,7 +256,7 @@ export async function reconciliarSwapsOrfaos(
     },
     select: {
       id: true, investidorId: true, fromAmount: true, fee: true, classe: true, plinarfAmount: true,
-      liberadaTxHash: true, consumedAt: true, consumedTxHash: true,
+      liberadaTxHash: true, consumedAt: true, consumedTxHash: true, conflitoAlertadoEm: true,
       onRampOrder: { select: { id: true } },
     },
   });
@@ -265,9 +267,14 @@ export async function reconciliarSwapsOrfaos(
       const onchain = await fetchTransactionByHash(v.liberadaTxHash);
       if (!onchain?.successful) continue;
       if (v.consumedAt) {
-        // O quote já foi consumido por OUTRA tx e a liberada também entrou: emissão dupla. Alerta, sem escriturar.
-        console.error('[swap-reconciliacao] ALERTA vigia: tx liberada por tempo entrou e o quote já tem outra tx', v.id);
-        r.vigiaConflitos++;
+        // O quote já foi consumido por OUTRA tx e a liberada também entrou: emissão dupla. Sem escriturar. O
+        // alerta sai UMA vez por quote (dedupe por conflitoAlertadoEm), senão a cada varredura por 24 h.
+        if (!v.conflitoAlertadoEm) {
+          console.error('[swap-reconciliacao] ALERTA vigia: tx liberada por tempo entrou e o quote já tem outra tx', v.id);
+          await db.quote.updateMany({ where: { id: v.id, conflitoAlertadoEm: null }, data: { conflitoAlertadoEm: new Date() } });
+          r.vigiaConflitos++;
+          r.conflitoQuoteIds.push(v.id);
+        }
         continue;
       }
       const ok = await escriturarOrfa(

@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
-const m = vi.hoisted(() => ({ reconciliar: vi.fn(), consume: vi.fn() }));
+const m = vi.hoisted(() => ({ reconciliar: vi.fn(), consume: vi.fn(), alerta: vi.fn() }));
+vi.mock('@/lib/services/alerta-ops', () => ({ enviarAlertaOps: m.alerta }));
 vi.mock('@/lib/services/swap-escrituracao', () => ({ reconciliarSwapsOrfaos: m.reconciliar }));
 vi.mock('@/lib/rate-limit/config', () => ({
   publicLimiter: { consume: m.consume },
@@ -12,7 +13,7 @@ import { GET } from '@/app/api/ops/reconciliar-subscricoes/route';
 const SECRET = 'segredo-de-teste-ops';
 const RESULTADO = {
   escriturados: 1, liberados: 1, aguardando: 0, vencidasSemProva: 0, semHash: 0,
-  vigiaEscrituradas: 0, vigiaConflitos: 0, erros: 0,
+  vigiaEscrituradas: 0, vigiaConflitos: 0, conflitoQuoteIds: [] as string[], erros: 0,
 };
 const req = (auth?: string) =>
   new Request('http://x/api/ops/reconciliar-subscricoes', { headers: auth ? { authorization: auth } : {} });
@@ -22,6 +23,7 @@ beforeEach(() => {
   process.env.OPS_CRON_SECRET = SECRET;
   m.reconciliar.mockReset().mockResolvedValue(RESULTADO);
   m.consume.mockReset().mockResolvedValue(true);
+  m.alerta.mockReset().mockResolvedValue(true);
 });
 afterEach(() => {
   delete process.env.OPS_CRON_SECRET;
@@ -31,15 +33,29 @@ describe('GET /api/ops/reconciliar-subscricoes', () => {
   it('com o Bearer certo → 200 e só as contagens', async () => {
     const r = await GET(req(`Bearer ${SECRET}`));
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ ...RESULTADO, alerta: false });
+    const { conflitoQuoteIds: _ids, ...contagens } = RESULTADO;
+    expect(await r.json()).toEqual({ ...contagens, alerta: false, alertaEnviado: false });
+    expect(m.alerta).not.toHaveBeenCalled(); // sem conflito, sem e-mail
     expect(m.reconciliar).toHaveBeenCalledOnce();
   });
 
-  it('vigiaConflitos > 0 (emissão dupla) liga o alerta imediato na resposta', async () => {
-    m.reconciliar.mockResolvedValue({ ...RESULTADO, vigiaConflitos: 1 });
+  it('conflito novo na vigia (emissão dupla): manda o e-mail de alerta com os ids e liga alerta na resposta (sem vazar os ids)', async () => {
+    m.reconciliar.mockResolvedValue({ ...RESULTADO, vigiaConflitos: 1, conflitoQuoteIds: ['q_dup'] });
     const body = await (await GET(req(`Bearer ${SECRET}`))).json();
-    expect(body.alerta).toBe(true);
-    expect(body.vigiaConflitos).toBe(1);
+    expect(body).toMatchObject({ alerta: true, alertaEnviado: true, vigiaConflitos: 1 });
+    expect(body.conflitoQuoteIds).toBeUndefined(); // só contagens na resposta
+    expect(m.alerta).toHaveBeenCalledOnce();
+    const mail = m.alerta.mock.calls[0][0];
+    expect(mail.assunto).toMatch(/emissão dupla/);
+    expect(mail.linhas.join('\n')).toContain('quote: q_dup');
+  });
+
+  it('o e-mail de alerta falhar (sem SMTP) não derruba a rota: alerta true, alertaEnviado false', async () => {
+    m.reconciliar.mockResolvedValue({ ...RESULTADO, vigiaConflitos: 1, conflitoQuoteIds: ['q_dup'] });
+    m.alerta.mockResolvedValue(false);
+    const r = await GET(req(`Bearer ${SECRET}`));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ alerta: true, alertaEnviado: false });
   });
 
   it('sem header, com secret errado, sem o prefixo Bearer ou de tamanho diferente → 404, sem reconciliar', async () => {
