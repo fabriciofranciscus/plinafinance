@@ -6,7 +6,7 @@ import { expect, test } from '@playwright/test';
  * Cobrimos somente endpoints sem side effect on-chain pra manter os
  * testes rápidos e idempotentes:
  *   - POST /api/vender/simular — só cálculo de faixa indicativa.
- *   - POST /api/comprar/reservar com body inválido — valida contract.
+ *   - POST /api/comprar/reserva com body inválido — valida contract.
  *
  * Os endpoints `lead` (vendedor + comprador) escrevem on-chain (Memo.hash
  * de consentimento) e ficam fora desse spec pra não consumir XLM de
@@ -56,7 +56,7 @@ test.describe('vender · simulador', () => {
 
 test.describe('comprar · reservar contract', () => {
   test('exige autenticação (sem token Privy → 401)', async ({ request }) => {
-    const res = await request.post('/api/comprar/reservar', {
+    const res = await request.post('/api/comprar/reserva', {
       data: { cotaId: 'qualquer', leadCompradorId: 'alheio' },
     });
     expect(res.status()).toBe(401);
