@@ -51,9 +51,9 @@ export const GLOSSARY: Record<string, string> = {
   distribute:
     'Pagamento do distributor pra wallet do investidor. Após authorize, o issuer libera; o distributor paga.',
   TESOURO:
-    'Token Stellar emitido pela Etherfuse representando Tesouro Direto brasileiro. Bridge intermediário entre BRL e PLINA-RF no fluxo de produção.',
-  'paridade NAV':
-    'Razão 1:1 entre PLINA-RF e o valor patrimonial líquido (NAV) do FIDC. No POC, mantida sem revalorização; em produção, NAV é apurado diariamente.',
+    'Token Stellar emitido pela Etherfuse lastreado em títulos públicos federais brasileiros (segundo a Etherfuse). Bridge intermediário entre BRL e PLINA-RF no fluxo de produção.',
+  'valor por token':
+    'Valor do pool dividido pelos tokens emitidos. Em rede de testes, calculado pela Plina com base nas cotas e no valor recebido registrados.',
   clawback:
     'AUTH_CLAWBACK_ENABLED. Permite o issuer revogar tokens em hipóteses limitadas (judicial, sanção, fraude, erro). Diferencial institucional documentado no whitepaper §6.5.',
   'swap atômico':

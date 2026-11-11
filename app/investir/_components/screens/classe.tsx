@@ -7,8 +7,8 @@
  * use-investir-flow → /api/investidor/quote (campo `classe`) → swap build/submit
  * picka o asset code (PLINARF Sênior / PLINARFB Subordinada).
  *
- * Disclaimer obrigatório "sem promessa de rentabilidade" — números de yield
- * são indicativos do mockup (PRD §M5.1), não compromisso contratual.
+ * Disclaimer obrigatório: simulação em rede de testes, sem oferta nem promessa
+ * de retorno. A tela não exibe meta de retorno de nenhuma subclasse.
  */
 
 import { useState } from 'react';
@@ -23,7 +23,6 @@ interface ClasseScreenProps {
 const OPCOES: Array<{
   id: ClasseEscolhida;
   titulo: string;
-  yieldAlvo: string;
   posicaoWaterfall: string;
   risco: string;
   descricao: string;
@@ -31,20 +30,18 @@ const OPCOES: Array<{
   {
     id: 'SENIOR',
     titulo: 'Sênior · PLINARF',
-    yieldAlvo: 'CDI + x%',
     posicaoWaterfall: '1ª camada após despesas',
     risco: 'Menor',
     descricao:
-      'Recebe yield prometido antes da camada Subordinada. Inadimplência é absorvida primeiro pela Subordinada — só atinge Sênior em estresse severo. Padrão institucional brasileiro.',
+      'Tem prioridade sobre a Subordinada nos pagamentos. Perdas atingem primeiro a Subordinada.',
   },
   {
     id: 'SUBORDINADA',
     titulo: 'Subordinada · PLINARFB',
-    yieldAlvo: 'Sobra residual',
-    posicaoWaterfall: 'Última camada (skin-in-the-game)',
+    posicaoWaterfall: 'Última camada',
     risco: 'Maior',
     descricao:
-      'Recebe a sobra após despesas e yield Sênior. Primeira camada a absorver inadimplência. Compartilhada com Plina como skin-in-the-game — alinhamento de incentivos.',
+      'Recebe depois da Sênior. É a primeira a absorver perdas.',
   },
 ];
 
@@ -56,15 +53,15 @@ export function ClasseScreen({ initial = 'SENIOR', onContinue }: ClasseScreenPro
       <TestnetBanner />
 
       <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
-        03 // Classe · PLINA-RF
+        03 // Subclasse · PLINA-RF
       </p>
       <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">
-        Escolha sua classe no FIDC.
+        Escolha a subclasse (simulação em rede de testes).
       </h1>
       <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
-        O PLINA-RF é estruturado em duas classes com tratamento distinto no
-        waterfall. A escolha define o asset code emitido na sua wallet e a
-        ordem de recebimento de yield e absorção de perdas.
+        O modelo prevê duas subclasses, Sênior e Subordinada, com ordens
+        diferentes de recebimento e de absorção de perdas. A escolha define o
+        asset code emitido na sua wallet de teste.
       </p>
 
       <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -91,15 +88,11 @@ export function ClasseScreen({ initial = 'SENIOR', onContinue }: ClasseScreenPro
 
               <dl className="mt-5 space-y-2 font-text text-sm">
                 <div className="flex justify-between gap-3">
-                  <dt className="text-base/55">Yield alvo</dt>
-                  <dd className="font-mono text-base text-right">{opt.yieldAlvo}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
                   <dt className="text-base/55">Waterfall</dt>
                   <dd className="text-base text-right">{opt.posicaoWaterfall}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-base/55">Risco</dt>
+                  <dt className="text-base/55">Risco relativo</dt>
                   <dd className="text-base text-right">{opt.risco}</dd>
                 </div>
               </dl>
@@ -113,9 +106,11 @@ export function ClasseScreen({ initial = 'SENIOR', onContinue }: ClasseScreenPro
       </div>
 
       <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/55 mt-10 max-w-prose leading-relaxed">
-        Disclaimer · yield-alvo é indicativo e não representa promessa de
-        rentabilidade. Whitepaper §6.5 · 4 hipóteses de clawback institucional
-        aplicáveis a ambas as classes.
+        Simulação em rede de testes, sem valor financeiro real. Esta tela não é
+        oferta nem promessa de retorno ou de rentabilidade; uma estrutura
+        institucional é fase futura, sujeita a aprovação regulatória.
+        Whitepaper §6.5 · 4 hipóteses de clawback institucional aplicáveis a
+        ambas as subclasses.
       </p>
 
       <div className="mt-10">

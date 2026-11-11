@@ -151,20 +151,20 @@ export default function PainelPage() {
             <Card
               href="/investir"
               eyebrow="01"
-              title="Investir"
-              desc="Alocar capital no pool PLINA-RF."
+              title="Investir (testnet)"
+              desc="Simular a entrada em rede de testes, sem valor real."
             />
             <Card
               href="/vender"
               eyebrow="02"
               title="Vender cota"
-              desc="Antecipar liquidez de uma cota contemplada."
+              desc="Conversar sobre a cessão de uma cota contemplada, sujeita à anuência da administradora."
             />
             <Card
               href="/comprar"
               eyebrow="03"
               title="Comprar cota"
-              desc="Adquirir uma cota com deságio."
+              desc="Simular a reserva de uma cota (testnet)."
             />
           </div>
         </div>

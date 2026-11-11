@@ -348,7 +348,7 @@ function WizardInner() {
             Venda sua cota contemplada
           </h1>
           <p className="font-text text-lg text-base/70 mt-3">
-            Pix em até 48h. Deságio transparente. Processo 100% digital.
+            Proposta com deságio explicado, após a análise da cota. Simulação em rede de testes.
           </p>
 
           <div className="mt-12">
@@ -435,9 +435,10 @@ function WizardInner() {
           </div>
 
           <p className="font-text text-sm text-base/60 mt-8 leading-relaxed">
-            Depois do envio, nossa mesa faz a validação jurídica, gera a oferta
-            firme e conduz a cessão digital. Você acompanha cada etapa, com Pix
-            em até 48h após a assinatura, por um link auditável.
+            Depois do envio, analisamos a cota, preparamos uma proposta e
+            conduzimos a cessão, que depende da anuência da administradora. Você
+            acompanha cada etapa por um link. Em rede de testes, nada é pago de
+            verdade.
           </p>
         </div>
       </main>
@@ -1275,8 +1276,8 @@ function PassoEnvioCota(props: {
         )}
       </div>
       <p className="font-text text-sm text-base/70 mt-1">
-        Informe sua cota para estimarmos o valor líquido. A oferta firme sai
-        após análise documental.
+        Informe sua cota para estimarmos o valor líquido. A proposta sai após a
+        análise documental (simulação em rede de testes).
       </p>
 
       <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">

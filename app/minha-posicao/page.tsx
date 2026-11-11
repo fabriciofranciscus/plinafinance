@@ -75,11 +75,11 @@ const TIPO_BEM_LABEL: Record<string, string> = {
 const ACAO_LABEL: Record<string, string> = {
   COTA_INCORPORADA: 'Cota incorporada ao pool',
   TOKEN_EMITIDO: 'PLINA-RF emitido',
-  INVESTIDOR_ONBOARDED: 'Onboarding institucional concluído',
+  INVESTIDOR_ONBOARDED: 'Cadastro concluído',
   TRUSTLINE_AUTORIZADA: 'Trustline autorizada pelo issuer',
   TRUSTLINE_REVOGADA: 'Trustline revogada',
   DISTRIBUICAO: 'Aquisição de PLINA-RF',
-  CLAWBACK_EXECUTADO: 'Clawback institucional',
+  CLAWBACK_EXECUTADO: 'Clawback executado',
   COTA_REALIZADA: 'Cota realizada',
   PLINARF_LIQUIDADO: 'Liquidação de PLINA-RF',
 };
@@ -271,21 +271,21 @@ export default function MinhaPosicaoPage() {
       <PageWrap>
         <div className="py-16">
           <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-            Acesso institucional · PLINA-RF
+            Rede de testes · Minha posição
           </p>
           <h1 className="font-title mt-3 text-4xl font-semibold tracking-tight">
-            Sua carteira institucional
+            Sua posição (testnet)
           </h1>
           <p className="font-text mt-4 text-base/80 max-w-2xl leading-relaxed">
-            Esta superfície expõe seu saldo PLINA-RF, sua composição
-            lastreada no pool e a atividade auditável da sua posição.
-            Faça login pra continuar.
+            Esta tela mostra seu saldo do token de demonstração, a composição
+            do pool de demonstração e a atividade da sua posição, tudo em rede
+            de testes e sem valor financeiro real. Faça login para continuar.
           </p>
           <button
             onClick={() => login()}
             className="mt-8 bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors"
           >
-            Entrar com email institucional
+            Entrar com e-mail
           </button>
         </div>
       </PageWrap>
@@ -316,7 +316,7 @@ export default function MinhaPosicaoPage() {
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div>
             <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-              Extrato institucional · {pool?.network ?? 'TESTNET'}
+              Extrato · {pool?.network ?? 'TESTNET'}
             </p>
             <h1 className="font-title mt-3 text-4xl md:text-5xl font-semibold tracking-tight">
               Sua posição
@@ -467,10 +467,10 @@ export default function MinhaPosicaoPage() {
             {!hasPosition && (
               <div className="mt-6 border-l-0 border-t border-light-hairline pt-6">
                 <p className="font-text text-base/70 text-sm leading-relaxed max-w-2xl">
-                  Você ainda não detém PLINA-RF. Cada token representa
-                  R$ 1,00 de NAV em direito creditório brasileiro
-                  contemplado, lastreado pela curva de realização
-                  acompanhada do FIDC.
+                  Você ainda não detém tokens de demonstração. O valor de cada
+                  token é o valor do pool dividido pelos tokens emitidos,
+                  calculado pela Plina em rede de testes, sem valor financeiro
+                  real.
                 </p>
                 <a
                   href="/investir"
@@ -650,7 +650,7 @@ export default function MinhaPosicaoPage() {
             <div className="border-y border-light-hairline divide-y divide-light-hairline">
               <ComplianceRow
                 label="Custodiante"
-                value="Privy embedded wallet · MPC institucional"
+                value="Privy embedded wallet · MPC"
                 detail="Investidor mantém controle via session Privy. Chaves nunca expostas a frontend nem backend Plina."
               />
               <ComplianceRow
@@ -659,24 +659,24 @@ export default function MinhaPosicaoPage() {
                 detail="Trustline autorizada após KYC. Issuer pode revogar autorização e reverter saldos sob política pública linkada no stellar.toml."
               />
               <ComplianceRow
-                label="KYC institucional"
+                label="KYC"
                 value="Aprovado · Etherfuse sandbox (LATAM)"
                 detail="Identidade + documentos + agreements submetidos via API. Em produção, idem em produção Etherfuse."
               />
               <ComplianceRow
                 label="Jurisdição"
                 value="Brasil · POC operado com capital próprio"
-                detail="Sem oferta pública (Lei 11.795/2008). Fase 1 estrutura FIDC formal sob CVM 175 com administrador fiduciário e auditoria big four."
+                detail="Fase 01: operação privada sob a Lei 11.795/2008, em rede de testes. Sem oferta. Uma estrutura institucional é fase futura, sujeita a aprovação regulatória."
               />
             </div>
           </section>
 
-          {/* 3. Composição lastreada */}
+          {/* 3. Composição do pool de demonstração */}
           {pool && pool.cotasCount > 0 && (
             <section className="mb-16">
               <div className="flex items-baseline justify-between mb-4">
                 <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
-                  Composição lastreada · pool consolidado
+                  Composição do pool de demonstração
                 </p>
                 <a
                   href="/pool"
@@ -739,8 +739,9 @@ export default function MinhaPosicaoPage() {
               </div>
               <p className="font-text text-xs text-base/60 mt-3 max-w-2xl">
                 Identificadores das cotas (administradora, número de grupo,
-                titularidade) ficam off-chain sob custódia do gestor do FIDC.
-                On-chain expomos NAV, hash de emissão e endereços públicos.
+                titularidade) ficam fora da rede, sob guarda da Plina. Na rede
+                expomos o valor por token, o hash de emissão e endereços
+                públicos.
               </p>
             </section>
           )}
@@ -774,20 +775,20 @@ export default function MinhaPosicaoPage() {
                 label={hasPosition ? 'Aumentar posição' : 'Adquirir PLINA-RF'}
                 description={
                   hasPosition
-                    ? 'Compre tokens adicionais via Etherfuse + Stellar.'
-                    : 'Onboarding institucional + onramp BRL/PIX → TESOURO → PLINA-RF.'
+                    ? 'Simule a compra de tokens adicionais em rede de testes.'
+                    : 'Cadastro + entrada BRL/Pix (simulada) → TESOURO → token de demonstração.'
                 }
                 href="/investir"
-                cta="Comprar"
+                cta="Simular"
               />
               <NextStep
                 label="Verificar transparência"
-                description="Composição do pool, NAV diário, hashes de emissão. Auditável em tempo real."
+                description="Composição do pool de demonstração, valor por token e hashes de emissão. Verificável no Stellar Expert."
                 href="/pool"
                 cta="Pool público"
               />
               <NextStep
-                label="Política institucional"
+                label="Política de clawback"
                 description="Quatro hipóteses exclusivas de clawback. Linkada no stellar.toml SEP-0001."
                 href="/politica-clawback"
                 cta="Ler política"

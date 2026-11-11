@@ -57,7 +57,7 @@ export function PrivyAppProvider({ children }: { children: ReactNode }) {
           theme: 'light',
           accentColor: '#0EA7C7', // auditable-cyan do brand
           logo: '/icon.svg',
-          landingHeader: 'Acesso institucional Plina',
+          landingHeader: 'Entrar na Plina (testnet)',
         },
       }}
     >

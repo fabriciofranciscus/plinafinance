@@ -20,7 +20,7 @@ type Caminho = 'cotistas' | 'investidores' | 'comprar';
 
 const TABS: { id: Caminho; label: string; href: string }[] = [
   { id: 'cotistas', label: 'Para Cotistas', href: '/vender' },
-  { id: 'investidores', label: 'Para Investidores', href: '/investir' },
+  { id: 'investidores', label: 'Simulação para investidores', href: '/investir' },
   { id: 'comprar', label: 'Comprar Cota', href: '/comprar' },
 ];
 
