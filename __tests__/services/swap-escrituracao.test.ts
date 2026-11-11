@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 
 const m = vi.hoisted(() => ({
   findMany: vi.fn(),
+  resgateFindMany: vi.fn(),
   count: vi.fn(),
   updateMany: vi.fn(),
   fetchTx: vi.fn(),
@@ -11,11 +12,13 @@ const m = vi.hoisted(() => ({
   eventoCreate: vi.fn(),
   movimentoCreateMany: vi.fn(),
   incrementarHolding: vi.fn(),
+  decrementarHolding: vi.fn(),
 }));
 
 vi.mock('@/lib/db', () => {
   const tx = {
     quote: { updateMany: m.updateMany },
+    resgateCotacao: { updateMany: m.updateMany },
     investidor: { update: m.investidorUpdate },
     eventoAudit: { create: m.eventoCreate },
     movimentoFundo: { createMany: m.movimentoCreateMany },
@@ -23,13 +26,14 @@ vi.mock('@/lib/db', () => {
   return {
     db: {
       quote: { findMany: m.findMany, count: m.count, updateMany: m.updateMany },
+      resgateCotacao: { findMany: m.resgateFindMany, updateMany: m.updateMany },
       $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
     },
   };
 });
 vi.mock('@/lib/stellar/transactions', () => ({ fetchTransactionByHash: m.fetchTx }));
 vi.mock('@/lib/stellar/orfa-swap', () => ({ situacaoEnvelopeSwap: m.situacao }));
-vi.mock('@/lib/services/holdings', () => ({ incrementarHolding: m.incrementarHolding }));
+vi.mock('@/lib/services/holdings', () => ({ incrementarHolding: m.incrementarHolding, decrementarHolding: m.decrementarHolding }));
 
 import { VIGIA_LOTE, marcarConflitosAlertados, reconciliarSwapsOrfaos } from '@/lib/services/swap-escrituracao';
 
@@ -55,6 +59,7 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   m.findMany.mockReset().mockResolvedValue([]);
   m.count.mockReset().mockResolvedValue(0);
+  m.resgateFindMany.mockReset().mockResolvedValue([]);
   m.updateMany.mockReset().mockResolvedValue({ count: 1 });
   m.fetchTx.mockReset();
   m.situacao.mockReset();
@@ -62,6 +67,7 @@ beforeEach(() => {
   m.eventoCreate.mockReset().mockResolvedValue({});
   m.movimentoCreateMany.mockReset().mockResolvedValue({ count: 1 });
   m.incrementarHolding.mockReset().mockResolvedValue(undefined);
+  m.decrementarHolding.mockReset().mockResolvedValue(undefined);
 });
 
 describe('reconciliarSwapsOrfaos — prova pela conta do investidor (N1)', () => {
@@ -332,3 +338,69 @@ describe('marcarConflitosAlertados', () => {
     expect(m.updateMany).not.toHaveBeenCalled();
   });
 });
+
+describe('reconciliarSwapsOrfaos — resgates com queima órfãos (E2-6)', () => {
+  const resgate = (over: Record<string, unknown> = {}) => ({
+    id: 'r_1', investidorId: 'inv_1', classe: 'SENIOR', plinarfAmount: D('100'), brlEquivalente: D('100.00'),
+    bridgeAmount: D('85.54'), navPorTokenNaCotacao: D('1'), submitXdrHash: 'xr1', submitXdr: 'XDR_R1', ...over,
+  });
+  const comResgates = (lista: unknown[]) => {
+    orfas([]);
+    m.resgateFindMany.mockResolvedValue(lista);
+  };
+  const resgateUpdates = () => m.updateMany.mock.calls.filter((c) => c[0].where?.id === 'r_1');
+
+  it('ENTROU com sucesso: escritura RESGATE_PAGO (caixa −V, tokens −q) sem o investidor, pelo reconciliador', async () => {
+    comResgates([resgate()]);
+    m.situacao.mockResolvedValue({ status: 'ENTROU', hash: 'th_r', successful: true, ledger: 9 });
+    const r = await reconciliarSwapsOrfaos({ agora: AGORA });
+    expect(r).toMatchObject({ resgatesEscriturados: 1, resgatesLiberados: 0, erros: 0 });
+    expect(m.situacao).toHaveBeenCalledWith('XDR_R1');
+    expect(m.updateMany.mock.calls[0][0]).toMatchObject({ where: { id: 'r_1', consumedAt: null }, data: { consumedTxHash: 'th_r' } });
+    const mov = m.movimentoCreateMany.mock.calls[0][0].data[0];
+    expect(mov).toMatchObject({ tipo: 'RESGATE_PAGO', chave: 'resgate:r_1' });
+    expect(m.decrementarHolding).toHaveBeenCalledOnce();
+    expect(m.eventoCreate.mock.calls[0][0].data).toMatchObject({ acao: 'PLINARF_LIQUIDADO', operador: 'reconciliador-resgate', privyId: null });
+  });
+
+  it('ENTROU com falha, ou S consumida por OUTRA tx do investidor: libera a reserva, sem escriturar', async () => {
+    comResgates([resgate(), resgate({ id: 'r_2', submitXdrHash: 'xr2' })]);
+    m.situacao
+      .mockResolvedValueOnce({ status: 'ENTROU', hash: 'x', successful: false, ledger: 9 })
+      .mockResolvedValueOnce({ status: 'OUTRA_TX', hash: 'y' });
+    const r = await reconciliarSwapsOrfaos({ agora: AGORA });
+    expect(r).toMatchObject({ resgatesLiberados: 2, resgatesEscriturados: 0 });
+    expect(m.updateMany).toHaveBeenCalledWith({
+      where: { id: 'r_1', submitXdrHash: 'xr1', consumedAt: null },
+      data: { submitXdrHash: null, submitTxHash: null, submitMaxTime: null, submitXdr: null },
+    });
+    expect(m.movimentoCreateMany).not.toHaveBeenCalled();
+  });
+
+  it('AGUARDANDO: nada muda; LIVRE_EXPIRADA/INDETERMINADO/sem XDR: NUNCA libera, fica para o operador', async () => {
+    comResgates([
+      resgate(),
+      resgate({ id: 'r_2', submitXdrHash: 'xr2' }),
+      resgate({ id: 'r_3', submitXdrHash: 'xr3' }),
+      resgate({ id: 'r_4', submitXdrHash: 'xr4', submitXdr: null }),
+    ]);
+    m.situacao
+      .mockResolvedValueOnce({ status: 'AGUARDANDO', liberaApos: 1 })
+      .mockResolvedValueOnce({ status: 'LIVRE_EXPIRADA', sequenceConta: '5', ledger: 9, fechadoEm: 'x' })
+      .mockResolvedValueOnce({ status: 'INDETERMINADO', motivo: 'sem dado' });
+    const r = await reconciliarSwapsOrfaos({ agora: AGORA });
+    expect(r).toMatchObject({ resgatesAguardando: 1, resgatesSemProva: 3, resgatesLiberados: 0, resgatesEscriturados: 0 });
+    expect(m.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('erro do Horizon ou do commit: conta o erro, mantém a reserva e segue as demais', async () => {
+    comResgates([resgate(), resgate({ id: 'r_2', submitXdrHash: 'xr2', submitXdr: 'XDR_R2' })]);
+    m.situacao
+      .mockRejectedValueOnce(new Error('horizon fora'))
+      .mockResolvedValueOnce({ status: 'ENTROU', hash: 'th2', successful: true, ledger: 9 });
+    const r = await reconciliarSwapsOrfaos({ agora: AGORA });
+    expect(r).toMatchObject({ erros: 1, resgatesEscriturados: 1 });
+    expect(resgateUpdates()).toHaveLength(0); // a r_1 (com erro) não foi tocada
+  });
+});
+
