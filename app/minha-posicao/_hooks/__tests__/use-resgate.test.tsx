@@ -162,6 +162,26 @@ describe('useResgate (contrato E2-4)', () => {
     expect(JSON.stringify(result.current.erro)).not.toMatch(/tx_bad_seq/);
   });
 
+  it('409 PRECO_FORA_DA_FAIXA e RESGATE_ACIMA_DO_TETO (build ou submit): tipos próprios, limpam a cotação e mantêm a quantidade', async () => {
+    for (const [code, tipo] of [['PRECO_FORA_DA_FAIXA', 'preco_fora_da_faixa'], ['RESGATE_ACIMA_DO_TETO', 'acima_do_teto']] as const) {
+      fetchMock.mockResolvedValueOnce(json({ error: 'x', code }, 409));
+      const a = setup();
+      act(() => a.result.current.setAmount('900000'));
+      await act(async () => a.result.current.gerarCotacao());
+      expect(a.result.current.erro).toEqual({ tipo, codigo: code, fase: 'build' });
+      expect(a.result.current.amount).toBe('900000');
+      fetchMock.mockResolvedValueOnce(json(BUILD)).mockResolvedValueOnce(json({ error: 'x', code }, 409));
+      const b = setup();
+      act(() => b.result.current.setAmount('100'));
+      await act(async () => b.result.current.gerarCotacao());
+      await act(async () => b.result.current.confirmar());
+      await flush();
+      expect(b.result.current.erro).toEqual({ tipo, codigo: code, fase: 'submit' });
+      expect(b.result.current.build).toBeNull();
+      expect(b.result.current.txHash).toBeNull();
+    }
+  });
+
   it('recotar depois de NAV_MUDOU refaz o build e usa o quoteId novo', async () => {
     fetchMock
       .mockResolvedValueOnce(json(BUILD))

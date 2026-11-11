@@ -83,6 +83,8 @@ export type ResgateErroTipoTexto =
   | 'indisponivel'
   | 'classe_indisponivel'
   | 'rede_nao_confirmou'
+  | 'preco_fora_da_faixa'
+  | 'acima_do_teto'
   | 'generico';
 
 /**
@@ -129,6 +131,17 @@ export function erroResgate(
       return {
         titulo: 'Resgate indisponível para esta subclasse',
         texto: 'O resgate desta subclasse ainda não está disponível na rede de testes.',
+      };
+    // PROVISÓRIO (Bento R2, 409 no build e no submit de reserva nova): a Norma confere.
+    case 'preco_fora_da_faixa':
+      return {
+        titulo: 'Resgate indisponível no momento',
+        texto: `Não foi possível validar o preço do TESOURO agora. Nada foi enviado. Tente de novo mais tarde ou fale com a equipe em ${EQUIPE}.`,
+      };
+    case 'acima_do_teto':
+      return {
+        titulo: 'Valor acima do limite por resgate',
+        texto: 'Este valor está acima do limite por resgate. Tente um valor menor. Rede de testes, sem valor financeiro real.',
       };
     case 'rede_nao_confirmou':
       // 502 cobre rejeição real E resposta ambígua (a tx pode ter entrado): NÃO dizer "não foram resgatados".

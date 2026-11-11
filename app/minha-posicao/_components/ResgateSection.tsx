@@ -179,7 +179,7 @@ export function ResgateSection({
                 </>
               );
             })()}
-            {r.erro.tipo === 'sem_liquidez' && (
+            {(r.erro.tipo === 'sem_liquidez' || r.erro.tipo === 'acima_do_teto') && (
               <button
                 type="button"
                 onClick={() => {

@@ -48,7 +48,8 @@ export function useResgate({ stellarAddress, signRawHash, getAccessToken, onDone
     const r = e instanceof ResgateError ? e : new ResgateError('generico', null);
     setErro({ tipo: r.tipo, codigo: r.codigo, fase });
     // quote velho não pode ser assinado de novo: exige nova cotação
-    const pedeNovaCotacao = r.tipo === 'nav_mudou' || r.tipo === 'cotacao_expirada' || r.tipo === 'conflito' || r.tipo === 'sem_liquidez';
+    const pedeNovaCotacao = r.tipo === 'nav_mudou' || r.tipo === 'cotacao_expirada' || r.tipo === 'conflito' || r.tipo === 'sem_liquidez' ||
+      r.tipo === 'preco_fora_da_faixa' || r.tipo === 'acima_do_teto';
     setPasso(pedeNovaCotacao ? 'idle' : voltarPara);
     if (pedeNovaCotacao) setBuild(null);
   }, []);

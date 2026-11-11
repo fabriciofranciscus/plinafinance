@@ -69,7 +69,7 @@ describe('microcopy do /sacar (Norma)', () => {
 });
 
 describe('microcopy do resgate (E2-6): erros da Norma §2.8–2.9', () => {
-  const TIPOS = ['nav_mudou', 'cotacao_expirada', 'conflito', 'sem_liquidez', 'em_conferencia', 'indisponivel', 'classe_indisponivel', 'rede_nao_confirmou', 'generico'] as const;
+  const TIPOS = ['nav_mudou', 'cotacao_expirada', 'conflito', 'sem_liquidez', 'em_conferencia', 'indisponivel', 'classe_indisponivel', 'rede_nao_confirmou', 'preco_fora_da_faixa', 'acima_do_teto', 'generico'] as const;
 
   it('sem liquidez: build e submit têm textos próprios, sem prometer prazo nem janela', () => {
     const b = erroResgate('sem_liquidez', 'build');
@@ -108,6 +108,13 @@ describe('microcopy do resgate (E2-6): erros da Norma §2.8–2.9', () => {
     expect(erroResgate('generico', 'build').texto).toMatch(/Confira seu saldo antes de tentar de novo/);
     expect(erroResgate('generico', 'build').texto).toMatch(/número do pedido, se houver/);
     expect(erroResgate('conflito', 'submit', 'q-9').texto).toMatch(/Confira seu histórico antes de pedir um novo resgate/);
+  });
+
+  it('preço fora da faixa diz "Nada foi enviado"; teto pede valor menor sem revelar o limite nem prometer janela', () => {
+    expect(erroResgate('preco_fora_da_faixa', 'build').texto).toMatch(/Nada foi enviado/);
+    const t = erroResgate('acima_do_teto', 'submit');
+    expect(t.texto).toMatch(/Tente um valor menor/);
+    expect(t.texto).not.toMatch(/\d{3}|janela|R\$/);
   });
 
   it('nenhum texto usa jargão, código cru, prazo ou janela', () => {

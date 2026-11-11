@@ -36,6 +36,8 @@ export type ResgateErroTipo =
   | 'indisponivel'
   | 'classe_indisponivel'
   | 'rede_nao_confirmou'
+  | 'preco_fora_da_faixa'
+  | 'acima_do_teto'
   | 'generico';
 
 export class ResgateError extends Error {
@@ -76,6 +78,8 @@ async function post<T>(
     if (codigo === 'SWAP_EM_CONFERENCIA') throw new ResgateError('em_conferencia', codigo);
     if (codigo === 'CONFLICT') throw new ResgateError('conflito', codigo);
     if (codigo === 'LIQUIDEZ_INSUFICIENTE') throw new ResgateError('sem_liquidez', codigo);
+    if (codigo === 'PRECO_FORA_DA_FAIXA') throw new ResgateError('preco_fora_da_faixa', codigo);
+    if (codigo === 'RESGATE_ACIMA_DO_TETO') throw new ResgateError('acima_do_teto', codigo);
     if (codigo === 'CLASSE_INDISPONIVEL') throw new ResgateError('classe_indisponivel', codigo);
     if (codigo === 'LEDGER_UNAVAILABLE') throw new ResgateError('indisponivel', codigo);
     // 502 cobre rejeição real E resposta ambígua (a tx pode ter entrado): nunca "não resgatado"
