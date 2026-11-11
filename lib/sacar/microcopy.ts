@@ -82,6 +82,7 @@ export type ResgateErroTipoTexto =
   | 'em_conferencia'
   | 'indisponivel'
   | 'classe_indisponivel'
+  | 'rede_nao_confirmou'
   | 'generico';
 
 /**
@@ -129,15 +130,21 @@ export function erroResgate(
         titulo: 'Resgate indisponível para esta subclasse',
         texto: 'O resgate desta subclasse ainda não está disponível na rede de testes.',
       };
+    case 'rede_nao_confirmou':
+      // 502 cobre rejeição real E resposta ambígua (a tx pode ter entrado): NÃO dizer "não foram resgatados".
+      return {
+        titulo: 'A rede não confirmou o resgate',
+        texto: `A rede de testes não confirmou este resgate e estamos conferindo. Seus tokens de demonstração só saem se a rede confirmar. Antes de tentar de novo, confira seu saldo. Se você iniciar outro resgate agora, pode aparecer que há um resgate em conferência; fale conosco em ${EQUIPE}${numero}.`,
+      };
     case 'conflito':
       return {
         titulo: 'Cotação já usada',
-        texto: 'Esta cotação já foi usada em outro envio. Gere uma nova cotação para continuar.',
+        texto: `Esta cotação já foi usada em um envio. Confira seu histórico antes de pedir um novo resgate; em caso de dúvida, fale com a equipe${numero}.`,
       };
     default:
       return {
-        titulo: 'Não foi possível concluir o resgate',
-        texto: `Tente novamente; se persistir, fale com a equipe em ${EQUIPE}${numero}.`,
+        titulo: 'Não foi possível confirmar o resgate agora',
+        texto: `Não foi possível confirmar o resgate agora. Confira seu saldo antes de tentar de novo. Se persistir, fale com a equipe em ${EQUIPE}${pedido ? ` informando o número do pedido (${pedido})` : ', informando o número do pedido, se houver'}.`,
       };
   }
 }

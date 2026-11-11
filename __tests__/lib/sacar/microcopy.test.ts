@@ -69,7 +69,7 @@ describe('microcopy do /sacar (Norma)', () => {
 });
 
 describe('microcopy do resgate (E2-6): erros da Norma §2.8–2.9', () => {
-  const TIPOS = ['nav_mudou', 'cotacao_expirada', 'conflito', 'sem_liquidez', 'em_conferencia', 'indisponivel', 'classe_indisponivel', 'generico'] as const;
+  const TIPOS = ['nav_mudou', 'cotacao_expirada', 'conflito', 'sem_liquidez', 'em_conferencia', 'indisponivel', 'classe_indisponivel', 'rede_nao_confirmou', 'generico'] as const;
 
   it('sem liquidez: build e submit têm textos próprios, sem prometer prazo nem janela', () => {
     const b = erroResgate('sem_liquidez', 'build');
@@ -94,6 +94,20 @@ describe('microcopy do resgate (E2-6): erros da Norma §2.8–2.9', () => {
     expect(erroResgate('classe_indisponivel', 'build').titulo).toBe('Resgate indisponível para esta subclasse');
     expect(erroResgate('nav_mudou', 'submit').texto).toMatch(/Nada foi enviado/);
     expect(erroResgate('cotacao_expirada', 'submit').texto).toMatch(/Nada foi enviado/);
+  });
+
+  it('502: "não confirmou, estamos conferindo", nunca "não foram resgatados"; genérico e conflito mandam conferir antes de tentar de novo', () => {
+    const r = erroResgate('rede_nao_confirmou', 'submit', 'q-9');
+    expect(r.titulo).toBe('A rede não confirmou o resgate');
+    expect(r.texto).toMatch(/não confirmou este resgate e estamos conferindo/);
+    expect(r.texto).toMatch(/confira seu saldo/);
+    expect(r.texto).toContain('número do pedido (q-9)');
+    for (const t of ['rede_nao_confirmou', 'generico', 'conflito'] as const) {
+      expect(erroResgate(t, 'submit', 'q-9').texto).not.toMatch(/não foram resgatados|gere uma nova cotação|tente novamente;/i);
+    }
+    expect(erroResgate('generico', 'build').texto).toMatch(/Confira seu saldo antes de tentar de novo/);
+    expect(erroResgate('generico', 'build').texto).toMatch(/número do pedido, se houver/);
+    expect(erroResgate('conflito', 'submit', 'q-9').texto).toMatch(/Confira seu histórico antes de pedir um novo resgate/);
   });
 
   it('nenhum texto usa jargão, código cru, prazo ou janela', () => {

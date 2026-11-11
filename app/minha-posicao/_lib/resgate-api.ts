@@ -9,7 +9,7 @@
  *   409 SWAP_EM_CONFERENCIA, 409 CONFLICT (cotação já usada com outro XDR),
  *   409 LIQUIDEZ_INSUFICIENTE (Atlas: caixa do fundo ou TESOURO do distributor
  *   não cobrem o valor), 400 VALIDATION_FAILED, 422 CLASSE_INDISPONIVEL,
- *   503 LEDGER_UNAVAILABLE.
+ *   503 LEDGER_UNAVAILABLE (só com o código: um 503 sem código é ambíguo → genérico).
  *
  * O cliente só exibe os valores do servidor: nada é calculado aqui. Erros viram
  * tipos (nunca o texto cru da resposta); o código fica para os detalhes técnicos.
@@ -35,6 +35,7 @@ export type ResgateErroTipo =
   | 'em_conferencia'
   | 'indisponivel'
   | 'classe_indisponivel'
+  | 'rede_nao_confirmou'
   | 'generico';
 
 export class ResgateError extends Error {
@@ -76,7 +77,10 @@ async function post<T>(
     if (codigo === 'CONFLICT') throw new ResgateError('conflito', codigo);
     if (codigo === 'LIQUIDEZ_INSUFICIENTE') throw new ResgateError('sem_liquidez', codigo);
     if (codigo === 'CLASSE_INDISPONIVEL') throw new ResgateError('classe_indisponivel', codigo);
-    if (codigo === 'LEDGER_UNAVAILABLE' || res.status === 503) throw new ResgateError('indisponivel', codigo);
+    if (codigo === 'LEDGER_UNAVAILABLE') throw new ResgateError('indisponivel', codigo);
+    // 502 cobre rejeição real E resposta ambígua (a tx pode ter entrado): nunca "não resgatado"
+    if (codigo === 'STELLAR_SUBMIT_FAILED' || res.status === 502)
+      throw new ResgateError('rede_nao_confirmou', codigo ?? 'STELLAR_SUBMIT_FAILED');
     throw new ResgateError('generico', codigo ?? `HTTP_${res.status}`);
   }
   try {

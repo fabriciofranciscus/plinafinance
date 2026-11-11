@@ -147,6 +147,21 @@ describe('useResgate (contrato E2-4)', () => {
     expect(JSON.stringify(result.current.erro)).not.toMatch(/stack/);
   });
 
+  it('502 STELLAR_SUBMIT_FAILED: "rede não confirmou", mantém a cotação (retry do mesmo envio é idempotente) e não mostra result_codes', async () => {
+    fetchMock
+      .mockResolvedValueOnce(json(BUILD))
+      .mockResolvedValueOnce(json({ error: 'a rede recusou', code: 'STELLAR_SUBMIT_FAILED', title: 'Bad', resultCodes: { transaction: 'tx_bad_seq' } }, 502));
+    const { result } = setup();
+    act(() => result.current.setAmount('100'));
+    await act(async () => result.current.gerarCotacao());
+    await act(async () => result.current.confirmar());
+    await flush();
+    expect(result.current.erro).toEqual({ tipo: 'rede_nao_confirmou', codigo: 'STELLAR_SUBMIT_FAILED', fase: 'submit' });
+    expect(result.current.passo).toBe('ready');
+    expect(result.current.ultimoPedido).toBe('q-1');
+    expect(JSON.stringify(result.current.erro)).not.toMatch(/tx_bad_seq/);
+  });
+
   it('recotar depois de NAV_MUDOU refaz o build e usa o quoteId novo', async () => {
     fetchMock
       .mockResolvedValueOnce(json(BUILD))
