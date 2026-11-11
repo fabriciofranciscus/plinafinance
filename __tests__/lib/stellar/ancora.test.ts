@@ -38,6 +38,7 @@ const txRec = (hash: string, over: Record<string, unknown> = {}) => ({
 });
 
 let paginas: unknown[][] = [[]];
+let paginasLidas = 0;
 let agora = 0;
 const lookup = vi.fn();
 
@@ -46,13 +47,17 @@ beforeEach(() => {
   agora = Date.now();
   _setRelogioAncoraForTests({ agora: () => agora, dormir: async (ms) => { agora += ms; } });
   paginas = [[]];
+  paginasLidas = 0;
   submitEnvelope.mockReset();
   buscarTxPorHash.mockReset().mockResolvedValue({ found: false });
   lookup.mockReset();
   vi.spyOn(horizon, 'feeStats').mockResolvedValue({ fee_charged: { p70: '100' } } as never);
   vi.spyOn(horizon, 'loadAccount').mockResolvedValue(new Account(DIST, '5') as never);
   vi.spyOn(horizon, 'transactions').mockImplementation(() => {
-    const pagina = (i: number): unknown => ({ records: paginas[i] ?? [], next: async () => pagina(i + 1) });
+    const pagina = (i: number): unknown => {
+      paginasLidas = Math.max(paginasLidas, i + 1);
+      return { records: paginas[i] ?? [], next: async () => pagina(i + 1) };
+    };
     const b = {
       forAccount: () => b, order: () => b, limit: () => b,
       call: async () => pagina(0),
@@ -159,5 +164,51 @@ describe('verificarAncora', () => {
 
     lookup.mockRejectedValueOnce(Object.assign(new Error('horizon 500'), { response: { status: 500 } }));
     await expect(verificarAncora({ txHash: 't', sha256Hex: SHA })).rejects.toThrow('horizon 500');
+  });
+});
+
+describe('busca limitada por data (S3 do Argus)', () => {
+  const DESDE = new Date('2026-11-11T15:00:00Z');
+  const em = (iso: string) => ({ created_at: iso });
+  // página = 200 txs sem o memo, em ordem decrescente de tempo
+  const paginaSem = (iso: string) => Array.from({ length: 200 }, (_, i) => txRec(`x-${iso}-${i}`, { memo: 'outro', ...em(iso) }));
+
+  it('para de paginar ao passar de desde − 1 h (não lê o histórico todo)', async () => {
+    paginas = [paginaSem('2026-11-11T16:00:00Z'), paginaSem('2026-11-11T13:59:59Z'), ...Array.from({ length: 60 }, () => paginaSem('2026-11-10T00:00:00Z'))];
+    expect(await buscarAncora(SHA, { desde: DESDE })).toBeNull();
+    expect(paginasLidas).toBe(2);
+  });
+
+  it('acha a âncora dentro da janela (até 1 h antes do claim)', async () => {
+    paginas = [paginaSem('2026-11-11T16:00:00Z'), [txRec('ancora', em('2026-11-11T14:30:00Z'))]];
+    expect(await buscarAncora(SHA, { desde: DESDE })).toEqual({ txHash: 'ancora', ledgerCloseTime: '2026-11-11T14:30:00Z' });
+  });
+
+  it('com desde, histórico grande NÃO vira ANCORA_HISTORICO_EXCEDE_LIMITE', async () => {
+    paginas = [...Array.from({ length: 60 }, () => paginaSem('2026-11-11T18:00:00Z')), paginaSem('2026-11-11T13:00:00Z')];
+    expect(await buscarAncora(SHA, { desde: DESDE })).toBeNull();
+  });
+
+  it('sem desde, o teto de 10.000 txs continua (comportamento anterior)', async () => {
+    paginas = Array.from({ length: 60 }, () => paginaSem('2026-11-11T18:00:00Z'));
+    const err = await buscarAncora(SHA).catch((e: unknown) => e);
+    expect((err as AncoraError).code).toBe('ANCORA_HISTORICO_EXCEDE_LIMITE');
+  });
+
+  it('duplicada dentro da janela continua ANCORA_DUPLICADA', async () => {
+    paginas = [[txRec('a', em('2026-11-11T15:10:00Z')), txRec('b', em('2026-11-11T15:05:00Z'))], paginaSem('2026-11-11T13:00:00Z')];
+    expect(((await buscarAncora(SHA, { desde: DESDE }).catch((e: unknown) => e)) as AncoraError).code).toBe('ANCORA_DUPLICADA');
+  });
+
+  it('desde inválido → erro, sem consultar', async () => {
+    await expect(buscarAncora(SHA, { desde: new Date('x') })).rejects.toThrow(/desde inválido/);
+    expect(paginasLidas).toBe(0);
+  });
+
+  it('ancorarSha256 repassa desde: âncora existente na janela é reutilizada', async () => {
+    paginas = [[txRec('ja', em('2026-11-11T15:20:00Z'))]];
+    const r = await ancorarSha256({ sha256Hex: SHA, contexto: 'SNAPSHOT_NAV', desde: DESDE });
+    expect(r).toMatchObject({ txHash: 'ja', reutilizada: true });
+    expect(submitEnvelope).not.toHaveBeenCalled();
   });
 });
