@@ -212,3 +212,29 @@ describe('busca limitada por data (S3 do Argus)', () => {
     expect(submitEnvelope).not.toHaveBeenCalled();
   });
 });
+
+describe('recomendações da Vera ao S3', () => {
+  const DESDE = new Date('2026-11-11T15:00:00Z');
+  const paginaSem = (iso: string) => Array.from({ length: 200 }, (_, i) => txRec(`y-${iso}-${i}`, { memo: 'outro', created_at: iso }));
+
+  it('S3-a: created_at ilegível → erro, nunca lê sem fim', async () => {
+    paginas = [[txRec('z', { memo: 'outro', created_at: 'lixo' })], ...Array.from({ length: 5 }, () => paginaSem('2026-11-11T18:00:00Z'))];
+    const err = await buscarAncora(SHA, { desde: DESDE }).catch((e: unknown) => e);
+    expect((err as AncoraError).code).toBe('ANCORA_HISTORICO_EXCEDE_LIMITE');
+    expect(paginasLidas).toBe(1);
+  });
+
+  it('S3-a: com desde, teto generoso de 250 páginas → ANCORA_HISTORICO_EXCEDE_LIMITE', async () => {
+    paginas = Array.from({ length: 300 }, () => paginaSem('2026-11-11T18:00:00Z'));
+    const err = await buscarAncora(SHA, { desde: DESDE }).catch((e: unknown) => e);
+    expect((err as AncoraError).code).toBe('ANCORA_HISTORICO_EXCEDE_LIMITE');
+    expect(paginasLidas).toBe(251);
+  });
+
+  it('S3-b: desde no futuro (> agora + 5 min) → erro antes de ler', async () => {
+    await expect(buscarAncora(SHA, { desde: new Date(agora + 10 * 60_000) })).rejects.toThrow(/futuro/);
+    expect(paginasLidas).toBe(0);
+    await expect(buscarAncora(SHA, { desde: new Date(agora + 4 * 60_000) })).resolves.toBeNull();
+  });
+
+});

@@ -56,6 +56,10 @@ const INTERVALO_MS = 5_000;
 const FOLGA_SEC = 10;
 /** Folga antes do `desde` (criação do claim) na busca de âncora existente (S3 do Argus). */
 const FOLGA_DESDE_MS = 60 * 60 * 1000;
+/** `desde` aceito até 5 min à frente do relógio (folga de relógio); além disso esconderia âncora recente. */
+const FUTURO_MAX_MS = 5 * 60 * 1000;
+/** Com `desde`, teto generoso (50.000 txs) para nunca ler sem fim. */
+const MAX_PAGINAS_COM_DESDE = 250;
 
 type Relogio = { agora: () => number; dormir: (ms: number) => Promise<void> };
 const REAL: Relogio = { agora: () => Date.now(), dormir: (ms) => new Promise((r) => setTimeout(r, ms)) };
@@ -84,8 +88,11 @@ type PaginaTx = { records: TxRec[]; next(): Promise<PaginaTx> };
 /**
  * Âncora já feita para este hash, ou `null`. Com `desde` (criação do claim),
  * lê as txs do distributor em ordem decrescente e PARA na primeira anterior a
- * `desde − 1 h` (S3 do Argus): o custo não cresce com o histórico. Sem `desde`,
- * lê até 10.000 txs e, passando disso, ANCORA_HISTORICO_EXCEDE_LIMITE.
+ * `desde − 1 h` (S3 do Argus): o custo não cresce com o histórico (teto de
+ * 50.000 txs, created_at ilegível → erro; `desde` > agora + 5 min → erro). Sem
+ * `desde`, lê até 10.000 txs e, passando disso, ANCORA_HISTORICO_EXCEDE_LIMITE.
+ * Limitação: a idempotência vale dentro da vida do claim (âncora mais velha que
+ * `desde − 1 h` não é vista; custo de uma âncora a mais, sem perda de prova).
  */
 export async function buscarAncora(
   sha256Hex: string,
@@ -96,6 +103,7 @@ export async function buscarAncora(
   if (opts?.desde !== undefined) {
     const t = opts.desde instanceof Date ? opts.desde.getTime() : NaN;
     if (!Number.isFinite(t)) throw new Error('buscarAncora: desde inválido');
+    if (t > relogio.agora() + FUTURO_MAX_MS) throw new Error('buscarAncora: desde no futuro');
     corte = t - FOLGA_DESDE_MS;
   }
   const dist = distributorSigner().publicKey();
@@ -108,9 +116,16 @@ export async function buscarAncora(
     .limit(PAGINA)
     .call()) as unknown as PaginaTx;
   ler: for (let n = 1; pagina.records.length > 0; n++) {
-    if (corte === null && n > MAX_PAGINAS) throw new AncoraError('ANCORA_HISTORICO_EXCEDE_LIMITE');
+    if (n > (corte === null ? MAX_PAGINAS : MAX_PAGINAS_COM_DESDE)) {
+      throw new AncoraError('ANCORA_HISTORICO_EXCEDE_LIMITE');
+    }
     for (const tx of pagina.records) {
-      if (corte !== null && Date.parse(tx.created_at) < corte) break ler;
+      if (corte !== null) {
+        const criada = Date.parse(tx.created_at);
+        // created_at ilegível: não dá para saber onde parar → falha fechada, como histórico grande demais.
+        if (!Number.isFinite(criada)) throw new AncoraError('ANCORA_HISTORICO_EXCEDE_LIMITE');
+        if (criada < corte) break ler;
+      }
       if (tx.successful && tx.source_account === dist && tx.memo_type === 'hash' && tx.memo === memoB64) {
         achadas.push(tx);
       }
@@ -126,7 +141,7 @@ export async function buscarAncora(
 export async function ancorarSha256(input: {
   sha256Hex: string;
   contexto: AncoraContexto;
-  /** Criação do claim (S3): limita a busca de âncora existente. Recomendado. */
+  /** Criação do claim (S3): limita a busca de âncora existente. Passar sempre em produção. */
   desde?: Date;
 }): Promise<{ txHash: string; reutilizada: boolean; ledgerCloseTime: string }> {
   exigirHash(input.sha256Hex);
