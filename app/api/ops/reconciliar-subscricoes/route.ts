@@ -11,7 +11,7 @@
 import { NextResponse } from 'next/server';
 import { requireOpsCron } from '@/lib/auth/ops-cron';
 import { enviarAlertaOps } from '@/lib/services/alerta-ops';
-import { reconciliarSwapsOrfaos } from '@/lib/services/swap-escrituracao';
+import { marcarConflitosAlertados, reconciliarSwapsOrfaos } from '@/lib/services/swap-escrituracao';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -34,8 +34,17 @@ export async function GET(req: Request) {
           ...conflitoQuoteIds.map((id) => `quote: ${id}`),
         ],
       });
+      // A marca de dedupe só vale se o e-mail FOI entregue; senão a próxima varredura alerta de novo.
+      if (alertaEnviado) {
+        try {
+          await marcarConflitosAlertados(conflitoQuoteIds);
+        } catch (err) {
+          console.error('[ops/reconciliar-subscricoes] marca do alerta falhou', (err as { name?: string })?.name ?? 'erro');
+        }
+      }
     }
-    // `alerta` também fica na resposta: o workflow agendado deve falhar o job quando for true.
+    // `alerta` = há conflito em aberto (sem alerta entregue ainda): fica true a cada varredura até o e-mail sair.
+    // O workflow agendado deve falhar o job quando for true.
     return NextResponse.json({ ...contagens, alerta: contagens.vigiaConflitos > 0, alertaEnviado });
   } catch (err) {
     console.error('[ops/reconciliar-subscricoes]', (err as { name?: string })?.name ?? 'erro');
