@@ -11,7 +11,11 @@
 import { NextResponse } from 'next/server';
 import { requireOpsCron } from '@/lib/auth/ops-cron';
 import { enviarAlertaOps } from '@/lib/services/alerta-ops';
-import { marcarConflitosAlertados, reconciliarSwapsOrfaos } from '@/lib/services/swap-escrituracao';
+import {
+  marcarConflitosAlertados,
+  marcarConflitosResgateAlertados,
+  reconciliarSwapsOrfaos,
+} from '@/lib/services/swap-escrituracao';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -20,7 +24,7 @@ export async function GET(req: Request) {
   const negado = await requireOpsCron(req);
   if (negado) return negado;
   try {
-    const { conflitoQuoteIds, ...contagens } = await reconciliarSwapsOrfaos();
+    const { conflitoQuoteIds, conflitoResgateIds, ...contagens } = await reconciliarSwapsOrfaos();
     // Alarme imediato (mesmo canal do alarme de emissão: e-mail da caixa de incidentes): conflito NOVO da vigia
     // de 24 h = emissão dupla. Um e-mail por quote (dedupe no reconciliador). O corpo leva só ids internos.
     let alertaEnviado = false;
@@ -43,9 +47,33 @@ export async function GET(req: Request) {
         }
       }
     }
+    // Resgate (E2-6): mesma regra — tx liberada por tempo entrou com a cotação já consumida por outra tx.
+    let alertaResgateEnviado = false;
+    if (conflitoResgateIds.length > 0) {
+      alertaResgateEnviado = await enviarAlertaOps({
+        assunto: 'resgate liberado por tempo entrou na chain com a cotação já consumida (possível pagamento duplo)',
+        linhas: [
+          'A vigia de 24 h achou uma tx de resgate, liberada por tempo, que entrou on-chain com sucesso enquanto a',
+          'cotação já foi consumida por OUTRA tx. NÃO foi escriturada. O operador/Atlas decide (runbook).',
+          '',
+          ...conflitoResgateIds.map((id) => `cotação de resgate: ${id}`),
+        ],
+      });
+      if (alertaResgateEnviado) {
+        try {
+          await marcarConflitosResgateAlertados(conflitoResgateIds);
+        } catch (err) {
+          console.error('[ops/reconciliar-subscricoes] marca do alerta do resgate falhou', (err as { name?: string })?.name ?? 'erro');
+        }
+      }
+    }
     // `alerta` = há conflito em aberto (sem alerta entregue ainda): fica true a cada varredura até o e-mail sair.
     // O workflow agendado deve falhar o job quando for true.
-    return NextResponse.json({ ...contagens, alerta: contagens.vigiaConflitos > 0, alertaEnviado });
+    return NextResponse.json({
+      ...contagens,
+      alerta: contagens.vigiaConflitos > 0 || contagens.resgatesVigiaConflitos > 0,
+      alertaEnviado: alertaEnviado || alertaResgateEnviado,
+    });
   } catch (err) {
     console.error('[ops/reconciliar-subscricoes]', (err as { name?: string })?.name ?? 'erro');
     return NextResponse.json({ error: 'erro interno' }, { status: 500 });

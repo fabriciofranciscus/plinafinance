@@ -65,10 +65,24 @@ export async function escriturarResgate(input: {
   });
 }
 
-/** Libera a reserva (só desta XDR e só enquanto não consumida). */
-export function liberarReservaDoResgate(quoteId: string, xdrHash: string) {
+/**
+ * Libera a reserva (só desta XDR e só enquanto não consumida). `porTempo` guarda o hash liberado na vigia de 24 h
+ * (mesma regra do swap, N1): a liberação por tempo não prova que a tx não entrou, só que a rede passou do prazo dela.
+ */
+export function liberarReservaDoResgate(
+  quoteId: string,
+  xdrHash: string,
+  opts: { porTempo?: { txHash: string } } = {},
+) {
   return db.resgateCotacao.updateMany({
     where: { id: quoteId, submitXdrHash: xdrHash, consumedAt: null },
-    data: { submitXdrHash: null, submitTxHash: null, submitMaxTime: null, submitXdr: null },
+    data: {
+      submitXdrHash: null,
+      submitTxHash: null,
+      submitMaxTime: null,
+      submitXdr: null,
+      livreExpiradaVistaEm: null,
+      ...(opts.porTempo ? { liberadaTxHash: opts.porTempo.txHash, liberadaPorTempoEm: new Date() } : {}),
+    },
   });
 }

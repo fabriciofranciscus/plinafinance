@@ -742,6 +742,14 @@ model ResgateCotacao {
   submitXdr            String?       @db.Text
   consumedAt           DateTime?
   consumedTxHash       String?
+  /// Mesmas regras do N1 para a reserva órfã (ver Quote): 1ª varredura que viu a sequence livre depois do prazo
+  /// (a liberação por tempo exige uma 2ª, ≥ 5 min depois); hash liberado por tempo vai para a vigia de 24 h.
+  livreExpiradaVistaEm DateTime?
+  liberadaTxHash       String?
+  liberadaPorTempoEm   DateTime?
+  vigiaConsultadaEm    DateTime?
+  /// Dedupe do alerta de conflito da vigia (1 e-mail por cotação).
+  conflitoAlertadoEm   DateTime?
   criadoEm             DateTime      @default(now())
 
   @@index([investidorId])

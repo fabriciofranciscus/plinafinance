@@ -1,8 +1,8 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
-const m = vi.hoisted(() => ({ reconciliar: vi.fn(), consume: vi.fn(), alerta: vi.fn(), marcar: vi.fn() }));
+const m = vi.hoisted(() => ({ reconciliar: vi.fn(), consume: vi.fn(), alerta: vi.fn(), marcar: vi.fn(), marcarResgate: vi.fn() }));
 vi.mock('@/lib/services/alerta-ops', () => ({ enviarAlertaOps: m.alerta }));
-vi.mock('@/lib/services/swap-escrituracao', () => ({ reconciliarSwapsOrfaos: m.reconciliar, marcarConflitosAlertados: m.marcar }));
+vi.mock('@/lib/services/swap-escrituracao', () => ({ reconciliarSwapsOrfaos: m.reconciliar, marcarConflitosAlertados: m.marcar, marcarConflitosResgateAlertados: m.marcarResgate }));
 vi.mock('@/lib/rate-limit/config', () => ({
   publicLimiter: { consume: m.consume },
   clientIp: () => '203.0.113.9',
@@ -13,7 +13,8 @@ import { GET } from '@/app/api/ops/reconciliar-subscricoes/route';
 const SECRET = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90'; // 64 hex, como `openssl rand -hex 32`
 const RESULTADO = {
   escriturados: 1, liberados: 1, aguardando: 0, vencidasSemProva: 0, semHash: 0,
-  vigiaEscrituradas: 0, vigiaConflitos: 0, vigiaRestantes: 0, conflitoQuoteIds: [] as string[], erros: 0,
+  vigiaEscrituradas: 0, vigiaConflitos: 0, vigiaRestantes: 0, conflitoQuoteIds: [] as string[],
+  resgatesVigiaEscrituradas: 0, resgatesVigiaConflitos: 0, resgatesVigiaRestantes: 0, conflitoResgateIds: [] as string[], erros: 0,
 };
 const req = (auth?: string) =>
   new Request('http://x/api/ops/reconciliar-subscricoes', { headers: auth ? { authorization: auth } : {} });
@@ -25,6 +26,7 @@ beforeEach(() => {
   m.consume.mockReset().mockResolvedValue(true);
   m.alerta.mockReset().mockResolvedValue(true);
   m.marcar.mockReset().mockResolvedValue(undefined);
+  m.marcarResgate.mockReset().mockResolvedValue(undefined);
 });
 afterEach(() => {
   delete process.env.OPS_CRON_SECRET;
@@ -34,7 +36,7 @@ describe('GET /api/ops/reconciliar-subscricoes', () => {
   it('com o Bearer certo → 200 e só as contagens', async () => {
     const r = await GET(req(`Bearer ${SECRET}`));
     expect(r.status).toBe(200);
-    const { conflitoQuoteIds: _ids, ...contagens } = RESULTADO;
+    const { conflitoQuoteIds: _ids, conflitoResgateIds: _rids, ...contagens } = RESULTADO;
     expect(await r.json()).toEqual({ ...contagens, alerta: false, alertaEnviado: false });
     expect(m.alerta).not.toHaveBeenCalled(); // sem conflito, sem e-mail
     expect(m.reconciliar).toHaveBeenCalledOnce();
@@ -108,6 +110,25 @@ describe('GET /api/ops/reconciliar-subscricoes', () => {
     process.env.OPS_CRON_SECRET = `  ${forte}  `;
     expect((await GET(req(`Bearer ${forte}`))).status).toBe(200);
     expect((await GET(req(`Bearer ${'k'.repeat(31)}j`))).status).toBe(404); // 32 chars, mas errado
+  });
+
+  it('conflito novo na vigia de RESGATE: e-mail próprio, marca só depois de entregue, alerta true, ids fora da resposta', async () => {
+    m.reconciliar.mockResolvedValue({ ...RESULTADO, resgatesVigiaConflitos: 1, conflitoResgateIds: ['r_dup'] });
+    const body = await (await GET(req(`Bearer ${SECRET}`))).json();
+    expect(body).toMatchObject({ alerta: true, alertaEnviado: true, resgatesVigiaConflitos: 1 });
+    expect(body.conflitoResgateIds).toBeUndefined();
+    expect(m.alerta).toHaveBeenCalledOnce();
+    expect(JSON.stringify(m.alerta.mock.calls[0][0])).toContain('r_dup');
+    expect(m.marcarResgate).toHaveBeenCalledWith(['r_dup']);
+    expect(m.marcar).not.toHaveBeenCalled();
+  });
+
+  it('e-mail do conflito de resgate NÃO entregue: não marca (a próxima varredura alerta de novo) e alerta segue true', async () => {
+    m.reconciliar.mockResolvedValue({ ...RESULTADO, resgatesVigiaConflitos: 1, conflitoResgateIds: ['r_dup'] });
+    m.alerta.mockResolvedValue(false);
+    const body = await (await GET(req(`Bearer ${SECRET}`))).json();
+    expect(body).toMatchObject({ alerta: true, alertaEnviado: false });
+    expect(m.marcarResgate).not.toHaveBeenCalled();
   });
 
   it('a resposta traz vigiaRestantes (só contagem)', async () => {

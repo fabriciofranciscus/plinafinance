@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 const m = vi.hoisted(() => ({
   findMany: vi.fn(),
   resgateFindMany: vi.fn(),
+  resgateCount: vi.fn(),
   count: vi.fn(),
   updateMany: vi.fn(),
   fetchTx: vi.fn(),
@@ -26,7 +27,7 @@ vi.mock('@/lib/db', () => {
   return {
     db: {
       quote: { findMany: m.findMany, count: m.count, updateMany: m.updateMany },
-      resgateCotacao: { findMany: m.resgateFindMany, updateMany: m.updateMany },
+      resgateCotacao: { findMany: m.resgateFindMany, count: m.resgateCount, updateMany: m.updateMany },
       $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
     },
   };
@@ -60,6 +61,7 @@ beforeEach(() => {
   m.findMany.mockReset().mockResolvedValue([]);
   m.count.mockReset().mockResolvedValue(0);
   m.resgateFindMany.mockReset().mockResolvedValue([]);
+  m.resgateCount.mockReset().mockResolvedValue(0);
   m.updateMany.mockReset().mockResolvedValue({ count: 1 });
   m.fetchTx.mockReset();
   m.situacao.mockReset();
@@ -344,9 +346,10 @@ describe('reconciliarSwapsOrfaos — resgates com queima órfãos (E2-6)', () =>
     id: 'r_1', investidorId: 'inv_1', classe: 'SENIOR', plinarfAmount: D('100'), brlEquivalente: D('100.00'),
     bridgeAmount: D('85.54'), navPorTokenNaCotacao: D('1'), submitXdrHash: 'xr1', submitXdr: 'XDR_R1', ...over,
   });
-  const comResgates = (lista: unknown[]) => {
+  /** 1ª consulta de resgates = órfãos; 2ª = vigia de 24 h. */
+  const comResgates = (lista: unknown[], vigia: unknown[] = []) => {
     orfas([]);
-    m.resgateFindMany.mockResolvedValue(lista);
+    m.resgateFindMany.mockResolvedValueOnce(lista).mockResolvedValueOnce(vigia);
   };
   const resgateUpdates = () => m.updateMany.mock.calls.filter((c) => c[0].where?.id === 'r_1');
 
@@ -372,25 +375,119 @@ describe('reconciliarSwapsOrfaos — resgates com queima órfãos (E2-6)', () =>
     expect(r).toMatchObject({ resgatesLiberados: 2, resgatesEscriturados: 0 });
     expect(m.updateMany).toHaveBeenCalledWith({
       where: { id: 'r_1', submitXdrHash: 'xr1', consumedAt: null },
-      data: { submitXdrHash: null, submitTxHash: null, submitMaxTime: null, submitXdr: null },
+      data: LIBERA,
     });
     expect(m.movimentoCreateMany).not.toHaveBeenCalled();
   });
 
-  it('AGUARDANDO: nada muda; LIVRE_EXPIRADA/INDETERMINADO/sem XDR: NUNCA libera, fica para o operador', async () => {
+  it('AGUARDANDO, INDETERMINADO ou sem XDR: nada muda e NUNCA libera (operador)', async () => {
     comResgates([
       resgate(),
       resgate({ id: 'r_2', submitXdrHash: 'xr2' }),
-      resgate({ id: 'r_3', submitXdrHash: 'xr3' }),
-      resgate({ id: 'r_4', submitXdrHash: 'xr4', submitXdr: null }),
+      resgate({ id: 'r_3', submitXdrHash: 'xr3', submitXdr: null }),
     ]);
     m.situacao
       .mockResolvedValueOnce({ status: 'AGUARDANDO', liberaApos: 1 })
-      .mockResolvedValueOnce({ status: 'LIVRE_EXPIRADA', sequenceConta: '5', ledger: 9, fechadoEm: 'x' })
       .mockResolvedValueOnce({ status: 'INDETERMINADO', motivo: 'sem dado' });
     const r = await reconciliarSwapsOrfaos({ agora: AGORA });
-    expect(r).toMatchObject({ resgatesAguardando: 1, resgatesSemProva: 3, resgatesLiberados: 0, resgatesEscriturados: 0 });
+    expect(r).toMatchObject({ resgatesAguardando: 1, resgatesSemProva: 2, resgatesLiberados: 0, resgatesEscriturados: 0 });
     expect(m.updateMany).not.toHaveBeenCalled();
+  });
+
+  const LIVRE = { status: 'LIVRE_EXPIRADA', sequenceConta: '5', ledger: 9, fechadoEm: 'x' };
+
+  it('LIVRE_EXPIRADA na 1ª varredura: só MARCA (livreExpiradaVistaEm), não libera', async () => {
+    comResgates([resgate()]);
+    m.situacao.mockResolvedValue(LIVRE);
+    const r = await reconciliarSwapsOrfaos({ agora: AGORA });
+    expect(r).toMatchObject({ resgatesAguardando: 1, resgatesLiberados: 0 });
+    expect(m.updateMany).toHaveBeenCalledTimes(1);
+    expect(m.updateMany.mock.calls[0][0]).toEqual({
+      where: { id: 'r_1', submitXdrHash: 'xr1', consumedAt: null },
+      data: { livreExpiradaVistaEm: new Date(AGORA) },
+    });
+  });
+
+  it('LIVRE_EXPIRADA na 2ª varredura (≥ 5 min depois): libera POR TEMPO e guarda o hash na vigia de 24 h', async () => {
+    comResgates([resgate({ submitTxHash: 'th_r1', livreExpiradaVistaEm: new Date(AGORA - 6 * 60_000) })]);
+    m.situacao.mockResolvedValue(LIVRE);
+    const r = await reconciliarSwapsOrfaos({ agora: AGORA });
+    expect(r).toMatchObject({ resgatesLiberados: 1, resgatesAguardando: 0 });
+    const c = m.updateMany.mock.calls.find((x) => x[0].data?.liberadaTxHash);
+    expect(c![0].where).toEqual({ id: 'r_1', submitXdrHash: 'xr1', consumedAt: null });
+    expect(c![0].data).toMatchObject({ submitXdrHash: null, submitXdr: null, liberadaTxHash: 'th_r1' });
+    expect(m.movimentoCreateMany).not.toHaveBeenCalled();
+  });
+
+  it('2ª varredura cedo demais (< 5 min): não libera nem remarca', async () => {
+    comResgates([resgate({ livreExpiradaVistaEm: new Date(AGORA - 60_000) })]);
+    m.situacao.mockResolvedValue(LIVRE);
+    const r = await reconciliarSwapsOrfaos({ agora: AGORA });
+    expect(r).toMatchObject({ resgatesAguardando: 1, resgatesLiberados: 0 });
+    expect(m.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('a marca da 1ª varredura é APAGADA se o estado deixa de ser LIVRE_EXPIRADA (AGUARDANDO/INDETERMINADO)', async () => {
+    comResgates([resgate({ livreExpiradaVistaEm: new Date(AGORA - 6 * 60_000) })]);
+    m.situacao.mockResolvedValue({ status: 'INDETERMINADO', motivo: 'sem dado' });
+    await reconciliarSwapsOrfaos({ agora: AGORA });
+    expect(m.updateMany).toHaveBeenCalledWith({
+      where: { id: 'r_1', submitXdrHash: 'xr1', consumedAt: null },
+      data: { livreExpiradaVistaEm: null },
+    });
+  });
+
+  describe('vigia de 24 h dos resgates liberados por tempo', () => {
+    const vigiado = (over: Record<string, unknown> = {}) => ({
+      id: 'r_9', investidorId: 'inv_1', classe: 'SENIOR', plinarfAmount: D('100'), brlEquivalente: D('100.00'),
+      bridgeAmount: D('85.54'), navPorTokenNaCotacao: D('1'), liberadaTxHash: 'th_lib', consumedAt: null,
+      consumedTxHash: null, conflitoAlertadoEm: null, ...over,
+    });
+
+    it('a tx liberada entrou com sucesso depois: escritura (reconciliador-resgate-vigia) e conta', async () => {
+      comResgates([], [vigiado()]);
+      m.resgateCount.mockResolvedValue(1);
+      m.fetchTx.mockResolvedValue({ hash: 'th_lib', successful: true });
+      const r = await reconciliarSwapsOrfaos({ agora: AGORA });
+      expect(r).toMatchObject({ resgatesVigiaEscrituradas: 1, resgatesVigiaConflitos: 0, resgatesVigiaRestantes: 0 });
+      expect(m.fetchTx).toHaveBeenCalledWith('th_lib');
+      expect(m.movimentoCreateMany.mock.calls[0][0].data[0]).toMatchObject({ tipo: 'RESGATE_PAGO', chave: 'resgate:r_9' });
+      expect(m.eventoCreate.mock.calls[0][0].data).toMatchObject({ operador: 'reconciliador-resgate-vigia' });
+    });
+
+    it('cotação já consumida por OUTRA tx e a liberada também entrou: conflito (sem escriturar), id para o alerta', async () => {
+      comResgates([], [vigiado({ consumedAt: new Date(AGORA - 1000), consumedTxHash: 'outra' })]);
+      m.resgateCount.mockResolvedValue(1);
+      m.fetchTx.mockResolvedValue({ hash: 'th_lib', successful: true });
+      const r = await reconciliarSwapsOrfaos({ agora: AGORA });
+      expect(r).toMatchObject({ resgatesVigiaConflitos: 1, resgatesVigiaEscrituradas: 0, conflitoResgateIds: ['r_9'] });
+      expect(m.movimentoCreateMany).not.toHaveBeenCalled();
+    });
+
+    it('conflito já alertado não alerta de novo; tx ausente/falha não faz nada; já escriturada é pulada', async () => {
+      comResgates([], [
+        vigiado({ consumedAt: new Date(AGORA - 1000), consumedTxHash: 'outra', conflitoAlertadoEm: new Date(AGORA - 5000) }),
+        vigiado({ id: 'r_10', liberadaTxHash: 'th_x' }),
+        vigiado({ id: 'r_11', consumedTxHash: 'th_lib' }),
+      ]);
+      m.resgateCount.mockResolvedValue(3);
+      m.fetchTx.mockResolvedValueOnce({ hash: 'th_lib', successful: true }).mockResolvedValueOnce(null);
+      const r = await reconciliarSwapsOrfaos({ agora: AGORA });
+      expect(r).toMatchObject({ resgatesVigiaConflitos: 0, resgatesVigiaEscrituradas: 0, conflitoResgateIds: [] });
+      expect(m.fetchTx).toHaveBeenCalledTimes(2); // a r_11 (já escriturada) não é consultada
+    });
+
+    it('carimba o rodízio do lote e conta os restantes; erro do Horizon conta e segue', async () => {
+      comResgates([], [vigiado(), vigiado({ id: 'r_10', liberadaTxHash: 'th_y' })]);
+      m.resgateCount.mockResolvedValue(15);
+      m.fetchTx.mockRejectedValueOnce(new Error('horizon fora')).mockResolvedValueOnce(null);
+      const r = await reconciliarSwapsOrfaos({ agora: AGORA });
+      expect(r).toMatchObject({ erros: 1, resgatesVigiaRestantes: 13 });
+      expect(m.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['r_9', 'r_10'] } },
+        data: { vigiaConsultadaEm: new Date(AGORA) },
+      });
+    });
   });
 
   it('erro do Horizon ou do commit: conta o erro, mantém a reserva e segue as demais', async () => {

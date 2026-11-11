@@ -14,13 +14,14 @@ const AGORA_SEC = AGORA / 1000;
 const m = vi.hoisted(() => ({
   create: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn(),
   preco: vi.fn(), buildResgate: vi.fn(), fetchTx: vi.fn(), preSign: vi.fn(), submitPrivy: vi.fn(),
-  caixa: vi.fn(), saldo: vi.fn(), precoAgora: vi.fn(),
+  caixa: vi.fn(), saldo: vi.fn(), precoAgora: vi.fn(), agregado: vi.fn(), lockRaw: vi.fn(),
   conferencia: vi.fn(), decrementar: vi.fn(), investidorUpdate: vi.fn(), eventoCreate: vi.fn(), movCreateMany: vi.fn(),
 }));
 
 vi.mock('@/lib/db', () => {
   const tx = {
-    resgateCotacao: { updateMany: m.updateMany },
+    $executeRaw: m.lockRaw,
+    resgateCotacao: { updateMany: m.updateMany, aggregate: m.agregado },
     investidor: { update: m.investidorUpdate },
     eventoAudit: { create: m.eventoCreate },
     movimentoFundo: { createMany: m.movCreateMany },
@@ -87,6 +88,8 @@ beforeEach(() => {
   m.preco.mockResolvedValue({ navPorToken: NAV, brlEquivalente: D('100.00'), navTotal: 1, tokensVivos: 1 });
   m.buildResgate.mockResolvedValue({ xdr: 'XDR_BUILD', hashHex: '0xabc', maxTime: AGORA_SEC + 120 });
   m.conferencia.mockResolvedValue(undefined);
+  m.lockRaw.mockResolvedValue(1);
+  m.agregado.mockResolvedValue({ _sum: { brlEquivalente: null, bridgeAmount: null } });
   m.caixa.mockResolvedValue(D('1000.00'));
   m.saldo.mockResolvedValue('500.0000000');
   m.precoAgora.mockResolvedValue('1.25');
@@ -307,6 +310,65 @@ describe('submeterResgate — recusas antes de a Plina assinar', () => {
     nadaAssinado();
   });
 
+  describe('liquidez sob lock na reserva (cotações simultâneas, condição de merge do Atlas)', () => {
+    it('toma o advisory lock antes de ler os reservados e reservar (mesma transação)', async () => {
+      m.findFirst.mockResolvedValue(cotacao());
+      await tenta();
+      const ordem = [m.lockRaw, m.agregado, m.updateMany].map((f) => f.mock.invocationCallOrder[0]);
+      expect(ordem).toEqual([...ordem].sort((a, b) => a - b));
+      expect(m.lockRaw.mock.calls[0].join(' ')).toContain('pg_advisory_xact_lock');
+      expect(m.lockRaw.mock.calls[0][1]).toBe('plina:resgate-liquidez');
+    });
+
+    it('caixa − Σ brlEquivalente dos reservados < este resgate → 409 LIQUIDEZ_INSUFICIENTE, nada reservado nem assinado', async () => {
+      m.findFirst.mockResolvedValue(cotacao());
+      m.caixa.mockResolvedValue(D('150.00'));
+      m.agregado.mockResolvedValue({ _sum: { brlEquivalente: D('60.00'), bridgeAmount: D('48') } }); // sobra 90 < 100
+      await expect(tenta()).rejects.toMatchObject({ code: 'LIQUIDEZ_INSUFICIENTE', status: 409 });
+      expect(m.updateMany).not.toHaveBeenCalled();
+      nadaAssinado();
+    });
+
+    it('exatamente igual ao disponível passa (≥)', async () => {
+      m.findFirst.mockResolvedValue(cotacao());
+      m.caixa.mockResolvedValue(D('160.00'));
+      m.agregado.mockResolvedValue({ _sum: { brlEquivalente: D('60.00'), bridgeAmount: null } });
+      await expect(tenta()).resolves.toEqual({ txHash: 'tx_hash_final' });
+    });
+
+    it('saldo de TESOURO − Σ bridgeAmount dos reservados < este resgate → 409 LIQUIDEZ_INSUFICIENTE', async () => {
+      m.findFirst.mockResolvedValue(cotacao());
+      m.saldo.mockResolvedValue('100.0000000');
+      m.agregado.mockResolvedValue({ _sum: { brlEquivalente: D('10.00'), bridgeAmount: D('30') } }); // sobra 70 < 80
+      await expect(tenta()).rejects.toMatchObject({ code: 'LIQUIDEZ_INSUFICIENTE', status: 409 });
+      expect(m.updateMany).not.toHaveBeenCalled();
+      nadaAssinado();
+    });
+
+    it('resgates escriturados DEPOIS da leitura do saldo também descontam do TESOURO (a leitura pode ainda não refleti-los)', async () => {
+      m.findFirst.mockResolvedValue(cotacao());
+      m.saldo.mockResolvedValue('100.0000000');
+      m.agregado
+        .mockResolvedValueOnce({ _sum: { brlEquivalente: null, bridgeAmount: null } }) // reservados
+        .mockResolvedValueOnce({ _sum: { bridgeAmount: D('30') } }); // consumidos depois da leitura
+      await expect(tenta()).rejects.toMatchObject({ code: 'LIQUIDEZ_INSUFICIENTE' });
+      expect(m.agregado.mock.calls[1][0].where.consumedAt.gte).toBeInstanceOf(Date);
+      expect(m.agregado.mock.calls[1][0].where.id).toEqual({ not: 'q_1' });
+    });
+
+    it('não conta a própria cotação entre os reservados; a órfã (já reservada) não passa pelo lock', async () => {
+      m.findFirst.mockResolvedValue(cotacao());
+      await tenta();
+      expect(m.agregado.mock.calls[0][0].where).toMatchObject({ id: { not: 'q_1' }, submitXdrHash: { not: null }, consumedAt: null });
+      m.lockRaw.mockClear();
+      const tx = envelope();
+      m.findFirst.mockResolvedValue(cotacao({ submitXdrHash: createHash('sha256').update(tx.hash()).digest('hex') }));
+      m.updateMany.mockResolvedValueOnce({ count: 0 });
+      await submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA });
+      expect(m.lockRaw).not.toHaveBeenCalled();
+    });
+  });
+
   it('JANELA: envelope com maxTime depois do prazo da cotação + 120 s → 400 (validador da Estela), nada assinado', async () => {
     m.findFirst.mockResolvedValue(cotacao({ expiresAt: new Date(AGORA + 5_000) })); // prazo curto
     await expect(tenta(envelope({ maxTime: AGORA_SEC + 170 }))).rejects.toMatchObject({ code: 'VALIDATION_FAILED', status: 400 });
@@ -378,7 +440,7 @@ describe('submeterResgate — reserva órfã (mesma regra do swap, N1-S1)', () =
     await expect(submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA })).rejects.toMatchObject({ status: 409 });
     expect(m.updateMany).toHaveBeenCalledWith({
       where: { id: 'q_1', submitXdrHash: hash, consumedAt: null },
-      data: { submitXdrHash: null, submitTxHash: null, submitMaxTime: null, submitXdr: null },
+      data: { submitXdrHash: null, submitTxHash: null, submitMaxTime: null, submitXdr: null, livreExpiradaVistaEm: null },
     });
     expect(m.movCreateMany).not.toHaveBeenCalled();
   });

@@ -69,15 +69,60 @@ async function exigirLiquidez(i: {
   bridge: Prisma.Decimal;
   distributorPubkey: string;
   bridgeAsset: { code: string; issuer: string };
-}): Promise<void> {
+}): Promise<{ saldo: Prisma.Decimal; lidoEm: number }> {
   const caixa = await caixaDoFundo();
   if (i.brl.gt(caixa)) {
     throw new ApiError('LIQUIDEZ_INSUFICIENTE', 409, 'O fundo não tem caixa disponível para este resgate agora. Tente um valor menor.');
   }
+  const lidoEm = Date.now();
   const saldo = new Prisma.Decimal(await getAssetBalance(i.distributorPubkey, i.bridgeAsset.code, i.bridgeAsset.issuer));
   if (i.bridge.gt(saldo)) {
     throw new ApiError('LIQUIDEZ_INSUFICIENTE', 409, 'O fundo não tem liquidez disponível para este resgate agora. Tente um valor menor.');
   }
+  return { saldo, lidoEm };
+}
+
+/** Chave do advisory lock que serializa as reservas de resgate (a checagem de liquidez + a reserva são atômicas). */
+export const LOCK_LIQUIDEZ_RESGATE = 'plina:resgate-liquidez';
+
+/**
+ * Reserva o resgate JUNTO com a checagem de liquidez, dentro de `pg_advisory_xact_lock` (Atlas, condição de merge):
+ * duas cotações simultâneas que passariam cada uma na checagem solta, mas juntas superam o caixa, não passam as duas.
+ *   caixa do razão − Σ brlEquivalente dos resgates reservados e ainda não escriturados ≥ este brlEquivalente;
+ *   saldo de TESOURO do distributor − Σ bridgeAmount dos reservados (e dos escriturados depois da leitura do saldo,
+ *   que a leitura pode ainda não refletir) ≥ este bridgeAmount.
+ * Transação curta, SEM rede dentro do lock (o saldo on-chain é lido antes, em `exigirLiquidez`). Devolve quantas linhas
+ * reservou (0 = outro request reservou antes). Estouro → `409 LIQUIDEZ_INSUFICIENTE` e nada é reservado.
+ */
+async function reservarComLiquidez(i: {
+  cot: { id: string; brlEquivalente: Prisma.Decimal | string; bridgeAmount: Prisma.Decimal | string };
+  saldoTesouro: { saldo: Prisma.Decimal; lidoEm: number };
+  dados: Prisma.ResgateCotacaoUpdateManyMutationInput;
+}): Promise<number> {
+  return db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${LOCK_LIQUIDEZ_RESGATE}))`;
+    const reservados = await tx.resgateCotacao.aggregate({
+      where: { id: { not: i.cot.id }, submitXdrHash: { not: null }, consumedAt: null },
+      _sum: { brlEquivalente: true, bridgeAmount: true },
+    });
+    // Escriturados DEPOIS da leitura do saldo: o pagamento on-chain pode já ter saído e o saldo lido ainda o conter.
+    const recentes = await tx.resgateCotacao.aggregate({
+      where: { id: { not: i.cot.id }, consumedAt: { gte: new Date(i.saldoTesouro.lidoEm) } },
+      _sum: { bridgeAmount: true },
+    });
+    const caixa = await caixaDoFundo(tx);
+    const brl = new Prisma.Decimal(i.cot.brlEquivalente);
+    if (brl.gt(caixa.minus(reservados._sum.brlEquivalente ?? 0))) {
+      throw new ApiError('LIQUIDEZ_INSUFICIENTE', 409, 'O fundo não tem caixa disponível para este resgate agora. Tente um valor menor.');
+    }
+    const bridge = new Prisma.Decimal(i.cot.bridgeAmount);
+    const comprometido = new Prisma.Decimal(reservados._sum.bridgeAmount ?? 0).plus(recentes._sum.bridgeAmount ?? 0);
+    if (bridge.gt(i.saldoTesouro.saldo.minus(comprometido))) {
+      throw new ApiError('LIQUIDEZ_INSUFICIENTE', 409, 'O fundo não tem liquidez disponível para este resgate agora. Tente um valor menor.');
+    }
+    const r = await tx.resgateCotacao.updateMany({ where: { id: i.cot.id, submitXdrHash: null }, data: i.dados });
+    return r.count;
+  });
 }
 
 export async function cotarResgate(input: CotarResgateInput): Promise<CotacaoDeResgate> {
@@ -198,6 +243,7 @@ export async function submeterResgate(input: SubmeterResgateInput): Promise<{ tx
   }
 
   // NAV relido só em reserva NOVA (numa órfã a tx pode já estar no ledger e o NAV de agora já a reflete).
+  let saldoTesouro: { saldo: Prisma.Decimal; lidoEm: number } | null = null;
   if (!orfa) {
     const atual = await calcularPrecoDeResgate({ amountPlinarf: new Prisma.Decimal(cot.plinarfAmount).toFixed(7) });
     if (navMudou(cot.navPorTokenNaCotacao, atual.navPorToken)) {
@@ -208,8 +254,9 @@ export async function submeterResgate(input: SubmeterResgateInput): Promise<{ tx
     if (navMudou(cot.taxaBridge, precoAgora)) {
       throw new ApiError('NAV_MUDOU', 409, 'O preço mudou desde a cotação. Gere uma nova cotação.');
     }
-    // Liquidez relida (outras operações podem ter consumido o caixa desde a cotação).
-    await exigirLiquidez({
+    // Liquidez relida (outras operações podem ter consumido o caixa desde a cotação). A checagem DEFINITIVA, junto com
+    // a reserva e sob lock, é `reservarComLiquidez` abaixo (cotações simultâneas).
+    saldoTesouro = await exigirLiquidez({
       brl: new Prisma.Decimal(cot.brlEquivalente),
       bridge: new Prisma.Decimal(cot.bridgeAmount),
       distributorPubkey,
@@ -221,15 +268,18 @@ export async function submeterResgate(input: SubmeterResgateInput): Promise<{ tx
 
   const maxTime = Number(tx.timeBounds?.maxTime ?? 0);
   const txHashHex = tx.hash().toString('hex');
-  const reserved = await db.resgateCotacao.updateMany({
-    where: { id: cot.id, submitXdrHash: null },
-    data: {
-      submitXdrHash: xdrHash,
-      submitTxHash: txHashHex,
-      submitMaxTime: maxTime > 0 ? new Date(maxTime * 1000) : null,
-      submitXdr: signedXdr,
-    },
-  });
+  const dadosReserva = {
+    submitXdrHash: xdrHash,
+    submitTxHash: txHashHex,
+    submitMaxTime: maxTime > 0 ? new Date(maxTime * 1000) : null,
+    submitXdr: signedXdr,
+  };
+  // Reserva NOVA: sob o lock de liquidez (a checagem e a reserva são atômicas). Órfã: já reservada, sem checagem nova.
+  const reserved = {
+    count: saldoTesouro
+      ? await reservarComLiquidez({ cot, saldoTesouro, dados: dadosReserva })
+      : (await db.resgateCotacao.updateMany({ where: { id: cot.id, submitXdrHash: null }, data: dadosReserva })).count,
+  };
   if (reserved.count !== 1 && !orfa) {
     // Perdeu a corrida: outro request reservou nesse meio-tempo.
     const fresh = await db.resgateCotacao.findUnique({ where: { id: cot.id }, select: { submitXdrHash: true } });
