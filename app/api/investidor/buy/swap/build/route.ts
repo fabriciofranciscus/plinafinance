@@ -16,7 +16,7 @@
  * direto (emissão single-shot pelo issuer) executado server-side. Marca audit log.
  *
  * Body: { quoteId, investorPubkey, investidorId? }
- * Returns (real): { xdr, hashHex, quoteId, mock: false } — XDR sem nenhuma assinatura da Plina;
+ * Returns (real): { xdr, hashHex, quoteId, mock: false, plinarfAmount, navPorTokenNaCotacao } — XDR sem nenhuma assinatura da Plina;
  *   `quoteId` é o quote a usar no submit (novo se o anterior expirou — recotar)
  * Returns (mock): { txHash, mock: true, alreadyExecuted: true }
  */
@@ -256,7 +256,14 @@ export const POST = withApi(async (req, { requestId }) => {
     });
 
     return ok(
-      { txHash: distRes.hash, quoteId: cotacao.id, mock: true, alreadyExecuted: true },
+      {
+        txHash: distRes.hash,
+        quoteId: cotacao.id,
+        mock: true,
+        alreadyExecuted: true,
+        plinarfAmount: stellarAmount,
+        navPorTokenNaCotacao: navNaCotacao,
+      },
       { requestId },
     );
   }
@@ -292,6 +299,10 @@ export const POST = withApi(async (req, { requestId }) => {
       hashHex,
       quoteId: cotacao.id,
       mock: false,
+      // Contrato Atlas/Flora: os valores do quote VIGENTE usado no envelope (pode ser o recotado), em
+      // string decimal. A confirmação da tela mostra este plinarfAmount, não o da cotação inicial.
+      plinarfAmount: stellarAmount,
+      navPorTokenNaCotacao: navNaCotacao,
     },
     { requestId },
   );
