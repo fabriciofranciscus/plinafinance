@@ -9,6 +9,9 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { clientIp, publicLimiter } from '../rate-limit/config';
 
+/** Tamanho mínimo aceito para OPS_CRON_SECRET (após trim). */
+export const OPS_CRON_SECRET_MIN = 32;
+
 const naoEncontrado = () => NextResponse.json({ error: 'not found' }, { status: 404 });
 
 /** Compara em tempo constante (hash de tamanho fixo dos dois lados). */
@@ -24,7 +27,9 @@ export async function requireOpsCron(req: Request): Promise<Response | null> {
     return NextResponse.json({ error: 'rate limited' }, { status: 429 });
   }
   const secret = process.env.OPS_CRON_SECRET?.trim();
-  if (!secret) return naoEncontrado(); // sem secret configurado a rota não existe (fail-closed)
+  // Sem secret, ou fraco (< 32 caracteres: o valor vem de `openssl rand -hex 32`), a rota não existe (fail-closed).
+  // O rate limit é só por IP: um secret curto cairia em força bruta distribuída.
+  if (!secret || secret.length < OPS_CRON_SECRET_MIN) return naoEncontrado();
   const auth = req.headers.get('authorization') ?? '';
   const prefixo = 'Bearer ';
   if (!auth.startsWith(prefixo)) return naoEncontrado();

@@ -467,6 +467,8 @@ model Quote {
   livreExpiradaVistaEm DateTime?
   /// Dedupe do alerta de conflito da vigia (tx liberada por tempo entrou e o quote já tem outra tx): 1 e-mail por quote.
   conflitoAlertadoEm DateTime?
+  /// Última consulta da vigia a este hash liberado: rodízio em lote (nunca consultadas primeiro, depois as mais antigas).
+  vigiaConsultadaEm DateTime?
   liberadaTxHash     String?
   liberadaPorTempoEm DateTime?
   criadoEm       DateTime       @default(now())
