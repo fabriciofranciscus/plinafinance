@@ -31,7 +31,7 @@ vi.mock('@/lib/stellar/transactions', () => ({ fetchTransactionByHash: m.fetchTx
 vi.mock('@/lib/stellar/orfa-swap', () => ({ situacaoEnvelopeSwap: m.situacao }));
 vi.mock('@/lib/services/holdings', () => ({ incrementarHolding: m.incrementarHolding }));
 
-import { VIGIA_LOTE, reconciliarSwapsOrfaos } from '@/lib/services/swap-escrituracao';
+import { VIGIA_LOTE, marcarConflitosAlertados, reconciliarSwapsOrfaos } from '@/lib/services/swap-escrituracao';
 
 const D = (v: string) => new Prisma.Decimal(v);
 const AGORA = Date.parse('2026-11-10T12:00:00Z');
@@ -235,18 +235,24 @@ describe('reconciliarSwapsOrfaos — vigia de 24 h dos hashes liberados por temp
     expect(r.vigiaEscrituradas).toBe(0);
   });
 
-  it('a liberada entrou MAS o quote já foi consumido por OUTRA tx: conflito NOVO (emissão dupla), marca o alerta, NÃO escritura', async () => {
+  it('a liberada entrou MAS o quote já foi consumido por OUTRA tx: conflito em aberto (emissão dupla), NÃO escritura e NÃO grava a marca de alerta', async () => {
     orfas([], [vigiada({ consumedAt: new Date(), consumedTxHash: 'outra' })]);
     m.fetchTx.mockResolvedValue({ hash: 'th_lib', successful: true });
     const r = await reconciliarSwapsOrfaos({ agora: AGORA });
     expect(r.vigiaConflitos).toBe(1);
     expect(r.conflitoQuoteIds).toEqual(['q_v']);
-    expect(m.updateMany).toHaveBeenCalledWith({
-      where: { id: 'q_v', conflitoAlertadoEm: null },
-      data: { conflitoAlertadoEm: expect.any(Date) },
-    });
+    // a marca conflitoAlertadoEm só é gravada DEPOIS do e-mail entregue (marcarConflitosAlertados), nunca aqui
+    expect(m.updateMany.mock.calls.some((c) => 'conflitoAlertadoEm' in (c[0].data ?? {}))).toBe(false);
     expect(m.investidorUpdate).not.toHaveBeenCalled();
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('ALERTA vigia'), 'q_v');
+  });
+
+  it('o conflito continua em aberto a cada varredura enquanto a marca não for gravada (alerta de novo)', async () => {
+    m.fetchTx.mockResolvedValue({ hash: 'th_lib', successful: true });
+    for (let i = 0; i < 2; i++) {
+      orfas([], [vigiada({ consumedAt: new Date(), consumedTxHash: 'outra' })]);
+      expect((await reconciliarSwapsOrfaos({ agora: AGORA })).conflitoQuoteIds).toEqual(['q_v']);
+    }
   });
 
   it('conflito JÁ alertado: não conta de novo nem repete o alerta (dedupe, senão 1 e-mail por varredura por 24 h)', async () => {
@@ -312,3 +318,17 @@ describe('reconciliarSwapsOrfaos — vigia em lote com rodízio (Vera/Farol)', (
   });
 });
 
+describe('marcarConflitosAlertados', () => {
+  it('grava conflitoAlertadoEm só nos ainda sem marca', async () => {
+    await marcarConflitosAlertados(['q_1', 'q_2'], AGORA);
+    expect(m.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['q_1', 'q_2'] }, conflitoAlertadoEm: null },
+      data: { conflitoAlertadoEm: new Date(AGORA) },
+    });
+  });
+
+  it('lista vazia: não toca no banco', async () => {
+    await marcarConflitosAlertados([]);
+    expect(m.updateMany).not.toHaveBeenCalled();
+  });
+});

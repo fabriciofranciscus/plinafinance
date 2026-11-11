@@ -1,8 +1,8 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
-const m = vi.hoisted(() => ({ reconciliar: vi.fn(), consume: vi.fn(), alerta: vi.fn() }));
+const m = vi.hoisted(() => ({ reconciliar: vi.fn(), consume: vi.fn(), alerta: vi.fn(), marcar: vi.fn() }));
 vi.mock('@/lib/services/alerta-ops', () => ({ enviarAlertaOps: m.alerta }));
-vi.mock('@/lib/services/swap-escrituracao', () => ({ reconciliarSwapsOrfaos: m.reconciliar }));
+vi.mock('@/lib/services/swap-escrituracao', () => ({ reconciliarSwapsOrfaos: m.reconciliar, marcarConflitosAlertados: m.marcar }));
 vi.mock('@/lib/rate-limit/config', () => ({
   publicLimiter: { consume: m.consume },
   clientIp: () => '203.0.113.9',
@@ -24,6 +24,7 @@ beforeEach(() => {
   m.reconciliar.mockReset().mockResolvedValue(RESULTADO);
   m.consume.mockReset().mockResolvedValue(true);
   m.alerta.mockReset().mockResolvedValue(true);
+  m.marcar.mockReset().mockResolvedValue(undefined);
 });
 afterEach(() => {
   delete process.env.OPS_CRON_SECRET;
@@ -50,12 +51,38 @@ describe('GET /api/ops/reconciliar-subscricoes', () => {
     expect(mail.linhas.join('\n')).toContain('quote: q_dup');
   });
 
-  it('o e-mail de alerta falhar (sem SMTP) não derruba a rota: alerta true, alertaEnviado false', async () => {
+  it('e-mail ENTREGUE → grava a marca de dedupe dos conflitos alertados', async () => {
+    m.reconciliar.mockResolvedValue({ ...RESULTADO, vigiaConflitos: 2, conflitoQuoteIds: ['q_a', 'q_b'] });
+    await GET(req(`Bearer ${SECRET}`));
+    expect(m.marcar).toHaveBeenCalledWith(['q_a', 'q_b']);
+  });
+
+  it('SMTP FALHA → a marca NÃO é gravada (a próxima varredura alerta de novo); a rota não cai e alerta fica true', async () => {
     m.reconciliar.mockResolvedValue({ ...RESULTADO, vigiaConflitos: 1, conflitoQuoteIds: ['q_dup'] });
     m.alerta.mockResolvedValue(false);
     const r = await GET(req(`Bearer ${SECRET}`));
     expect(r.status).toBe(200);
     expect(await r.json()).toMatchObject({ alerta: true, alertaEnviado: false });
+    expect(m.marcar).not.toHaveBeenCalled();
+  });
+
+  it('simula duas varreduras seguidas: SMTP falha na 1ª (sem marca), entrega na 2ª (com marca) — o aviso não se perde', async () => {
+    m.reconciliar.mockResolvedValue({ ...RESULTADO, vigiaConflitos: 1, conflitoQuoteIds: ['q_dup'] });
+    m.alerta.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    await GET(req(`Bearer ${SECRET}`));
+    expect(m.marcar).not.toHaveBeenCalled();
+    await GET(req(`Bearer ${SECRET}`));
+    expect(m.alerta).toHaveBeenCalledTimes(2);
+    expect(m.marcar).toHaveBeenCalledOnce();
+    expect(m.marcar).toHaveBeenCalledWith(['q_dup']);
+  });
+
+  it('falha ao gravar a marca depois do e-mail entregue não derruba a rota (pior caso: um e-mail repetido)', async () => {
+    m.reconciliar.mockResolvedValue({ ...RESULTADO, vigiaConflitos: 1, conflitoQuoteIds: ['q_dup'] });
+    m.marcar.mockRejectedValue(new Error('db fora'));
+    const r = await GET(req(`Bearer ${SECRET}`));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ alerta: true, alertaEnviado: true });
   });
 
   it('sem header, com secret errado, sem o prefixo Bearer ou de tamanho diferente → 404, sem reconciliar', async () => {

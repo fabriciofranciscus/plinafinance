@@ -168,6 +168,18 @@ async function escriturarOrfa(q: Orfa, hash: string, operador: string): Promise<
   return true;
 }
 
+/**
+ * Marca os conflitos como alertados — SÓ depois de o e-mail de alerta ter sido entregue (dedupe: 1 e-mail por
+ * quote). Sem a marca, a próxima varredura alerta de novo.
+ */
+export async function marcarConflitosAlertados(quoteIds: string[], agora: number = Date.now()): Promise<void> {
+  if (quoteIds.length === 0) return;
+  await db.quote.updateMany({
+    where: { id: { in: quoteIds }, conflitoAlertadoEm: null },
+    data: { conflitoAlertadoEm: new Date(agora) },
+  });
+}
+
 export async function reconciliarSwapsOrfaos(
   opts: { agora?: number } = {},
 ): Promise<ResultadoReconciliacao> {
@@ -278,11 +290,12 @@ export async function reconciliarSwapsOrfaos(
       const onchain = await fetchTransactionByHash(v.liberadaTxHash);
       if (!onchain?.successful) continue;
       if (v.consumedAt) {
-        // O quote já foi consumido por OUTRA tx e a liberada também entrou: emissão dupla. Sem escriturar. O
-        // alerta sai UMA vez por quote (dedupe por conflitoAlertadoEm), senão a cada varredura por 24 h.
+        // O quote já foi consumido por OUTRA tx e a liberada também entrou: emissão dupla. Sem escriturar. Conflito
+        // "em aberto" = sem alerta ENTREGUE: a marca conflitoAlertadoEm NÃO é gravada aqui, e sim por
+        // `marcarConflitosAlertados` depois que o e-mail sai de fato (uma falha do SMTP não pode silenciar o único
+        // aviso de emissão dupla: a próxima varredura tenta de novo).
         if (!v.conflitoAlertadoEm) {
           console.error('[swap-reconciliacao] ALERTA vigia: tx liberada por tempo entrou e o quote já tem outra tx', v.id);
-          await db.quote.updateMany({ where: { id: v.id, conflitoAlertadoEm: null }, data: { conflitoAlertadoEm: new Date() } });
           r.vigiaConflitos++;
           r.conflitoQuoteIds.push(v.id);
         }
