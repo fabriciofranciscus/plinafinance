@@ -25,6 +25,7 @@ export type PagamentoCedenteErrorCode =
   | 'CEDENTE_SEM_DOCUMENTO'
   | 'KYC_NAO_APROVADO'
   | 'CPF_SINTETICO'
+  | 'TRATAMENTO_MANUAL'
   | 'TITULAR_DIVERGE'
   | 'PAGAMENTO_JA_EXECUTADO'
   | 'TETO_NAO_CONFIGURADO'
@@ -38,7 +39,8 @@ const MENSAGENS: Record<PagamentoCedenteErrorCode, string> = {
   CESSAO_NAO_ASSINADA: 'Pagamento ao cedente recusado: a cessão precisa estar ASSINADA.',
   CEDENTE_SEM_DOCUMENTO: 'Pagamento ao cedente recusado: o cedente não tem conta com CPF válido ligada ao lead.',
   KYC_NAO_APROVADO: 'Pagamento ao cedente recusado: o KYC do cedente não está aprovado.',
-  CPF_SINTETICO: 'Pagamento ao cedente recusado: o CPF da conta é sintético (dummy de sandbox) e não identifica um titular real.',
+  CPF_SINTETICO: 'Pagamento ao cedente recusado: o CPF da conta é sintético (dummy de sandbox) e só vale com o provedor simulado.',
+  TRATAMENTO_MANUAL: 'Pagamento ao cedente recusado: cedente pessoa jurídica (CNPJ) exige tratamento manual até o D30.',
   TITULAR_DIVERGE: 'Pagamento ao cedente recusado: o CPF do cadastro do lead e o da conta do cedente divergem.',
   PAGAMENTO_JA_EXECUTADO: 'Pagamento ao cedente recusado: já executado para esta cessão.',
   TETO_NAO_CONFIGURADO: 'Pagamento ao cedente recusado: teto de valor não configurado.',
@@ -113,10 +115,15 @@ async function contextoDoPagamento(cessaoId: string, provider?: PixProvider): Pr
   // entra quando houver documento PJ VERIFICADO do cedente (hoje não há).
   const lead = cessao.oferta.leadVendedor;
   const pessoa = lead?.pessoa;
+  // Cedente PJ (documento de 14 dígitos no cadastro ou na conta): a Pessoa não tem CNPJ com KYC, então não há titular
+  // verificável; tratamento MANUAL até o D30 (decisão do Atlas). Nunca vira chave CNPJ automática.
+  const dig = (v?: string | null) => (v ?? '').replace(/\D/g, '');
+  if (dig(lead?.cpf).length === 14 || dig(pessoa?.cpfNormalizado).length === 14) {
+    throw new PagamentoCedenteError('TRATAMENTO_MANUAL');
+  }
   const documento = pessoa?.cpfNormalizado ? validarChavePix('CPF', pessoa.cpfNormalizado) : null;
   if (!pessoa || !documento) throw new PagamentoCedenteError('CEDENTE_SEM_DOCUMENTO');
   if (!pessoa.kycAprovado) throw new PagamentoCedenteError('KYC_NAO_APROVADO');
-  if (pessoa.isSyntheticCpf) throw new PagamentoCedenteError('CPF_SINTETICO'); // dummy de sandbox nunca é titular real
   // O CPF autodeclarado no lead, se existir, não pode contradizer o da conta verificada.
   const declarado = lead?.cpf?.replace(/\D/g, '');
   if (declarado && declarado !== documento) throw new PagamentoCedenteError('TITULAR_DIVERGE');
@@ -131,6 +138,9 @@ async function contextoDoPagamento(cessaoId: string, provider?: PixProvider): Pr
   if (STELLAR_NETWORK === 'PUBLIC') {
     throw new PagamentoCedenteError(p.nome === 'SIMULADO' ? 'SIMULADO_EM_MAINNET' : 'PROVEDOR_SEM_PAGAMENTO_REAL');
   }
+  // CPF sintético (dummy do sandbox) não identifica um titular real: só passa com o provedor SIMULADO (que não move
+  // dinheiro nem fala com PSP); com Asaas (ou qualquer outro) recusa. O audit de execução marca o CPF sintético.
+  if (pessoa.isSyntheticCpf && p.nome !== 'SIMULADO') throw new PagamentoCedenteError('CPF_SINTETICO');
   return { cessaoId: cessao.id, leadVendedorId: cessao.oferta.leadVendedorId, documento, tipoChave: 'CPF', valor, provider: p };
 }
 
@@ -216,7 +226,11 @@ export async function fecharPagamento(
   }
   const cessao = await db.cessao.findUnique({
     where: { id: cessaoId },
-    select: { id: true, ofertaId: true, oferta: { select: { leadVendedorId: true } } },
+    select: {
+      id: true,
+      ofertaId: true,
+      oferta: { select: { leadVendedorId: true, leadVendedor: { select: { pessoa: { select: { isSyntheticCpf: true } } } } } },
+    },
   });
   if (!cessao) throw new PagamentoCedenteError('CESSAO_NAO_ENCONTRADA');
 
@@ -259,6 +273,8 @@ export async function fecharPagamento(
           transferenciaId: t.providerId,
           e2eId: t.e2eId,
           comprovanteSha256: t.comprovanteSha256,
+          // CPF sintético (dummy do sandbox) só chega aqui com o provedor SIMULADO; a auditoria deixa isso explícito.
+          cpfSintetico: cessao.oferta.leadVendedor?.pessoa?.isSyntheticCpf === true,
         } as Prisma.InputJsonValue,
         payloadHash: t.comprovanteSha256,
         stellarTxHash: t.ancoraTxHash,

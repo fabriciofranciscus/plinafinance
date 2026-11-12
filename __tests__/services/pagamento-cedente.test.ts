@@ -188,11 +188,26 @@ describe('P2 (Argus/Atlas): o destino é o CPF da PESSOA verificada por KYC liga
     await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'KYC_NAO_APROVADO' });
     expect(m.pagar).not.toHaveBeenCalled();
   });
-  it.each(['TESTNET', 'PUBLIC'])('CPF sintético (dummy do sandbox) → CPF_SINTETICO em qualquer rede (%s), sem PSP', async (rede) => {
-    m.rede.v = rede;
+  it('CPF sintético (dummy do sandbox): recusado com Asaas/qualquer provedor que não seja o SIMULADO (CPF_SINTETICO), sem PSP', async () => {
     m.cessao.mockResolvedValueOnce(cessaoCom(lead({ pessoa: pessoa({ isSyntheticCpf: true }) })));
     await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'CPF_SINTETICO' });
     expect(m.pagar).not.toHaveBeenCalled();
+  });
+  it('CPF sintético com o provedor SIMULADO passa (não move dinheiro) e o EventoAudit de execução MARCA cpfSintetico:true; CPF real marca false', async () => {
+    m.transf.mockResolvedValue(comprovada({ provedor: 'SIMULADO' }));
+    m.cessao.mockResolvedValue(cessaoCom(lead({ pessoa: pessoa({ isSyntheticCpf: true }) })));
+    await expect(pagarCedenteDaCessao(IN, { provider: prov('SIMULADO') })).resolves.toMatchObject({ status: 'COMPROVADA' });
+    expect(m.auditCreate.mock.calls[0][0].data.payloadJson.cpfSintetico).toBe(true);
+    m.auditCreate.mockClear();
+    m.cessao.mockResolvedValue(cessaoCom(lead()));
+    await pagarCedenteDaCessao(IN, { provider: prov('SIMULADO') });
+    expect(m.auditCreate.mock.calls[0][0].data.payloadJson.cpfSintetico).toBe(false);
+  });
+  it('a recusa do sintético vale também na reabertura (provedor não simulado)', async () => {
+    m.cessao.mockResolvedValueOnce(cessaoCom(lead({ pessoa: pessoa({ isSyntheticCpf: true }) })));
+    await expect(reabrirPagamentoCedente(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'CPF_SINTETICO' });
+    expect(m.auditCreate).not.toHaveBeenCalled();
+    expect(m.reabrir).not.toHaveBeenCalled();
   });
   it('o CPF autodeclarado no lead pode faltar (o fluxo atual nem o passa) e vem com máscara; se existir e contradizer a conta verificada → TITULAR_DIVERGE', async () => {
     m.cessao.mockResolvedValueOnce(cessaoCom(lead({ cpf: null })));
@@ -207,9 +222,12 @@ describe('P2 (Argus/Atlas): o destino é o CPF da PESSOA verificada por KYC liga
     await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'TITULAR_DIVERGE' });
     expect(m.pagar).not.toHaveBeenCalled();
   });
-  it('CNPJ não existe nesta fase (não há documento PJ verificado do cedente): conta com 14 dígitos → recusa sem PSP', async () => {
-    m.cessao.mockResolvedValueOnce(cessaoCom(lead({ cpf: '11222333000181', pessoa: pessoa({ cpfNormalizado: '11222333000181' }) })));
-    await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'CEDENTE_SEM_DOCUMENTO' });
+  it.each([
+    ['documento de 14 dígitos na conta (Pessoa)', lead({ cpf: null, pessoa: pessoa({ cpfNormalizado: '11222333000181' }) })],
+    ['documento de 14 dígitos declarado no lead', lead({ cpf: '11.222.333/0001-81' })],
+  ])('cedente PJ/CNPJ (%s) → TRATAMENTO_MANUAL até o D30, sem PSP e nunca chave CNPJ automática', async (_n, l) => {
+    m.cessao.mockResolvedValueOnce(cessaoCom(l));
+    await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'TRATAMENTO_MANUAL' });
     expect(m.pagar).not.toHaveBeenCalled();
   });
   it('a reabertura usa a mesma fonte e as mesmas recusas (KYC, sem pessoa)', async () => {
