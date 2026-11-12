@@ -8,6 +8,7 @@ import { z } from 'zod';
 import {
   ID_TRANSFERENCIA,
   PspError,
+  exigirRedeDeTeste,
   validarEnvio,
   type ConsultaPix,
   type EnvioPix,
@@ -53,6 +54,7 @@ export interface AsaasOpcoes {
 }
 
 export function criarAsaasProvider(opts: AsaasOpcoes = {}): PixProvider {
+  exigirRedeDeTeste(); // o Asaas daqui é sandbox: nunca em mainnet
   const apiKey = (opts.apiKey ?? process.env.ASAAS_API_KEY ?? '').trim();
   const base = (opts.baseUrl ?? process.env.ASAAS_BASE_URL ?? ASAAS_SANDBOX_BASE).replace(/\/+$/, '');
   if (!apiKey || base !== ASAAS_SANDBOX_BASE) throw new PspError('PSP_CONFIG');

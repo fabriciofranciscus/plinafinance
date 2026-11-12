@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { COMPROVANTE_TIPO, mascararDestino, montarComprovante } from '@/lib/integrations/psp/comprovante';
 import { criarSimuladoProvider } from '@/lib/integrations/psp/simulado';
 import { obterPixProvider } from '@/lib/integrations/psp';
+import { criarAsaasProvider } from '@/lib/integrations/psp/asaas';
 import { validarChavePix } from '@/lib/integrations/psp/types';
 
 describe('mascararDestino', () => {
@@ -89,5 +90,40 @@ describe('provedor simulado e seletor', () => {
     } finally {
       for (const [k, v] of [['PSP_PROVIDER', antes.p], ['ASAAS_API_KEY', antes.k]] as const) v === undefined ? delete process.env[k] : (process.env[k] = v);
     }
+  });
+});
+
+describe('P1 (Argus): trava de mainnet — nenhum provedor atual existe em STELLAR_NETWORK=PUBLIC', () => {
+  const guardar = (fn: () => void) => {
+    const antes = { n: process.env.STELLAR_NETWORK, p: process.env.PSP_PROVIDER, k: process.env.ASAAS_API_KEY };
+    try {
+      fn();
+    } finally {
+      for (const [k, v] of [['STELLAR_NETWORK', antes.n], ['PSP_PROVIDER', antes.p], ['ASAAS_API_KEY', antes.k]] as const) {
+        if (v === undefined) delete process.env[k]; else process.env[k] = v;
+      }
+    }
+  };
+  it.each([[undefined], ['SIMULADO'], ['ASAAS']])('PSP_PROVIDER=%s em PUBLIC → PSP_CONFIG (inclusive o padrão)', (prov) => {
+    guardar(() => {
+      process.env.STELLAR_NETWORK = 'PUBLIC';
+      process.env.ASAAS_API_KEY = 'k'.repeat(20);
+      if (prov === undefined) delete process.env.PSP_PROVIDER; else process.env.PSP_PROVIDER = prov;
+      expect(() => obterPixProvider()).toThrow(expect.objectContaining({ code: 'PSP_CONFIG' }));
+    });
+  });
+  it('os construtores diretos também recusam em PUBLIC (simulado e Asaas)', () => {
+    guardar(() => {
+      process.env.STELLAR_NETWORK = 'PUBLIC';
+      expect(() => criarSimuladoProvider()).toThrow(expect.objectContaining({ code: 'PSP_CONFIG' }));
+      expect(() => criarAsaasProvider({ apiKey: 'k'.repeat(20), fetch: vi.fn() })).toThrow(expect.objectContaining({ code: 'PSP_CONFIG' }));
+    });
+  });
+  it('em TESTNET continua criando', () => {
+    guardar(() => {
+      process.env.STELLAR_NETWORK = 'TESTNET';
+      expect(criarSimuladoProvider().nome).toBe('SIMULADO');
+      expect(criarAsaasProvider({ apiKey: 'k'.repeat(20), fetch: vi.fn() }).nome).toBe('ASAAS');
+    });
   });
 });

@@ -4,11 +4,12 @@
  * recuperação de um envio ambíguo não finge que algo saiu. O comprovante gerado a partir dele é rotulado `SIMULADO`.
  */
 import { createHash } from 'node:crypto';
-import { PspError, validarEnvio, type ConsultaPix, type EnvioPix, type PixProvider } from './types';
+import { PspError, exigirRedeDeTeste, validarEnvio, type ConsultaPix, type EnvioPix, type PixProvider } from './types';
 
 const idDe = (chave: string) => `sim_${createHash('sha256').update(chave).digest('hex').slice(0, 24)}`;
 
 export function criarSimuladoProvider(agora: () => Date = () => new Date()): PixProvider {
+  exigirRedeDeTeste(); // simulado nunca conta como pago em mainnet
   return {
     nome: 'SIMULADO',
     async enviarPix(entrada: EnvioPix) {

@@ -152,6 +152,11 @@ async function avancar(row: TransferenciaPix, provider: PixProvider): Promise<Tr
     return aplicarStatusTerminalRuim(atual.id, c.status, c.motivoFalha ?? 'PSP_FALHA');
   }
   // CONCLUIDO
+  if (c.valor === undefined && provider.nome !== 'SIMULADO') {
+    // P3 do Argus: DONE sem o valor não prova que saiu o valor pedido. Estado de alerta, nunca comprova às cegas.
+    await marcar(atual.id, { status: 'INCERTO', motivoFalha: 'PSP_SEM_VALOR', travaAte: null });
+    throw new LiquidacaoCedenteError('VALOR_DIVERGE', 'PSP_SEM_VALOR');
+  }
   if (c.valor !== undefined && !new Prisma.Decimal(c.valor).eq(atual.valor)) {
     // O PSP concluiu um valor diferente do pedido: dinheiro saiu errado. Estado de alerta (INCERTO, com providerId:
     // nada retoma sozinho), não fica PROCESSANDO em silêncio.

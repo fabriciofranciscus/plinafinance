@@ -155,6 +155,21 @@ describe('pagarTitular — PSP ainda processando, falha e recusa', () => {
   });
 });
 
+describe('P3 (Argus): DONE sem o valor não comprova às cegas', () => {
+  it('PSP concluído SEM valor → INCERTO/PSP_SEM_VALOR, sem comprovante nem âncora (alerta; nada retoma sozinho)', async () => {
+    const p = provedor({ consulta: async () => ({ id: 'tra_1', status: 'CONCLUIDO', e2eId: 'E1', efetivadoEm: '2026-11-12' }) });
+    await expect(pagarTitular(IN, { provider: p, agora: AGORA })).rejects.toMatchObject({ code: 'VALOR_DIVERGE', causa: 'PSP_SEM_VALOR' });
+    expect(m.rows[0]).toMatchObject({ status: 'INCERTO', motivoFalha: 'PSP_SEM_VALOR', comprovante: null });
+    expect(m.ancora).not.toHaveBeenCalled();
+    expect((await avancarTransferencia('cessao_1', { provider: p, agora: AGORA })).status).toBe('INCERTO');
+    expect(p.enviarPix).toHaveBeenCalledTimes(1);
+  });
+  it('o provedor SIMULADO (que não tem valor para devolver) segue comprovando', async () => {
+    const p = provedor({ nome: 'SIMULADO', consulta: async () => ({ id: 'tra_1', status: 'CONCLUIDO', efetivadoEm: '2026-11-12' }) });
+    expect((await pagarTitular(IN, { provider: p, agora: AGORA })).status).toBe('COMPROVADA');
+  });
+});
+
 describe('pagarTitular — resposta ambígua: NUNCA reenvia sozinho', () => {
   const ambiguo = () => provedor({ envio: async () => { throw new PspError('PSP_INCERTO'); } });
 
