@@ -33,7 +33,7 @@ export type PagamentoCedenteErrorCode =
 const MENSAGENS: Record<PagamentoCedenteErrorCode, string> = {
   CESSAO_NAO_ENCONTRADA: 'Pagamento ao cedente recusado: cessão não encontrada.',
   CESSAO_NAO_ASSINADA: 'Pagamento ao cedente recusado: a cessão precisa estar ASSINADA.',
-  CEDENTE_SEM_DOCUMENTO: 'Pagamento ao cedente recusado: o cedente não tem CPF válido no cadastro.',
+  CEDENTE_SEM_DOCUMENTO: 'Pagamento ao cedente recusado: o cedente não tem CPF/CNPJ válido no cadastro.',
   TITULAR_DIVERGE: 'Pagamento ao cedente recusado: o CPF do cadastro do lead e o da conta do cedente divergem.',
   PAGAMENTO_JA_EXECUTADO: 'Pagamento ao cedente recusado: já executado para esta cessão.',
   TETO_NAO_CONFIGURADO: 'Pagamento ao cedente recusado: teto de valor não configurado.',
@@ -68,7 +68,9 @@ export interface ResultadoPagamentoCedente {
 interface ContextoPagamento {
   cessaoId: string;
   leadVendedorId: string;
-  cpf: string;
+  /** Documento do cedente (CPF 11 dígitos ou CNPJ 14, só dígitos): é a chave Pix. */
+  documento: string;
+  tipoChave: 'CPF' | 'CNPJ';
   valor: Prisma.Decimal;
   provider: PixProvider;
 }
@@ -97,12 +99,16 @@ async function contextoDoPagamento(cessaoId: string, provider?: PixProvider): Pr
   if (cessao.status !== 'ASSINADA') throw new PagamentoCedenteError('CESSAO_NAO_ASSINADA');
   if (cessao.pagamento?.status === 'EXECUTADO') throw new PagamentoCedenteError('PAGAMENTO_JA_EXECUTADO');
 
-  // Titular: o CPF do cadastro do cedente (precisa ser válido); se a conta (Pessoa) também tem CPF, os dois têm de bater.
+  // Titular: o DOCUMENTO do cadastro do cedente (CPF de 11 dígitos, ou CNPJ de 14 se for PJ), válido pelos dígitos
+  // verificadores; o sistema MONTA a chave a partir dele (decisão do Atlas: só chave CPF/CNPJ igual ao documento). Se a
+  // conta (Pessoa) também tem documento, os dois têm de bater.
   const lead = cessao.oferta.leadVendedor;
-  const cpf = lead?.cpf ? validarChavePix('CPF', lead.cpf) : null;
-  if (!cpf) throw new PagamentoCedenteError('CEDENTE_SEM_DOCUMENTO');
-  const cpfConta = lead?.pessoa?.cpfNormalizado?.replace(/\D/g, '');
-  if (cpfConta && cpfConta !== cpf) throw new PagamentoCedenteError('TITULAR_DIVERGE');
+  const digitos = (lead?.cpf ?? '').replace(/\D/g, '');
+  const tipoChave: 'CPF' | 'CNPJ' | null = digitos.length === 11 ? 'CPF' : digitos.length === 14 ? 'CNPJ' : null;
+  const documento = tipoChave ? validarChavePix(tipoChave, digitos) : null;
+  if (!tipoChave || !documento) throw new PagamentoCedenteError('CEDENTE_SEM_DOCUMENTO');
+  const docConta = lead?.pessoa?.cpfNormalizado?.replace(/\D/g, '');
+  if (docConta && docConta !== documento) throw new PagamentoCedenteError('TITULAR_DIVERGE');
 
   // O valor é o da oferta da cessão; nunca o que o chamador diz.
   const valor = new Prisma.Decimal(cessao.oferta.valorLiquidoVendedor);
@@ -112,12 +118,12 @@ async function contextoDoPagamento(cessaoId: string, provider?: PixProvider): Pr
   if (p.nome === 'SIMULADO' && STELLAR_NETWORK === 'PUBLIC') {
     throw new PagamentoCedenteError('SIMULADO_EM_MAINNET'); // fail-closed: simulado nunca conta como pago em mainnet
   }
-  return { cessaoId: cessao.id, leadVendedorId: cessao.oferta.leadVendedorId, cpf, valor, provider: p };
+  return { cessaoId: cessao.id, leadVendedorId: cessao.oferta.leadVendedorId, documento, tipoChave, valor, provider: p };
 }
 
 /**
  * Paga o cedente de uma cessão assinada. **O destino NÃO vem do chamador** (P2 do Argus, decisão do Atlas): a chave Pix
- * é a do tipo CPF do próprio cedente da cessão (o CPF do cadastro), então a titularidade bate por construção; chave de
+ * é a do tipo CPF (ou CNPJ, se PJ) do próprio cedente da cessão (o documento do cadastro), então a titularidade bate por construção; chave de
  * outro tipo ou de outra pessoa não existe aqui (follow-up pós-D30, com dupla aprovação auditada). O CPF não é
  * persistido nem logado por este serviço. Idempotente: repetir devolve o estado, não paga de novo.
  */
@@ -127,7 +133,7 @@ export async function pagarCedenteDaCessao(
 ): Promise<ResultadoPagamentoCedente> {
   const ctx = await contextoDoPagamento(input.cessaoId, opts.provider);
   const r = await pagarTitular(
-    { cessaoId: ctx.cessaoId, valor: ctx.valor.toFixed(2), chavePix: ctx.cpf, tipoChave: 'CPF' },
+    { cessaoId: ctx.cessaoId, valor: ctx.valor.toFixed(2), chavePix: ctx.documento, tipoChave: ctx.tipoChave },
     { provider: ctx.provider, agora: opts.agora },
   );
   if (r.status !== 'COMPROVADA') return { status: r.status, sha256: r.sha256, txHash: r.txHash };
@@ -150,7 +156,7 @@ export async function reabrirPagamentoCedente(
   const t = await db.transferenciaPix.findUnique({ where: { cessaoId: ctx.cessaoId } });
   if (!t) throw new LiquidacaoCedenteError('TRANSFERENCIA_NAO_ENCONTRADA');
   if (t.status !== 'FALHOU') throw new LiquidacaoCedenteError('NAO_REABRIVEL', t.status);
-  if (t.destinoMascarado !== mascararDestino('CPF', ctx.cpf)) throw new PagamentoCedenteError('DESTINO_DIVERGE');
+  if (t.destinoMascarado !== mascararDestino(ctx.tipoChave, ctx.documento)) throw new PagamentoCedenteError('DESTINO_DIVERGE');
 
   // Auditoria da decisão (append-only), antes de qualquer envio. Só ids, hashes de tentativa e códigos; sem CPF.
   await db.eventoAudit.create({
@@ -172,7 +178,7 @@ export async function reabrirPagamentoCedente(
   });
 
   const r = await reabrirTransferencia(
-    { cessaoId: ctx.cessaoId, valor: ctx.valor.toFixed(2), chavePix: ctx.cpf, tipoChave: 'CPF', operador: input.operador },
+    { cessaoId: ctx.cessaoId, valor: ctx.valor.toFixed(2), chavePix: ctx.documento, tipoChave: ctx.tipoChave, operador: input.operador },
     { provider: ctx.provider, agora: opts.agora },
   );
   if (r.status !== 'COMPROVADA') return { status: r.status, sha256: r.sha256, txHash: r.txHash };

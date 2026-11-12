@@ -159,6 +159,20 @@ describe('P2 (Argus/Atlas): o destino é o CPF do cedente da cessão, nunca o do
     await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'CEDENTE_SEM_DOCUMENTO' });
     expect(m.pagar).not.toHaveBeenCalled();
   });
+  it('cedente PJ: documento de 14 dígitos válido vira chave do tipo CNPJ (e CNPJ inválido é recusado)', async () => {
+    m.cessao.mockResolvedValueOnce(cessaoCom(lead({ cpf: '11.222.333/0001-81' })));
+    await pagarCedenteDaCessao(IN, { provider: prov('ASAAS') });
+    expect(m.pagar.mock.calls[0][0]).toMatchObject({ chavePix: '11222333000181', tipoChave: 'CNPJ' });
+    m.pagar.mockClear();
+    m.cessao.mockResolvedValueOnce(cessaoCom(lead({ cpf: '11222333000180' })));
+    await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'CEDENTE_SEM_DOCUMENTO' });
+    expect(m.pagar).not.toHaveBeenCalled();
+  });
+  it('documento com tamanho que não é CPF nem CNPJ (ex.: 12 dígitos) → CEDENTE_SEM_DOCUMENTO, sem PSP', async () => {
+    m.cessao.mockResolvedValueOnce(cessaoCom(lead({ cpf: '123456789012' })));
+    await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'CEDENTE_SEM_DOCUMENTO' });
+    expect(m.pagar).not.toHaveBeenCalled();
+  });
   it('CPF do lead com máscara é normalizado para dígitos', async () => {
     m.cessao.mockResolvedValueOnce(cessaoCom(lead({ cpf: '529.982.247-25' })));
     await pagarCedenteDaCessao(IN, { provider: prov('ASAAS') });
