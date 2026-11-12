@@ -9,6 +9,8 @@ const m = vi.hoisted(() => ({
   leadUpdate: vi.fn(),
   auditCreate: vi.fn(),
   pagar: vi.fn(),
+  reabrir: vi.fn(),
+  ordem: [] as string[],
   rede: { v: 'TESTNET' },
 }));
 
@@ -22,6 +24,7 @@ vi.mock('@/lib/db', () => {
     db: {
       cessao: { findUnique: m.cessao },
       transferenciaPix: { findUnique: m.transf },
+      eventoAudit: { create: m.auditCreate },
       $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
     },
   };
@@ -33,9 +36,10 @@ vi.mock('@/lib/stellar/config', async (orig) => ({
 vi.mock('@/lib/services/liquidacao-cedente', async (orig) => ({
   ...(await orig<typeof import('@/lib/services/liquidacao-cedente')>()),
   pagarTitular: m.pagar,
+  reabrirTransferencia: m.reabrir,
 }));
 
-import { PagamentoCedenteError, fecharPagamento, pagarCedenteDaCessao } from '@/lib/services/pagamento-cedente';
+import { PagamentoCedenteError, fecharPagamento, pagarCedenteDaCessao, reabrirPagamentoCedente } from '@/lib/services/pagamento-cedente';
 import type { PixProvider } from '@/lib/integrations/psp/types';
 
 const SHA = 'b'.repeat(64);
@@ -55,6 +59,7 @@ beforeEach(() => {
   process.env.PIX_MAX_BRL = '50000';
   m.rede.v = 'TESTNET';
   Object.values(m).forEach((f) => typeof f === 'function' && (f as ReturnType<typeof vi.fn>).mockReset());
+  m.ordem.length = 0;
   m.cessao.mockResolvedValue({
     id: 'cessao_1', status: 'ASSINADA', ofertaId: 'of_1',
     oferta: { valorLiquidoVendedor: D('1234.50'), leadVendedorId: 'lead_1', leadVendedor: lead() }, pagamento: null,
@@ -165,6 +170,69 @@ describe('P2 (Argus/Atlas): o destino é o CPF do cedente da cessão, nunca o do
     expect(m.pagar).not.toHaveBeenCalled();
     m.cessao.mockResolvedValueOnce(cessaoCom(lead({ pessoa: { cpfNormalizado: CPF_CEDENTE } })));
     await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).resolves.toMatchObject({ status: 'COMPROVADA' });
+  });
+});
+
+describe('reabrirPagamentoCedente — ação de admin AUDITADA (decisão do Atlas, F-E12-1)', () => {
+  const falhou = (over: Record<string, unknown> = {}) => comprovada({
+    status: 'FALHOU', tentativa: 1, idempotencyKey: 'pix-cedente:cessao_1', motivoFalha: 'PSP_RECUSOU', providerId: null,
+    comprovanteSha256: null, ancoraTxHash: null, destinoMascarado: 'CPF ***4725', ...over,
+  });
+  beforeEach(() => {
+    m.transf.mockResolvedValue(falhou());
+    m.auditCreate.mockImplementation(async () => { m.ordem.push('audit'); return {}; });
+    m.reabrir.mockImplementation(async () => { m.ordem.push('reabrir'); return { status: 'PROCESSANDO' }; });
+  });
+
+  it('FALHOU confirmado: grava EventoAudit PIX_REAL_REABERTO ANTES do novo envio e reabre com o MESMO destino (CPF do cadastro) e o valor da oferta', async () => {
+    const r = await reabrirPagamentoCedente({ ...IN, chavePix: 'outra@pessoa.com', valor: '1.00' } as never, { provider: prov('ASAAS') });
+    expect(r.status).toBe('PROCESSANDO');
+    expect(m.ordem).toEqual(['audit', 'reabrir']);
+    expect(m.reabrir.mock.calls[0][0]).toEqual({ cessaoId: 'cessao_1', valor: '1234.50', chavePix: CPF_CEDENTE, tipoChave: 'CPF', operador: 'admin-panel' });
+    const audit = m.auditCreate.mock.calls[0][0].data;
+    expect(audit).toMatchObject({ acao: 'PIX_REAL_REABERTO', operador: 'admin-panel', cessaoId: 'cessao_1', leadVendedorId: 'lead_1' });
+    expect(audit.payloadJson).toMatchObject({ tentativaAnterior: 1, tentativaNova: 2, motivoAnterior: 'PSP_RECUSOU', idempotencyKeyAnterior: 'pix-cedente:cessao_1' });
+    expect(JSON.stringify(audit)).not.toContain(CPF_CEDENTE); // sem CPF na auditoria
+  });
+
+  it('se a reabertura já concluiu (COMPROVADA), fecha o pagamento (Pagamento/lead/EventoAudit de execução)', async () => {
+    m.reabrir.mockResolvedValue({ status: 'COMPROVADA', sha256: SHA, txHash: TX });
+    m.transf.mockReset().mockResolvedValueOnce(falhou()).mockResolvedValue(comprovada()); // 1ª leitura FALHOU; depois da reabertura, COMPROVADA
+    const r = await reabrirPagamentoCedente(IN, { provider: prov('ASAAS') });
+    expect(r).toMatchObject({ status: 'COMPROVADA', pagamentoId: 'pag_1' });
+    expect(m.pagamentoUpsert).toHaveBeenCalledOnce();
+  });
+
+  it.each(['INCERTO', 'PROCESSANDO', 'ENVIANDO', 'COMPROVADA'] as const)('estado %s NÃO reabre (o dinheiro pode ter saído): NAO_REABRIVEL, sem auditoria nem envio', async (status) => {
+    m.transf.mockResolvedValue(falhou({ status }));
+    await expect(reabrirPagamentoCedente(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'NAO_REABRIVEL', causa: status });
+    expect(m.auditCreate).not.toHaveBeenCalled();
+    expect(m.reabrir).not.toHaveBeenCalled();
+  });
+
+  it('o destino do cadastro mudou desde a tentativa anterior: DESTINO_DIVERGE (destino diferente = pós-D30, dupla aprovação), sem auditoria nem envio', async () => {
+    m.transf.mockResolvedValue(falhou({ destinoMascarado: 'CPF ***9999' }));
+    await expect(reabrirPagamentoCedente(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'DESTINO_DIVERGE' });
+    expect(m.auditCreate).not.toHaveBeenCalled();
+    expect(m.reabrir).not.toHaveBeenCalled();
+  });
+
+  it('sem transferência registrada, cessão não assinada, já paga, sem CPF, acima do teto ou simulado em mainnet: recusa sem auditoria nem envio', async () => {
+    m.transf.mockResolvedValueOnce(null);
+    await expect(reabrirPagamentoCedente(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'TRANSFERENCIA_NAO_ENCONTRADA' });
+    m.cessao.mockResolvedValueOnce({ id: 'cessao_1', status: 'PENDENTE', oferta: { valorLiquidoVendedor: D('1'), leadVendedor: lead() }, pagamento: null });
+    await expect(reabrirPagamentoCedente(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'CESSAO_NAO_ASSINADA' });
+    m.cessao.mockResolvedValueOnce({ id: 'cessao_1', status: 'ASSINADA', oferta: { valorLiquidoVendedor: D('1'), leadVendedor: lead() }, pagamento: { status: 'EXECUTADO' } });
+    await expect(reabrirPagamentoCedente(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'PAGAMENTO_JA_EXECUTADO' });
+    m.cessao.mockResolvedValueOnce({ id: 'cessao_1', status: 'ASSINADA', oferta: { valorLiquidoVendedor: D('1'), leadVendedor: lead({ cpf: null }) }, pagamento: null });
+    await expect(reabrirPagamentoCedente(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'CEDENTE_SEM_DOCUMENTO' });
+    process.env.PIX_MAX_BRL = '10';
+    await expect(reabrirPagamentoCedente(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'ACIMA_DO_TETO' });
+    process.env.PIX_MAX_BRL = '50000';
+    m.rede.v = 'PUBLIC';
+    await expect(reabrirPagamentoCedente(IN, { provider: prov('SIMULADO') })).rejects.toMatchObject({ code: 'SIMULADO_EM_MAINNET' });
+    expect(m.auditCreate).not.toHaveBeenCalled();
+    expect(m.reabrir).not.toHaveBeenCalled();
   });
 });
 
