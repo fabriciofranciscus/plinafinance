@@ -61,6 +61,7 @@ describe('varrerPixSaida', () => {
   it.each([
     ['INCERTO', [aberta('c1', 'INCERTO')], { incertos: 1, alerta: true }],
     ['VALOR_DIVERGE', [aberta('c1', 'INCERTO', { motivoFalha: 'PSP_VALOR_DIVERGE' })], { valorDiverge: 1, incertos: 1, alerta: true }],
+    ['DONE sem EndToEndId (PSP_SEM_E2E), mesmo recente', [aberta('c1', 'PROCESSANDO', { motivoFalha: 'PSP_SEM_E2E' })], { semE2eId: 1, processando: 1, alerta: true }],
     ['PROCESSANDO há mais de 30 min', [aberta('c1', 'PROCESSANDO', { criadoEm: minAtras(31) })], { processandoAntigas: 1, processando: 1, alerta: true }],
     ['ENVIANDO há mais de 30 min', [aberta('c1', 'ENVIANDO', { criadoEm: minAtras(45) })], { processandoAntigas: 1, alerta: true }],
   ])('alerta: %s', async (_n, final, esperado) => {

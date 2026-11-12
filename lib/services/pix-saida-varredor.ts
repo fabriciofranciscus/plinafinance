@@ -1,7 +1,7 @@
 /**
  * Varredor do Pix de saída (E1-2). Chamado por agendador (`GET /api/ops/pix-saida`): retoma as transferências não
  * terminais SEM reenviar (`avancarTransferencia`), fecha as que viraram COMPROVADA (`fecharPagamento`) e calcula o
- * alerta de operação: VALOR_DIVERGE, qualquer INCERTO, ou PROCESSANDO/ENVIANDO há mais de 30 min. Só contagens e ids
+ * alerta de operação: VALOR_DIVERGE, qualquer INCERTO, PSP em DONE sem EndToEndId (PSP_SEM_E2E), ou PROCESSANDO/ENVIANDO há mais de 30 min. Só contagens e ids
  * internos de cessão; nada de PII. Contrato: contratos/2026-11-12-e1-2-fiacao-pagamento-cedente.md.
  */
 import { db } from '../db';
@@ -18,6 +18,8 @@ export interface ResultadoVarredorPix {
   processando: number;
   incertos: number;
   valorDiverge: number;
+  /** PSP em DONE sem EndToEndId: em conferência (Consuelo). */
+  semE2eId: number;
   processandoAntigas: number;
   alerta: boolean;
   /** Cessões em alerta AINDA não avisadas por e-mail (ids internos). */
@@ -73,7 +75,7 @@ export async function varrerPixSaida(opts: { agora?: Date } = {}): Promise<Resul
   });
   const corte = agora.getTime() - PROCESSANDO_ALERTA_MS;
   const emAlerta = aberto.filter(
-    (t) => t.status === 'INCERTO' || t.motivoFalha === 'PSP_VALOR_DIVERGE' || t.criadoEm.getTime() < corte,
+    (t) => t.status === 'INCERTO' || t.motivoFalha === 'PSP_VALOR_DIVERGE' || t.motivoFalha === 'PSP_SEM_E2E' || t.criadoEm.getTime() < corte,
   );
   return {
     avancadas,
@@ -82,6 +84,7 @@ export async function varrerPixSaida(opts: { agora?: Date } = {}): Promise<Resul
     processando: aberto.filter((t) => t.status !== 'INCERTO').length,
     incertos: aberto.filter((t) => t.status === 'INCERTO').length,
     valorDiverge: aberto.filter((t) => t.motivoFalha === 'PSP_VALOR_DIVERGE').length,
+    semE2eId: aberto.filter((t) => t.motivoFalha === 'PSP_SEM_E2E').length,
     processandoAntigas: aberto.filter((t) => t.status !== 'INCERTO' && t.criadoEm.getTime() < corte).length,
     alerta: emAlerta.length > 0,
     paraAvisar: emAlerta.filter((t) => t.alertadoEm === null).map((t) => t.cessaoId),
