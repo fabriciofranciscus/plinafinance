@@ -281,10 +281,11 @@ export async function verificarSnapshot(
     else add(`conciliacao-${code}`, 'ok', `${code}: Σ trustlines autorizadas = circulante no arquivo`);
   }
 
-  // 5. Cada cota ativa se liga à rede pela emissaoTxHash (Consuelo, 12/11). REPROVA o que não existe ou falhou na rede.
-  // A emissão do modelo atual (E1-4) sai do issuer com Memo.hash; emissões LEGADAS (testnet antiga: sem memo, de outra
-  // conta) existem e deram certo, mas não provam o vínculo por memo: ficam "não conferido", dizendo por quê. O memo
-  // esperado (hash da incorporação) não está no arquivo.
+  // 5. Cada cota ativa se liga à rede pela emissaoTxHash (Consuelo/Atlas, 12/11). REPROVA o que não existe ou falhou na
+  // rede. A classificação vem SÓ do FATO on-chain, nunca de rótulo do arquivo: emissão do modelo E1-4 = tx bem-sucedida,
+  // do issuer e com Memo.hash; emissão bem-sucedida que NÃO tem isso é LEGADA ("emissão confirmada, sem cadeia de
+  // hashes"): é listada à parte, como AVISO, e não derruba a prova. Cota sem emissaoTxHash no arquivo não pode ser
+  // classificada (não há fato on-chain a consultar): fica "não conferido". O memo esperado não está no arquivo.
   const itens = arq.numerador.cotasAtivas.itens as Array<{ cotaId: string; emissaoTxHash?: string | null }>;
   const emissor = opts.issuerEsperado ?? classe.issuer;
   if (itens.length > 0) {
@@ -300,12 +301,14 @@ export async function verificarSnapshot(
       else fortes++;
     }
     if (reprovadas.length > 0) add('cotas-emissao', 'falhou', reprovadas.join(' | '));
-    else if (semHash.length > 0 || legadas.length > 0) {
-      const partes = [`${fortes} de ${itens.length} cotas com emissão do issuer e Memo.hash conferida no Horizon`];
-      if (legadas.length > 0) partes.push(`${legadas.length} com emissão existente e bem-sucedida, mas sem Memo.hash do issuer (emissão legada): vínculo por memo não provado (${legadas.join(', ')})`);
-      if (semHash.length > 0) partes.push(`${semHash.length} sem emissaoTxHash no arquivo (${semHash.map((i) => i.cotaId).join(', ')})`);
-      add('cotas-emissao', 'nao_conferido', partes.join('; '));
-    } else add('cotas-emissao', 'ok', `${fortes} de ${itens.length} cotas: emissaoTxHash existe no Horizon, bem-sucedida, do issuer, com Memo.hash`);
+    else if (semHash.length > 0) {
+      add('cotas-emissao', 'nao_conferido', `${fortes} de ${itens.length} cotas com emissão E1-4 conferida no Horizon; ${semHash.length} sem emissaoTxHash no arquivo, não classificáveis (${semHash.map((i) => i.cotaId).join(', ')})`);
+    } else {
+      add('cotas-emissao', 'ok', `${fortes} de ${itens.length} cotas: emissão do modelo E1-4 conferida no Horizon (bem-sucedida, do issuer, com Memo.hash); ${legadas.length} LEGADA(S) listada(s) à parte`);
+    }
+    if (legadas.length > 0 && reprovadas.length === 0) {
+      add('cotas-legadas', 'aviso', `LEGADO (emissão confirmada na rede, sem cadeia de hashes do modelo E1-4): ${legadas.length} cota(s): ${legadas.join(', ')}`);
+    }
   }
 
   // 6. Conferência PARCIAL (opcional): TESOURO do distributor × preço de referência cobre o caixa realizado.
