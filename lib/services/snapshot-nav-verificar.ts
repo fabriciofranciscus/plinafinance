@@ -46,6 +46,8 @@ export interface LeitorHorizon {
    * `geradoEm` do arquivo, então a leitura (do mais novo ao mais antigo) pode parar ao passar dele.
    */
   buscarPorMemo(conta: string, memoB64: string, desde?: string): Promise<TxHorizon[]>;
+  /** Uma transação por hash; `null` se o Horizon não a conhece (404). Outros erros propagam. */
+  transacao(hash: string): Promise<TxHorizon | null>;
 }
 
 export type Estado = 'ok' | 'falhou' | 'nao_conferido';
@@ -116,6 +118,11 @@ export async function verificarSnapshot(
     redeEsperada?: string;
     /** stellar.toml público usado como âncora de confiança (S4): domínio e `ACCOUNTS` (null = não lido/sem a lista). */
     toml?: { dominio: string; accounts: string[] | null };
+    /**
+     * Conferência PARCIAL opcional (Consuelo): TESOURO (ativo-ponte) do distributor × preço de referência ≥ caixa
+     * realizado do arquivo. O preço de referência é informado pelo revisor (não está no Horizon).
+     */
+    tesouro?: { code: string; issuer: string; precoBrl: string };
   } = {},
 ): Promise<ResultadoVerificacao> {
   const conf: Conferencia[] = [];
@@ -271,6 +278,43 @@ export async function verificarSnapshot(
     const interna = D(a.trustlinesAutorizadas.soma).eq(a.circulante);
     if (!interna) add(`conciliacao-${code}`, 'falhou', `${code}: Σ trustlines (${a.trustlinesAutorizadas.soma}) ≠ circulante (${a.circulante}) dentro do próprio arquivo`);
     else add(`conciliacao-${code}`, 'ok', `${code}: Σ trustlines autorizadas = circulante no arquivo`);
+  }
+
+  // 5. Cada cota ativa se liga à rede pela emissaoTxHash (Consuelo, 12/11). REPROVA o que não existe ou falhou na rede.
+  // A emissão do modelo atual (E1-4) sai do issuer com Memo.hash; emissões LEGADAS (testnet antiga: sem memo, de outra
+  // conta) existem e deram certo, mas não provam o vínculo por memo: ficam "não conferido", dizendo por quê. O memo
+  // esperado (hash da incorporação) não está no arquivo.
+  const itens = arq.numerador.cotasAtivas.itens as Array<{ cotaId: string; emissaoTxHash?: string | null }>;
+  const emissor = opts.issuerEsperado ?? classe.issuer;
+  if (itens.length > 0) {
+    const semHash = itens.filter((i) => !i.emissaoTxHash);
+    const reprovadas: string[] = [];
+    const legadas: string[] = [];
+    let fortes = 0;
+    for (const i of itens.filter((x) => x.emissaoTxHash)) {
+      const tx = await leitor.transacao(i.emissaoTxHash as string);
+      if (!tx) reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} não encontrada no Horizon`);
+      else if (!tx.successful) reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} falhou na rede`);
+      else if (tx.source_account !== emissor || tx.memo_type !== 'hash') legadas.push(i.cotaId);
+      else fortes++;
+    }
+    if (reprovadas.length > 0) add('cotas-emissao', 'falhou', reprovadas.join(' | '));
+    else if (semHash.length > 0 || legadas.length > 0) {
+      const partes = [`${fortes} de ${itens.length} cotas com emissão do issuer e Memo.hash conferida no Horizon`];
+      if (legadas.length > 0) partes.push(`${legadas.length} com emissão existente e bem-sucedida, mas sem Memo.hash do issuer (emissão legada): vínculo por memo não provado (${legadas.join(', ')})`);
+      if (semHash.length > 0) partes.push(`${semHash.length} sem emissaoTxHash no arquivo (${semHash.map((i) => i.cotaId).join(', ')})`);
+      add('cotas-emissao', 'nao_conferido', partes.join('; '));
+    } else add('cotas-emissao', 'ok', `${fortes} de ${itens.length} cotas: emissaoTxHash existe no Horizon, bem-sucedida, do issuer, com Memo.hash`);
+  }
+
+  // 6. Conferência PARCIAL (opcional): TESOURO do distributor × preço de referência cobre o caixa realizado.
+  if (opts.tesouro) {
+    const caixa = D(arq.numerador.caixaRealizado.total);
+    const saldo = await leitor.saldoDaConta(distAncora, opts.tesouro.code, opts.tesouro.issuer);
+    const valor = saldo.mul(opts.tesouro.precoBrl);
+    const texto = `PARCIAL: ${opts.tesouro.code} do distributor ${f7(saldo)} × preço de referência ${opts.tesouro.precoBrl} = R$ ${valor.toFixed(2)} ${valor.gte(caixa) ? '≥' : '<'} caixa realizado do arquivo R$ ${caixa.toFixed(2)} (o preço é informado pelo revisor; saldo de hoje)`;
+    if (valor.gte(caixa)) add('tesouro-cobre-caixa', 'ok', texto);
+    else add('tesouro-cobre-caixa', passou ? 'nao_conferido' : 'falhou', texto);
   }
   return fim();
 }

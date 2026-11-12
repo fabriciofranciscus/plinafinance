@@ -10,7 +10,7 @@ const DIST = 'GDIST';
 
 function arquivoBase(): ArquivoSnapshotNav {
   const numerador = montarNumerador(
-    [{ id: 'c1', status: 'DISPONIVEL', valorCarta: '100000.00', desagioAquisicao: '0.2000' }],
+    [{ id: 'c1', status: 'DISPONIVEL', valorCarta: '100000.00', desagioAquisicao: '0.2000', hashValidacao: 'h'.repeat(64), emissaoTxHash: 'tx_emissao_1' }],
     { movimentos: 1, porTipo: { SUBSCRICAO: '2000' } },
   );
   const base = {
@@ -39,12 +39,14 @@ function arquivoBase(): ArquivoSnapshotNav {
 const bytesDe = (a: unknown) => Buffer.from(canonicalizar(a), 'utf8');
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 
-function leitor(over: Partial<{ ledger: number; emitido: string; dist: string; soma: string; contas: number; txs: (memo: string) => TxHorizon[] }> = {}): LeitorHorizon {
+function leitor(over: Partial<{ ledger: number; emitido: string; dist: string; soma: string; contas: number; txs: (memo: string) => TxHorizon[]; tx: (hash: string) => TxHorizon | null; tesouro: string }> = {}): LeitorHorizon {
   const o = { ledger: 101, emitido: '82000', dist: '0', soma: '82000', contas: 3, ...over };
   return {
+    transacao: async (hash) =>
+      (over.tx ?? ((h) => ({ hash: h, successful: true, source_account: 'GISS', memo_type: 'hash', memo: 'AAAA', created_at: '2026-11-10T10:00:00Z' })))(hash),
     ledgerAtual: async () => ({ ledger: o.ledger, fechadoEm: '2026-11-12T09:01:00Z' }),
     totalEmitido: async () => D(o.emitido),
-    saldoDaConta: async () => D(o.dist),
+    saldoDaConta: async (_c, code) => (code === 'TESOURO' ? D(over.tesouro ?? '0') : D(o.dist)),
     trustlinesAutorizadas: async () => ({ soma: D(o.soma), contas: o.contas }),
     buscarPorMemo: async (_c, memo) =>
       (o.txs ?? ((m) => [{ hash: 'tx1', successful: true, source_account: DIST, memo_type: 'hash', memo: m, created_at: '2026-11-12T09:00:06Z' }]))(memo),
@@ -216,6 +218,55 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
     const r = await verificarSnapshot(bytesDe(a), leitor(), PLINA);
     expect(r.conferencias.some((c) => c.id === 'arquivo' && c.estado === 'falhou')).toBe(true);
     expect(r.codigoSaida).toBe(1);
+  });
+
+  describe('cotas ativas ligadas à rede (emissaoTxHash) — Consuelo', () => {
+    const bytes = () => bytesDe(arquivoBase());
+    it('emissão bem-sucedida, do issuer, com Memo.hash → ok (e o arquivo honesto segue CONFERIDO)', async () => {
+      const r = await verificarSnapshot(bytes(), leitor(), PLINA);
+      expect(estado(r, 'cotas-emissao')).toBe('ok');
+      expect(r.codigoSaida).toBe(0);
+    });
+    it.each([
+      ['não encontrada', () => null],
+      ['falhou na rede', (h: string) => ({ hash: h, successful: false, source_account: 'GISS', memo_type: 'hash', created_at: 'x' })],
+    ])('emissão %s → falhou (saída 1)', async (_n, tx) => {
+      const r = await verificarSnapshot(bytes(), leitor({ tx: tx as never }), PLINA);
+      expect(estado(r, 'cotas-emissao')).toBe('falhou');
+      expect(r.codigoSaida).toBe(1);
+    });
+    it.each([
+      ['de outra conta que não o issuer', (h: string) => ({ hash: h, successful: true, source_account: 'GOUTRA', memo_type: 'hash', created_at: 'x' })],
+      ['sem Memo.hash', (h: string) => ({ hash: h, successful: true, source_account: 'GISS', memo_type: 'none', created_at: 'x' })],
+    ])('emissão existente e bem-sucedida %s (legada, como as cotas reais da testnet) → não conferido (saída 2), nunca reprovada nem ok', async (_n, tx) => {
+      const r = await verificarSnapshot(bytes(), leitor({ tx: tx as never }), PLINA);
+      expect(estado(r, 'cotas-emissao')).toBe('nao_conferido');
+      expect(r.conferencias.find((c) => c.id === 'cotas-emissao')?.detalhe).toMatch(/emissão legada/);
+      expect(r.codigoSaida).toBe(2);
+    });
+    it('cota sem emissaoTxHash no arquivo → não conferido (nunca ok em silêncio), saída 2', async () => {
+      const a = arquivoBase();
+      a.numerador.cotasAtivas.itens[0].emissaoTxHash = null;
+      const r = await verificarSnapshot(bytesDe(a), leitor(), PLINA);
+      expect(estado(r, 'cotas-emissao')).toBe('nao_conferido');
+      expect(r.codigoSaida).toBe(2);
+    });
+  });
+
+  describe('conferência PARCIAL do TESOURO — Consuelo', () => {
+    const T = { code: 'TESOURO', issuer: 'GETHER', precoBrl: '1.167' };
+    it('TESOURO × preço ≥ caixa realizado → ok, rotulado PARCIAL; não pedida → nenhuma linha', async () => {
+      const b = bytesDe(arquivoBase()); // caixa 2000
+      const ok = await verificarSnapshot(b, leitor({ tesouro: '2000' }), { ...PLINA, tesouro: T });
+      expect(estado(ok, 'tesouro-cobre-caixa')).toBe('ok');
+      expect(ok.conferencias.find((c) => c.id === 'tesouro-cobre-caixa')?.detalhe).toMatch(/PARCIAL/);
+      expect((await verificarSnapshot(b, leitor(), PLINA)).conferencias.some((c) => c.id === 'tesouro-cobre-caixa')).toBe(false);
+    });
+    it('TESOURO insuficiente no mesmo ledger → falhou; depois do ledger do arquivo → não conferido', async () => {
+      const b = bytesDe(arquivoBase());
+      expect(estado(await verificarSnapshot(b, leitor({ tesouro: '100', ledger: 101 }), { ...PLINA, tesouro: T }), 'tesouro-cobre-caixa')).toBe('falhou');
+      expect(estado(await verificarSnapshot(b, leitor({ tesouro: '100', ledger: 5000 }), { ...PLINA, tesouro: T }), 'tesouro-cobre-caixa')).toBe('nao_conferido');
+    });
   });
 
   it('não é JSON: falha sem lançar', async () => {

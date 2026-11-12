@@ -9,7 +9,7 @@
  *     domínio padrão plina.finance, troque com --toml-domain).
  * A saída diz de onde veio cada conta. Confere: (1) o arquivo é o JSON canônico; (2) contas e rede = as informadas;
  * (3) Memo.hash da tx com source = distributor informado = SHA-256 do arquivo; (4) o NAV refeito do conteúdo;
- * (5) o distributor consta em ACCOUNTS do stellar.toml da Plina (domínio ≠ plina.finance = aviso); (6) circulante, saldo do distributor e Σ trustlines autorizadas refeitos no Horizon. Saída 0 = tudo conferido ·
+ * (5) o distributor consta em ACCOUNTS do stellar.toml da Plina (domínio ≠ plina.finance = aviso); (6) cada cota ativa: emissaoTxHash existe no Horizon, do issuer, com Memo.hash; (7) circulante, saldo do distributor e Σ trustlines autorizadas refeitos no Horizon. Saída 0 = tudo conferido ·
  * 1 = NÃO CONFERIDO (alguma conferência falhou) · 2 = nada falhou, mas há itens não conferidos (saldos mudaram
  * depois do snapshot: o Horizon não guarda saldo histórico).
  *
@@ -75,6 +75,14 @@ function leitor(server: Horizon.Server): LeitorHorizon {
       }
       return { soma, contas };
     },
+    async transacao(hash) {
+      try {
+        return (await server.transactions().transaction(hash).call()) as unknown as TxHorizon;
+      } catch (e) {
+        if ((e as { response?: { status?: number } })?.response?.status === 404) return null;
+        throw e;
+      }
+    },
     async buscarPorMemo(conta, memoB64, desde) {
       const achadas: TxHorizon[] = [];
       let p = (await server.transactions().forAccount(conta).order('desc').limit(PAGINA).call()) as unknown as Pagina<TxHorizon>;
@@ -95,7 +103,7 @@ function leitor(server: Horizon.Server): LeitorHorizon {
 
 const ICONE = { ok: '✓', falhou: '✗', nao_conferido: '?' } as const;
 const uso =
-  'uso: pnpm snapshot:verificar <https://url-do-json> --distributor <G…> --network <testnet|public> [--issuer <G…>] [--toml-domain <dominio>] [--tx <hash>]';
+  'uso: pnpm snapshot:verificar <https://url-do-json> --distributor <G…> --network <testnet|public> [--issuer <G…>] [--toml-domain <dominio>] [--tx <hash>] [--tesouro <CODE:ISSUER> --preco-tesouro <BRL>]';
 
 type Toml = { CURRENCIES?: Array<{ code?: string; issuer?: string }>; ACCOUNTS?: string[] };
 
@@ -110,7 +118,7 @@ async function lerToml(dominio: string): Promise<Toml | null> {
 async function main() {
   const args = process.argv.slice(2);
   const opcao = (n: string) => (args.includes(n) ? args[args.indexOf(n) + 1] : undefined);
-  const valores = new Set(['--tx', '--issuer', '--distributor', '--network', '--toml-domain'].map(opcao).filter(Boolean));
+  const valores = new Set(['--tx', '--issuer', '--distributor', '--network', '--toml-domain', '--tesouro', '--preco-tesouro'].map(opcao).filter(Boolean));
   const url = args.find((a) => !a.startsWith('--') && !valores.has(a));
   const distributorEsperado = opcao('--distributor');
   const rede = opcao('--network')?.toLowerCase();
@@ -119,6 +127,18 @@ async function main() {
     process.exit(64);
   }
   const dominio = opcao('--toml-domain') ?? 'plina.finance';
+  // Conferência parcial opcional (TESOURO do distributor × preço de referência ≥ caixa): as duas opções juntas.
+  const tesouroArg = opcao('--tesouro');
+  const precoArg = opcao('--preco-tesouro');
+  let tesouro: { code: string; issuer: string; precoBrl: string } | undefined;
+  if (tesouroArg || precoArg) {
+    const [code, issuer] = (tesouroArg ?? '').split(':');
+    if (!code || !issuer || !precoArg || !/^\d+(\.\d+)?$/.test(precoArg)) {
+      console.error(`ERRO: --tesouro <CODE:ISSUER> e --preco-tesouro <BRL> andam juntos (preço decimal).\n${uso}`);
+      process.exit(64);
+    }
+    tesouro = { code, issuer, precoBrl: precoArg };
+  }
   const toml = await lerToml(dominio);
   let issuerEsperado = opcao('--issuer');
   const fonteIssuer = issuerEsperado ? '--issuer (argumento)' : `stellar.toml de ${dominio}`;
@@ -146,6 +166,7 @@ async function main() {
     issuerEsperado,
     distributorEsperado,
     redeEsperada: rede,
+    tesouro,
     toml: { dominio, accounts: Array.isArray(toml?.ACCOUNTS) ? toml.ACCOUNTS : null },
   });
   for (const c of r.conferencias) console.log(`${ICONE[c.estado]} ${c.id}: ${c.detalhe}`);
