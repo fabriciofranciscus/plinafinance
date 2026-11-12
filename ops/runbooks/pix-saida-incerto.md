@@ -2,8 +2,9 @@
 
 Use a seção 0 antes do primeiro pagamento ou de qualquer reabertura. Use as
 demais seções quando o alerta de `GET /api/ops/pix-saida` informar uma cessão
-com pagamento `INCERTO`, valor divergente ou processamento antigo. A regra
-principal é: **não reenvie**. O PSP pode ter recebido ou concluído o Pix.
+com pagamento `INCERTO` (inclusive `PSP_SEM_VALOR`), `PROCESSANDO` por
+`PSP_SEM_E2E`, valor divergente ou processamento antigo. A regra principal é:
+**não reenvie**. O PSP pode ter recebido ou concluído o Pix.
 
 ## 0. Conferir titular antes de pagar ou reabrir
 
@@ -44,7 +45,7 @@ host do banco pelo inventário aprovado e execute uma consulta somente leitura:
 ```sql
 BEGIN READ ONLY;
 SELECT "cessaoId", "status", "provedor", "providerId", "idempotencyKey",
-       "valor", "motivoFalha", "tentativa", "criadoEm", "atualizadoEm"
+       "valor", "motivoFalha", "tentativa", "historico", "criadoEm", "atualizadoEm"
   FROM "TransferenciaPix"
  WHERE "cessaoId" = '<CESSAO_ID_DO_ALERTA>';
 ROLLBACK;
@@ -52,18 +53,21 @@ ROLLBACK;
 
 Pare se não houver exatamente uma linha, se o ambiente estiver incerto ou se o
 estado já for terminal. Não consulte nem exponha a chave Pix; ela não é
-persistida pelo serviço. Confirme que `idempotencyKey` é exatamente
-`pix-cedente:<cessaoId>`; divergência de referência é incidente e bloqueia a
-classificação.
+persistida pelo serviço. Na tentativa 1, a referência atual é
+`pix-cedente:<cessaoId>`; na tentativa `n` (n ≥ 2), é
+`pix-cedente:<cessaoId>:<n>`. O `historico` contém as referências, `providerId`,
+motivo, operador e `reabertaEm` das tentativas anteriores, sem o destino. Pare
+como incidente se a sequência não corresponder a `tentativa`.
 
 ## 2. Conferir duas fontes independentes
 
-1. Consulte a API do PSP pela referência externa exata
-   `pix-cedente:<cessaoId>`. Use `providerId` apenas como confirmação adicional;
-   não troque a referência por busca manual de destinatário.
+1. Monte a lista da referência atual e de **todas** as referências anteriores
+   em `historico`. Consulte cada uma na API do PSP; use o `providerId` da mesma
+   tentativa apenas como confirmação adicional. Não troque as referências por
+   busca manual de destinatário.
 2. No mesmo ambiente, consulte o extrato da conta de liquidação no intervalo
    entre `criadoEm` e o horário atual, procurando débito, estorno ou lançamento
-   pendente com a mesma referência e o mesmo valor.
+   pendente de **cada** referência, sempre com o mesmo valor.
 3. Confira nas duas fontes status, valor, identificador E2E e comprovante. A
    API pode continuar pendente sem que exista débito no extrato; ausência em
    uma só fonte não prova falha.
@@ -79,8 +83,14 @@ classificação.
 | API `DONE`/concluído, valor exato e comprovante/identificador E2E válidos; extrato confirma o débito correspondente | Elegível a `COMPROVADA`; deixe o varredor consultar e fechar. Se ele não convergir, abra incidente e mantenha a cessão bloqueada. |
 | Após 24 h, API não registra transferência concluída e extrato não contém débito nem lançamento pendente correspondente | Elegível a `FALHOU` somente pela ação auditada e com dupla aprovação de Thais e Atlas. |
 | API pendente/não encontrada, extrato sem débito, prazo menor que 24 h, resposta ilegível ou qualquer fonte indisponível | Permanece `INCERTO`; não reenvie e não reabra. |
+| `INCERTO` / `PSP_SEM_VALOR`, ainda que a API diga `DONE` | Permanece `INCERTO`: o serviço não comprova o valor pedido. Registre o que o extrato mostra e mantenha bloqueado. |
+| `PROCESSANDO` / `PSP_SEM_E2E` | Permanece `PROCESSANDO`: não trate como `INCERTO` nem `COMPROVADA`; o identificador E2E continua faltando. |
 | API e extrato divergem | Permanece `INCERTO` com severidade financeira; interrompa o fluxo e escale imediatamente. |
 | Valor diferente do pedido | Permanece `INCERTO` com severidade financeira; interrompa o fluxo e escale imediatamente. |
+
+O prazo de 24 h começa em `criadoEm` na tentativa 1. Para a tentativa atual
+`n` (n ≥ 2), começa no último `reabertaEm` do `historico`. Nunca use
+`atualizadoEm`, pois consultas do varredor alteram esse horário.
 
 `COMPROVADA` ou `FALHOU` só são aceitas com as duas fontes. A ação admin
 auditada, planejada para depois do D30, deve validar que os dois resultados já
