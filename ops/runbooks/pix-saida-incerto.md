@@ -10,16 +10,19 @@ com pagamento `INCERTO` (inclusive `PSP_SEM_VALOR`), `PROCESSANDO` por
 
 1. No sistema restrito de operação, abra o laudo de validação da cota e o
    cadastro do cedente da mesma cessão.
-2. Compare os dígitos normalizados do CPF/CNPJ do titular confirmado no laudo
+2. Confirme que o laudo da cessão foi registrado pela ação
+   `registrarLaudoDaCessao`. Se esse registro não existir, pare antes de
+   atestar, pagar ou reabrir; não use SQL para suprir o laudo.
+3. Compare os dígitos normalizados do CPF/CNPJ do titular confirmado no laudo
    com os do cadastro. Não copie nem exponha o documento durante a conferência.
-3. Se faltar documento, o titular não estiver confirmado, houver divergência,
+4. Se faltar documento, o titular não estiver confirmado, houver divergência,
    ou o caso envolver espólio, cotitularidade ou procurador, **não pague nem
    reabra**: encaminhe para tratamento manual.
-4. Se coincidir, use a ação admin autenticada `confirmar-titular-laudo` antes
+5. Se coincidir, use a ação admin autenticada `confirmar-titular-laudo` antes
    de pagar ou reabrir. Ela lê o documento aprovado do cadastro, grava somente
    o HMAC e registra em `EventoAudit` o `cessaoId`, o operador da sessão e o
    atestado; não digite nem envie CPF/CNPJ, chave Pix, imagem ou trecho do laudo.
-5. Se a ação auditada não estiver disponível ou falhar, pare. Não pague, não
+6. Se a ação auditada não estiver disponível ou falhar, pare. Não pague, não
    reabra e não use SQL para suprir o registro.
 
 O HMAC do titular faz parte do D30. Development/Preview usam um segredo
