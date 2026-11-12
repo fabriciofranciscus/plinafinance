@@ -4,7 +4,7 @@ import { _resetPrivyStubLogForTests, motivoStubRecusado, privyStubAtivo } from '
 import { createRateLimiter } from '@/lib/rate-limit/in-memory';
 
 /** RT-1 (Argus, 12/11): o stub do Privy só liga em teste, nunca em produção Vercel nem em mainnet. */
-const ENV_KEYS = ['PRIVY_VERIFY_STUB', 'NODE_ENV', 'E2E_STUB', 'VERCEL_ENV', 'STELLAR_NETWORK'] as const;
+const ENV_KEYS = ['PRIVY_VERIFY_STUB', 'NODE_ENV', 'E2E_STUB', 'VERCEL_ENV', 'VERCEL', 'STELLAR_NETWORK'] as const;
 const salvo: Record<string, string | undefined> = {};
 
 function ambiente(env: Partial<Record<(typeof ENV_KEYS)[number], string>>) {
@@ -43,10 +43,35 @@ describe('privyStubAtivo — os 3 casos do Atlas', () => {
   });
 });
 
+describe('privyStubAtivo — Preview e runtime da Vercel (RT-1, adendo do Argus)', () => {
+  it('Preview com E2E_STUB=1 e a flag (duas variáveis no escopo Preview) → recusa', () => {
+    const env = { PRIVY_VERIFY_STUB: 'true', E2E_STUB: '1', VERCEL_ENV: 'preview', NODE_ENV: 'production' };
+    expect(privyStubAtivo(env)).toBe(false);
+    expect(motivoStubRecusado(env)).toBe('VERCEL_ENV_PREVIEW');
+  });
+  it('Preview com NODE_ENV=test também recusa', () => {
+    expect(privyStubAtivo({ PRIVY_VERIFY_STUB: 'true', NODE_ENV: 'test', VERCEL_ENV: 'preview' })).toBe(false);
+  });
+  it('qualquer runtime da Vercel (VERCEL=1), mesmo sem VERCEL_ENV, com E2E_STUB=1 → recusa', () => {
+    const env = { PRIVY_VERIFY_STUB: 'true', E2E_STUB: '1', VERCEL: '1' };
+    expect(privyStubAtivo(env)).toBe(false);
+    expect(motivoStubRecusado(env)).toBe('VERCEL_RUNTIME');
+  });
+  it('local/CI fora da Vercel continua ligando (VERCEL_ENV e VERCEL ausentes)', () => {
+    expect(privyStubAtivo({ PRIVY_VERIFY_STUB: 'true', E2E_STUB: '1', NODE_ENV: 'development' })).toBe(true);
+  });
+  it('o limiter volta a valer no Preview e no runtime da Vercel', () => {
+    for (const extra of [{ VERCEL_ENV: 'preview' }, { VERCEL: '1' }]) {
+      ambiente({ PRIVY_VERIFY_STUB: 'true', NODE_ENV: 'test', ...extra });
+      const rl = createRateLimiter({ limit: 1, windowMs: 60_000 });
+      expect([rl.consume('a'), rl.consume('a')]).toEqual([true, false]);
+    }
+  });
+});
+
 describe('privyStubAtivo — demais combinações (fail-closed)', () => {
   it.each([
     ['produção sem E2E_STUB', { NODE_ENV: 'production' }],
-    ['Preview da Vercel sem E2E_STUB', { NODE_ENV: 'production', VERCEL_ENV: 'preview' }],
     ['desenvolvimento sem E2E_STUB', { NODE_ENV: 'development' }],
     ['NODE_ENV ausente', {}],
     ['E2E_STUB diferente de 1', { NODE_ENV: 'production', E2E_STUB: 'true' }],
