@@ -8,7 +8,7 @@ vi.mock('@/lib/rate-limit/config', () => ({ publicLimiter: { consume: m.consume 
 import { GET } from '@/app/api/ops/pix-saida/route';
 
 const SECRET = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
-const BASE = { avancadas: 1, comprovadas: 0, erros: 0, processando: 1, incertos: 0, valorDiverge: 0, semE2eId: 0, processandoAntigas: 0, alerta: false, paraAvisar: [] as string[] };
+const BASE = { avancadas: 1, comprovadas: 0, erros: 0, processando: 1, incertos: 0, valorDiverge: 0, semE2eId: 0, falhados: 0, processandoAntigas: 0, alerta: false, paraAvisar: [] as string[] };
 const req = (auth?: string) => new Request('http://x/api/ops/pix-saida', { headers: auth ? { authorization: auth } : {} });
 
 beforeEach(() => {
@@ -25,7 +25,7 @@ describe('GET /api/ops/pix-saida', () => {
   it('Bearer certo → 200 só com contagens, sem ids nem lista', async () => {
     const r = await GET(req(`Bearer ${SECRET}`));
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ avancadas: 1, comprovadas: 0, erros: 0, processando: 1, incertos: 0, valorDiverge: 0, semE2eId: 0, processandoAntigas: 0, alerta: false, alertaEnviado: false });
+    expect(await r.json()).toEqual({ avancadas: 1, comprovadas: 0, erros: 0, processando: 1, incertos: 0, valorDiverge: 0, semE2eId: 0, falhados: 0, processandoAntigas: 0, alerta: false, alertaEnviado: false });
     expect(m.alerta).not.toHaveBeenCalled();
   });
 
