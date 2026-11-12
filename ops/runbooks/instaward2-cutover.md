@@ -31,8 +31,9 @@ Estado consolidado em 2026-11-11. Este checklist prepara a decisão; não autori
 - [ ] PSP regulado sandbox: conta da Thais, idempotência, comprovante privado e memo-hash homologados. Criar a conta não autoriza ativar `ASAAS` antes do rótulo `PIX_SANDBOX`; avisar o Atlas se ela existir antes do D30.
 - [ ] Até o D30, `PSP_PROVIDER=SIMULADO` em todo ambiente que gera evidência do SOW. Não ativar `ASAAS` enquanto o sandbox puder gravar `PIX_REAL`/`PIX_REAL_EXECUTADO`.
 - [ ] Com `STELLAR_NETWORK=PUBLIC`, `PSP_PROVIDER` é explícito e de produção; ausente, `SIMULADO` ou Asaas sandbox falha com `PSP_CONFIG` antes de claim/envio. `DONE` sem valor fica `INCERTO`. P1/P3 foram aprovados pela Vera em `15b0725`, mas o item só fecha depois do merge e da prova no ambiente isolado.
-- [x] `TITULAR_HMAC_SECRET` removido de Development/Preview, das `.env.local` e do pacote de Production; o HMAC automatizado ficou na branch pós-D30 `feat/e1-2-titular-laudo`.
-- [ ] Antes da cota de prova, a ação admin de pagar/reabrir registra no `EventoAudit` o operador da sessão e o atestado manual laudo × cadastro, sem documento, chave Pix ou trecho do laudo. Sem esse registro, o runbook manda parar; SQL é proibido.
+- [x] `TITULAR_HMAC_SECRET` testnet aleatório (64 caracteres) instalado como secret em Development/Preview e nas 9 `.env.local`, sem valor no repositório; Production permanece ausente.
+- [ ] Antes da cota de prova, a Thais cria `TITULAR_HMAC_SECRET` próprio em Production (sensitive, ≥ 32 caracteres, diferente de testnet), faz redeploy e confirma apenas a existência. Nunca copiar o valor para chat, mural, arquivo compartilhado ou `.env.example`.
+- [ ] A ação admin `confirmar-titular-laudo` registra no `EventoAudit` o operador da sessão e somente o HMAC/atestado laudo × cadastro, sem documento, chave Pix ou trecho do laudo. Sem esse registro, o runbook manda parar; SQL é proibido.
 - [ ] `PIX_MAX_BRL` está configurado e testado fail-closed. Incertos seguem `ops/runbooks/pix-saida-incerto.md`; nenhuma escrita manual no banco.
 - [ ] Etherfuse: SLA, preço, limites, rail BR/PIX, ativo-ponte e contato de incidente confirmados por escrito.
 - [ ] Vercel Blob privado: token separado por ambiente, acesso curto e revogação testados.
