@@ -83,6 +83,13 @@ function leitor(server: Horizon.Server): LeitorHorizon {
         throw e;
       }
     },
+    async operacoes(hash) {
+      const r = await server.operations().forTransaction(hash).limit(200).call();
+      return r.records.map((o) => {
+        const x = o as unknown as { type: string; from?: string; source_account?: string; asset_code?: string; asset_issuer?: string };
+        return { type: x.type, from: x.from, source_account: x.source_account, asset_code: x.asset_code, asset_issuer: x.asset_issuer };
+      });
+    },
     async buscarPorMemo(conta, memoB64, desde) {
       const achadas: TxHorizon[] = [];
       let p = (await server.transactions().forAccount(conta).order('desc').limit(PAGINA).call()) as unknown as Pagina<TxHorizon>;

@@ -41,11 +41,13 @@ function arquivoBase(cotas: Array<typeof COTA1> = [COTA1]): ArquivoSnapshotNav {
 const bytesDe = (a: unknown) => Buffer.from(canonicalizar(a), 'utf8');
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 
-function leitor(over: Partial<{ ledger: number; emitido: string; dist: string; soma: string; contas: number; txs: (memo: string) => TxHorizon[]; tx: (hash: string) => TxHorizon | null; tesouro: string }> = {}): LeitorHorizon {
+function leitor(over: Partial<{ ledger: number; emitido: string; dist: string; soma: string; contas: number; txs: (memo: string) => TxHorizon[]; tx: (hash: string) => TxHorizon | null; tesouro: string; ops: Array<Record<string, string>> }> = {}): LeitorHorizon {
   const o = { ledger: 101, emitido: '82000', dist: '0', soma: '82000', contas: 3, ...over };
   return {
     transacao: async (hash) =>
       (over.tx ?? ((h) => ({ hash: h, successful: true, source_account: 'GISS', memo_type: 'hash', memo: 'AAAA', created_at: '2026-11-10T10:00:00Z' })))(hash),
+    // padrão: a tx é uma EMISSÃO (pagamento de PLINARF do issuer em vigor, 'GISS'); `ops` troca as operações
+    operacoes: async () => (over.ops ?? [{ type: 'payment', asset_code: 'PLINARF', asset_issuer: 'GISS', from: 'GISS' }]) as never,
     ledgerAtual: async () => ({ ledger: o.ledger, fechadoEm: '2026-11-12T09:01:00Z' }),
     totalEmitido: async () => D(o.emitido),
     saldoDaConta: async (_c, code) => (code === 'TESOURO' ? D(over.tesouro ?? '0') : D(o.dist)),
@@ -244,7 +246,7 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
       expect(legadas?.detalhe).toMatch(/^1 LEGADO: emissão confirmada, sem cadeia de hashes/);
       expect(legadas?.detalhe).toMatch(/Regra: LEGADO só quando a emissaoTxHash existe na rede, foi bem-sucedida, saiu do issuer em vigor e NÃO tem o Memo\.hash do modelo E1-4/);
       expect(legadas?.detalhe).toMatch(/Código 0 = nada reprovou e toda emissão do modelo E1-4 confere/);
-      expect(estado(r, 'cotas-emissao')).toBe('ok');
+      expect(estado(r, 'cotas-emissao')).toBe('aviso'); // só legadas: sem emissão E1-4 conferida, dito explicitamente (F-E31-7)
       expect(r.codigoSaida).toBe(0);
     });
     it.each([
@@ -309,6 +311,45 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
       expect(chamadas).toEqual([]); // nada vai à rede
       expect(r.codigoSaida).toBe(1);
     });
+    describe('F-E31-7: a tx de emissão precisa ser de fato uma emissão do ativo da classe', () => {
+      const b = () => bytesDe(arquivoBase());
+      it.each([
+        ['sem nenhuma operação', []],
+        ['só operação que não é pagamento', [{ type: 'manage_data', from: 'GISS' }]],
+        ['pagamento de OUTRO ativo', [{ type: 'payment', asset_code: 'USDC', asset_issuer: 'GISS', from: 'GISS' }]],
+        ['pagamento do ativo mas de OUTRO issuer', [{ type: 'payment', asset_code: 'PLINARF', asset_issuer: 'GOUTRO', from: 'GISS' }]],
+        ['pagamento do ativo que NÃO saiu do issuer', [{ type: 'payment', asset_code: 'PLINARF', asset_issuer: 'GISS', from: 'GDIST' }]],
+      ])('tx do issuer, bem-sucedida, %s → ✗ (nem E1-4 nem legada)', async (_n, ops) => {
+        const r = await verificarSnapshot(b(), leitor({ ops: ops as never }), PLINA);
+        expect(estado(r, 'cotas-emissao')).toBe('falhou');
+        expect(r.conferencias.find((c) => c.id === 'cotas-emissao')?.detalhe).toMatch(/não contém pagamento de PLINARF saído do issuer/);
+        expect(r.conferencias.some((c) => c.id === 'cotas-legadas')).toBe(false);
+        expect(r.codigoSaida).toBe(1);
+      });
+      it('o pagamento sem o campo from usa a conta de origem da operação (source_account)', async () => {
+        const r = await verificarSnapshot(b(), leitor({ ops: [{ type: 'payment', asset_code: 'PLINARF', asset_issuer: 'GISS', source_account: 'GISS' }] as never }), PLINA);
+        expect(estado(r, 'cotas-emissao')).toBe('ok');
+      });
+      it('o mesmo emissaoTxHash em duas cotas → ✗ (não prova duas emissões)', async () => {
+        const a = arquivoBase([COTA1, { ...COTA1, id: 'c2' }]);
+        const r = await verificarSnapshot(bytesDe(a), leitor(), PLINA);
+        expect(estado(r, 'cotas-emissao')).toBe('falhou');
+        expect(r.conferencias.find((c) => c.id === 'cotas-emissao')?.detalhe).toMatch(/emissaoTxHash repetido \(já usado pela cota c1\)/);
+        expect(r.codigoSaida).toBe(1);
+      });
+      it('SÓ legadas (0 emissão E1-4): cotas-emissao vira AVISO explícito, sem mudar o código de saída (0)', async () => {
+        const r = await verificarSnapshot(
+          b(),
+          leitor({ tx: ((h: string) => ({ hash: h, successful: true, source_account: 'GISS', memo_type: 'none', created_at: 'x' })) as never }),
+          PLINA,
+        );
+        expect(estado(r, 'cotas-emissao')).toBe('aviso');
+        expect(r.conferencias.find((c) => c.id === 'cotas-emissao')?.detalhe).toMatch(/0 de 1 cotas do modelo E1-4: todas as emissões são LEGADAS/);
+        expect(r.conferencias.some((c) => c.id === 'cotas-legadas')).toBe(true);
+        expect(r.codigoSaida).toBe(0);
+      });
+    });
+
     it('cota sem emissaoTxHash no arquivo → não conferido (nunca ok em silêncio), saída 2', async () => {
       const a = arquivoBase();
       a.numerador.cotasAtivas.itens[0].emissaoTxHash = null;

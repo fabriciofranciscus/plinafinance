@@ -30,6 +30,15 @@ export interface TxHorizon {
   created_at: string;
 }
 
+export interface OperacaoHorizon {
+  type: string;
+  /** Origem do pagamento (`from`) ou, na falta, a conta de origem da operação. */
+  from?: string;
+  source_account?: string;
+  asset_code?: string;
+  asset_issuer?: string;
+}
+
 export interface LeitorHorizon {
   ledgerAtual(): Promise<{ ledger: number; fechadoEm: string }>;
   /** Σ de `/assets` do asset (autorizado + obrigações + não autorizado + claimable + LP + contratos). */
@@ -48,6 +57,8 @@ export interface LeitorHorizon {
   buscarPorMemo(conta: string, memoB64: string, desde?: string): Promise<TxHorizon[]>;
   /** Uma transação por hash; `null` se o Horizon não a conhece (404). Outros erros propagam. */
   transacao(hash: string): Promise<TxHorizon | null>;
+  /** Operações da transação (só leitura). Usadas para provar que a emissão é um pagamento do ativo da classe. */
+  operacoes(hash: string): Promise<OperacaoHorizon[]>;
 }
 
 /** `aviso`: informação que NÃO altera o código de saída (ex.: conferência parcial que depende de config do revisor). */
@@ -293,6 +304,8 @@ export async function verificarSnapshot(
     const reprovadas: string[] = [];
     const legadas: string[] = [];
     let fortes = 0;
+    // O mesmo hash em duas cotas não prova duas emissões (F-E31-7): arquivo forjado apontando tudo para uma tx real.
+    const vistos = new Map<string, string>();
     for (const i of itens.filter((x) => x.emissaoTxHash)) {
       // O hash vem do arquivo (de terceiros): só vai ao Horizon se for um hash de transação (64 hex minúsculos); o
       // resto é reprovado sem tocar a rede nem repetir o conteúdo cru (F-E31-6 da Vera).
@@ -300,18 +313,36 @@ export async function verificarSnapshot(
         reprovadas.push(`${i.cotaId}: emissaoTxHash inválido no arquivo (não é um hash de transação de 64 hex minúsculos)`);
         continue;
       }
+      const anterior = vistos.get(i.emissaoTxHash);
+      if (anterior) {
+        reprovadas.push(`${i.cotaId}: emissaoTxHash repetido (já usado pela cota ${anterior})`);
+        continue;
+      }
+      vistos.set(i.emissaoTxHash, i.cotaId);
       const tx = await leitor.transacao(i.emissaoTxHash);
       if (!tx) reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} não encontrada no Horizon`);
       else if (!tx.successful) reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} falhou na rede`);
       else if (tx.source_account !== emissor) reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} não saiu do issuer em vigor (outro issuer reprova)`);
-      else if (tx.memo_type !== 'hash') legadas.push(i.cotaId);
-      else fortes++;
+      else {
+        // A tx precisa ser, de fato, uma EMISSÃO: contém um pagamento do ativo da classe (código + issuer em vigor)
+        // saído do issuer. Uma tx qualquer do issuer não vale (F-E31-7 da Vera).
+        const ops = await leitor.operacoes(i.emissaoTxHash);
+        const emissao = ops.some(
+          (o) => o.type === 'payment' && o.asset_code === arq.nav.classe && o.asset_issuer === emissor && (o.from ?? o.source_account) === emissor,
+        );
+        if (!emissao) reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} não contém pagamento de ${arq.nav.classe} saído do issuer em vigor`);
+        else if (tx.memo_type !== 'hash') legadas.push(i.cotaId);
+        else fortes++;
+      }
     }
     if (reprovadas.length > 0) add('cotas-emissao', 'falhou', reprovadas.join(' | '));
     else if (semHash.length > 0) {
       add('cotas-emissao', 'nao_conferido', `${fortes} de ${itens.length} cotas com emissão E1-4 conferida no Horizon; ${semHash.length} sem emissaoTxHash no arquivo, não classificáveis (${semHash.map((i) => i.cotaId).join(', ')})`);
+    } else if (fortes === 0) {
+      // Nada reprovou (código não muda), mas NENHUMA emissão do modelo E1-4 apareceu: a tela diz isso, sem fingir prova.
+      add('cotas-emissao', 'aviso', `0 de ${itens.length} cotas do modelo E1-4: todas as emissões são LEGADAS (pagamento do ativo confirmado, sem Memo.hash); nenhuma emissão E1-4 foi conferida neste snapshot`);
     } else {
-      add('cotas-emissao', 'ok', `${fortes} de ${itens.length} cotas: emissão do modelo E1-4 conferida no Horizon (bem-sucedida, do issuer, com Memo.hash); ${legadas.length} LEGADA(S) listada(s) à parte`);
+      add('cotas-emissao', 'ok', `${fortes} de ${itens.length} cotas: emissão do modelo E1-4 conferida no Horizon (pagamento do ativo, do issuer, com Memo.hash); ${legadas.length} LEGADA(S) listada(s) à parte`);
     }
     if (legadas.length > 0 && reprovadas.length === 0) {
       add(
