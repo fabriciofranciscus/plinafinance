@@ -84,7 +84,7 @@ const anteriores = (r: TransferenciaPix): TentativaAnterior[] =>
  * Início da tentativa ATUAL: a hora da última reabertura (ou `criadoEm` na 1ª tentativa). É o `desde` da âncora e da
  * busca da tentativa atual: depois de reabrir, a janela começa na reabertura, não no claim original (janela menor).
  */
-const inicioDaTentativa = (r: TransferenciaPix): Date => {
+export const inicioDaTentativa = (r: TransferenciaPix): Date => {
   const a = anteriores(r);
   const ultima = a.length > 0 ? Date.parse(a[a.length - 1].reabertaEm) : NaN;
   return Number.isFinite(ultima) ? new Date(ultima) : r.criadoEm;

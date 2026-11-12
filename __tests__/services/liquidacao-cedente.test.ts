@@ -50,7 +50,7 @@ import { ComprovanteBlobError } from '@/lib/integrations/blob/comprovante-psp';
 import { criarSimuladoProvider } from '@/lib/integrations/psp/simulado';
 import { PspError, type ConsultaPix, type PixProvider } from '@/lib/integrations/psp/types';
 import { AncoraError } from '@/lib/stellar/ancora';
-import { avancarTransferencia, pagarTitular, reabrirTransferencia } from '@/lib/services/liquidacao-cedente';
+import { avancarTransferencia, inicioDaTentativa, pagarTitular, reabrirTransferencia } from '@/lib/services/liquidacao-cedente';
 
 const AGORA = new Date('2026-11-12T09:00:00.000Z');
 const CHAVE_PIX = 'maria.silva@example.com.br';
@@ -323,6 +323,16 @@ describe('F-E12-1 — chave Pix validada por tipo antes do claim', () => {
 describe('F-E12-1 — reabrir um FALHOU confirmado pelo PSP (auditado, chave nova)', () => {
   const recusa = () => provedor({ envio: async () => { throw new PspError('PSP_RECUSOU'); } });
   const REABRIR = { ...IN, operador: 'admin-panel' };
+
+  it('expõe o início da tentativa atual (a hora da reabertura)', async () => {
+    const p = recusa();
+    await pagarTitular(IN, { provider: p, agora: AGORA });
+    p.enviarPix.mockResolvedValue({ id: 'tra_2', status: 'PENDENTE' });
+    p.consultarStatus.mockResolvedValue({ id: 'tra_2', status: 'PENDENTE' });
+    const REABERTURA = new Date('2026-11-12T15:00:00.000Z');
+    await reabrirTransferencia(REABRIR, { provider: p, agora: REABERTURA });
+    expect(inicioDaTentativa(m.rows[0] as never)).toEqual(REABERTURA);
+  });
 
   it('FALHOU (PSP recusou) → reabre com idempotencyKey :2, guarda a tentativa anterior no histórico e conclui', async () => {
     const p = recusa();
