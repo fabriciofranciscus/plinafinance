@@ -15,16 +15,16 @@ com pagamento `INCERTO` (inclusive `PSP_SEM_VALOR`), `PROCESSANDO` por
 3. Se faltar documento, o titular não estiver confirmado, houver divergência,
    ou o caso envolver espólio, cotitularidade ou procurador, **não pague nem
    reabra**: encaminhe para tratamento manual.
-4. Se coincidir, use a ação autenticada `confirmar-titular-laudo` antes de
-   pagar/reabrir. Ela lê o documento aprovado do cadastro, grava apenas o HMAC
-   do documento e registra o atestado em `EventoAudit`; não digite nem envie o
-   CPF/CNPJ pelo formulário. Não grave chave Pix, imagem ou trecho do laudo no
-   evento. Se a ação auditada não estiver disponível, pare; não use SQL para
-   suprir o registro.
+4. Se coincidir, registre a conferência pela ação admin autenticada que vai
+   pagar ou reabrir. O `EventoAudit` deve guardar o `cessaoId`, o operador da
+   sessão e somente o atestado booleano de que laudo e cadastro coincidem; não
+   digite nem envie o CPF/CNPJ, chave Pix, imagem ou trecho do laudo.
+5. Se a ação ainda não gravar esse atestado no `EventoAudit`, pare. Não pague,
+   não reabra e não use SQL para suprir o registro.
 
-O HMAC do titular faz parte do D30. Development/Preview usam o segredo de
-testnet; Production recebe um segredo próprio, pela Thais, antes da cota de
-prova. Sem `TITULAR_HMAC_SECRET` válido, pagar e reabrir falham fechado.
+O HMAC automatizado do titular e `TITULAR_HMAC_SECRET` ficam fora do D30, na
+branch pós-D30 `feat/e1-2-titular-laudo`. Production não recebe esse segredo no
+pacote atual.
 
 ## Guardas
 
