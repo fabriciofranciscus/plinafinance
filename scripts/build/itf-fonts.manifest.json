@@ -1,0 +1,26 @@
+{
+  "_comment": "Somente nomes, tamanhos e SHA-256 dos 4 arquivos ITF (Chillax/Satoshi). Os arquivos NUNCA entram no git (ITF FFL 2.0). Origem: Vercel Blob privado 'plina-itf-fonts', prefixo itf/.",
+  "prefix": "itf/",
+  "files": [
+    {
+      "name": "Chillax-Semibold.woff2",
+      "sha256": "16cc2b75ef71f81aa3cd47792a8d349719c335a91e8787eb229aea5de279740a",
+      "bytes": 22776
+    },
+    {
+      "name": "Chillax-Medium.woff2",
+      "sha256": "afaf7e5fc33a5db46eb97ec9162ca86dbf07118c3a9acc8e33834a04740bef02",
+      "bytes": 22920
+    },
+    {
+      "name": "Satoshi-Light.woff2",
+      "sha256": "28bde2ff554acba1eff96f6cf120e226736286e05c90ececdaa3fafececbd55e",
+      "bytes": 23788
+    },
+    {
+      "name": "Satoshi-Regular.woff2",
+      "sha256": "5aa97d938f523dd893c52473c3a021a0bf4ba0f95290edcc0749c088717f951f",
+      "bytes": 27184
+    }
+  ]
+}

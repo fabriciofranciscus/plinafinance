@@ -11,7 +11,7 @@
     "test:watch": "vitest",
     "lint:auth-guard": "node scripts/lint/require-auth-guard.mjs",
     "postinstall": "prisma generate",
-    "prebuild": "pnpm lint:auth-guard",
+    "prebuild": "pnpm lint:auth-guard && node scripts/build/fetch-itf-fonts.mjs",
     "smoke:stellar": "tsx scripts/smoke-stellar.ts",
     "smoke:investidor": "tsx scripts/smoke-investidor.ts",
     "smoke:etherfuse": "tsx scripts/smoke-etherfuse.ts",
