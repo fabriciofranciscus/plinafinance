@@ -329,9 +329,27 @@ export async function pagarTitular(
  * hora) é acrescentada a `historico`; a recuperação de incerteza passa a olhar TODAS as chaves. Qualquer outro estado
  * (INCERTO, PROCESSANDO, COMPROVADA) NÃO reabre: o dinheiro pode ter saído. Decisão do operador, nunca automática.
  */
+/** Dados da tentativa que está sendo substituída, entregues ao `aoReabrir` (para auditoria). */
+export interface TentativaSubstituida {
+  provedor: string;
+  tentativaAnterior: number;
+  tentativaNova: number;
+  idempotencyKeyAnterior: string;
+  motivoAnterior: string | null;
+  providerIdAnterior: string | null;
+}
+
 export async function reabrirTransferencia(
   input: EntradaPagamento & { operador: string },
-  opts: { provider?: PixProvider; agora?: Date } = {},
+  opts: {
+    provider?: PixProvider;
+    agora?: Date;
+    /**
+     * Roda DENTRO da mesma transação da reabertura, só se ela se aplicou (F-REAB-1 da Vera): o evento de auditoria da
+     * reabertura nasce junto com a tentativa nova ou não nasce. O envio ao PSP vem depois da transação.
+     */
+    aoReabrir?: (tx: Prisma.TransactionClient, t: TentativaSubstituida) => Promise<void>;
+  } = {},
 ): Promise<ResultadoPagamento> {
   exigirRedeDeTeste();
   if (typeof input.operador !== 'string' || !/^[A-Za-z0-9:_.-]{1,80}$/.test(input.operador)) {
@@ -357,22 +375,35 @@ export async function reabrirTransferencia(
     reabertaEm: agora.toISOString(),
     operador,
   };
-  // Atômico: só reabre se continua FALHOU na MESMA tentativa (duas reaberturas simultâneas = uma só).
-  const r = await db.transferenciaPix.updateMany({
-    where: { id: row.id, status: 'FALHOU', tentativa: row.tentativa },
-    data: {
-      status: 'ENVIANDO',
-      tentativa: nova,
-      idempotencyKey: chaveDaCessao(row.cessaoId, nova),
-      historico: [...anteriores(row), entrada] as unknown as Prisma.InputJsonValue,
-      providerId: null,
-      e2eId: null,
-      motivoFalha: null,
-      destinoMascarado: mascararDestino(i.tipoChave, i.chavePix),
-      travaAte: new Date(agora.getTime() + LEASE_PIX_MS),
-    },
+  // Valores da tentativa substituída, capturados ANTES da transação (a auditoria descreve o que foi substituído).
+  const substituida: TentativaSubstituida = {
+    provedor: row.provedor,
+    tentativaAnterior: row.tentativa,
+    tentativaNova: nova,
+    idempotencyKeyAnterior: row.idempotencyKey,
+    motivoAnterior: row.motivoFalha,
+    providerIdAnterior: row.providerId,
+  };
+  // Atômico: só reabre se continua FALHOU na MESMA tentativa (duas reaberturas simultâneas = uma só); a auditoria
+  // (aoReabrir) roda na MESMA transação e só se a reabertura se aplicou.
+  await db.$transaction(async (tx) => {
+    const r = await tx.transferenciaPix.updateMany({
+      where: { id: row.id, status: 'FALHOU', tentativa: row.tentativa },
+      data: {
+        status: 'ENVIANDO',
+        tentativa: nova,
+        idempotencyKey: chaveDaCessao(row.cessaoId, nova),
+        historico: [...anteriores(row), entrada] as unknown as Prisma.InputJsonValue,
+        providerId: null,
+        e2eId: null,
+        motivoFalha: null,
+        destinoMascarado: mascararDestino(i.tipoChave, i.chavePix),
+        travaAte: new Date(agora.getTime() + LEASE_PIX_MS),
+      },
+    });
+    if (r.count !== 1) throw new LiquidacaoCedenteError('EM_ANDAMENTO');
+    await opts.aoReabrir?.(tx, substituida);
   });
-  if (r.count !== 1) throw new LiquidacaoCedenteError('EM_ANDAMENTO');
   const reaberta = await db.transferenciaPix.findUnique({ where: { cessaoId: row.cessaoId } });
   if (!reaberta) throw new LiquidacaoCedenteError('TRANSFERENCIA_NAO_ENCONTRADA');
   return dispararEnvio(reaberta, i, provider);

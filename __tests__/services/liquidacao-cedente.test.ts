@@ -11,6 +11,8 @@ const m = vi.hoisted(() => ({
 
 vi.mock('@/lib/db', () => ({
   db: {
+    // a transação do mock reusa o mesmo banco em memória (sem rollback; o que importa é a ordem e a condição)
+    $transaction: async (fn: (tx: unknown) => unknown) => fn((await import('@/lib/db')).db),
     transferenciaPix: {
       findUnique: async ({ where }: { where: { cessaoId: string } }) => m.rows.find((r) => r.cessaoId === where.cessaoId) ?? null,
       create: async ({ data }: { data: Row }) => {
@@ -436,6 +438,38 @@ describe('F-E12-1 — reabrir um FALHOU confirmado pelo PSP (auditado, chave nov
     const chamadas = p.localizarPorChave.mock.calls as unknown as Array<[string, Date]>;
     expect(chamadas.find((c) => c[0] === 'pix-cedente:cessao_1:2')?.[1]).toEqual(REABERTURA);
     expect(chamadas.find((c) => c[0] === 'pix-cedente:cessao_1')?.[1]).toEqual(m.rows[0].criadoEm);
+  });
+
+  it('F-REAB-1: o aoReabrir (auditoria) roda DENTRO da transação da reabertura, só quando ela se aplicou, com os dados da tentativa substituída', async () => {
+    const p = recusa();
+    await pagarTitular(IN, { provider: p, agora: AGORA });
+    p.enviarPix.mockResolvedValue({ id: 'tra_2', status: 'PENDENTE' });
+    p.consultarStatus.mockResolvedValue({ id: 'tra_2', status: 'PENDENTE' });
+    const aoReabrir = vi.fn(async () => undefined);
+    await reabrirTransferencia(REABRIR, { provider: p, agora: AGORA, aoReabrir });
+    expect(aoReabrir).toHaveBeenCalledOnce();
+    expect((aoReabrir.mock.calls[0] as unknown as [unknown, Record<string, unknown>])[1]).toEqual({
+      provedor: 'ASAAS', tentativaAnterior: 1, tentativaNova: 2, idempotencyKeyAnterior: 'pix-cedente:cessao_1', motivoAnterior: 'PSP_RECUSOU', providerIdAnterior: null,
+    });
+    expect(m.rows[0].tentativa).toBe(2); // a reabertura se aplicou junto com o hook
+  });
+
+  it('F-REAB-1: duas reaberturas simultâneas = UM aoReabrir (a perdedora não deixa evento nem envio); estado que não é FALHOU nunca chama o hook', async () => {
+    const p = recusa();
+    await pagarTitular(IN, { provider: p, agora: AGORA });
+    p.enviarPix.mockResolvedValue({ id: 'tra_2', status: 'PENDENTE' });
+    p.consultarStatus.mockResolvedValue({ id: 'tra_2', status: 'PENDENTE' });
+    const aoReabrir = vi.fn(async () => undefined);
+    const [a, b] = await Promise.allSettled([
+      reabrirTransferencia(REABRIR, { provider: p, agora: AGORA, aoReabrir }),
+      reabrirTransferencia(REABRIR, { provider: p, agora: AGORA, aoReabrir }),
+    ]);
+    expect([a.status, b.status].sort()).toEqual(['fulfilled', 'rejected']);
+    expect(aoReabrir).toHaveBeenCalledOnce();
+    const outro = vi.fn(async () => undefined);
+    m.rows[0].status = 'PROCESSANDO';
+    await expect(reabrirTransferencia(REABRIR, { provider: p, agora: AGORA, aoReabrir: outro })).rejects.toMatchObject({ code: 'NAO_REABRIVEL' });
+    expect(outro).not.toHaveBeenCalled();
   });
 
   it('exige operador identificado, a chave Pix válida e o mesmo valor/provedor', async () => {
