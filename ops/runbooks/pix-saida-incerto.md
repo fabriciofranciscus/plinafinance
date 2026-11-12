@@ -15,15 +15,16 @@ com pagamento `INCERTO` (inclusive `PSP_SEM_VALOR`), `PROCESSANDO` por
 3. Se faltar documento, o titular não estiver confirmado, houver divergência,
    ou o caso envolver espólio, cotitularidade ou procurador, **não pague nem
    reabra**: encaminhe para tratamento manual.
-4. Se coincidir, registre a conferência em `EventoAudit` pela ação aprovada do
-   aplicativo, antes de pagar/reabrir: `cessaoId`, resultado, referência do
-   laudo, operador e horário. Não grave CPF/CNPJ, chave Pix, imagem ou trecho do
-   laudo no evento. Se a ação auditada não estiver disponível, pare; não use
-   SQL para suprir o registro.
+4. Se coincidir, use a ação autenticada `confirmar-titular-laudo` antes de
+   pagar/reabrir. Ela lê o documento aprovado do cadastro, grava apenas o HMAC
+   do documento e registra o atestado em `EventoAudit`; não digite nem envie o
+   CPF/CNPJ pelo formulário. Não grave chave Pix, imagem ou trecho do laudo no
+   evento. Se a ação auditada não estiver disponível, pare; não use SQL para
+   suprir o registro.
 
-Essa conferência manual é temporária. O HMAC versionado do titular do laudo é
-pré-requisito pós-D30 para habilitar PSP de produção ou retirar a recusa em
-`STELLAR_NETWORK=PUBLIC`.
+O HMAC do titular faz parte do D30. Development/Preview usam o segredo de
+testnet; Production recebe um segredo próprio, pela Thais, antes da cota de
+prova. Sem `TITULAR_HMAC_SECRET` válido, pagar e reabrir falham fechado.
 
 ## Guardas
 

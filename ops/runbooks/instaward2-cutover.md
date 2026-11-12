@@ -31,6 +31,8 @@ Estado consolidado em 2026-11-11. Este checklist prepara a decisão; não autori
 - [ ] PSP regulado sandbox: conta da Thais, idempotência, comprovante privado e memo-hash homologados. Criar a conta não autoriza ativar `ASAAS` antes do rótulo `PIX_SANDBOX`; avisar o Atlas se ela existir antes do D30.
 - [ ] Até o D30, `PSP_PROVIDER=SIMULADO` em todo ambiente que gera evidência do SOW. Não ativar `ASAAS` enquanto o sandbox puder gravar `PIX_REAL`/`PIX_REAL_EXECUTADO`.
 - [ ] Com `STELLAR_NETWORK=PUBLIC`, `PSP_PROVIDER` é explícito e de produção; ausente, `SIMULADO` ou Asaas sandbox falha com `PSP_CONFIG` antes de claim/envio. `DONE` sem valor fica `INCERTO`. P1/P3 foram aprovados pela Vera em `15b0725`, mas o item só fecha depois do merge e da prova no ambiente isolado.
+- [x] `TITULAR_HMAC_SECRET` aleatório (64 caracteres) instalado como secret em Development/Preview e nas `.env.local`, sem valor no repositório; Production permaneceu ausente.
+- [ ] Antes da cota de prova, a Thais cria `TITULAR_HMAC_SECRET` próprio em Production (sensitive, ≥ 32 caracteres, diferente de testnet), faz redeploy e confirma apenas a existência. Nunca copiar o valor para chat, mural, arquivo compartilhado ou `.env.example`.
 - [ ] `PIX_MAX_BRL` está configurado e testado fail-closed. Incertos seguem `ops/runbooks/pix-saida-incerto.md`; nenhuma escrita manual no banco.
 - [ ] Etherfuse: SLA, preço, limites, rail BR/PIX, ativo-ponte e contato de incidente confirmados por escrito.
 - [ ] Vercel Blob privado: token separado por ambiente, acesso curto e revogação testados.
