@@ -42,7 +42,9 @@ const SHA = 'b'.repeat(64);
 const TX = 'a'.repeat(64);
 const D = (v: string) => new Prisma.Decimal(v);
 const prov = (nome: 'ASAAS' | 'SIMULADO') => ({ nome }) as unknown as PixProvider;
-const IN = { cessaoId: 'cessao_1', chavePix: 'maria@example.com', tipoChave: 'EMAIL' as const, operador: 'admin-panel' };
+const CPF_CEDENTE = '52998224725'; // CPF sintético com dígitos verificadores válidos
+const IN = { cessaoId: 'cessao_1', operador: 'admin-panel' };
+const lead = (over: Record<string, unknown> = {}) => ({ cpf: CPF_CEDENTE, pessoa: null, ...over });
 
 const comprovada = (over: Record<string, unknown> = {}) => ({
   cessaoId: 'cessao_1', status: 'COMPROVADA', provedor: 'ASAAS', valor: D('1234.50'), providerId: 'tra_1', e2eId: 'E2E1',
@@ -55,7 +57,7 @@ beforeEach(() => {
   Object.values(m).forEach((f) => typeof f === 'function' && (f as ReturnType<typeof vi.fn>).mockReset());
   m.cessao.mockResolvedValue({
     id: 'cessao_1', status: 'ASSINADA', ofertaId: 'of_1',
-    oferta: { valorLiquidoVendedor: D('1234.50'), leadVendedorId: 'lead_1' }, pagamento: null,
+    oferta: { valorLiquidoVendedor: D('1234.50'), leadVendedorId: 'lead_1', leadVendedor: lead() }, pagamento: null,
   });
   m.transf.mockResolvedValue(comprovada());
   m.pagamentoFind.mockResolvedValue(null);
@@ -65,15 +67,16 @@ beforeEach(() => {
 
 describe('pagarCedenteDaCessao', () => {
   it('valor = oferta da cessão (2 casas), nunca o do chamador; COMPROVADA grava Pagamento PIX_REAL, lead e EventoAudit com payloadHash = SHA-256 do comprovante', async () => {
-    const r = await pagarCedenteDaCessao({ ...IN, valor: '99999.00' } as never, { provider: prov('ASAAS') });
+    const r = await pagarCedenteDaCessao({ ...IN, valor: '99999.00', chavePix: 'outra@pessoa.com', tipoChave: 'EMAIL' } as never, { provider: prov('ASAAS') });
     expect(r).toEqual({ status: 'COMPROVADA', pagamentoId: 'pag_1', sha256: SHA, txHash: TX });
-    expect(m.pagar.mock.calls[0][0]).toEqual({ cessaoId: 'cessao_1', valor: '1234.50', chavePix: IN.chavePix, tipoChave: 'EMAIL' });
+    // o destino é o CPF do cedente da cessão; o que o chamador tentou passar (valor, chave de outro tipo) é ignorado
+    expect(m.pagar.mock.calls[0][0]).toEqual({ cessaoId: 'cessao_1', valor: '1234.50', chavePix: CPF_CEDENTE, tipoChave: 'CPF' });
     expect(m.pagamentoUpsert.mock.calls[0][0].create).toMatchObject({ metodo: 'PIX_REAL', onChainTxHash: TX, status: 'EXECUTADO', comprovanteUrl: 'comprovantes-psp/cessao_1.json' });
     expect(m.leadUpdate).toHaveBeenCalledWith({ where: { id: 'lead_1' }, data: { status: 'PIX_EXECUTADO' } });
     const audit = m.auditCreate.mock.calls[0][0].data;
     expect(audit).toMatchObject({ acao: 'PIX_REAL_EXECUTADO', payloadHash: SHA, stellarTxHash: TX, cessaoId: 'cessao_1', operador: 'admin-panel' });
     expect(audit.payloadHash).toBe(audit.payloadJson.comprovanteSha256); // payloadHash = memo = SHA-256 do comprovante
-    expect(JSON.stringify(audit)).not.toMatch(/maria|example\.com|chavePix/i); // sem PII nem chave Pix
+    expect(JSON.stringify(audit)).not.toMatch(new RegExp(`${CPF_CEDENTE}|chavePix`, 'i')); // sem CPF nem chave Pix
   });
 
   it('provedor SIMULADO (testnet) grava metodo PIX_SIMULADO', async () => {
@@ -112,9 +115,9 @@ describe('pagarCedenteDaCessao', () => {
   it('cessão inexistente, não assinada ou já paga: recusa sem PSP', async () => {
     m.cessao.mockResolvedValueOnce(null);
     await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'CESSAO_NAO_ENCONTRADA' });
-    m.cessao.mockResolvedValueOnce({ id: 'cessao_1', status: 'PENDENTE', oferta: { valorLiquidoVendedor: D('1') }, pagamento: null });
+    m.cessao.mockResolvedValueOnce({ id: 'cessao_1', status: 'PENDENTE', oferta: { valorLiquidoVendedor: D('1'), leadVendedor: lead() }, pagamento: null });
     await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'CESSAO_NAO_ASSINADA' });
-    m.cessao.mockResolvedValueOnce({ id: 'cessao_1', status: 'ASSINADA', oferta: { valorLiquidoVendedor: D('1') }, pagamento: { status: 'EXECUTADO' } });
+    m.cessao.mockResolvedValueOnce({ id: 'cessao_1', status: 'ASSINADA', oferta: { valorLiquidoVendedor: D('1'), leadVendedor: lead() }, pagamento: { status: 'EXECUTADO' } });
     await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'PAGAMENTO_JA_EXECUTADO' });
     expect(m.pagar).not.toHaveBeenCalled();
   });
@@ -133,6 +136,35 @@ describe('pagarCedenteDaCessao', () => {
     m.pagar.mockRejectedValue(new LiquidacaoCedenteError('VALOR_DIVERGE'));
     await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'VALOR_DIVERGE' });
     expect(m.pagamentoUpsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('P2 (Argus/Atlas): o destino é o CPF do cedente da cessão, nunca o do chamador', () => {
+  const cessaoCom = (leadVendedor: unknown) => ({
+    id: 'cessao_1', status: 'ASSINADA', ofertaId: 'of_1',
+    oferta: { valorLiquidoVendedor: D('1234.50'), leadVendedorId: 'lead_1', leadVendedor }, pagamento: null,
+  });
+  it.each([
+    ['sem CPF no cadastro', lead({ cpf: null })],
+    ['CPF inválido (dígito verificador)', lead({ cpf: '52998224726' })],
+    ['CPF de dígitos repetidos', lead({ cpf: '11111111111' })],
+    ['sem lead', null],
+  ])('%s → CEDENTE_SEM_DOCUMENTO, nada vai ao PSP', async (_n, l) => {
+    m.cessao.mockResolvedValueOnce(cessaoCom(l));
+    await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'CEDENTE_SEM_DOCUMENTO' });
+    expect(m.pagar).not.toHaveBeenCalled();
+  });
+  it('CPF do lead com máscara é normalizado para dígitos', async () => {
+    m.cessao.mockResolvedValueOnce(cessaoCom(lead({ cpf: '529.982.247-25' })));
+    await pagarCedenteDaCessao(IN, { provider: prov('ASAAS') });
+    expect((m.pagar.mock.calls[0] as unknown as [Record<string, string>])[0].chavePix).toBe(CPF_CEDENTE);
+  });
+  it('CPF da conta (Pessoa) diferente do CPF do lead → TITULAR_DIVERGE, sem pagar; igual passa', async () => {
+    m.cessao.mockResolvedValueOnce(cessaoCom(lead({ pessoa: { cpfNormalizado: '11144477735' } })));
+    await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'TITULAR_DIVERGE' });
+    expect(m.pagar).not.toHaveBeenCalled();
+    m.cessao.mockResolvedValueOnce(cessaoCom(lead({ pessoa: { cpfNormalizado: CPF_CEDENTE } })));
+    await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).resolves.toMatchObject({ status: 'COMPROVADA' });
   });
 });
 

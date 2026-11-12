@@ -9,7 +9,7 @@
 import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { obterPixProvider } from '../integrations/psp';
-import type { PixProvider, TipoChavePix } from '../integrations/psp/types';
+import { validarChavePix, type PixProvider } from '../integrations/psp/types';
 import { STELLAR_NETWORK } from '../stellar/config';
 import {
   LiquidacaoCedenteError,
@@ -20,6 +20,8 @@ import {
 export type PagamentoCedenteErrorCode =
   | 'CESSAO_NAO_ENCONTRADA'
   | 'CESSAO_NAO_ASSINADA'
+  | 'CEDENTE_SEM_DOCUMENTO'
+  | 'TITULAR_DIVERGE'
   | 'PAGAMENTO_JA_EXECUTADO'
   | 'TETO_NAO_CONFIGURADO'
   | 'ACIMA_DO_TETO'
@@ -28,6 +30,8 @@ export type PagamentoCedenteErrorCode =
 const MENSAGENS: Record<PagamentoCedenteErrorCode, string> = {
   CESSAO_NAO_ENCONTRADA: 'Pagamento ao cedente recusado: cessão não encontrada.',
   CESSAO_NAO_ASSINADA: 'Pagamento ao cedente recusado: a cessão precisa estar ASSINADA.',
+  CEDENTE_SEM_DOCUMENTO: 'Pagamento ao cedente recusado: o cedente não tem CPF válido no cadastro.',
+  TITULAR_DIVERGE: 'Pagamento ao cedente recusado: o CPF do cadastro do lead e o da conta do cedente divergem.',
   PAGAMENTO_JA_EXECUTADO: 'Pagamento ao cedente recusado: já executado para esta cessão.',
   TETO_NAO_CONFIGURADO: 'Pagamento ao cedente recusado: teto de valor não configurado.',
   ACIMA_DO_TETO: 'Pagamento ao cedente recusado: valor acima do teto.',
@@ -58,20 +62,39 @@ export interface ResultadoPagamentoCedente {
 }
 
 /**
- * Paga o cedente de uma cessão assinada. A chave Pix vem na chamada (operador) e não é persistida. Idempotente:
- * repetir devolve o estado, não paga de novo.
+ * Paga o cedente de uma cessão assinada. **O destino NÃO vem do chamador** (P2 do Argus, decisão do Atlas): a chave Pix
+ * é a do tipo CPF do próprio cedente da cessão (o CPF do cadastro), então a titularidade bate por construção; chave de
+ * outro tipo ou de outra pessoa não existe aqui (follow-up pós-D30, com dupla aprovação auditada). O CPF não é
+ * persistido nem logado por este serviço. Idempotente: repetir devolve o estado, não paga de novo.
  */
 export async function pagarCedenteDaCessao(
-  input: { cessaoId: string; chavePix: string; tipoChave: TipoChavePix; operador: string },
+  input: { cessaoId: string; operador: string },
   opts: { provider?: PixProvider; agora?: Date } = {},
 ): Promise<ResultadoPagamentoCedente> {
   const cessao = await db.cessao.findUnique({
     where: { id: input.cessaoId },
-    select: { id: true, status: true, oferta: { select: { valorLiquidoVendedor: true } }, pagamento: { select: { status: true } } },
+    select: {
+      id: true,
+      status: true,
+      oferta: {
+        select: {
+          valorLiquidoVendedor: true,
+          leadVendedor: { select: { cpf: true, pessoa: { select: { cpfNormalizado: true } } } },
+        },
+      },
+      pagamento: { select: { status: true } },
+    },
   });
   if (!cessao) throw new PagamentoCedenteError('CESSAO_NAO_ENCONTRADA');
   if (cessao.status !== 'ASSINADA') throw new PagamentoCedenteError('CESSAO_NAO_ASSINADA');
   if (cessao.pagamento?.status === 'EXECUTADO') throw new PagamentoCedenteError('PAGAMENTO_JA_EXECUTADO');
+
+  // Titular: o CPF do cadastro do cedente (precisa ser válido); se a conta (Pessoa) também tem CPF, os dois têm de bater.
+  const lead = cessao.oferta.leadVendedor;
+  const cpf = lead?.cpf ? validarChavePix('CPF', lead.cpf) : null;
+  if (!cpf) throw new PagamentoCedenteError('CEDENTE_SEM_DOCUMENTO');
+  const cpfConta = lead?.pessoa?.cpfNormalizado?.replace(/\D/g, '');
+  if (cpfConta && cpfConta !== cpf) throw new PagamentoCedenteError('TITULAR_DIVERGE');
 
   // O valor é o da oferta da cessão; nunca o que o chamador diz.
   const valor = new Prisma.Decimal(cessao.oferta.valorLiquidoVendedor);
@@ -83,7 +106,7 @@ export async function pagarCedenteDaCessao(
   }
 
   const r = await pagarTitular(
-    { cessaoId: cessao.id, valor: valor.toFixed(2), chavePix: input.chavePix, tipoChave: input.tipoChave },
+    { cessaoId: cessao.id, valor: valor.toFixed(2), chavePix: cpf, tipoChave: 'CPF' },
     { provider, agora: opts.agora },
   );
   if (r.status !== 'COMPROVADA') return { status: r.status, sha256: r.sha256, txHash: r.txHash };
