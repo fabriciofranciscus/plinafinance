@@ -13,6 +13,7 @@
 export type MotivoStubRecusado =
   | 'VERCEL_ENV_PRODUCTION'
   | 'VERCEL_ENV_PREVIEW'
+  | 'VERCEL_ENV_DEFINIDO'
   | 'VERCEL_RUNTIME'
   | 'STELLAR_NETWORK_PUBLIC'
   | 'FORA_DE_AMBIENTE_DE_TESTE';
@@ -30,8 +31,11 @@ export function _resetPrivyStubLogForTests(): void {
 export function motivoStubRecusado(env: Env = process.env): MotivoStubRecusado | null {
   if (env.VERCEL_ENV === 'production') return 'VERCEL_ENV_PRODUCTION';
   if (env.VERCEL_ENV === 'preview') return 'VERCEL_ENV_PREVIEW';
-  if (env.VERCEL === '1') return 'VERCEL_RUNTIME'; // qualquer execução na Vercel (inclui Preview/Production com VERCEL_ENV ausente)
-  if (env.STELLAR_NETWORK === 'PUBLIC') return 'STELLAR_NETWORK_PUBLIC';
+  // QUALQUER VERCEL_ENV definido recusa (o banco de Preview é o de produção; F-RT1-1 da Vera): o E2E roda em localhost/CI,
+  // onde a variável não existe, então a regra custa zero. Aparar espaços evita driblar com "  preview ".
+  if ((env.VERCEL_ENV ?? '').trim() !== '') return 'VERCEL_ENV_DEFINIDO';
+  if ((env.VERCEL ?? '').trim() !== '') return 'VERCEL_RUNTIME'; // qualquer execução na Vercel (VERCEL=1 ou outro valor)
+  if ((env.STELLAR_NETWORK ?? '').trim().toUpperCase() === 'PUBLIC') return 'STELLAR_NETWORK_PUBLIC';
   if (env.NODE_ENV !== 'test' && env.E2E_STUB !== '1') return 'FORA_DE_AMBIENTE_DE_TESTE';
   return null;
 }

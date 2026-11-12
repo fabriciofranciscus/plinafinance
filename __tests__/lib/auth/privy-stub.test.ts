@@ -57,6 +57,20 @@ describe('privyStubAtivo — Preview e runtime da Vercel (RT-1, adendo do Argus)
     expect(privyStubAtivo(env)).toBe(false);
     expect(motivoStubRecusado(env)).toBe('VERCEL_RUNTIME');
   });
+  it.each(['development', 'staging', 'Preview', 'PRODUCTION', '  preview ', 'qualquer-coisa'])('F-RT1-1: QUALQUER VERCEL_ENV definido (%j) recusa, mesmo com E2E_STUB=1 e NODE_ENV=test', (valor) => {
+    const env = { PRIVY_VERIFY_STUB: 'true', E2E_STUB: '1', NODE_ENV: 'test', VERCEL_ENV: valor };
+    expect(privyStubAtivo(env)).toBe(false);
+    expect(motivoStubRecusado(env)).not.toBeNull();
+  });
+  it.each(['0', 'true', ' 1 '])('VERCEL com qualquer valor (%j) recusa', (valor) => {
+    expect(privyStubAtivo({ PRIVY_VERIFY_STUB: 'true', E2E_STUB: '1', VERCEL: valor })).toBe(false);
+  });
+  it.each(['public', 'Public', ' PUBLIC '])('STELLAR_NETWORK %j (variações de caixa/espaço) também recusa', (valor) => {
+    expect(privyStubAtivo({ PRIVY_VERIFY_STUB: 'true', E2E_STUB: '1', NODE_ENV: 'test', STELLAR_NETWORK: valor })).toBe(false);
+  });
+  it('VERCEL_ENV vazio ou só espaços conta como ausente (local/CI com variável vazia continua ligando)', () => {
+    expect(privyStubAtivo({ PRIVY_VERIFY_STUB: 'true', E2E_STUB: '1', NODE_ENV: 'development', VERCEL_ENV: '  ', VERCEL: '' })).toBe(true);
+  });
   it('local/CI fora da Vercel continua ligando (VERCEL_ENV e VERCEL ausentes)', () => {
     expect(privyStubAtivo({ PRIVY_VERIFY_STUB: 'true', E2E_STUB: '1', NODE_ENV: 'development' })).toBe(true);
   });
