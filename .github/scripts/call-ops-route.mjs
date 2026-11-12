@@ -42,7 +42,9 @@ if (!baseUrl || !routePath || !routePath.startsWith('/')) {
 
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
         fail(`${label}: resposta fora do contrato`);
-      } else if (payload?.alerta === true) {
+      } else if (typeof payload.alerta !== 'boolean') {
+        fail(`${label}: resposta fora do contrato`);
+      } else if (payload.alerta) {
         fail(`${label}: alerta operacional ativo`);
       } else if (mode === 'snapshot' && payload?.publicado !== true) {
         fail(`${label}: snapshot não publicado`);

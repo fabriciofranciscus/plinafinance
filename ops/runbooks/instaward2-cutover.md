@@ -29,7 +29,7 @@ Estado consolidado em 2026-11-11. Este checklist prepara a decisão; não autori
 
 - [ ] DocuSign sandbox: HMAC, replay, dedupe, PDF privado e hash do byte armazenado homologados.
 - [ ] PSP regulado sandbox: conta da Thais, idempotência, comprovante privado e memo-hash homologados.
-- [ ] Com `STELLAR_NETWORK=PUBLIC`, `PSP_PROVIDER` é explícito e de produção; ausente, `SIMULADO` ou Asaas sandbox falha com `PSP_CONFIG` antes de claim/envio. `DONE` sem valor fica `INCERTO`.
+- [ ] Com `STELLAR_NETWORK=PUBLIC`, `PSP_PROVIDER` é explícito e de produção; ausente, `SIMULADO` ou Asaas sandbox falha com `PSP_CONFIG` antes de claim/envio. `DONE` sem valor fica `INCERTO`. **Ainda não marcar:** correções P1/P3 estão no delta `6d04a12`, pendentes de reteste da Vera.
 - [ ] `PIX_MAX_BRL` está configurado e testado fail-closed. Incertos seguem `ops/runbooks/pix-saida-incerto.md`; nenhuma escrita manual no banco.
 - [ ] Etherfuse: SLA, preço, limites, rail BR/PIX, ativo-ponte e contato de incidente confirmados por escrito.
 - [ ] Vercel Blob privado: token separado por ambiente, acesso curto e revogação testados.

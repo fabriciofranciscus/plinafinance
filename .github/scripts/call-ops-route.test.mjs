@@ -19,6 +19,9 @@ before(async () => {
     }
     if (req.url === '/ok') res.end('{"alerta":false}');
     else if (req.url === '/alert') res.end('{"alerta":true,"private":"must-not-leak"}');
+    else if (req.url === '/missing-alert') res.end('{"ok":true}');
+    else if (req.url === '/string-alert') res.end('{"alerta":"true"}');
+    else if (req.url === '/numeric-alert') res.end('{"alerta":1}');
     else if (req.url === '/null') res.end('null');
     else if (req.url === '/snapshot' && req.method === 'POST') res.end('{"publicado":true,"alerta":false}');
     else if (req.url === '/not-published') res.end('{"publicado":false,"alerta":false}');
@@ -81,6 +84,14 @@ test('recusa resposta que não seja objeto JSON', async () => {
   assert.equal(result.code, 1);
   assert.match(result.output, /resposta fora do contrato/);
 });
+
+for (const path of ['/missing-alert', '/string-alert', '/numeric-alert']) {
+  test(`recusa alerta ausente ou fora do tipo booleano: ${path}`, async () => {
+    const result = await run(path);
+    assert.equal(result.code, 1);
+    assert.match(result.output, /resposta fora do contrato/);
+  });
+}
 
 test('snapshot exige POST e publicado true', async () => {
   const ok = await run('/snapshot', { OPS_ROUTE_MODE: 'snapshot' });
