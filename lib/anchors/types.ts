@@ -316,6 +316,8 @@ export interface CreateCustomerInput {
     publicKey?: string;
     /** Full name — required by providers that use tax-ID-based identity (e.g. Transfero). */
     name?: string;
+    /** Organization kind (Etherfuse): `personal` = PF/KYC (default), `business` = PJ/KYB. */
+    accountType?: 'personal' | 'business';
     /** Tax identification number (e.g. CPF/CNPJ for Brazil) — required by some providers. */
     taxId?: string;
     /** ISO 3166-1 alpha-3 country code for the tax ID (e.g. `"BRA"`). */
@@ -618,7 +620,12 @@ export interface Anchor {
      * @returns The KYC URL string.
      * @throws {AnchorError} On API error.
      */
-    getKycUrl?(customerId: string, publicKey?: string, bankAccountId?: string): Promise<string>;
+    getKycUrl?(
+        customerId: string,
+        publicKey?: string,
+        bankAccountId?: string,
+        userInfo?: { email: string; displayName?: string },
+    ): Promise<string>;
 
     /**
      * Get the current KYC verification status for a customer.

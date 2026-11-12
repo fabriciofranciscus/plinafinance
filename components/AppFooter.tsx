@@ -21,8 +21,8 @@ export function AppFooter({ issuerPubkey }: AppFooterProps) {
             Plina<span className="text-primary">.</span>
           </p>
           <p className="mt-3 text-lightBg/70 leading-relaxed">
-            Tokenizadora institucional de direito creditório brasileiro.
-            FIDC sob CVM 175. Stellar nativo.
+            Cotas contempladas de consórcio, com registro verificável na
+            Stellar testnet. Em desenvolvimento; sem oferta.
           </p>
           <a
             href="mailto:contato@plina.finance"

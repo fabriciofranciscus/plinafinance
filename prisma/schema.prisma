@@ -157,6 +157,8 @@ enum AcaoAudit {
   ENTIDADE_PREENCHIDA
   // KYC completo (sandbox/produção) — upload real de documento/selfie
   KYC_DOCUMENTOS_ENVIADOS
+  // Webhook assinado do anchor atualizou o KYC (E2-2)
+  KYC_ATUALIZADO_WEBHOOK
 }
 
 // Funil vendedor
@@ -317,6 +319,12 @@ model Pessoa {
   /// Setado só depois de `submitKycDocuments` ter sucesso — usado pra não
   /// forçar reenvio de foto real a cada retry enquanto KYC ainda não aprovou.
   kycDocumentosEnviadosEm DateTime?
+  /// Aviso point-in-time do anchor (`kyc_updated.userMessage`): o que reenviar.
+  /// Não é reentregue por GET /kyc — persistir na chegada ou se perde.
+  kycUserMessage         String?
+  /// Anchor sinalizou `needsWork`: a aplicação em background falhou e há
+  /// requisito para reenviar.
+  kycNeedsWork           Boolean   @default(false)
   criadoEm               DateTime  @default(now())
   atualizadoEm           DateTime  @updatedAt
 
@@ -645,7 +653,7 @@ model LeadEoi {
   telefone     String?
   perfil       String
   jurisdiction String?
-  ticket       String
+  ticket       String?
   currency     String?
   classe       String?
   timeline     String?
@@ -737,6 +745,25 @@ model RealizacaoCaminho {
 /// `payloadHash` é o SHA-256 que foi pra blockchain como memo. Vendedor/
 /// comprador podem cross-verificar: hash do documento off-chain == memo
 /// da tx Stellar referenciada.
+/// Entregas de webhook de terceiros (anchor etc.). Append-only: linhas não são
+/// editadas nem apagadas, exceto o carimbo de processamento. `eventoId` é a
+/// chave de dedupe da entrega (mesma entrega reenviada → mesmo eventoId).
+/// `payloadJson` guarda só campos allowlisted — nunca PII.
+model WebhookEvento {
+  id           String    @id @default(cuid())
+  fornecedor   String
+  eventoId     String
+  tipo         String
+  recursoId    String?
+  payloadJson  Json
+  recebidoEm   DateTime  @default(now())
+  processadoEm DateTime?
+  erro         String?
+
+  @@unique([fornecedor, eventoId])
+  @@index([fornecedor, tipo, recebidoEm])
+}
+
 model EventoAudit {
   id             String          @id @default(cuid())
   acao           AcaoAudit

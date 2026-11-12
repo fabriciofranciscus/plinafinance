@@ -202,7 +202,14 @@ export interface EtherfuseKycDocumentRequest {
 // API Response Types
 // ---------------------------------------------------------------------------
 
-/** Response from `POST /ramp/onboarding-url`. */
+/** Response from `POST /ramp/organization`. */
+export interface EtherfuseOrganizationResponse {
+    organizationId: string;
+    displayName: string;
+    accountType: 'personal' | 'business';
+}
+
+/** Response from `POST /ramp/onboarding-url` (presigned URL for bank/agreements). */
 export interface EtherfuseOnboardingResponse {
     /** Presigned onboarding URL for KYC and agreement acceptance. */
     presigned_url: string;

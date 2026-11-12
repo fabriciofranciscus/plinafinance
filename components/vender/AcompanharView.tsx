@@ -58,9 +58,9 @@ const DESCRICAO_ETAPA = [
   'Verificação AML/KYC concluída — feita uma única vez, vale para venda e investimento.',
   'Sua cota foi enviada e entrou na fila da nossa mesa.',
   'Nossa mesa valida a titularidade e a situação da cota junto à administradora.',
-  'Oferta firme calculada sobre prazo, administradora e curva de yield do pool.',
-  'Cessão de direitos creditórios assinada e registrada on-chain.',
-  'Pix do valor líquido executado em até 48h após a assinatura.',
+  'Proposta calculada sobre o prazo, a administradora e a curva de precificação da Plina (simulação em rede de testes).',
+  'Cessão da cota assinada. A transferência depende da anuência da administradora; o hash do documento fica registrado em rede de testes.',
+  'Pix do valor líquido, previsto após a assinatura (simulado em rede de testes; sem prazo garantido).',
 ] as const;
 
 export default function AcompanharView({ data }: { data: AcompanharData }) {
@@ -261,8 +261,8 @@ function PainelOferta({
     <div className="mt-6 border-t border-light-hairline pt-6">
       {ilustrativo && (
         <p className="font-mono text-[11px] text-base/55 mb-4">
-          Exemplo ilustrativo — sua oferta firme aparece aqui quando a mesa
-          concluir a validação.
+          Exemplo ilustrativo — sua proposta aparece aqui quando a mesa
+          concluir a validação (simulação em rede de testes).
         </p>
       )}
 
@@ -280,7 +280,7 @@ function PainelOferta({
             value={`${v.prazoRestanteMeses} meses`}
           />
         )}
-        <OfertaLinha label="Prazo de pagamento" value="≤ 48 horas via Pix" />
+        <OfertaLinha label="Pagamento" value="Pix (simulado em rede de testes)" />
         <OfertaLinha
           label="Método"
           value="Anchor BR · SEP-24 / BaaS Celcoin"
@@ -312,8 +312,8 @@ function PainelOferta({
       {erro && <p className="font-text text-sm text-red-700 mt-4">{erro}</p>}
 
       <p className="font-text text-xs text-base/55 mt-4 leading-relaxed">
-        Deságio calculado sobre prazo, administradora e curva de yield do pool
-        PLINA-RF.
+        Deságio simulado a partir do prazo, da administradora e da curva de
+        precificação da Plina; nenhum valor é proposta firme.
       </p>
     </div>
   );
@@ -450,28 +450,28 @@ function PainelPix({
           <span className="text-3xl">✓</span>
         </div>
         <h3 className="font-title text-3xl font-semibold tracking-tight mt-6">
-          {BRL.format(valor)} enviados via Pix
+          {BRL.format(valor)} (Pix simulado)
         </h3>
         <p className="font-mono text-sm text-base/60 mt-2">
-          Pix enviado para sua chave cadastrada
+          Simulação em rede de testes: nenhum dinheiro real foi enviado.
         </p>
         <p className="font-text text-sm text-base/70 mt-4 max-w-md mx-auto leading-relaxed">
-          Direito creditório incorporado ao pool FIDC · PLINA-RF emitido
-          proporcionalmente na Stellar.
+          Cota incorporada ao pool de demonstração · tokens de demonstração
+          emitidos na Stellar testnet.
         </p>
 
-        {/* Cota → Pool FIDC → PLINA-RF mintado · Stellar */}
+        {/* Cota → Pool → token de demonstração · Stellar testnet */}
         <div className="mx-auto mt-8 flex max-w-2xl items-center justify-between gap-3 border border-light-hairline bg-document-grey/40 p-5 font-mono text-xs">
           <span className="flex-1 border border-light-hairline bg-white px-3 py-3 text-center text-base/80">
             Cota
           </span>
           <span className="text-primary-deep">→</span>
           <span className="flex-1 border border-light-hairline bg-white px-3 py-3 text-center text-base/80">
-            Pool FIDC
+            Pool
           </span>
           <span className="text-primary-deep">→</span>
           <span className="flex-1 border border-primary/40 bg-primary/10 px-3 py-3 text-center text-primary-deep">
-            PLINA-RF mintado · Stellar
+            Token de demonstração · Stellar testnet
           </span>
         </div>
 

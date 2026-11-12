@@ -15,7 +15,7 @@
  *   1. GET /ramp/me — auth.
  *   2. Stellar account testnet (friendbot).
  *   3. GET /ramp/assets — descobre TESOURO + CETES.
- *   4. POST /ramp/onboarding-url — cria customer (PLINA-MOD-001 accountType business).
+ *   4. POST /ramp/organization — cria org/customer (PLINA-MOD-001 revisado: accountType condicional).
  *   5. POST /ramp/customer/{id}/kyc + /kyc/documents + agreements — KYC programático.
  *   6. Poll GET /ramp/customer/{id}/kyc/{pubkey} — espera status approved.
  *   7. PROBE: POST /ramp/bank-account PIX + CLABE — ambos fechados upstream.
@@ -142,15 +142,19 @@ async function main() {
   setVerdict('asset_discovery', 'pass');
 
   // 4. createCustomer
-  step(4, TOTAL_STEPS, 'POST /ramp/onboarding-url — cria customer');
+  step(4, TOTAL_STEPS, 'POST /ramp/organization — cria org (customer)');
+  const smokeEmail = `smoke+${Date.now()}@plina.finance`;
   const customer = await anchor.createCustomer({
-    email: `smoke+${Date.now()}@plina.finance`,
+    email: smokeEmail,
     publicKey: pubkey,
     country: 'BR',
   });
   ok(`customer.id = ${customer.id}`);
   ok(`bankAccountId = ${customer.bankAccountId}`);
-  const kycUrl = await anchor.getKycUrl(customer.id, pubkey, customer.bankAccountId);
+  const kycUrl = await anchor.getKycUrl(customer.id, pubkey, customer.bankAccountId, {
+    email: smokeEmail,
+    displayName: 'Plina Smoke',
+  });
   ok(`presignedUrl recebida (${kycUrl.length} chars)`);
   setVerdict('customer_create', 'pass');
   output.customer = {
@@ -176,7 +180,7 @@ async function main() {
         name: { givenName: 'Plina', familyName: 'SmokeTest' },
         dateOfBirth: '1990-01-15',
         phoneNumber: '+5511999999999',
-        email: `smoke+${Date.now()}@plina.finance`,
+        email: smokeEmail,
         occupation: 'Gestor de Fundo',
         address: {
           street: 'Av. Paulista, 1000',
@@ -185,7 +189,7 @@ async function main() {
           postalCode: '01310-100',
           country: 'BR',
         },
-        idNumbers: [{ value: '52998224725', type: 'CPF' }],
+        // idNumbers (CPF) removido: Etherfuse só aceita o campo para MX.
       },
     });
     ok('identity submetida');

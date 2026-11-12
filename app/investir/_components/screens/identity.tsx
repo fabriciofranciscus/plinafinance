@@ -50,7 +50,7 @@ export function IdentityScreen({
       <TestnetBanner />
 
       <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
-        02 // Identidade · KYC institucional
+        02 // Identidade · KYC
       </p>
       <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">
         Wallet Stellar e KYC programático.
@@ -63,8 +63,8 @@ export function IdentityScreen({
       {/* Trilha: Institucional BR (funcional) / Internacional (M4, gated). */}
       <div className="mt-8 inline-flex rounded-full border border-base/20 p-1">
         {([
-          { id: 'BR' as const, label: 'Institucional BR', range: 'R$ 500k–10M', enabled: true },
-          { id: 'INTL' as const, label: 'Internacional', range: 'US$ 100k–5M', enabled: INTL_FLOW_ENABLED },
+          { id: 'BR' as const, label: 'Entidade brasileira', enabled: true },
+          { id: 'INTL' as const, label: 'Internacional', enabled: INTL_FLOW_ENABLED },
         ]).map((t) => {
           const active = track === t.id;
           return (
@@ -84,9 +84,9 @@ export function IdentityScreen({
               }`}
             >
               {t.label}
-              <span className="ml-2 font-mono text-[10px] opacity-70">
-                {t.enabled ? t.range : 'em breve'}
-              </span>
+              {!t.enabled && (
+                <span className="ml-2 font-mono text-[10px] opacity-70">em breve</span>
+              )}
             </button>
           );
         })}
@@ -236,7 +236,6 @@ function emptyProfile(track: InvestorTrack): InstitutionalProfile {
     jurisdiction: track === 'BR' ? 'BR' : '',
     cnpj: '',
     entityType: 'FAMILY_OFFICE',
-    estimatedTicket: '',
     currency: track === 'BR' ? 'BRL' : 'USDC',
   };
 }
@@ -269,10 +268,10 @@ export function isEntidadeValida(
 }
 
 /**
- * Onboarding institucional (cartão 1 do mockup do CEO). Tab-aware: BR coleta
- * Razão social/CNPJ/Tipo/Ticket R$; INTL coleta Razão social/Jurisdição/Tipo/
- * Ticket US$. Persistido em colunas do Investidor via /api/investidor/entidade
- * (disparado no "Continuar"). entityType/estimatedTicket vão só no audit log.
+ * Cadastro da entidade (cartão 1 do mockup do CEO). Tab-aware: BR coleta
+ * Razão social/CNPJ/Tipo; INTL coleta Razão social/Jurisdição/Tipo. Persistido
+ * em colunas do Investidor via /api/investidor/entidade (disparado no
+ * "Continuar"). entityType vai só no audit log. Sem campo de tíquete (LD0b).
  */
 function EntityOnboarding({
   track,
@@ -290,11 +289,11 @@ function EntityOnboarding({
   return (
     <div className="mt-10 border border-base/15 bg-white p-6 md:p-7">
       <p className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">
-        Onboarding institucional
+        Cadastro (simulação em rede de testes)
       </p>
       <p className="font-text text-sm text-base/70 mt-1">
         {isBR
-          ? 'Investidor Qualificado / Profissional (CVM 30). Dados da entidade brasileira.'
+          ? 'Cadastro da entidade brasileira (simulação em rede de testes). Esta tela não classifica o investidor.'
           : 'KYC via anchor regulada na sua jurisdição (MoneyGram · Settle · anchors europeias SEP-compliant).'}
       </p>
 
@@ -356,24 +355,11 @@ function EntityOnboarding({
             ))}
           </select>
         </label>
-        <label className="block">
-          <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-            Ticket estimado ({isBR ? 'R$' : 'USD'})
-          </span>
-          <input
-            type="text"
-            inputMode="numeric"
-            value={p.estimatedTicket}
-            onChange={(e) => set({ estimatedTicket: e.target.value })}
-            placeholder={isBR ? '2.500.000' : '500.000'}
-            className={fieldCls + ' font-mono'}
-          />
-        </label>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
         {(isBR
-          ? ['Suitability CVM 30', 'Investidor Qualificado / Profissional']
+          ? ['Cadastro BR', 'Simulação em testnet']
           : ['SEP-24 · onboarding hosted', 'SEP-12 · KYC reutilizável']
         ).map((c) => (
           <span

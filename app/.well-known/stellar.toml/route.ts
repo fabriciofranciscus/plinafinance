@@ -7,17 +7,18 @@
  * their toml file with CORS headers").
  *
  * Asset code on-chain `PLINARF` (sem hífen — restrição Stellar AlphaNum12).
- * Issuer + policy URL vêm do ParametrosPool no banco — fonte de verdade
- * única, não precisa duplicar em config.
+ * Issuer: SÓ do env do deploy (STELLAR_ISSUER_PUBLIC), a mesma fonte das rotas
+ * que movem dinheiro. É o que liga o domínio ao ativo para carteiras: não lê o
+ * banco (editável) e falha fechado (500, sem toml) se faltar ou for inválido.
  */
 
-import { db } from '@/lib/db';
+import { StrKey } from '@stellar/stellar-sdk';
 
 export const dynamic = 'force-dynamic';
 
 const TOML_TEMPLATE = (issuer: string) => `# Plina Finance — Stellar TOML (SEP-0001)
 #
-# Asset: PLINARF (1 PLINA-RF = R$ 1,00 em direito creditório ajustado pelo NAV)
+# Asset: PLINARF — token de demonstração, sem valor financeiro real
 # Network: TESTNET (POC — mainnet exigirá multisig do issuer e smart account
 # Soroban conforme ARCHITECTURE §3.2 + §3.3)
 #
@@ -30,57 +31,50 @@ NETWORK_PASSPHRASE = "Test SDF Network ; September 2015"
 
 [DOCUMENTATION]
 ORG_NAME = "Plina Finance"
-ORG_DESCRIPTION = "Tokenizadora institucional de direito creditório brasileiro. Cotas de consórcio contempladas representadas como ativo Stellar PLINA-RF lastreado em FIDC sob CVM 175."
+ORG_DESCRIPTION = "Cotas contempladas de consórcio, com registro verificável na Stellar testnet. Projeto em desenvolvimento; sem oferta."
 ORG_URL = "https://plina.finance"
 ORG_OFFICIAL_EMAIL = "contato@plina.finance"
 ORG_LOGO = "https://plina.finance/icon.svg"
 
-# SEPs planejados (Fase 1 — mainnet com FIDC formal):
+# SEPs planejados (fase futura):
 #   TRANSFER_SERVER      = ""   # SEP-6  server-to-server com anchors parceiras
 #   KYC_SERVER           = ""   # SEP-12 KYC compartilhado
 #   WEB_AUTH_ENDPOINT    = ""   # SEP-10 auth do investidor
 #   ANCHOR_QUOTE_SERVER  = ""   # SEP-38 BRL ↔ USDC/EURC
 #   DIRECT_PAYMENT_SERVER = ""  # SEP-31 cross-border B2B
-# POC integra Etherfuse (REST proprietário, LATAM regulada) — SEPs entram
-# quando anchors parceiras de USDC/EURC entrarem na Fase 1.
+# POC integra Etherfuse (REST proprietário) — SEPs entram quando anchors
+# parceiras de USDC/EURC entrarem, em fase futura.
 
 [[CURRENCIES]]
 code = "PLINARF"
 issuer = "${issuer}"
 display_decimals = 2
-name = "Plina Direito Creditório (POC)"
-desc = "Token Stellar representando cota de direito creditório brasileiro (cota de consórcio contemplada). 1 PLINA-RF = R$ 1,00 em NAV. POC em testnet — não negociável. Política de clawback pública em https://plina.finance/politica-clawback."
-conditions = "POC institucional na testnet. Mainnet exige enquadramento FIDC formal sob CVM 175 conforme Fase 1 do roadmap."
+name = "Plina · token de demonstração (testnet)"
+desc = "Token de demonstração em rede de testes, sem valor financeiro real e não negociável. Política de clawback pública em https://plina.finance/politica-clawback. AUTH_REQUIRED — a conta passa pelo cadastro e KYC da Plina antes de receber trustline autorizada."
+conditions = "Demonstração em testnet. Qualquer operação com valor real depende de aprovação regulatória e de documentação própria; não há oferta em andamento."
 status = "test"
-is_asset_anchored = true
-anchor_asset_type = "other"
-attestation_of_reserve = "https://plina.finance/politica-clawback"
-regulated = true
-approval_criteria = "AUTH_REQUIRED — investidor passa pelo onboarding KYC institucional da Plina antes de receber trustline autorizada."
+# SEP-1: exatamente um entre is_unlimited, fixed_number e max_number. O issuer
+# emite conforme as cotas entram, sem teto fixo.
+is_unlimited = true
+# SEP-1: is_asset_anchored só é true se o token é resgatável pelo ativo
+# subjacente; em testnet não é (sem anchor_asset_type nem attestation_of_reserve).
+is_asset_anchored = false
+# SEP-8: regulated = true exige approval_server (co-assinatura de cada tx), que
+# não existe. AUTH_REQUIRED/REVOCABLE/CLAWBACK seguem ligados no issuer on-chain.
+regulated = false
 
-[[PRINCIPALS]]
-name = "Thais Reis"
-email = "thais@plina.finance"
-twitter = ""
-github = ""
-keybase = ""
-
-[[PRINCIPALS]]
-name = "Fabricio Santos"
-email = "fabricio@plina.finance"
-twitter = ""
-github = ""
-keybase = ""
+# Seção de principais omitida de propósito (opcional na SEP-1): sem nomes nem e-mails
+# pessoais no arquivo público. Contato: ORG_OFFICIAL_EMAIL.
 `;
 
 export async function GET() {
-  const params = await db.parametrosPool.findUnique({
-    where: { id: 'singleton' },
-  });
-
-  // Fallback pra env caso seed ainda não tenha rodado.
-  const issuer =
-    params?.issuerPubkey ?? process.env.STELLAR_ISSUER_PUBLIC ?? '';
+  const issuer = process.env.STELLAR_ISSUER_PUBLIC ?? '';
+  if (!StrKey.isValidEd25519PublicKey(issuer)) {
+    return new Response('stellar.toml indisponível: issuer não configurado.', {
+      status: 500,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+    });
+  }
 
   return new Response(TOML_TEMPLATE(issuer), {
     status: 200,
@@ -89,7 +83,8 @@ export async function GET() {
       'Access-Control-Allow-Origin': '*',
       // Sem MIME type oficial pra toml; text/plain é o padrão consensual.
       'Content-Type': 'text/plain; charset=utf-8',
-      'Cache-Control': 'public, max-age=300',
+      // Navegador e CDN por até 5 min. Explorers têm cache próprio (fora do nosso controle).
+      'Cache-Control': 'public, max-age=300, s-maxage=300',
     },
   });
 }

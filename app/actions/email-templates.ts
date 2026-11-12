@@ -1,4 +1,4 @@
-// Templates de e-mail HTML para o fluxo de Lead Capture (EOI / Waitlist).
+// Templates de e-mail HTML para o fluxo de contato da landing (contato exploratório, sem oferta).
 // Design alinhado ao DESIGN.md — paleta institucional, hairlines, mono para dados.
 // Cores e fontes são pré-computadas (sem alpha, sem web fonts) para máxima
 // compatibilidade com clientes de e-mail (Outlook, Gmail, Apple Mail, etc).
@@ -27,12 +27,14 @@ export type LeadData = {
   phone?: string;
   profile: string;       // já com label legível
   jurisdiction?: string;
-  ticket: string;        // já com label legível
+  ticket?: string;       // já com label legível; opcional (sondagem sem oferta)
   currency?: string;
   classe?: string;
   timeline?: string;
   notes?: string;
   recebido: string;      // ISO timestamp
+  /** E-mail já cadastrado: o cadastro original foi mantido (dados não alterados). */
+  reenvio?: boolean;
 };
 
 function esc(s: string): string {
@@ -60,54 +62,46 @@ function fmtDateBR(iso: string): string {
 
 export function renderInvestorReply(d: LeadData) {
   const firstName = d.name.split(' ')[0];
-  const subject = 'Plina · Interesse registrado';
+  const subject = 'Plina · Recebemos seu contato';
 
   const text = `${firstName},
 
-Recebemos seu interesse no PLINA-RF via plina.finance. Nossa equipe entrará em contato em até 48 horas com apresentação detalhada do instrumento e documentação do FIDC.
+Recebemos seu contato pelo plina.finance. Nossa equipe responderá por e-mail assim que possível. Este e-mail confirma o recebimento; não é oferta nem solicitação de investimento, e não há oferta em andamento.
 
 Próximos passos:
 
-  01 · Em até 48 horas · Nossa equipe de RI entrará em contato com apresentação do instrumento e documentação do FIDC.
-  02 · Roadshow institucional · Agendamento com o time fundador. Slots em Miami, São Paulo, Cingapura e Londres.
-  03 · Onboarding formal · Habilitação institucional sob estrutura CVM 175, com prestadores registrados e auditoria Big Four.
+  01 · Resposta · Nossa equipe lê sua mensagem e responde por e-mail, assim que possível.
+  02 · Conversa · Se fizer sentido, agendamos uma conversa com o time fundador.
+  03 · Sem compromisso · Este é um contato exploratório. Não há oferta em andamento nem documentação de oferta a enviar.
 
-Resumo da sua manifestação:
+Resumo do seu contato:
 
   Organização: ${d.org}
-  Perfil: ${d.profile}
-  Tíquete indicativo: ${d.ticket}${d.jurisdiction ? `\n  Jurisdição: ${d.jurisdiction}` : ''}
+  Perfil: ${d.profile}${d.jurisdiction ? `\n  Jurisdição: ${d.jurisdiction}` : ''}
 
 Em caso de dúvidas, basta responder este e-mail ou escrever para contato@plina.finance.
 
+Você recebeu esta mensagem porque preencheu o formulário em plina.finance. Para pedir acesso, correção ou eliminação dos seus dados, responda este e-mail.
+
 —
 Plina Finance
-Pool tokenizado de cotas de consórcio contempladas · FIDC · CVM 175 · Stellar
-Oferta restrita · Investidor qualificado
+Cotas contempladas de consórcio, com registro verificável em rede de testes
+Contato exploratório · Sem oferta · Em desenvolvimento
 `;
 
   const passos: Array<[string, string, string]> = [
-    [
-      '01',
-      'Em até 48 horas',
-      'Nossa equipe de Relações com Investidores envia apresentação detalhada do instrumento e documentação do FIDC.',
-    ],
-    [
-      '02',
-      'Roadshow institucional',
-      'Após análise inicial, agendamos com o time fundador. Slots em São Paulo, Miami, Cingapura e Londres.',
-    ],
+    ['01', 'Resposta', 'Nossa equipe lê sua mensagem e responde por e-mail, assim que possível.'],
+    ['02', 'Conversa', 'Se fizer sentido, agendamos uma conversa com o time fundador.'],
     [
       '03',
-      'Onboarding formal',
-      'Habilitação institucional sob estrutura CVM 175, com prestadores registrados e auditoria Big Four.',
+      'Sem compromisso',
+      'Este é um contato exploratório. Não há oferta em andamento nem documentação de oferta a enviar.',
     ],
   ];
 
   const resumo: Array<[string, string]> = [
     ['Organização', d.org],
     ['Perfil', d.profile],
-    ['Tíquete', d.ticket],
     ...(d.jurisdiction ? [['Jurisdição', d.jurisdiction] as [string, string]] : []),
   ];
 
@@ -159,7 +153,7 @@ Oferta restrita · Investidor qualificado
 </head>
 <body style="margin:0;padding:0;background:${COLORS.pageGrey};font-family:${SANS};color:${COLORS.petrol};-webkit-font-smoothing:antialiased;">
   <span style="display:none !important;visibility:hidden;mso-hide:all;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
-    Recebemos seu interesse no PLINA-RF. Nossa equipe entrará em contato em até 48 horas.
+    Recebemos seu contato. Nossa equipe responderá assim que possível.
   </span>
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${COLORS.pageGrey};">
     <tr>
@@ -175,7 +169,7 @@ Oferta restrita · Investidor qualificado
                     Plina<span style="color:${COLORS.cyan};">.</span>
                   </td>
                   <td align="right" style="padding:22px 40px;font-family:${MONO};font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:#A0A8A8;">
-                    Interesse registrado
+                    Contato recebido
                   </td>
                 </tr>
               </table>
@@ -189,7 +183,7 @@ Oferta restrita · Investidor qualificado
                 ${esc(firstName)},
               </h1>
               <p style="margin:0;font-family:${SANS};font-size:16px;line-height:1.6;color:${COLORS.petrol70};font-weight:400;">
-                Recebemos seu interesse no PLINA-RF via plina.finance. Nossa equipe entrará em contato em até 48 horas com apresentação detalhada do instrumento e documentação do FIDC.
+                Recebemos seu contato pelo plina.finance. Nossa equipe responderá por e-mail assim que possível. Este e-mail confirma o recebimento; não é oferta nem solicitação de investimento, e não há oferta em andamento.
               </p>
             </td>
           </tr>
@@ -218,7 +212,7 @@ Oferta restrita · Investidor qualificado
           <tr>
             <td style="padding:32px 40px 0 40px;">
               <p style="margin:0 0 20px 0;font-family:${MONO};font-size:10px;letter-spacing:0.24em;text-transform:uppercase;color:${COLORS.cyanDeep};font-weight:700;">
-                Resumo do interesse
+                Resumo do contato
               </p>
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${COLORS.grey};border:1px solid ${COLORS.hairline};">
                 ${resumoRows}
@@ -233,6 +227,9 @@ Oferta restrita · Investidor qualificado
                 Em caso de dúvidas, basta responder este e-mail ou escrever para
                 <a href="mailto:contato@plina.finance" style="color:${COLORS.cyanDeep};text-decoration:none;border-bottom:1px solid ${COLORS.cyanDeep};">contato@plina.finance</a>.
               </p>
+              <p style="margin:16px 0 0 0;font-family:${SANS};font-size:12px;color:${COLORS.petrol55};line-height:1.6;">
+                Você recebeu esta mensagem porque preencheu o formulário em plina.finance. Para pedir acesso, correção ou eliminação dos seus dados, responda este e-mail.
+              </p>
             </td>
           </tr>
 
@@ -243,10 +240,10 @@ Oferta restrita · Investidor qualificado
                 Plina<span style="color:${COLORS.cyan};">.</span>
               </p>
               <p style="margin:0 0 16px 0;font-family:${SANS};font-size:13px;color:#A0A8A8;font-weight:400;">
-                Pool tokenizado de cotas de consórcio contempladas
+                Cotas contempladas de consórcio, com registro verificável em rede de testes
               </p>
               <p style="margin:0;font-family:${MONO};font-size:9px;letter-spacing:0.24em;text-transform:uppercase;color:#7A8484;">
-                Oferta restrita · Investidor qualificado · CVM 175 · Stellar
+                Contato exploratório · Em desenvolvimento · Rede de testes
               </p>
             </td>
           </tr>
@@ -275,17 +272,24 @@ Oferta restrita · Investidor qualificado
 // Notificação interna pra equipe
 // ----------------------------------------------------------------
 
+const AVISO_NAO_VERIFICADO =
+  'Os dados abaixo foram informados agora por quem enviou o formulário e NÃO foram verificados.';
+
+const AVISO_REENVIO =
+  'Reenvio de e-mail já cadastrado — dados do banco NÃO alterados; só corrigir após confirmar a identidade pelo e-mail do titular.';
+
 export function renderInternalNotification(d: LeadData) {
-  const subject = `[Plina · EOI] ${d.org}`;
+  const subject = `[Plina · Contato${d.reenvio ? ' · reenvio' : ''}] ${d.org}`;
 
   const lines = [
-    `Nova manifestação de interesse (EOI) recebida via plina.finance`,
+    ...(d.reenvio ? [AVISO_REENVIO, AVISO_NAO_VERIFICADO, ``] : []),
+    `Novo contato recebido via plina.finance`,
     ``,
     `Nome: ${d.name}`,
     `E-mail: ${d.email}`,
     `Organização: ${d.org}`,
     `Perfil: ${d.profile}`,
-    `Tíquete: ${d.ticket}`,
+    ...(d.ticket ? [`Tíquete: ${d.ticket}`] : []),
     ...(d.phone ? [`Telefone: ${d.phone}`] : []),
     ...(d.jurisdiction ? [`Jurisdição: ${d.jurisdiction}`] : []),
     ...(d.currency ? [`Moeda de preferência: ${d.currency}`] : []),
@@ -298,11 +302,17 @@ export function renderInternalNotification(d: LeadData) {
   const text = lines.join('\n');
 
   const dataRows: Array<[string, string, boolean]> = [
+    ...(d.reenvio
+      ? [
+          ['Aviso', AVISO_REENVIO, false] as [string, string, boolean],
+          ['Atenção', AVISO_NAO_VERIFICADO, false] as [string, string, boolean],
+        ]
+      : []),
     ['Nome', d.name, false],
     ['E-mail', d.email, true],
     ['Organização', d.org, false],
     ['Perfil', d.profile, false],
-    ['Tíquete', d.ticket, false],
+    ...(d.ticket ? [['Tíquete', d.ticket, false] as [string, string, boolean]] : []),
     ...(d.phone ? [['Telefone', d.phone, false] as [string, string, boolean]] : []),
     ...(d.jurisdiction ? [['Jurisdição', d.jurisdiction, false] as [string, string, boolean]] : []),
     ...(d.currency ? [['Moeda', d.currency, false] as [string, string, boolean]] : []),
@@ -351,7 +361,7 @@ export function renderInternalNotification(d: LeadData) {
 </head>
 <body style="margin:0;padding:0;background:${COLORS.pageGrey};font-family:${SANS};color:${COLORS.petrol};-webkit-font-smoothing:antialiased;">
   <span style="display:none !important;visibility:hidden;mso-hide:all;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
-    Nova EOI de ${esc(d.org)} (${esc(d.profile)}, ${esc(d.ticket)}).
+    Novo contato de ${esc(d.org)} (${esc(d.profile)}).
   </span>
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${COLORS.pageGrey};">
     <tr>
@@ -364,7 +374,7 @@ export function renderInternalNotification(d: LeadData) {
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                 <tr>
                   <td style="padding:18px 32px;font-family:${MONO};font-size:10px;letter-spacing:0.24em;text-transform:uppercase;color:${COLORS.cyan};font-weight:700;">
-                    [eoi] · Nova manifestação
+                    [contato] · Novo contato
                   </td>
                   <td align="right" style="padding:18px 32px;font-family:${MONO};font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:#A0A8A8;">
                     ${esc(fmtDateBR(d.recebido))}
@@ -411,7 +421,7 @@ export function renderInternalNotification(d: LeadData) {
           <tr>
             <td style="background:${COLORS.grey};padding:14px 32px;border-top:1px solid ${COLORS.hairline};">
               <p style="margin:0;font-family:${MONO};font-size:9px;letter-spacing:0.22em;text-transform:uppercase;color:${COLORS.petrol55};">
-                plina.finance · eoi · expression of interest v2
+                plina.finance · contato
               </p>
             </td>
           </tr>

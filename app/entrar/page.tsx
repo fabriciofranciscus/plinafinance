@@ -58,14 +58,15 @@ function EntrarInner() {
     <div className="bg-white min-h-screen">
       <div className="mx-auto max-w-2xl px-6 py-16 md:py-24">
         <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
-          01 // Acesso · PLINA-RF
+          01 // Acesso · Rede de testes
         </p>
         <h1 className="font-title text-4xl md:text-5xl font-semibold mt-4 tracking-tight leading-[1.05] text-base">
           Entrar na plataforma.
         </h1>
         <p className="font-text text-base mt-6 text-base/80 leading-relaxed max-w-prose">
-          Acesso institucional ao pool de direitos creditórios PLINA-RF.
-          Onboarding via wallet Stellar embedded e anchor LATAM regulada.
+          Acesso à demonstração da Plina em rede de testes, sem valor
+          financeiro real. O cadastro usa uma carteira Stellar embutida e uma
+          anchor parceira, em sandbox.
         </p>
 
         <div className="mt-12">
@@ -80,9 +81,9 @@ function EntrarInner() {
 
         <dl className="mt-16 pt-10 border-t border-light-hairline grid grid-cols-1 sm:grid-cols-3 gap-px bg-base/10">
           {[
-            { k: 'Token', v: 'PLINA-RF' },
-            { k: 'Lastro', v: 'FIDC / CVM 175' },
-            { k: 'Rede', v: 'Stellar' },
+            { k: 'Ambiente', v: 'Rede de testes' },
+            { k: 'Ativo', v: 'Cota de demonstração' },
+            { k: 'Rede', v: 'Stellar testnet' },
           ].map((it) => (
             <div key={it.k} className="bg-white px-5 py-5">
               <dt className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65">
