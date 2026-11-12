@@ -248,13 +248,24 @@ describe('reabrirPagamentoCedente — ação de admin AUDITADA (decisão do Atla
   beforeEach(() => {
     m.transf.mockResolvedValue(falhou());
     m.auditCreate.mockImplementation(async () => { m.ordem.push('audit'); return {}; });
-    m.reabrir.mockImplementation(async () => { m.ordem.push('reabrir'); return { status: 'PROCESSANDO' }; });
+    // O reabrirTransferencia real chama o hook DENTRO da transação da reabertura; o mock o reproduz.
+    m.reabrir.mockImplementation(async (_i: unknown, o: { aoReabrir?: (tx: unknown, t: unknown) => Promise<void> }) => {
+      m.ordem.push('reabertura:inicio');
+      await o.aoReabrir?.(
+        { eventoAudit: { create: m.auditCreate }, transferenciaPix: { update: m.transfUpdate } },
+        { provedor: 'ASAAS', tentativaAnterior: 1, tentativaNova: 2, idempotencyKeyAnterior: 'pix-cedente:cessao_1', motivoAnterior: 'PSP_RECUSOU', providerIdAnterior: null },
+      );
+      m.ordem.push('reabertura:fim');
+      return { status: 'PROCESSANDO' };
+    });
   });
 
-  it('FALHOU confirmado: grava EventoAudit PIX_REAL_REABERTO ANTES do novo envio e reabre com o MESMO destino (CPF da pessoa verificada) e o valor da oferta', async () => {
+  it('FALHOU confirmado: grava EventoAudit PIX_REAL_REABERTO DENTRO da transação da reabertura (F-REAB-1) e reabre com o MESMO destino (CPF da pessoa verificada) e o valor da oferta', async () => {
     const r = await reabrirPagamentoCedente({ ...IN, chavePix: 'outra@pessoa.com', valor: '1.00' } as never, { provider: prov('ASAAS') });
     expect(r.status).toBe('PROCESSANDO');
-    expect(m.ordem).toEqual(['audit', 'reabrir']);
+    // o evento nasce dentro da reabertura (hook), não antes dela: sem corrida nem leitura velha deixando evento órfão
+    expect(m.ordem).toEqual(['reabertura:inicio', 'audit', 'reabertura:fim']);
+    expect(typeof (m.reabrir.mock.calls[0][1] as { aoReabrir?: unknown }).aoReabrir).toBe('function');
     expect(m.transfUpdate).toHaveBeenCalledWith({ where: { cessaoId: 'cessao_1' }, data: { alertadoEm: null } }); // F-FIA-6
     expect(m.reabrir.mock.calls[0][0]).toEqual({ cessaoId: 'cessao_1', valor: '1234.50', chavePix: CPF_CEDENTE, tipoChave: 'CPF', operador: 'admin-panel' });
     const audit = m.auditCreate.mock.calls[0][0].data;

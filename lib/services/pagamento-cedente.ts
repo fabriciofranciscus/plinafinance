@@ -168,7 +168,7 @@ export async function pagarCedenteDaCessao(
  * REABRIR um pagamento (ação de admin AUDITADA; decisão do Atlas: F-E12-1 é ALTO no domínio, a cessão assinada com o
  * preço não pago deixa a Plina em atraso com o cedente). Só depois de FALHOU confirmado pelo PSP (recusa 4xx, FAILED ou
  * CANCELLED: nada saiu), com o MESMO destino do cadastro do cedente (se o cadastro mudou, recusa: destino diferente é
- * pós-D30 com dupla aprovação). A decisão é gravada em EventoAudit \`PIX_REAL_REABERTO\` ANTES do novo envio. Qualquer outro
+ * pós-D30 com dupla aprovação). A decisão é gravada em EventoAudit \`PIX_REAL_REABERTO\` na MESMA transação da reabertura (só se ela se aplicou) e antes do novo envio. Qualquer outro
  * estado (INCERTO, PROCESSANDO, COMPROVADA) não reabre: o dinheiro pode ter saído.
  */
 export async function reabrirPagamentoCedente(
@@ -181,31 +181,36 @@ export async function reabrirPagamentoCedente(
   if (t.status !== 'FALHOU') throw new LiquidacaoCedenteError('NAO_REABRIVEL', t.status);
   if (t.destinoMascarado !== mascararDestino(ctx.tipoChave, ctx.documento)) throw new PagamentoCedenteError('DESTINO_DIVERGE');
 
-  // Auditoria da decisão (append-only), antes de qualquer envio. Só ids, hashes de tentativa e códigos; sem CPF.
-  await db.eventoAudit.create({
-    data: {
-      acao: 'PIX_REAL_REABERTO',
-      operador: input.operador,
-      leadVendedorId: ctx.leadVendedorId,
-      cessaoId: ctx.cessaoId,
-      payloadJson: {
-        cessaoId: ctx.cessaoId,
-        provedor: t.provedor,
-        tentativaAnterior: t.tentativa,
-        tentativaNova: t.tentativa + 1,
-        idempotencyKeyAnterior: t.idempotencyKey,
-        motivoAnterior: t.motivoFalha,
-        providerIdAnterior: t.providerId,
-      } as Prisma.InputJsonValue,
-    },
-  });
-
-  // A tentativa nova pode precisar de alerta próprio (F-FIA-6): zera a marca de "já avisado".
-  await db.transferenciaPix.update({ where: { cessaoId: ctx.cessaoId }, data: { alertadoEm: null } });
-
+  // A auditoria da decisão (append-only) e o reset da marca de alerta (F-FIA-6) rodam DENTRO da transação da reabertura,
+  // só se ela se aplicou (F-REAB-1 da Vera): sem corrida nem leitura velha deixando evento sem tentativa nova. O envio ao
+  // PSP vem depois da transação, então o evento continua anterior a qualquer novo envio. Só ids, chaves de tentativa e
+  // códigos; sem CPF.
   const r = await reabrirTransferencia(
     { cessaoId: ctx.cessaoId, valor: ctx.valor.toFixed(2), chavePix: ctx.documento, tipoChave: ctx.tipoChave, operador: input.operador },
-    { provider: ctx.provider, agora: opts.agora },
+    {
+      provider: ctx.provider,
+      agora: opts.agora,
+      aoReabrir: async (tx, anterior) => {
+        await tx.eventoAudit.create({
+          data: {
+            acao: 'PIX_REAL_REABERTO',
+            operador: input.operador,
+            leadVendedorId: ctx.leadVendedorId,
+            cessaoId: ctx.cessaoId,
+            payloadJson: {
+              cessaoId: ctx.cessaoId,
+              provedor: anterior.provedor,
+              tentativaAnterior: anterior.tentativaAnterior,
+              tentativaNova: anterior.tentativaNova,
+              idempotencyKeyAnterior: anterior.idempotencyKeyAnterior,
+              motivoAnterior: anterior.motivoAnterior,
+              providerIdAnterior: anterior.providerIdAnterior,
+            } as Prisma.InputJsonValue,
+          },
+        });
+        await tx.transferenciaPix.update({ where: { cessaoId: ctx.cessaoId }, data: { alertadoEm: null } });
+      },
+    },
   );
   if (r.status !== 'COMPROVADA') return { status: r.status, sha256: r.sha256, txHash: r.txHash };
   const { pagamentoId } = await fecharPagamento(ctx.cessaoId, input.operador);
