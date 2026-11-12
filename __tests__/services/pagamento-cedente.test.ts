@@ -11,6 +11,7 @@ const m = vi.hoisted(() => ({
   pagar: vi.fn(),
   reabrir: vi.fn(),
   lock: vi.fn(),
+  alerta: vi.fn(),
   pagFind: vi.fn(),
   transfUpdate: vi.fn(),
   ordem: [] as string[],
@@ -34,6 +35,7 @@ vi.mock('@/lib/db', () => {
     },
   };
 });
+vi.mock('@/lib/services/alerta-ops', () => ({ enviarAlertaOps: m.alerta }));
 vi.mock('@/lib/stellar/config', async (orig) => ({
   ...(await orig<typeof import('@/lib/stellar/config')>()),
   get STELLAR_NETWORK() { return m.rede.v; },
@@ -46,6 +48,7 @@ vi.mock('@/lib/services/liquidacao-cedente', async (orig) => ({
 
 import { PagamentoCedenteError, fecharPagamento, pagarCedenteDaCessao, reabrirPagamentoCedente, situacaoPagamentoDoCedente } from '@/lib/services/pagamento-cedente';
 import type { PixProvider } from '@/lib/integrations/psp/types';
+import { hmacDoDocumento } from '@/lib/services/titular-laudo';
 
 const SHA = 'b'.repeat(64);
 const TX = 'a'.repeat(64);
@@ -53,6 +56,9 @@ const D = (v: string) => new Prisma.Decimal(v);
 const prov = (nome: 'ASAAS' | 'SIMULADO') => ({ nome }) as unknown as PixProvider;
 const CPF_CEDENTE = '52998224725'; // CPF sintético com dígitos verificadores válidos
 const IN = { cessaoId: 'cessao_1', operador: 'admin-panel' };
+const titular = (documento = CPF_CEDENTE, over: Record<string, unknown> = {}) => ({
+  titularDocHmac: hmacDoDocumento('cessao_1', documento), titularSituacao: 'TITULAR_UNICO', ...over,
+});
 const pessoa = (over: Record<string, unknown> = {}) => ({ cpfNormalizado: CPF_CEDENTE, isSyntheticCpf: false, kycAprovado: true, ...over });
 const lead = (over: Record<string, unknown> = {}) => ({ cpf: CPF_CEDENTE, pessoa: pessoa(), ...over });
 
@@ -63,13 +69,15 @@ const comprovada = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   process.env.PIX_MAX_BRL = '50000';
+  process.env.TITULAR_HMAC_SECRET = 's'.repeat(40);
   m.rede.v = 'TESTNET';
   Object.values(m).forEach((f) => typeof f === 'function' && (f as ReturnType<typeof vi.fn>).mockReset());
   m.ordem.length = 0;
   m.cessao.mockResolvedValue({
-    id: 'cessao_1', status: 'ASSINADA', ofertaId: 'of_1',
+    id: 'cessao_1', status: 'ASSINADA', ofertaId: 'of_1', ...titular(),
     oferta: { valorLiquidoVendedor: D('1234.50'), leadVendedorId: 'lead_1', leadVendedor: lead() }, pagamento: null,
   });
+  m.alerta.mockResolvedValue(true);
   m.lock.mockResolvedValue(0);
   m.transfUpdate.mockResolvedValue({});
   m.transf.mockResolvedValue(comprovada());
@@ -170,6 +178,7 @@ describe('pagarCedenteDaCessao', () => {
 describe('P2 (Argus/Atlas): o destino é o CPF da PESSOA verificada por KYC ligada ao lead, nunca o do chamador', () => {
   const cessaoCom = (leadVendedor: { pessoa?: { cpfNormalizado?: string | null } | null } | null) => ({
     id: 'cessao_1', status: 'ASSINADA', ofertaId: 'of_1',
+    ...titular(leadVendedor?.pessoa?.cpfNormalizado ?? CPF_CEDENTE),
     oferta: { valorLiquidoVendedor: D('1234.50'), leadVendedorId: 'lead_1', leadVendedor }, pagamento: null,
   });
   it.each([
@@ -269,9 +278,20 @@ describe('reabrirPagamentoCedente — ação de admin AUDITADA (decisão do Atla
     expect(m.transfUpdate).toHaveBeenCalledWith({ where: { cessaoId: 'cessao_1' }, data: { alertadoEm: null } }); // F-FIA-6
     expect(m.reabrir.mock.calls[0][0]).toEqual({ cessaoId: 'cessao_1', valor: '1234.50', chavePix: CPF_CEDENTE, tipoChave: 'CPF', operador: 'admin-panel' });
     const audit = m.auditCreate.mock.calls[0][0].data;
-    expect(audit).toMatchObject({ acao: 'PIX_REAL_REABERTO', operador: 'admin-panel', cessaoId: 'cessao_1', leadVendedorId: 'lead_1' });
+    expect(audit).toMatchObject({ acao: 'PIX_SANDBOX_REABERTO', operador: 'admin-panel', cessaoId: 'cessao_1', leadVendedorId: 'lead_1' });
     expect(audit.payloadJson).toMatchObject({ tentativaAnterior: 1, tentativaNova: 2, motivoAnterior: 'PSP_RECUSOU', idempotencyKeyAnterior: 'pix-cedente:cessao_1' });
     expect(JSON.stringify(audit)).not.toContain(CPF_CEDENTE); // sem CPF na auditoria
+  });
+
+  it('F-FIA-3: a ação de auditoria da reabertura segue o provedor (SIMULADO → PIX_SIMULADO_REABERTO); nunca PIX_REAL_REABERTO fora de produção', async () => {
+    m.reabrir.mockImplementation(async (_i: unknown, o: { aoReabrir?: (tx: unknown, t: unknown) => Promise<void> }) => {
+      await o.aoReabrir?.({ eventoAudit: { create: m.auditCreate }, transferenciaPix: { update: m.transfUpdate } }, { provedor: 'SIMULADO', tentativaAnterior: 1, tentativaNova: 2, idempotencyKeyAnterior: 'k', motivoAnterior: 'PSP_RECUSOU', providerIdAnterior: null });
+      return { status: 'PROCESSANDO' };
+    });
+    m.transf.mockResolvedValue(falhou({ provedor: 'SIMULADO' }));
+    await reabrirPagamentoCedente(IN, { provider: prov('SIMULADO') });
+    expect(m.auditCreate.mock.calls[0][0].data.acao).toBe('PIX_SIMULADO_REABERTO');
+    expect(JSON.stringify(m.auditCreate.mock.calls)).not.toContain('PIX_REAL');
   });
 
   it('se a reabertura já concluiu (COMPROVADA), fecha o pagamento (Pagamento/lead/EventoAudit de execução)', async () => {
@@ -311,6 +331,44 @@ describe('reabrirPagamentoCedente — ação de admin AUDITADA (decisão do Atla
     await expect(reabrirPagamentoCedente(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'PROVEDOR_SEM_PAGAMENTO_REAL' });
     expect(m.auditCreate).not.toHaveBeenCalled();
     expect(m.reabrir).not.toHaveBeenCalled();
+  });
+});
+
+describe('titular confirmado no laudo (condição da Consuelo, aceita pelo Atlas)', () => {
+  const cessaoCom = (extra: Record<string, unknown>) => ({
+    id: 'cessao_1', status: 'ASSINADA', ofertaId: 'of_1', ...titular(),
+    oferta: { valorLiquidoVendedor: D('1234.50'), leadVendedorId: 'lead_1', leadVendedor: lead() }, pagamento: null, ...extra,
+  });
+  it('documento do cadastro difere do titular do laudo → TITULAR_DIVERGE_LAUDO, ALERTA, nada vai ao PSP', async () => {
+    m.cessao.mockResolvedValueOnce(cessaoCom(titular('11144477735')));
+    await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'TITULAR_DIVERGE_LAUDO' });
+    expect(m.pagar).not.toHaveBeenCalled();
+    const mail = m.alerta.mock.calls[0][0];
+    expect(mail.linhas.join('\n')).toContain('cessão: cessao_1');
+    expect(JSON.stringify(mail)).not.toContain(CPF_CEDENTE); // o alerta não leva documento
+  });
+  it.each(['ESPOLIO', 'COTITULARIDADE', 'PROCURADOR'])('%s → TRATAMENTO_MANUAL (fora do fluxo automático), com alerta e sem PSP', async (situacao) => {
+    m.cessao.mockResolvedValueOnce(cessaoCom(titular(CPF_CEDENTE, { titularSituacao: situacao })));
+    await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'TRATAMENTO_MANUAL' });
+    expect(m.pagar).not.toHaveBeenCalled();
+    expect(m.alerta).toHaveBeenCalledOnce();
+  });
+  it('titular ainda não confirmado → TITULAR_NAO_CONFIRMADO (sem PSP); sem segredo configurado → recusa fail-closed', async () => {
+    m.cessao.mockResolvedValueOnce(cessaoCom({ titularDocHmac: null, titularSituacao: null }));
+    await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'TITULAR_NAO_CONFIRMADO' });
+    delete process.env.TITULAR_HMAC_SECRET;
+    await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'SEGREDO_NAO_CONFIGURADO' });
+    expect(m.pagar).not.toHaveBeenCalled();
+  });
+  it('o mesmo vale na reabertura: sem auditoria nem envio', async () => {
+    m.cessao.mockResolvedValueOnce(cessaoCom(titular('11144477735')));
+    await expect(reabrirPagamentoCedente(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'TITULAR_DIVERGE_LAUDO' });
+    expect(m.auditCreate).not.toHaveBeenCalled();
+    expect(m.reabrir).not.toHaveBeenCalled();
+  });
+  it('titular confere (HMAC igual, TITULAR_UNICO) → paga normalmente', async () => {
+    await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).resolves.toMatchObject({ status: 'COMPROVADA' });
+    expect(m.alerta).not.toHaveBeenCalled();
   });
 });
 

@@ -12,6 +12,8 @@ import { obterPixProvider } from '../integrations/psp';
 import { validarChavePix, type PixProvider } from '../integrations/psp/types';
 import { STELLAR_NETWORK } from '../stellar/config';
 import { mascararDestino } from '../integrations/psp/comprovante';
+import { enviarAlertaOps } from './alerta-ops';
+import { TitularLaudoError, exigirTitularDoLaudo } from './titular-laudo';
 import {
   LiquidacaoCedenteError,
   pagarTitular,
@@ -93,6 +95,8 @@ async function contextoDoPagamento(cessaoId: string, provider?: PixProvider): Pr
     select: {
       id: true,
       status: true,
+      titularDocHmac: true,
+      titularSituacao: true,
       oferta: {
         select: {
           valorLiquidoVendedor: true,
@@ -127,6 +131,20 @@ async function contextoDoPagamento(cessaoId: string, provider?: PixProvider): Pr
   // O CPF autodeclarado no lead, se existir, não pode contradizer o da conta verificada.
   const declarado = lead?.cpf?.replace(/\D/g, '');
   if (declarado && declarado !== documento) throw new PagamentoCedenteError('TITULAR_DIVERGE');
+
+  // Titular confirmado no laudo: o documento do cadastro tem de bater (HMAC); espólio/cotitularidade/procurador =
+  // tratamento manual. Divergência ou tratamento manual alertam o operador (só o id da cessão, sem documento).
+  try {
+    exigirTitularDoLaudo(cessao, documento);
+  } catch (err) {
+    if (err instanceof TitularLaudoError && (err.code === 'TITULAR_DIVERGE_LAUDO' || err.code === 'TRATAMENTO_MANUAL')) {
+      await enviarAlertaOps({
+        assunto: err.code === 'TITULAR_DIVERGE_LAUDO' ? 'documento do cedente difere do titular do laudo (pagamento recusado)' : 'cessão com titularidade que exige tratamento manual (pagamento recusado)',
+        linhas: [`cessão: ${cessao.id}`, `motivo: ${err.code}`, 'Nada foi enviado ao PSP. O operador decide o tratamento manual.'],
+      }).catch(() => false);
+    }
+    throw err;
+  }
 
   // O valor é o da oferta da cessão; nunca o que o chamador diz.
   const valor = new Prisma.Decimal(cessao.oferta.valorLiquidoVendedor);
@@ -168,7 +186,7 @@ export async function pagarCedenteDaCessao(
  * REABRIR um pagamento (ação de admin AUDITADA; decisão do Atlas: F-E12-1 é ALTO no domínio, a cessão assinada com o
  * preço não pago deixa a Plina em atraso com o cedente). Só depois de FALHOU confirmado pelo PSP (recusa 4xx, FAILED ou
  * CANCELLED: nada saiu), com o MESMO destino do cadastro do cedente (se o cadastro mudou, recusa: destino diferente é
- * pós-D30 com dupla aprovação). A decisão é gravada em EventoAudit \`PIX_REAL_REABERTO\` na MESMA transação da reabertura (só se ela se aplicou) e antes do novo envio. Qualquer outro
+ * pós-D30 com dupla aprovação). A decisão é gravada em EventoAudit (\`PIX_SANDBOX_REABERTO\` ou \`PIX_SIMULADO_REABERTO\`, conforme o provedor; \`PIX_REAL_REABERTO\` só PSP de produção) na MESMA transação da reabertura (só se ela se aplicou) e antes do novo envio. Qualquer outro
  * estado (INCERTO, PROCESSANDO, COMPROVADA) não reabre: o dinheiro pode ter saído.
  */
 export async function reabrirPagamentoCedente(
@@ -193,7 +211,8 @@ export async function reabrirPagamentoCedente(
       aoReabrir: async (tx, anterior) => {
         await tx.eventoAudit.create({
           data: {
-            acao: 'PIX_REAL_REABERTO',
+            // A ação segue o provedor (F-FIA-3): a trilha é append-only e não pode registrar "Pix real" que não houve.
+            acao: anterior.provedor === 'SIMULADO' ? ('PIX_SIMULADO_REABERTO' as const) : ('PIX_SANDBOX_REABERTO' as const),
             operador: input.operador,
             leadVendedorId: ctx.leadVendedorId,
             cessaoId: ctx.cessaoId,

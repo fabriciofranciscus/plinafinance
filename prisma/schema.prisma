@@ -141,8 +141,11 @@ enum AcaoAudit {
   CESSAO_ASSINADA
   PIX_SIMULADO_EXECUTADO
   PIX_REAL_EXECUTADO
+  TITULAR_LAUDO_CONFIRMADO
   PIX_SANDBOX_EXECUTADO
   PIX_REAL_REABERTO
+  PIX_SANDBOX_REABERTO
+  PIX_SIMULADO_REABERTO
   // Funil comprador (MVP testnet-first)
   LEAD_COMPRADOR_CAPTURADO
   RESERVA_CRIADA
@@ -625,6 +628,10 @@ model Cessao {
   taxaAnuenciaBps     Int?
   /// Ref externo da administradora (orderId/contractId) quando caminho=API.
   administradoraApiId String?
+  /// HMAC-SHA256 (segredo do servidor) do documento do titular confirmado no laudo de validação (E1-2). Nunca o documento.
+  titularDocHmac      String?
+  /// TITULAR_UNICO | ESPOLIO | COTITULARIDADE | PROCURADOR. Só TITULAR_UNICO paga automaticamente.
+  titularSituacao     String?
   criadaEm            DateTime      @default(now())
   atualizadaEm        DateTime      @updatedAt
 
