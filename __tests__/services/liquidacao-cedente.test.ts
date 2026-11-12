@@ -349,6 +349,33 @@ describe('F-E12-1 — reabrir um FALHOU confirmado pelo PSP (auditado, chave nov
     expect(p.enviarPix).toHaveBeenCalledTimes(2); // original + reabertura; a recuperação não reenviou
   });
 
+  it('depois de reabrir, o desde da âncora e da busca é a hora da REABERTURA (a janela não volta ao claim original)', async () => {
+    const REABERTURA = new Date('2026-11-12T15:00:00.000Z');
+    const p = recusa();
+    await pagarTitular(IN, { provider: p, agora: AGORA });
+    p.enviarPix.mockResolvedValue({ id: 'tra_2', status: 'PENDENTE' });
+    p.consultarStatus.mockResolvedValue({ id: 'tra_2', status: 'CONCLUIDO', valor: '123.45', e2eId: 'E2', efetivadoEm: '2026-11-12' });
+    await reabrirTransferencia(REABRIR, { provider: p, agora: REABERTURA });
+    expect(m.ancora.mock.calls[0][0].desde).toEqual(REABERTURA);
+    // 1ª tentativa continua ancorando com o claim original
+    const q = provedor();
+    m.rows.length = 0;
+    await pagarTitular({ ...IN, cessaoId: 'cessao_9' }, { provider: q, agora: AGORA });
+    expect(m.ancora.mock.calls[1][0].desde).toEqual(m.rows[0].criadoEm);
+  });
+
+  it('reaberta e ambígua: a busca da chave atual usa a reabertura e a das anteriores usa o claim', async () => {
+    const REABERTURA = new Date('2026-11-12T15:00:00.000Z');
+    const p = recusa();
+    await pagarTitular(IN, { provider: p, agora: AGORA });
+    p.enviarPix.mockRejectedValue(new PspError('PSP_INCERTO'));
+    await reabrirTransferencia(REABRIR, { provider: p, agora: REABERTURA });
+    await avancarTransferencia('cessao_1', { provider: p, agora: REABERTURA });
+    const chamadas = p.localizarPorChave.mock.calls as unknown as Array<[string, Date]>;
+    expect(chamadas.find((c) => c[0] === 'pix-cedente:cessao_1:2')?.[1]).toEqual(REABERTURA);
+    expect(chamadas.find((c) => c[0] === 'pix-cedente:cessao_1')?.[1]).toEqual(m.rows[0].criadoEm);
+  });
+
   it('exige operador identificado, a chave Pix válida e o mesmo valor/provedor', async () => {
     const p = recusa();
     await pagarTitular(IN, { provider: p, agora: AGORA });

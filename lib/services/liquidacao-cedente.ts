@@ -80,7 +80,21 @@ interface TentativaAnterior {
 const anteriores = (r: TransferenciaPix): TentativaAnterior[] =>
   Array.isArray(r.historico) ? (r.historico as unknown as TentativaAnterior[]) : [];
 /** Chave da tentativa atual + as das anteriores: a recuperação olha TODAS (um envio antigo não pode ficar invisível). */
-const todasAsChaves = (r: TransferenciaPix) => [r.idempotencyKey, ...anteriores(r).map((t) => t.idempotencyKey)];
+/**
+ * Início da tentativa ATUAL: a hora da última reabertura (ou `criadoEm` na 1ª tentativa). É o `desde` da âncora e da
+ * busca da tentativa atual: depois de reabrir, a janela começa na reabertura, não no claim original (janela menor).
+ */
+const inicioDaTentativa = (r: TransferenciaPix): Date => {
+  const a = anteriores(r);
+  const ultima = a.length > 0 ? Date.parse(a[a.length - 1].reabertaEm) : NaN;
+  return Number.isFinite(ultima) ? new Date(ultima) : r.criadoEm;
+};
+
+/** Chaves de TODAS as tentativas, cada uma com o `desde` do seu período (a atual: reabertura; as antigas: o claim). */
+const todasAsChaves = (r: TransferenciaPix): Array<{ chave: string; desde: Date }> => [
+  { chave: r.idempotencyKey, desde: inicioDaTentativa(r) },
+  ...anteriores(r).map((t) => ({ chave: t.idempotencyKey, desde: r.criadoEm })),
+];
 const ehUnique = (e: unknown) => (e as { code?: string } | null)?.code === 'P2002';
 
 function resultado(r: TransferenciaPix): ResultadoPagamento {
@@ -120,8 +134,8 @@ async function avancar(row: TransferenciaPix, provider: PixProvider): Promise<Tr
   if (!atual.providerId && (atual.status === 'ENVIANDO' || atual.status === 'INCERTO')) {
     let achada: { id: string; status: StatusPix } | null = null;
     try {
-      for (const chave of todasAsChaves(atual)) {
-        achada = await provider.localizarPorChave(chave, atual.criadoEm);
+      for (const { chave, desde } of todasAsChaves(atual)) {
+        achada = await provider.localizarPorChave(chave, desde);
         if (achada) break;
       }
     } catch (err) {
@@ -193,7 +207,7 @@ async function avancar(row: TransferenciaPix, provider: PixProvider): Promise<Tr
     throw err;
   }
   try {
-    const ancora = await ancorarSha256({ sha256Hex: sha256, contexto: 'COMPROVANTE_PIX', desde: atual.criadoEm });
+    const ancora = await ancorarSha256({ sha256Hex: sha256, contexto: 'COMPROVANTE_PIX', desde: inicioDaTentativa(atual) });
     return await marcar(atual.id, { status: 'COMPROVADA', comprovantePath: pathname, ancoraTxHash: ancora.txHash, travaAte: null });
   } catch (err) {
     if (err instanceof AncoraError) throw new LiquidacaoCedenteError('ANCORA_FALHOU', err.code, { cause: err });
