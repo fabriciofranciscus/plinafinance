@@ -101,7 +101,7 @@ function leitor(server: Horizon.Server): LeitorHorizon {
   };
 }
 
-const ICONE = { ok: '✓', falhou: '✗', nao_conferido: '?' } as const;
+const ICONE = { ok: '✓', falhou: '✗', nao_conferido: '?', aviso: '!' } as const;
 const uso =
   'uso: pnpm snapshot:verificar <https://url-do-json> --distributor <G…> --network <testnet|public> [--issuer <G…>] [--toml-domain <dominio>] [--tx <hash>] [--tesouro <CODE:ISSUER> --preco-tesouro <BRL>]';
 

@@ -262,10 +262,15 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
       expect(ok.conferencias.find((c) => c.id === 'tesouro-cobre-caixa')?.detalhe).toMatch(/PARCIAL/);
       expect((await verificarSnapshot(b, leitor(), PLINA)).conferencias.some((c) => c.id === 'tesouro-cobre-caixa')).toBe(false);
     });
-    it('TESOURO insuficiente no mesmo ledger → falhou; depois do ledger do arquivo → não conferido', async () => {
+    it('TESOURO insuficiente (no mesmo ledger ou depois) é só AVISO: nunca reprova nem muda o código de saída', async () => {
       const b = bytesDe(arquivoBase());
-      expect(estado(await verificarSnapshot(b, leitor({ tesouro: '100', ledger: 101 }), { ...PLINA, tesouro: T }), 'tesouro-cobre-caixa')).toBe('falhou');
-      expect(estado(await verificarSnapshot(b, leitor({ tesouro: '100', ledger: 5000 }), { ...PLINA, tesouro: T }), 'tesouro-cobre-caixa')).toBe('nao_conferido');
+      for (const ledger of [101, 5000]) {
+        const r = await verificarSnapshot(b, leitor({ tesouro: '100', ledger }), { ...PLINA, tesouro: T });
+        expect(estado(r, 'tesouro-cobre-caixa')).toBe('aviso');
+        expect(r.conferencias.find((c) => c.id === 'tesouro-cobre-caixa')?.detalhe).toMatch(/PARCIAL.*<.*caixa/);
+      }
+      // com ledger no mesmo ponto e tudo o mais conferido, o resultado continua CONFERIDO (saída 0)
+      expect((await verificarSnapshot(b, leitor({ tesouro: '100', ledger: 101 }), { ...PLINA, tesouro: T })).codigoSaida).toBe(0);
     });
   });
 

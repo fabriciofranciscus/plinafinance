@@ -50,7 +50,8 @@ export interface LeitorHorizon {
   transacao(hash: string): Promise<TxHorizon | null>;
 }
 
-export type Estado = 'ok' | 'falhou' | 'nao_conferido';
+/** `aviso`: informação que NÃO altera o código de saída (ex.: conferência parcial que depende de config do revisor). */
+export type Estado = 'ok' | 'falhou' | 'nao_conferido' | 'aviso';
 export interface Conferencia {
   id: string;
   estado: Estado;
@@ -313,8 +314,8 @@ export async function verificarSnapshot(
     const saldo = await leitor.saldoDaConta(distAncora, opts.tesouro.code, opts.tesouro.issuer);
     const valor = saldo.mul(opts.tesouro.precoBrl);
     const texto = `PARCIAL: ${opts.tesouro.code} do distributor ${f7(saldo)} × preço de referência ${opts.tesouro.precoBrl} = R$ ${valor.toFixed(2)} ${valor.gte(caixa) ? '≥' : '<'} caixa realizado do arquivo R$ ${caixa.toFixed(2)} (o preço é informado pelo revisor; saldo de hoje)`;
-    if (valor.gte(caixa)) add('tesouro-cobre-caixa', 'ok', texto);
-    else add('tesouro-cobre-caixa', passou ? 'nao_conferido' : 'falhou', texto);
+    // Só AVISO (decisão do Atlas): o preço de referência é config do revisor, não prova; nunca reprova nem muda a saída.
+    add('tesouro-cobre-caixa', valor.gte(caixa) ? 'ok' : 'aviso', texto);
   }
   return fim();
 }
