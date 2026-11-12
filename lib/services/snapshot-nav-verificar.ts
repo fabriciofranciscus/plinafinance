@@ -297,7 +297,8 @@ export async function verificarSnapshot(
       const tx = await leitor.transacao(i.emissaoTxHash as string);
       if (!tx) reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} não encontrada no Horizon`);
       else if (!tx.successful) reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} falhou na rede`);
-      else if (tx.source_account !== emissor || tx.memo_type !== 'hash') legadas.push(i.cotaId);
+      else if (tx.source_account !== emissor) reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} não saiu do issuer em vigor (outro issuer reprova)`);
+      else if (tx.memo_type !== 'hash') legadas.push(i.cotaId);
       else fortes++;
     }
     if (reprovadas.length > 0) add('cotas-emissao', 'falhou', reprovadas.join(' | '));
@@ -307,7 +308,11 @@ export async function verificarSnapshot(
       add('cotas-emissao', 'ok', `${fortes} de ${itens.length} cotas: emissão do modelo E1-4 conferida no Horizon (bem-sucedida, do issuer, com Memo.hash); ${legadas.length} LEGADA(S) listada(s) à parte`);
     }
     if (legadas.length > 0 && reprovadas.length === 0) {
-      add('cotas-legadas', 'aviso', `LEGADO (emissão confirmada na rede, sem cadeia de hashes do modelo E1-4): ${legadas.length} cota(s): ${legadas.join(', ')}`);
+      add(
+        'cotas-legadas',
+        'aviso',
+        `${legadas.length} LEGADO: emissão confirmada, sem cadeia de hashes (cotas: ${legadas.join(', ')}). Regra: LEGADO só quando a emissaoTxHash existe na rede, foi bem-sucedida, saiu do issuer em vigor e NÃO tem o Memo.hash do modelo E1-4; emissão inexistente, falhada ou de outro issuer reprova. Código 0 = nada reprovou e toda emissão do modelo E1-4 confere.`,
+      );
     }
   }
 

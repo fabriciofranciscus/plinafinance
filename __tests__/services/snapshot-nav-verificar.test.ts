@@ -237,16 +237,25 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
       expect(estado(r, 'cotas-emissao')).toBe('falhou');
       expect(r.codigoSaida).toBe(1);
     });
-    it.each([
-      ['de outra conta que não o issuer', (h: string) => ({ hash: h, successful: true, source_account: 'GOUTRA', memo_type: 'hash', created_at: 'x' })],
-      ['sem Memo.hash', (h: string) => ({ hash: h, successful: true, source_account: 'GISS', memo_type: 'none', created_at: 'x' })],
-    ])('emissão confirmada na rede mas %s = LEGADO: listado à parte como aviso e NÃO derruba a prova (saída 0)', async (_n, tx) => {
-      const r = await verificarSnapshot(bytes(), leitor({ tx: tx as never }), PLINA);
+    it('emissão confirmada, do issuer em vigor, SEM Memo.hash = LEGADO: listada à parte, com contagem e a regra citada, e NÃO derruba a prova (saída 0)', async () => {
+      const r = await verificarSnapshot(bytes(), leitor({ tx: ((h: string) => ({ hash: h, successful: true, source_account: 'GISS', memo_type: 'none', created_at: 'x' })) as never }), PLINA);
       const legadas = r.conferencias.find((c) => c.id === 'cotas-legadas');
       expect(legadas?.estado).toBe('aviso');
-      expect(legadas?.detalhe).toMatch(/LEGADO \(emissão confirmada na rede, sem cadeia de hashes/);
+      expect(legadas?.detalhe).toMatch(/^1 LEGADO: emissão confirmada, sem cadeia de hashes/);
+      expect(legadas?.detalhe).toMatch(/Regra: LEGADO só quando a emissaoTxHash existe na rede, foi bem-sucedida, saiu do issuer em vigor e NÃO tem o Memo\.hash do modelo E1-4/);
+      expect(legadas?.detalhe).toMatch(/Código 0 = nada reprovou e toda emissão do modelo E1-4 confere/);
       expect(estado(r, 'cotas-emissao')).toBe('ok');
       expect(r.codigoSaida).toBe(0);
+    });
+    it.each([
+      ['de OUTRO issuer, com Memo.hash', (h: string) => ({ hash: h, successful: true, source_account: 'GOUTRA', memo_type: 'hash', created_at: 'x' })],
+      ['de OUTRO issuer, sem memo (não é legada: reprova)', (h: string) => ({ hash: h, successful: true, source_account: 'GOUTRA', memo_type: 'none', created_at: 'x' })],
+    ])('emissão confirmada mas %s → ✗ (saída ≠ 0), nunca LEGADO', async (_n, tx) => {
+      const r = await verificarSnapshot(bytes(), leitor({ tx: tx as never }), PLINA);
+      expect(estado(r, 'cotas-emissao')).toBe('falhou');
+      expect(r.conferencias.find((c) => c.id === 'cotas-emissao')?.detalhe).toMatch(/outro issuer reprova/);
+      expect(r.conferencias.some((c) => c.id === 'cotas-legadas')).toBe(false);
+      expect(r.codigoSaida).toBe(1);
     });
     it('a classificação vem do FATO on-chain, não de rótulo do arquivo: item que se declara "E1-4" mas cuja tx não tem Memo.hash é LEGADO; item rotulado "legado" cuja tx tem Memo.hash do issuer é E1-4', async () => {
       const a = arquivoBase();
@@ -264,11 +273,11 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
       const r = await verificarSnapshot(
         bytesDe(a),
         leitor({
-          tx: ((h: string) => (h.startsWith('tx_legada') ? { hash: h, successful: true, source_account: 'GDIST', memo_type: 'none', created_at: 'x' } : { hash: h, successful: true, source_account: 'GISS', memo_type: 'hash', created_at: 'x' })) as never,
+          tx: ((h: string) => (h.startsWith('tx_legada') ? { hash: h, successful: true, source_account: 'GISS', memo_type: 'none', created_at: 'x' } : { hash: h, successful: true, source_account: 'GISS', memo_type: 'hash', created_at: 'x' })) as never,
         }),
         PLINA,
       );
-      expect(r.conferencias.find((c) => c.id === 'cotas-legadas')?.detalhe).toMatch(/3 cota\(s\): legada2, legada3, legada4/);
+      expect(r.conferencias.find((c) => c.id === 'cotas-legadas')?.detalhe).toMatch(/^3 LEGADO: .*legada2, legada3, legada4/);
       expect(estado(r, 'cotas-emissao')).toBe('ok');
       expect(r.conferencias.filter((c) => c.estado === 'falhou' || c.estado === 'nao_conferido')).toEqual([]);
       expect(r.codigoSaida).toBe(0);
@@ -277,7 +286,7 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
       const a = arquivoBase();
       const base = a.numerador.cotasAtivas.itens[0];
       a.numerador.cotasAtivas.itens = [base, { ...base, cotaId: 'fantasma', emissaoTxHash: 'tx_nao_existe' }];
-      const r = await verificarSnapshot(bytesDe(a), leitor({ tx: ((h: string) => (h === 'tx_nao_existe' ? null : { hash: h, successful: true, source_account: 'GDIST', memo_type: 'none', created_at: 'x' })) as never }), PLINA);
+      const r = await verificarSnapshot(bytesDe(a), leitor({ tx: ((h: string) => (h === 'tx_nao_existe' ? null : { hash: h, successful: true, source_account: 'GISS', memo_type: 'none', created_at: 'x' })) as never }), PLINA);
       expect(estado(r, 'cotas-emissao')).toBe('falhou');
       expect(r.conferencias.some((c) => c.id === 'cotas-legadas')).toBe(false);
       expect(r.codigoSaida).toBe(1);
