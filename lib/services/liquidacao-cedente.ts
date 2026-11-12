@@ -17,7 +17,7 @@ import { db } from '../db';
 import { ComprovanteBlobError, guardarComprovantePsp } from '../integrations/blob/comprovante-psp';
 import { mascararDestino, montarComprovante } from '../integrations/psp/comprovante';
 import { obterPixProvider } from '../integrations/psp';
-import { PspError, validarChavePix, type PixProvider, type StatusPix, type TipoChavePix } from '../integrations/psp/types';
+import { PspError, exigirRedeDeTeste, validarChavePix, type PixProvider, type StatusPix, type TipoChavePix } from '../integrations/psp/types';
 import { AncoraError, ancorarSha256 } from '../stellar/ancora';
 import { extractSafeError } from '../stellar/log-error';
 
@@ -291,6 +291,7 @@ export async function pagarTitular(
   input: EntradaPagamento,
   opts: { provider?: PixProvider; agora?: Date } = {},
 ): Promise<ResultadoPagamento> {
+  exigirRedeDeTeste(); // em PUBLIC nenhum provedor atual paga de verdade: nunca claim, envio nem COMPROVADA (também com provedor injetado)
   const i = validarEntrada(input);
   const provider = opts.provider ?? obterPixProvider();
   const agora = opts.agora ?? new Date();
@@ -332,6 +333,7 @@ export async function reabrirTransferencia(
   input: EntradaPagamento & { operador: string },
   opts: { provider?: PixProvider; agora?: Date } = {},
 ): Promise<ResultadoPagamento> {
+  exigirRedeDeTeste();
   if (typeof input.operador !== 'string' || !/^[A-Za-z0-9:_.-]{1,80}$/.test(input.operador)) {
     throw new LiquidacaoCedenteError('ENTRADA_INVALIDA', 'OPERADOR_INVALIDO');
   }
@@ -381,6 +383,7 @@ export async function avancarTransferencia(
   cessaoId: string,
   opts: { provider?: PixProvider; agora?: Date } = {},
 ): Promise<ResultadoPagamento> {
+  exigirRedeDeTeste();
   const row = await db.transferenciaPix.findUnique({ where: { cessaoId } });
   if (!row) throw new LiquidacaoCedenteError('TRANSFERENCIA_NAO_ENCONTRADA');
   return executar(row, opts.provider ?? obterPixProvider(), opts.agora ?? new Date());

@@ -155,6 +155,37 @@ describe('pagarTitular — PSP ainda processando, falha e recusa', () => {
   });
 });
 
+describe('Atlas/Vera F-FIA-1: em STELLAR_NETWORK=PUBLIC nenhum provedor vira COMPROVADA (nem injetado)', () => {
+  const comRede = async (rede: string, fn: () => Promise<void>) => {
+    const antes = process.env.STELLAR_NETWORK;
+    process.env.STELLAR_NETWORK = rede;
+    try { await fn(); } finally { if (antes === undefined) delete process.env.STELLAR_NETWORK; else process.env.STELLAR_NETWORK = antes; }
+  };
+  it('pagarTitular com provedor ASAAS injetado → PSP_CONFIG, sem claim, sem envio, sem comprovante, sem âncora', async () => {
+    await comRede('PUBLIC', async () => {
+      const p = provedor();
+      await expect(pagarTitular(IN, { provider: p, agora: AGORA })).rejects.toMatchObject({ code: 'PSP_CONFIG' });
+      expect(m.rows).toHaveLength(0);
+      expect(p.enviarPix).not.toHaveBeenCalled();
+      expect(p.consultarStatus).not.toHaveBeenCalled();
+      expect(m.ancora).not.toHaveBeenCalled();
+    });
+  });
+  it('avancarTransferencia e reabrirTransferencia também recusam em PUBLIC (uma linha pré-existente nunca chega a COMPROVADA)', async () => {
+    const p = provedor();
+    await pagarTitular(IN, { provider: p, agora: AGORA }); // testnet: COMPROVADA
+    m.rows[0].status = 'PROCESSANDO';
+    m.rows[0].ancoraTxHash = null;
+    p.consultarStatus.mockClear();
+    await comRede('PUBLIC', async () => {
+      await expect(avancarTransferencia('cessao_1', { provider: p, agora: AGORA })).rejects.toMatchObject({ code: 'PSP_CONFIG' });
+      await expect(reabrirTransferencia({ ...IN, operador: 'admin-panel' }, { provider: p, agora: AGORA })).rejects.toMatchObject({ code: 'PSP_CONFIG' });
+    });
+    expect(p.consultarStatus).not.toHaveBeenCalled();
+    expect(m.rows[0].status).toBe('PROCESSANDO');
+  });
+});
+
 describe('P3 (Argus): DONE sem o valor não comprova às cegas', () => {
   it('PSP concluído SEM valor → INCERTO/PSP_SEM_VALOR, sem comprovante nem âncora (alerta; nada retoma sozinho)', async () => {
     const p = provedor({ consulta: async () => ({ id: 'tra_1', status: 'CONCLUIDO', e2eId: 'E1', efetivadoEm: '2026-11-12' }) });
