@@ -170,6 +170,27 @@ describe('P3 (Argus): DONE sem o valor não comprova às cegas', () => {
   });
 });
 
+describe('Consuelo (domínio): PSP real em DONE sem EndToEndId não comprova', () => {
+  it('DONE sem e2eId → continua PROCESSANDO com PSP_SEM_E2E, sem comprovante nem âncora; quando o e2eId aparece, comprova e limpa o marcador', async () => {
+    const p = provedor({ consulta: async () => ({ id: 'tra_1', status: 'CONCLUIDO', valor: '123.45', e2eId: null, efetivadoEm: '2026-11-12' }) });
+    const r = await pagarTitular(IN, { provider: p, agora: AGORA });
+    expect(r.status).toBe('PROCESSANDO');
+    expect(m.rows[0]).toMatchObject({ status: 'PROCESSANDO', motivoFalha: 'PSP_SEM_E2E', comprovante: null, travaAte: null });
+    expect(m.ancora).not.toHaveBeenCalled();
+    expect((await avancarTransferencia('cessao_1', { provider: p, agora: AGORA })).status).toBe('PROCESSANDO'); // continua consultando
+    p.consultarStatus.mockResolvedValue({ id: 'tra_1', status: 'CONCLUIDO', valor: '123.45', e2eId: 'E2E9', efetivadoEm: '2026-11-12' });
+    const f = await avancarTransferencia('cessao_1', { provider: p, agora: AGORA });
+    expect(f.status).toBe('COMPROVADA');
+    expect(m.rows[0]).toMatchObject({ motivoFalha: null, e2eId: 'E2E9' });
+    expect(JSON.parse(m.rows[0].comprovante).e2eId).toBe('E2E9');
+    expect(p.enviarPix).toHaveBeenCalledTimes(1);
+  });
+  it('o provedor SIMULADO (sem e2eId) segue comprovando', async () => {
+    const p = provedor({ nome: 'SIMULADO', consulta: async () => ({ id: 'tra_1', status: 'CONCLUIDO', efetivadoEm: '2026-11-12' }) });
+    expect((await pagarTitular(IN, { provider: p, agora: AGORA })).status).toBe('COMPROVADA');
+  });
+});
+
 describe('pagarTitular — resposta ambígua: NUNCA reenvia sozinho', () => {
   const ambiguo = () => provedor({ envio: async () => { throw new PspError('PSP_INCERTO'); } });
 

@@ -178,6 +178,13 @@ async function avancar(row: TransferenciaPix, provider: PixProvider): Promise<Tr
     throw new LiquidacaoCedenteError('VALOR_DIVERGE', 'PSP_VALOR_DIVERGE');
   }
 
+  // Consuelo (domínio): com PSP real, DONE sem EndToEndId não comprova (o e2eId é a quitação). Fica em conferência
+  // (PROCESSANDO + PSP_SEM_E2E, o varredor alerta e consulta de novo); o provedor SIMULADO não tem e2eId e é isento.
+  if (provider.nome !== 'SIMULADO' && !c.e2eId && !atual.comprovanteSha256) {
+    if (atual.motivoFalha !== 'PSP_SEM_E2E') return marcar(atual.id, { motivoFalha: 'PSP_SEM_E2E' });
+    return atual;
+  }
+
   let bytes: Buffer;
   let sha256: string;
   if (atual.comprovante && atual.comprovanteSha256) {
@@ -208,7 +215,7 @@ async function avancar(row: TransferenciaPix, provider: PixProvider): Promise<Tr
   }
   try {
     const ancora = await ancorarSha256({ sha256Hex: sha256, contexto: 'COMPROVANTE_PIX', desde: inicioDaTentativa(atual) });
-    return await marcar(atual.id, { status: 'COMPROVADA', comprovantePath: pathname, ancoraTxHash: ancora.txHash, travaAte: null });
+    return await marcar(atual.id, { status: 'COMPROVADA', comprovantePath: pathname, ancoraTxHash: ancora.txHash, motivoFalha: null, travaAte: null });
   } catch (err) {
     if (err instanceof AncoraError) throw new LiquidacaoCedenteError('ANCORA_FALHOU', err.code, { cause: err });
     throw err;
