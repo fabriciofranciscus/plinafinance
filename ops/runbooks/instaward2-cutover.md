@@ -29,6 +29,8 @@ Estado consolidado em 2026-11-11. Este checklist prepara a decisão; não autori
 
 - [ ] DocuSign sandbox: HMAC, replay, dedupe, PDF privado e hash do byte armazenado homologados.
 - [ ] PSP regulado sandbox: conta da Thais, idempotência, comprovante privado e memo-hash homologados.
+- [ ] Com `STELLAR_NETWORK=PUBLIC`, `PSP_PROVIDER` é explícito e de produção; ausente, `SIMULADO` ou Asaas sandbox falha com `PSP_CONFIG` antes de claim/envio. `DONE` sem valor fica `INCERTO`.
+- [ ] `PIX_MAX_BRL` está configurado e testado fail-closed. Incertos seguem `ops/runbooks/pix-saida-incerto.md`; nenhuma escrita manual no banco.
 - [ ] Etherfuse: SLA, preço, limites, rail BR/PIX, ativo-ponte e contato de incidente confirmados por escrito.
 - [ ] Vercel Blob privado: token separado por ambiente, acesso curto e revogação testados.
 - [ ] Upstash: instâncias próprias de production/preview e rate-limit distribuído provado.
@@ -43,7 +45,7 @@ Estado consolidado em 2026-11-11. Este checklist prepara a decisão; não autori
 - [ ] Política de clawback tem duas aprovações distintas, notificação auditável e hipótese restrita.
 - [ ] TES-2 preserva o NAV; distributor fica sem PLINARF legado; registro e memo SHA-256 conferem.
 - [ ] Snapshot diário só publica depois de `Σ trustlines autorizadas = circulante` por asset code.
-- [ ] Alarme de emissão e reconciliação rodam a cada 10 min; `alerta: true` falha o job.
+- [ ] Alarmes de emissão, reconciliação de subscrições e Pix de saída rodam a cada 10 min; `alerta: true` falha o job.
 - [ ] Snapshot E3-1 é idempotente por data; reexecução não cria segunda âncora.
 - [ ] O monitor de 10 min encontra um snapshot publicado há menos de 26 h; ausência, arquivo inválido ou idade maior/igual a 26 h falha o job mesmo se o agendamento diário não executou.
 

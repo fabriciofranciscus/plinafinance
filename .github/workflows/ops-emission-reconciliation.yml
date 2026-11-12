@@ -1,4 +1,4 @@
-name: Ops emission and subscription alarms
+name: Ops emission, subscription and Pix alarms
 
 on:
   schedule:
@@ -15,7 +15,7 @@ concurrency:
 jobs:
   sweep:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     env:
       OPS_BASE_URL: ${{ vars.OPS_BASE_URL || 'https://plina.finance' }}
     steps:
@@ -38,6 +38,14 @@ jobs:
           OPS_CRON_SECRET: ${{ secrets.OPS_CRON_SECRET }}
           OPS_ROUTE_LABEL: orphan subscription reconciliation
           OPS_ROUTE_PATH: /api/ops/reconciliar-subscricoes
+        run: node .github/scripts/call-ops-route.mjs
+
+      - name: Reconcile outgoing Pix
+        if: always()
+        env:
+          OPS_CRON_SECRET: ${{ secrets.OPS_CRON_SECRET }}
+          OPS_ROUTE_LABEL: outgoing Pix reconciliation
+          OPS_ROUTE_PATH: /api/ops/pix-saida
         run: node .github/scripts/call-ops-route.mjs
 
       - name: Check NAV snapshot freshness
