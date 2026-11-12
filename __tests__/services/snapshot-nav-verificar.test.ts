@@ -8,7 +8,7 @@ import { desdeDaAncora, verificarSnapshot, type LeitorHorizon, type TxHorizon } 
 const D = (v: string) => new Prisma.Decimal(v);
 const DIST = 'GDIST';
 
-const COTA1 = { id: 'c1', status: 'DISPONIVEL', valorCarta: '100000.00', desagioAquisicao: '0.2000', hashValidacao: 'h'.repeat(64), emissaoTxHash: 'tx_emissao_1' };
+const COTA1 = { id: 'c1', status: 'DISPONIVEL', valorCarta: '100000.00', desagioAquisicao: '0.2000', hashValidacao: 'h'.repeat(64), emissaoTxHash: 'e'.repeat(64) };
 
 function arquivoBase(cotas: Array<typeof COTA1> = [COTA1]): ArquivoSnapshotNav {
   const numerador = montarNumerador(
@@ -269,11 +269,11 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
       expect(estado(r2, 'cotas-emissao')).toBe('ok');
     });
     it('misto: 1 cota E1-4 + 3 legadas, arquivo consistente → saída 0, com as 3 listadas à parte', async () => {
-      const a = arquivoBase([COTA1, ...[2, 3, 4].map((n) => ({ ...COTA1, id: `legada${n}`, emissaoTxHash: `tx_legada_${n}` }))]);
+      const a = arquivoBase([COTA1, ...[2, 3, 4].map((n) => ({ ...COTA1, id: `legada${n}`, emissaoTxHash: String(n).repeat(64) }))]);
       const r = await verificarSnapshot(
         bytesDe(a),
         leitor({
-          tx: ((h: string) => (h.startsWith('tx_legada') ? { hash: h, successful: true, source_account: 'GISS', memo_type: 'none', created_at: 'x' } : { hash: h, successful: true, source_account: 'GISS', memo_type: 'hash', created_at: 'x' })) as never,
+          tx: ((h: string) => (/^[234]+$/.test(h) ? { hash: h, successful: true, source_account: 'GISS', memo_type: 'none', created_at: 'x' } : { hash: h, successful: true, source_account: 'GISS', memo_type: 'hash', created_at: 'x' })) as never,
         }),
         PLINA,
       );
@@ -285,10 +285,28 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
     it('legada + uma emissão INEXISTENTE na rede → ✗ (saída 1): inexistente ou falhada continua reprovando e não é rebaixada a legada', async () => {
       const a = arquivoBase();
       const base = a.numerador.cotasAtivas.itens[0];
-      a.numerador.cotasAtivas.itens = [base, { ...base, cotaId: 'fantasma', emissaoTxHash: 'tx_nao_existe' }];
-      const r = await verificarSnapshot(bytesDe(a), leitor({ tx: ((h: string) => (h === 'tx_nao_existe' ? null : { hash: h, successful: true, source_account: 'GISS', memo_type: 'none', created_at: 'x' })) as never }), PLINA);
+      a.numerador.cotasAtivas.itens = [base, { ...base, cotaId: 'fantasma', emissaoTxHash: 'f'.repeat(64) }];
+      const r = await verificarSnapshot(bytesDe(a), leitor({ tx: ((h: string) => (h === 'f'.repeat(64) ? null : { hash: h, successful: true, source_account: 'GISS', memo_type: 'none', created_at: 'x' })) as never }), PLINA);
       expect(estado(r, 'cotas-emissao')).toBe('falhou');
       expect(r.conferencias.some((c) => c.id === 'cotas-legadas')).toBe(false);
+      expect(r.codigoSaida).toBe(1);
+    });
+    it.each([
+      ['curto', 'abc123'],
+      ['maiúsculas', 'E'.repeat(64)],
+      ['com caracteres de URL/path', '../accounts/GAAAA' + 'a'.repeat(47)],
+      ['com espaço', ' ' + 'e'.repeat(63)],
+      ['64 caracteres não hex', 'g'.repeat(64)],
+      ['tipo errado (número)', 12345 as never],
+    ])('F-E31-6: emissaoTxHash %s no arquivo (terceiros) → ✗ sem tocar o Horizon e sem repetir o conteúdo cru', async (_n, valor) => {
+      const a = arquivoBase();
+      a.numerador.cotasAtivas.itens[0].emissaoTxHash = valor as never;
+      const chamadas: string[] = [];
+      const r = await verificarSnapshot(bytesDe(a), leitor({ tx: ((h: string) => { chamadas.push(h); return null; }) as never }), PLINA);
+      expect(estado(r, 'cotas-emissao')).toBe('falhou');
+      expect(r.conferencias.find((c) => c.id === 'cotas-emissao')?.detalhe).toMatch(/emissaoTxHash inválido/);
+      expect(r.conferencias.find((c) => c.id === 'cotas-emissao')?.detalhe).not.toContain(String(valor));
+      expect(chamadas).toEqual([]); // nada vai à rede
       expect(r.codigoSaida).toBe(1);
     });
     it('cota sem emissaoTxHash no arquivo → não conferido (nunca ok em silêncio), saída 2', async () => {

@@ -294,7 +294,13 @@ export async function verificarSnapshot(
     const legadas: string[] = [];
     let fortes = 0;
     for (const i of itens.filter((x) => x.emissaoTxHash)) {
-      const tx = await leitor.transacao(i.emissaoTxHash as string);
+      // O hash vem do arquivo (de terceiros): só vai ao Horizon se for um hash de transação (64 hex minúsculos); o
+      // resto é reprovado sem tocar a rede nem repetir o conteúdo cru (F-E31-6 da Vera).
+      if (typeof i.emissaoTxHash !== 'string' || !/^[0-9a-f]{64}$/.test(i.emissaoTxHash)) {
+        reprovadas.push(`${i.cotaId}: emissaoTxHash inválido no arquivo (não é um hash de transação de 64 hex minúsculos)`);
+        continue;
+      }
+      const tx = await leitor.transacao(i.emissaoTxHash);
       if (!tx) reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} não encontrada no Horizon`);
       else if (!tx.successful) reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} falhou na rede`);
       else if (tx.source_account !== emissor) reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} não saiu do issuer em vigor (outro issuer reprova)`);
