@@ -28,8 +28,9 @@ Estado consolidado em 2026-11-11. Este checklist prepara a decisão; não autori
 ## 3. Fornecedores e ambiente
 
 - [ ] DocuSign sandbox: HMAC, replay, dedupe, PDF privado e hash do byte armazenado homologados.
-- [ ] PSP regulado sandbox: conta da Thais, idempotência, comprovante privado e memo-hash homologados.
-- [ ] Com `STELLAR_NETWORK=PUBLIC`, `PSP_PROVIDER` é explícito e de produção; ausente, `SIMULADO` ou Asaas sandbox falha com `PSP_CONFIG` antes de claim/envio. `DONE` sem valor fica `INCERTO`. **Ainda não marcar:** correções P1/P3 estão no delta `6d04a12`, pendentes de reteste da Vera.
+- [ ] PSP regulado sandbox: conta da Thais, idempotência, comprovante privado e memo-hash homologados. Criar a conta não autoriza ativar `ASAAS` antes do rótulo `PIX_SANDBOX`; avisar o Atlas se ela existir antes do D30.
+- [ ] Até o D30, `PSP_PROVIDER=SIMULADO` em todo ambiente que gera evidência do SOW. Não ativar `ASAAS` enquanto o sandbox puder gravar `PIX_REAL`/`PIX_REAL_EXECUTADO`.
+- [ ] Com `STELLAR_NETWORK=PUBLIC`, `PSP_PROVIDER` é explícito e de produção; ausente, `SIMULADO` ou Asaas sandbox falha com `PSP_CONFIG` antes de claim/envio. `DONE` sem valor fica `INCERTO`. P1/P3 foram aprovados pela Vera em `15b0725`, mas o item só fecha depois do merge e da prova no ambiente isolado.
 - [ ] `PIX_MAX_BRL` está configurado e testado fail-closed. Incertos seguem `ops/runbooks/pix-saida-incerto.md`; nenhuma escrita manual no banco.
 - [ ] Etherfuse: SLA, preço, limites, rail BR/PIX, ativo-ponte e contato de incidente confirmados por escrito.
 - [ ] Vercel Blob privado: token separado por ambiente, acesso curto e revogação testados.

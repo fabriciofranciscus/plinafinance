@@ -32,6 +32,9 @@ pré-requisito pós-D30 para habilitar PSP de produção ou retirar a recusa em
   em chat, mural, log ou arquivo compartilhado.
 - `SIMULADO` e Asaas sandbox nunca provam pagamento em dinheiro. Em
   `STELLAR_NETWORK=PUBLIC`, ambos devem falhar com `PSP_CONFIG`.
+- Até o D30, todo ambiente que gera evidência do SOW usa
+  `PSP_PROVIDER=SIMULADO`. Não ative `ASAAS` antes do rótulo `PIX_SANDBOX`;
+  se a conta sandbox for criada antes, avise o Atlas sem trocar o provedor.
 
 ## 1. Identificar a tentativa, somente leitura
 
