@@ -140,6 +140,7 @@ enum AcaoAudit {
   OFERTA_ACEITA
   CESSAO_ASSINADA
   PIX_SIMULADO_EXECUTADO
+  PIX_REAL_EXECUTADO
   // Funil comprador (MVP testnet-first)
   LEAD_COMPRADOR_CAPTURADO
   RESERVA_CRIADA
@@ -1107,6 +1108,8 @@ model TransferenciaPix {
   motivoFalha       String?
   /// Lease da execução em curso.
   travaAte          DateTime?
+  /// Quando o alerta de operação desta transferência foi ENTREGUE por e-mail (dedupe; só marca depois do envio).
+  alertadoEm        DateTime?
   criadoEm          DateTime               @default(now())
   atualizadoEm      DateTime               @updatedAt
 

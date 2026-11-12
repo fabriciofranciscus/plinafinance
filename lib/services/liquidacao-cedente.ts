@@ -19,7 +19,15 @@ import { mascararDestino, montarComprovante } from '../integrations/psp/comprova
 import { obterPixProvider } from '../integrations/psp';
 import { PspError, exigirRedeDeTeste, validarChavePix, type PixProvider, type StatusPix, type TipoChavePix } from '../integrations/psp/types';
 import { AncoraError, ancorarSha256 } from '../stellar/ancora';
-import { extractSafeError } from '../stellar/log-error';
+
+/** Só nome e código do erro: no caminho do Pix a mensagem de terceiros pode carregar dado pessoal. */
+export function causaSegura(err: unknown): { name: string; code?: string } {
+  const e = err as { name?: unknown; code?: unknown } | null;
+  return {
+    name: typeof e?.name === 'string' ? e.name : 'erro',
+    ...(typeof e?.code === 'string' ? { code: e.code } : {}),
+  };
+}
 
 export const LEASE_PIX_MS = 2 * 60_000;
 
@@ -228,7 +236,7 @@ async function executar(row: TransferenciaPix, provider: PixProvider, agora: Dat
   try {
     return resultado(await avancar(row, provider));
   } catch (err) {
-    if (!(err instanceof LiquidacaoCedenteError)) console.error('[liquidacao-cedente]', extractSafeError(err));
+    if (!(err instanceof LiquidacaoCedenteError)) console.error('[liquidacao-cedente]', causaSegura(err));
     throw err;
   } finally {
     await liberar(row.id);
@@ -276,7 +284,7 @@ async function dispararEnvio(row: TransferenciaPix, i: EntradaPagamento, provide
     row = await marcar(row.id, { providerId: enviada.id, status: 'PROCESSANDO', motivoFalha: null });
     return resultado(await avancar(row, provider));
   } catch (err) {
-    if (!(err instanceof LiquidacaoCedenteError)) console.error('[liquidacao-cedente]', extractSafeError(err));
+    if (!(err instanceof LiquidacaoCedenteError)) console.error('[liquidacao-cedente]', causaSegura(err));
     throw err;
   } finally {
     await liberar(row.id);
