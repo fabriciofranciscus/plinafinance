@@ -37,6 +37,8 @@ export interface OperacaoHorizon {
   source_account?: string;
   asset_code?: string;
   asset_issuer?: string;
+  /** Valor do pagamento (decimal, como o Horizon devolve). */
+  amount?: string;
 }
 
 export interface LeitorHorizon {
@@ -292,18 +294,32 @@ export async function verificarSnapshot(
     else add(`conciliacao-${code}`, 'ok', `${code}: Σ trustlines autorizadas = circulante no arquivo`);
   }
 
-  // 5. Cada cota ativa se liga à rede pela emissaoTxHash (Consuelo/Atlas, 12/11). REPROVA o que não existe ou falhou na
-  // rede. A classificação vem SÓ do FATO on-chain, nunca de rótulo do arquivo: emissão do modelo E1-4 = tx bem-sucedida,
-  // do issuer e com Memo.hash; emissão bem-sucedida que NÃO tem isso é LEGADA ("emissão confirmada, sem cadeia de
-  // hashes"): é listada à parte, como AVISO, e não derruba a prova. Cota sem emissaoTxHash no arquivo não pode ser
-  // classificada (não há fato on-chain a consultar): fica "não conferido". O memo esperado não está no arquivo.
-  const itens = arq.numerador.cotasAtivas.itens as Array<{ cotaId: string; emissaoTxHash?: string | null }>;
+  // 5. Cada cota ativa se liga à rede pela emissaoTxHash (Consuelo/Atlas, 12/11). A classificação vem SÓ do FATO on-chain,
+  // nunca de rótulo do arquivo.
+  //  ✗ (1) reprova: hash fora de /^[0-9a-f]{64}$/, hash repetido entre cotas, tx inexistente, falhada ou de OUTRA origem
+  //         que não o issuer em vigor.
+  //  ? (2) não conferido: tx bem-sucedida do issuer SEM uma operação `payment` do ativo da classe (código + issuer em
+  //         vigor), saída do issuer, com valor = `tokensEmitidos` da cota (também quando o arquivo não traz o valor); e
+  //         cota sem emissaoTxHash. Em nenhum dos dois a prova passa.
+  //  conferida: com a operação certa. Com Memo.hash = emissão do modelo E1-4; sem Memo.hash = LEGADA ("emissão
+  //         confirmada por operação de emissão, sem cadeia de hashes"): listada à parte, como AVISO.
+  // O memo esperado (hash da incorporação) não está no arquivo.
+  const itens = arq.numerador.cotasAtivas.itens as Array<{ cotaId: string; emissaoTxHash?: string | null; tokensEmitidos?: string | null }>;
   const emissor = opts.issuerEsperado ?? classe.issuer;
   if (itens.length > 0) {
     const semHash = itens.filter((i) => !i.emissaoTxHash);
     const reprovadas: string[] = [];
+    const naoConferidas: string[] = [];
     const legadas: string[] = [];
     let fortes = 0;
+    const valorIgual = (a?: string, b?: string | null): boolean => {
+      if (!a || !b) return false;
+      try {
+        return D(a).eq(D(b));
+      } catch {
+        return false;
+      }
+    };
     // O mesmo hash em duas cotas não prova duas emissões (F-E31-7): arquivo forjado apontando tudo para uma tx real.
     const vistos = new Map<string, string>();
     for (const i of itens.filter((x) => x.emissaoTxHash)) {
@@ -320,35 +336,51 @@ export async function verificarSnapshot(
       }
       vistos.set(i.emissaoTxHash, i.cotaId);
       const tx = await leitor.transacao(i.emissaoTxHash);
-      if (!tx) reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} não encontrada no Horizon`);
-      else if (!tx.successful) reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} falhou na rede`);
-      else if (tx.source_account !== emissor) reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} não saiu do issuer em vigor (outro issuer reprova)`);
-      else {
-        // A tx precisa ser, de fato, uma EMISSÃO: contém um pagamento do ativo da classe (código + issuer em vigor)
-        // saído do issuer. Uma tx qualquer do issuer não vale (F-E31-7 da Vera).
-        const ops = await leitor.operacoes(i.emissaoTxHash);
-        const emissao = ops.some(
-          (o) => o.type === 'payment' && o.asset_code === arq.nav.classe && o.asset_issuer === emissor && (o.from ?? o.source_account) === emissor,
-        );
-        if (!emissao) reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} não contém pagamento de ${arq.nav.classe} saído do issuer em vigor`);
-        else if (tx.memo_type !== 'hash') legadas.push(i.cotaId);
-        else fortes++;
+      if (!tx) {
+        reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} não encontrada no Horizon`);
+        continue;
       }
+      if (!tx.successful) {
+        reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} falhou na rede`);
+        continue;
+      }
+      if (tx.source_account !== emissor) {
+        reprovadas.push(`${i.cotaId}: emissão ${i.emissaoTxHash} não saiu do issuer em vigor (outro issuer reprova)`);
+        continue;
+      }
+      const ops = await leitor.operacoes(i.emissaoTxHash);
+      const confere = ops.some(
+        (o) =>
+          o.type === 'payment' &&
+          o.asset_code === arq.nav.classe &&
+          o.asset_issuer === emissor &&
+          (o.from ?? o.source_account) === emissor &&
+          valorIgual(o.amount, i.tokensEmitidos),
+      );
+      if (!confere) {
+        naoConferidas.push(
+          `${i.cotaId}: a emissão ${i.emissaoTxHash} existe, mas não tem pagamento de ${arq.nav.classe} saído do issuer em vigor com valor = tokensEmitidos da cota${i.tokensEmitidos ? '' : ' (o arquivo não traz tokensEmitidos)'}`,
+        );
+      } else if (tx.memo_type !== 'hash') legadas.push(i.cotaId);
+      else fortes++;
     }
     if (reprovadas.length > 0) add('cotas-emissao', 'falhou', reprovadas.join(' | '));
-    else if (semHash.length > 0) {
-      add('cotas-emissao', 'nao_conferido', `${fortes} de ${itens.length} cotas com emissão E1-4 conferida no Horizon; ${semHash.length} sem emissaoTxHash no arquivo, não classificáveis (${semHash.map((i) => i.cotaId).join(', ')})`);
+    else if (semHash.length > 0 || naoConferidas.length > 0) {
+      const partes = [`${fortes} de ${itens.length} cotas com emissão E1-4 conferida no Horizon`];
+      if (naoConferidas.length > 0) partes.push(`${naoConferidas.length} sem a operação de emissão esperada: ${naoConferidas.join(' | ')}`);
+      if (semHash.length > 0) partes.push(`${semHash.length} sem emissaoTxHash no arquivo, não classificáveis (${semHash.map((i) => i.cotaId).join(', ')})`);
+      add('cotas-emissao', 'nao_conferido', partes.join('; '));
     } else if (fortes === 0) {
-      // Nada reprovou (código não muda), mas NENHUMA emissão do modelo E1-4 apareceu: a tela diz isso, sem fingir prova.
-      add('cotas-emissao', 'aviso', `0 de ${itens.length} cotas do modelo E1-4: todas as emissões são LEGADAS (pagamento do ativo confirmado, sem Memo.hash); nenhuma emissão E1-4 foi conferida neste snapshot`);
+      // Nada reprovou (código não muda), mas NENHUMA emissão do modelo E1-4 apareceu: a linha diz isso, nunca "ok".
+      add('cotas-emissao', 'aviso', `${legadas.length} cotas legadas, conferidas por operação de emissão, sem memo (0 de ${itens.length} do modelo E1-4: nenhuma emissão E1-4 foi conferida neste snapshot)`);
     } else {
-      add('cotas-emissao', 'ok', `${fortes} de ${itens.length} cotas: emissão do modelo E1-4 conferida no Horizon (pagamento do ativo, do issuer, com Memo.hash); ${legadas.length} LEGADA(S) listada(s) à parte`);
+      add('cotas-emissao', 'ok', `${fortes} de ${itens.length} cotas: emissão do modelo E1-4 conferida no Horizon (pagamento do ativo, valor = tokensEmitidos, do issuer, com Memo.hash); ${legadas.length} LEGADA(S) listada(s) à parte`);
     }
     if (legadas.length > 0 && reprovadas.length === 0) {
       add(
         'cotas-legadas',
         'aviso',
-        `${legadas.length} LEGADO: emissão confirmada, sem cadeia de hashes (cotas: ${legadas.join(', ')}). Regra: LEGADO só quando a emissaoTxHash existe na rede, foi bem-sucedida, saiu do issuer em vigor e NÃO tem o Memo.hash do modelo E1-4; emissão inexistente, falhada ou de outro issuer reprova. Código 0 = nada reprovou e toda emissão do modelo E1-4 confere.`,
+        `${legadas.length} LEGADO: emissão confirmada por operação de emissão, sem cadeia de hashes (cotas: ${legadas.join(', ')}). Regra: LEGADO só quando a emissaoTxHash existe na rede, foi bem-sucedida, tem um pagamento de ${arq.nav.classe} saído do issuer em vigor com valor = tokensEmitidos da cota e NÃO tem o Memo.hash do modelo E1-4; inexistente, falhada ou de outro issuer reprova; sem a operação ou com outro valor fica não conferido. Código 0 = nada reprovou e toda emissão do modelo E1-4 confere.`,
       );
     }
   }

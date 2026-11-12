@@ -8,7 +8,7 @@ import { desdeDaAncora, verificarSnapshot, type LeitorHorizon, type TxHorizon } 
 const D = (v: string) => new Prisma.Decimal(v);
 const DIST = 'GDIST';
 
-const COTA1 = { id: 'c1', status: 'DISPONIVEL', valorCarta: '100000.00', desagioAquisicao: '0.2000', hashValidacao: 'h'.repeat(64), emissaoTxHash: 'e'.repeat(64) };
+const COTA1 = { id: 'c1', status: 'DISPONIVEL', valorCarta: '100000.00', desagioAquisicao: '0.2000', hashValidacao: 'h'.repeat(64), emissaoTxHash: 'e'.repeat(64), tokensEmitidos: '80000' };
 
 function arquivoBase(cotas: Array<typeof COTA1> = [COTA1]): ArquivoSnapshotNav {
   const numerador = montarNumerador(
@@ -47,7 +47,7 @@ function leitor(over: Partial<{ ledger: number; emitido: string; dist: string; s
     transacao: async (hash) =>
       (over.tx ?? ((h) => ({ hash: h, successful: true, source_account: 'GISS', memo_type: 'hash', memo: 'AAAA', created_at: '2026-11-10T10:00:00Z' })))(hash),
     // padrão: a tx é uma EMISSÃO (pagamento de PLINARF do issuer em vigor, 'GISS'); `ops` troca as operações
-    operacoes: async () => (over.ops ?? [{ type: 'payment', asset_code: 'PLINARF', asset_issuer: 'GISS', from: 'GISS' }]) as never,
+    operacoes: async () => (over.ops ?? [{ type: 'payment', asset_code: 'PLINARF', asset_issuer: 'GISS', from: 'GISS', amount: '80000.0000000' }]) as never,
     ledgerAtual: async () => ({ ledger: o.ledger, fechadoEm: '2026-11-12T09:01:00Z' }),
     totalEmitido: async () => D(o.emitido),
     saldoDaConta: async (_c, code) => (code === 'TESOURO' ? D(over.tesouro ?? '0') : D(o.dist)),
@@ -243,8 +243,8 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
       const r = await verificarSnapshot(bytes(), leitor({ tx: ((h: string) => ({ hash: h, successful: true, source_account: 'GISS', memo_type: 'none', created_at: 'x' })) as never }), PLINA);
       const legadas = r.conferencias.find((c) => c.id === 'cotas-legadas');
       expect(legadas?.estado).toBe('aviso');
-      expect(legadas?.detalhe).toMatch(/^1 LEGADO: emissão confirmada, sem cadeia de hashes/);
-      expect(legadas?.detalhe).toMatch(/Regra: LEGADO só quando a emissaoTxHash existe na rede, foi bem-sucedida, saiu do issuer em vigor e NÃO tem o Memo\.hash do modelo E1-4/);
+      expect(legadas?.detalhe).toMatch(/^1 LEGADO: emissão confirmada por operação de emissão, sem cadeia de hashes/);
+      expect(legadas?.detalhe).toMatch(/Regra: LEGADO só quando a emissaoTxHash existe na rede, foi bem-sucedida, tem um pagamento de PLINARF saído do issuer em vigor com valor = tokensEmitidos da cota e NÃO tem o Memo\.hash do modelo E1-4/);
       expect(legadas?.detalhe).toMatch(/Código 0 = nada reprovou e toda emissão do modelo E1-4 confere/);
       expect(estado(r, 'cotas-emissao')).toBe('aviso'); // só legadas: sem emissão E1-4 conferida, dito explicitamente (F-E31-7)
       expect(r.codigoSaida).toBe(0);
@@ -313,21 +313,37 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
     });
     describe('F-E31-7: a tx de emissão precisa ser de fato uma emissão do ativo da classe', () => {
       const b = () => bytesDe(arquivoBase());
+      const OP = { type: 'payment', asset_code: 'PLINARF', asset_issuer: 'GISS', from: 'GISS', amount: '80000.0000000' };
       it.each([
         ['sem nenhuma operação', []],
         ['só operação que não é pagamento', [{ type: 'manage_data', from: 'GISS' }]],
-        ['pagamento de OUTRO ativo', [{ type: 'payment', asset_code: 'USDC', asset_issuer: 'GISS', from: 'GISS' }]],
-        ['pagamento do ativo mas de OUTRO issuer', [{ type: 'payment', asset_code: 'PLINARF', asset_issuer: 'GOUTRO', from: 'GISS' }]],
-        ['pagamento do ativo que NÃO saiu do issuer', [{ type: 'payment', asset_code: 'PLINARF', asset_issuer: 'GISS', from: 'GDIST' }]],
-      ])('tx do issuer, bem-sucedida, %s → ✗ (nem E1-4 nem legada)', async (_n, ops) => {
+        ['pagamento de OUTRO ativo', [{ ...OP, asset_code: 'USDC' }]],
+        ['pagamento do ativo mas de OUTRO issuer', [{ ...OP, asset_issuer: 'GOUTRO' }]],
+        ['pagamento do ativo que NÃO saiu do issuer', [{ ...OP, from: 'GDIST' }]],
+        ['pagamento do ativo com VALOR diferente de tokensEmitidos', [{ ...OP, amount: '79999.9999999' }]],
+      ])('tx do issuer, bem-sucedida, %s → NÃO CONFERIDO (saída 2): nem E1-4 nem legada, a prova não passa', async (_n, ops) => {
         const r = await verificarSnapshot(b(), leitor({ ops: ops as never }), PLINA);
-        expect(estado(r, 'cotas-emissao')).toBe('falhou');
-        expect(r.conferencias.find((c) => c.id === 'cotas-emissao')?.detalhe).toMatch(/não contém pagamento de PLINARF saído do issuer/);
+        expect(estado(r, 'cotas-emissao')).toBe('nao_conferido');
+        expect(r.conferencias.find((c) => c.id === 'cotas-emissao')?.detalhe).toMatch(/não tem pagamento de PLINARF saído do issuer em vigor com valor = tokensEmitidos/);
         expect(r.conferencias.some((c) => c.id === 'cotas-legadas')).toBe(false);
-        expect(r.codigoSaida).toBe(1);
+        expect(r.codigoSaida).toBe(2);
+      });
+      it('arquivo SEM tokensEmitidos na cota (formato antigo): não dá para comparar o valor → NÃO CONFERIDO, e o texto diz isso', async () => {
+        const a = arquivoBase();
+        a.numerador.cotasAtivas.itens[0].tokensEmitidos = null;
+        const r = await verificarSnapshot(bytesDe(a), leitor(), PLINA);
+        expect(estado(r, 'cotas-emissao')).toBe('nao_conferido');
+        expect(r.conferencias.find((c) => c.id === 'cotas-emissao')?.detalhe).toMatch(/o arquivo não traz tokensEmitidos/);
+        expect(r.codigoSaida).toBe(2);
+      });
+      it('valor igual com casas diferentes (80000 × 80000.0000000) conta como igual; tx inexistente/falhada/hash inválido continuam ✗ (1)', async () => {
+        const ok = await verificarSnapshot(b(), leitor({ ops: [{ ...OP, amount: '80000' }] as never }), PLINA);
+        expect(estado(ok, 'cotas-emissao')).toBe('ok');
+        const inexistente = await verificarSnapshot(b(), leitor({ tx: (() => null) as never }), PLINA);
+        expect(inexistente.codigoSaida).toBe(1);
       });
       it('o pagamento sem o campo from usa a conta de origem da operação (source_account)', async () => {
-        const r = await verificarSnapshot(b(), leitor({ ops: [{ type: 'payment', asset_code: 'PLINARF', asset_issuer: 'GISS', source_account: 'GISS' }] as never }), PLINA);
+        const r = await verificarSnapshot(b(), leitor({ ops: [{ type: 'payment', asset_code: 'PLINARF', asset_issuer: 'GISS', source_account: 'GISS', amount: '80000.0000000' }] as never }), PLINA);
         expect(estado(r, 'cotas-emissao')).toBe('ok');
       });
       it('o mesmo emissaoTxHash em duas cotas → ✗ (não prova duas emissões)', async () => {
@@ -344,7 +360,7 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
           PLINA,
         );
         expect(estado(r, 'cotas-emissao')).toBe('aviso');
-        expect(r.conferencias.find((c) => c.id === 'cotas-emissao')?.detalhe).toMatch(/0 de 1 cotas do modelo E1-4: todas as emissões são LEGADAS/);
+        expect(r.conferencias.find((c) => c.id === 'cotas-emissao')?.detalhe).toMatch(/^1 cotas legadas, conferidas por operação de emissão, sem memo/);
         expect(r.conferencias.some((c) => c.id === 'cotas-legadas')).toBe(true);
         expect(r.codigoSaida).toBe(0);
       });

@@ -48,6 +48,8 @@ export interface ArquivoSnapshotNav {
         hashValidacao: string | null;
         /** Tx da emissão do token contra a cota. */
         emissaoTxHash: string | null;
+        /** Tokens emitidos contra a cota (7 casas): o verificador compara com o valor do pagamento de emissão na rede. */
+        tokensEmitidos: string | null;
         /** Só fora da mainnet (política de preço / reidentificação do cedente): parecer da Consuelo, 11/11. */
         valorCarta?: string;
         desagioAquisicao?: string;
@@ -89,6 +91,7 @@ export interface CotaDoNumerador {
   desagioAquisicao: Prisma.Decimal.Value;
   hashValidacao?: string | null;
   emissaoTxHash?: string | null;
+  tokensEmitidos?: Prisma.Decimal.Value | null;
 }
 
 export interface CaixaDoNumerador {
@@ -110,6 +113,7 @@ export function montarNumerador(
       valorMarcado: navDaCotaAsDecimal(c).toFixed(2),
       hashValidacao: c.hashValidacao ?? null,
       emissaoTxHash: c.emissaoTxHash ?? null,
+      tokensEmitidos: c.tokensEmitidos === undefined || c.tokensEmitidos === null ? null : f7(c.tokensEmitidos),
       ...(opts.incluirPrecoDaCarta
         ? { valorCarta: D(c.valorCarta).toFixed(2), desagioAquisicao: D(c.desagioAquisicao).toFixed(4) }
         : {}),

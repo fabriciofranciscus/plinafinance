@@ -86,8 +86,8 @@ function leitor(server: Horizon.Server): LeitorHorizon {
     async operacoes(hash) {
       const r = await server.operations().forTransaction(hash).limit(200).call();
       return r.records.map((o) => {
-        const x = o as unknown as { type: string; from?: string; source_account?: string; asset_code?: string; asset_issuer?: string };
-        return { type: x.type, from: x.from, source_account: x.source_account, asset_code: x.asset_code, asset_issuer: x.asset_issuer };
+        const x = o as unknown as { type: string; from?: string; source_account?: string; asset_code?: string; asset_issuer?: string; amount?: string };
+        return { type: x.type, from: x.from, source_account: x.source_account, asset_code: x.asset_code, asset_issuer: x.asset_issuer, amount: x.amount };
       });
     },
     async buscarPorMemo(conta, memoB64, desde) {
