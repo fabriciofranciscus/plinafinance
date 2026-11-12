@@ -9,6 +9,7 @@
  */
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
+import { z } from 'zod';
 import { canonicalizar } from './json-canonico';
 import {
   SNAPSHOT_TIPO,
@@ -62,6 +63,41 @@ export interface ResultadoVerificacao {
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 
+const dec = z.string().regex(/^-?\d+(\.\d+)?$/);
+/** Forma mínima que o verificador precisa para calcular (F-O2): o arquivo é de terceiros, então nada se presume. */
+const formaMinima = z.object({
+  rede: z.string().min(1),
+  geradoEm: z.string().min(1),
+  horizon: z.object({ ledger: z.number(), ledgerFinal: z.number() }),
+  numerador: z.object({
+    cotasAtivas: z.object({
+      valorMarcado: dec,
+      itens: z.array(z.object({ valorMarcado: dec })),
+    }),
+    caixaRealizado: z.object({ porTipo: z.record(z.string(), dec) }),
+    total: dec,
+  }),
+  circulante: z.record(
+    z.string(),
+    z.object({
+      issuer: z.string().min(1),
+      distributor: z.string().min(1),
+      totalEmitido: dec,
+      saldoIssuer: dec,
+      saldoDistributor: dec,
+      circulante: dec,
+      trustlinesAutorizadas: z.object({ contas: z.number(), soma: dec }),
+    }),
+  ),
+  nav: z.object({
+    classe: z.string().min(1),
+    regra: z.enum(['NAV_DO_LEDGER', 'NAV_INICIAL']),
+    denominador: dec,
+    porToken: dec,
+    porTokenSobreCirculante: dec.nullable(),
+  }),
+});
+
 export const DOMINIO_DA_PLINA = 'plina.finance';
 
 /** Folga antes do `geradoEm` (relógios, ordem de fechamento): a âncora nunca é anterior a ele. */
@@ -98,6 +134,7 @@ export async function verificarSnapshot(
     arq = JSON.parse(texto) as ArquivoSnapshotNav;
     if (arq.tipo !== SNAPSHOT_TIPO || arq.versao !== SNAPSHOT_VERSAO) throw new Error('tipo/versão');
     if (canonicalizar(arq) !== texto) throw new Error('bytes não são a forma canônica');
+    if (!formaMinima.safeParse(arq).success) throw new Error('formato incompleto ou com valor inválido (faltam campos ou há número malformado)');
     add('arquivo', 'ok', `${SNAPSHOT_TIPO} v${arq.versao}, dia ${arq.data}, JSON canônico (RFC 8785)`);
   } catch (e) {
     add('arquivo', 'falhou', `arquivo inválido: ${e instanceof Error ? e.message : 'erro'}`);

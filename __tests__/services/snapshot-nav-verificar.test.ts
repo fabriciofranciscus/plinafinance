@@ -202,6 +202,22 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
     expect(r.codigoSaida).toBe(2);
   });
 
+  it.each([
+    ['sem rede', (a: any) => { delete a.rede; }],
+    ['sem circulante', (a: any) => { delete a.circulante; }],
+    ['sem horizon', (a: any) => { delete a.horizon; }],
+    ['sem numerador.caixaRealizado', (a: any) => { delete a.numerador.caixaRealizado; }],
+    ['classe do NAV ausente em circulante', (a: any) => { a.nav.classe = 'OUTRA'; }],
+    ['número malformado', (a: any) => { a.circulante.PLINARF.totalEmitido = 'abc'; }],
+    ['NAV sem regra válida', (a: any) => { a.nav.regra = 'X'; }],
+  ])('F-O2: arquivo canônico mas incompleto (%s) → falhou com relatório, sem lançar', async (_n, quebrar) => {
+    const a = arquivoBase() as any;
+    quebrar(a);
+    const r = await verificarSnapshot(bytesDe(a), leitor(), PLINA);
+    expect(r.conferencias.some((c) => c.id === 'arquivo' && c.estado === 'falhou')).toBe(true);
+    expect(r.codigoSaida).toBe(1);
+  });
+
   it('não é JSON: falha sem lançar', async () => {
     const r = await verificarSnapshot(Buffer.from('não é json'), leitor());
     expect(r.codigoSaida).toBe(1);

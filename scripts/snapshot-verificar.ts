@@ -153,7 +153,7 @@ async function main() {
     r.codigoSaida === 0
       ? '\nCONFERIDO: o Memo.hash da âncora (tx do distributor informado) é o SHA-256 do arquivo; denominador e conciliação refeitos do Horizon; numerador = insumos publicados, cada cota com o seu hash de validação ancorado.'
       : r.codigoSaida === 2
-        ? '\nINCOMPLETO: nada falhou, mas há itens NÃO conferidos (saldos que mudaram depois do snapshot). Veja os "?" acima.'
+        ? '\nINCOMPLETO: nada falhou, mas há itens NÃO conferidos (ex.: distributor fora do ACCOUNTS do toml, domínio do toml, ou saldos que mudaram depois do snapshot). Veja os "?" acima.'
         : '\nNÃO CONFERIDO: alguma conferência falhou. Veja os "✗" acima.',
   );
   process.exit(r.codigoSaida);
