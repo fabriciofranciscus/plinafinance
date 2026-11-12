@@ -18,8 +18,9 @@
  *
  * Ambiente (só na build; a Vercel não distingue build de runtime, mas o app
  * não lê esta variável):
- *  - ITF_FONTS_BLOB_TOKEN: token do store `plina-itf-fonts` (nome do store só
- *    para fontes; nunca reutilizar o BLOB_READ_WRITE_TOKEN do app).
+ *  - ITF_FONTS_BLOB_TOKEN (ou ITF_FONTS_READ_WRITE_TOKEN, criado pelo painel com o
+ *    prefixo ITF_FONTS): token do store `plina-itf-fonts`, só de fontes; nunca
+ *    reutilizar o BLOB_READ_WRITE_TOKEN do app.
  *
  * Linha final no log da build:  `[itf-fonts] OK 4/4` (ou `AVISO ... Geist`).
  */
@@ -86,7 +87,9 @@ export async function run({
     return { status: 'present', ok: total, total };
   }
 
-  const token = (env.ITF_FONTS_BLOB_TOKEN ?? '').trim();
+  // Nome canônico: ITF_FONTS_BLOB_TOKEN. O painel da Vercel, ao conectar o store com o
+  // prefixo "ITF_FONTS", cria ITF_FONTS_READ_WRITE_TOKEN; aceitamos os dois.
+  const token = (env.ITF_FONTS_BLOB_TOKEN || env.ITF_FONTS_READ_WRITE_TOKEN || '').trim();
   if (!token) {
     warn(
       `[itf-fonts] AVISO: ITF_FONTS_BLOB_TOKEN ausente; a build segue com Geist (${present.length}/${total} arquivos locais).`,

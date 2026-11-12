@@ -50,6 +50,11 @@ describe('fetch-itf-fonts (LV2)', () => {
     expect(r.status).toBe('skipped');
   });
 
+  it('aceita o nome que o painel da Vercel cria com o prefixo ITF_FONTS', async () => {
+    const r = await run({ dir, env: { ITF_FONTS_READ_WRITE_TOKEN: 'tok' }, manifest, ...io(), download: okDownload });
+    expect(r.status).toBe('downloaded');
+  });
+
   it('com token: baixa os arquivos do prefixo itf/ e confere o hash', async () => {
     const seen: string[] = [];
     const r = await run({
