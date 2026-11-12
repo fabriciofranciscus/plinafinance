@@ -60,28 +60,31 @@ export function criarAsaasProvider(opts: AsaasOpcoes = {}): PixProvider {
 
   async function chamar(metodo: 'GET' | 'POST', caminho: string, corpo?: unknown): Promise<unknown> {
     const ctl = new AbortController();
+    // O timer cobre a resposta INTEIRA (cabeçalhos + corpo): um PSP que manda os cabeçalhos e trava o corpo não pendura.
     const timer = setTimeout(() => ctl.abort(), opts.timeoutMs ?? TIMEOUT_MS);
-    let resp: Response;
     try {
-      resp = await f(`${base}${caminho}`, {
-        method: metodo,
-        headers: { access_token: apiKey, 'content-type': 'application/json', accept: 'application/json' },
-        body: corpo === undefined ? undefined : JSON.stringify(corpo),
-        signal: ctl.signal,
-        redirect: 'error',
-      });
-    } catch {
-      throw new PspError('PSP_INCERTO'); // timeout/rede: pode ter chegado
+      let resp: Response;
+      try {
+        resp = await f(`${base}${caminho}`, {
+          method: metodo,
+          headers: { access_token: apiKey, 'content-type': 'application/json', accept: 'application/json' },
+          body: corpo === undefined ? undefined : JSON.stringify(corpo),
+          signal: ctl.signal,
+          redirect: 'error',
+        });
+      } catch {
+        throw new PspError('PSP_INCERTO'); // timeout/rede: pode ter chegado
+      }
+      // 429 e 5xx: o PSP pode ter processado → incerto. Demais 4xx: recusou antes de processar.
+      if (resp.status === 429 || resp.status >= 500) throw new PspError('PSP_INCERTO');
+      if (resp.status >= 400) throw new PspError('PSP_RECUSOU');
+      try {
+        return await resp.json();
+      } catch {
+        throw new PspError(metodo === 'POST' ? 'PSP_INCERTO' : 'PSP_RESPOSTA_INVALIDA');
+      }
     } finally {
       clearTimeout(timer);
-    }
-    // 429 e 5xx: o PSP pode ter processado → incerto. Demais 4xx: recusou antes de processar.
-    if (resp.status === 429 || resp.status >= 500) throw new PspError('PSP_INCERTO');
-    if (resp.status >= 400) throw new PspError('PSP_RECUSOU');
-    try {
-      return await resp.json();
-    } catch {
-      throw new PspError(metodo === 'POST' ? 'PSP_INCERTO' : 'PSP_RESPOSTA_INVALIDA');
     }
   }
 

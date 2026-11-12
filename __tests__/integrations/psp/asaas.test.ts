@@ -63,6 +63,15 @@ describe('Asaas — enviarPix', () => {
     const lento = (async (_u: string, init: RequestInit) => new Promise((_, rej) => init.signal?.addEventListener('abort', () => rej(new Error('abort'))))) as never;
     expect((await falha(prov(lento).enviarPix(ENVIO)))?.code).toBe('PSP_INCERTO');
   });
+  it('F-E12-6: o PSP manda os cabeçalhos e trava o CORPO → o timer ainda vale (PSP_INCERTO, não pendura)', async () => {
+    const corpoTravado = (async (_u: string, init: RequestInit) =>
+      new Response(new ReadableStream({ start(c) { init.signal?.addEventListener('abort', () => c.error(new Error('abort'))); } }), { status: 200 })) as never;
+    const t0 = Date.now();
+    expect((await falha(prov(corpoTravado).enviarPix(ENVIO)))?.code).toBe('PSP_INCERTO');
+    expect(Date.now() - t0).toBeLessThan(3000);
+    // na consulta (GET) a mesma trava vira resposta inválida, nunca pendura
+    expect((await falha(prov(corpoTravado).consultarStatus('tra_1')))?.code).toBe('PSP_RESPOSTA_INVALIDA');
+  });
   it('2xx com corpo ilegível ou status desconhecido depois do POST → PSP_INCERTO (o pedido foi aceito)', async () => {
     expect((await falha(prov((async () => new Response('<html>')) as never).enviarPix(ENVIO)))?.code).toBe('PSP_INCERTO');
     expect((await falha(prov((async () => json({ id: 't', status: 'ALGO_NOVO' })) as never).enviarPix(ENVIO)))?.code).toBe('PSP_INCERTO');

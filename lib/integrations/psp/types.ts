@@ -62,7 +62,49 @@ export const envioPixSchema = z.strictObject({
 export function validarEnvio(i: EnvioPix): EnvioPix {
   const r = envioPixSchema.safeParse(i);
   if (!r.success) throw new PspError('PSP_RECUSOU');
-  return r.data;
+  const chave = validarChavePix(r.data.tipoChave, r.data.chavePix);
+  if (!chave) throw new PspError('PSP_RECUSOU');
+  return { ...r.data, chavePix: chave };
+}
+
+function digitosVerificadoresOk(d: string, pesos: number[][]): boolean {
+  return pesos.every((p, k) => {
+    const soma = p.reduce((acc, peso, idx) => acc + Number(d[idx]) * peso, 0);
+    const resto = soma % 11;
+    return Number(d[p.length]) === (resto < 2 ? 0 : 11 - resto);
+  });
+}
+const PESOS_CPF = [[10, 9, 8, 7, 6, 5, 4, 3, 2], [11, 10, 9, 8, 7, 6, 5, 4, 3, 2]];
+const PESOS_CNPJ = [[5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2], [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]];
+
+/**
+ * Valida a chave Pix pelo tipo ANTES de qualquer claim ou envio (uma chave com erro de digitação não deve
+ * queimar a tentativa nem chegar ao PSP). Devolve a chave NORMALIZADA (CPF/CNPJ/telefone só dígitos; e-mail
+ * minúsculo; EVP minúsculo) ou `null` se inválida. CPF/CNPJ com dígito verificador; telefone 11 dígitos com DDD
+ * (formato exigido pelo Asaas).
+ */
+export function validarChavePix(tipo: TipoChavePix, chave: string): string | null {
+  const c = chave.trim();
+  switch (tipo) {
+    case 'CPF': {
+      const d = c.replace(/[.\-\s]/g, '');
+      if (!/^\d{11}$/.test(d) || /^(\d)\1{10}$/.test(d)) return null;
+      return digitosVerificadoresOk(d, PESOS_CPF) ? d : null;
+    }
+    case 'CNPJ': {
+      const d = c.replace(/[.\-/\s]/g, '');
+      if (!/^\d{14}$/.test(d) || /^(\d)\1{13}$/.test(d)) return null;
+      return digitosVerificadoresOk(d, PESOS_CNPJ) ? d : null;
+    }
+    case 'PHONE': {
+      const d = c.replace(/[()\-\s]/g, '');
+      return /^[1-9]\d{10}$/.test(d) ? d : null;
+    }
+    case 'EMAIL':
+      return c.length <= 77 && /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(c) ? c.toLowerCase() : null;
+    case 'EVP':
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c) ? c.toLowerCase() : null;
+  }
 }
 
 export const ID_TRANSFERENCIA = /^[A-Za-z0-9_-]{1,64}$/;

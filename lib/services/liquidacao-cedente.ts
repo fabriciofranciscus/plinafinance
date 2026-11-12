@@ -17,7 +17,7 @@ import { db } from '../db';
 import { ComprovanteBlobError, guardarComprovantePsp } from '../integrations/blob/comprovante-psp';
 import { mascararDestino, montarComprovante } from '../integrations/psp/comprovante';
 import { obterPixProvider } from '../integrations/psp';
-import { PspError, type PixProvider, type StatusPix, type TipoChavePix } from '../integrations/psp/types';
+import { PspError, validarChavePix, type PixProvider, type StatusPix, type TipoChavePix } from '../integrations/psp/types';
 import { AncoraError, ancorarSha256 } from '../stellar/ancora';
 import { extractSafeError } from '../stellar/log-error';
 
@@ -30,7 +30,8 @@ export type LiquidacaoCedenteErrorCode =
   | 'EM_ANDAMENTO'
   | 'COMPROVANTE_FALHOU'
   | 'ANCORA_FALHOU'
-  | 'TRANSFERENCIA_NAO_ENCONTRADA';
+  | 'TRANSFERENCIA_NAO_ENCONTRADA'
+  | 'NAO_REABRIVEL';
 
 const MENSAGENS: Record<LiquidacaoCedenteErrorCode, string> = {
   ENTRADA_INVALIDA: 'Pagamento ao titular recusado: entrada inválida.',
@@ -40,6 +41,7 @@ const MENSAGENS: Record<LiquidacaoCedenteErrorCode, string> = {
   COMPROVANTE_FALHOU: 'Comprovante do Pix não pôde ser guardado; nada foi ancorado. Repetir é seguro.',
   ANCORA_FALHOU: 'Comprovante do Pix não ancorado na rede; repetir é seguro.',
   TRANSFERENCIA_NAO_ENCONTRADA: 'Nenhum pagamento registrado para esta cessão.',
+  NAO_REABRIVEL: 'Só um pagamento com falha confirmada pelo PSP pode ser reaberto.',
 };
 
 export class LiquidacaoCedenteError extends Error {
@@ -64,7 +66,21 @@ const entrada = z.strictObject({
   tipoChave: z.enum(['CPF', 'CNPJ', 'EMAIL', 'PHONE', 'EVP']),
 });
 
-const chaveDaCessao = (cessaoId: string) => `pix-cedente:${cessaoId}`;
+const chaveDaCessao = (cessaoId: string, tentativa = 1) =>
+  tentativa === 1 ? `pix-cedente:${cessaoId}` : `pix-cedente:${cessaoId}:${tentativa}`;
+
+interface TentativaAnterior {
+  tentativa: number;
+  idempotencyKey: string;
+  providerId: string | null;
+  motivoFalha: string | null;
+  reabertaEm: string;
+  operador: string;
+}
+const anteriores = (r: TransferenciaPix): TentativaAnterior[] =>
+  Array.isArray(r.historico) ? (r.historico as unknown as TentativaAnterior[]) : [];
+/** Chave da tentativa atual + as das anteriores: a recuperação olha TODAS (um envio antigo não pode ficar invisível). */
+const todasAsChaves = (r: TransferenciaPix) => [r.idempotencyKey, ...anteriores(r).map((t) => t.idempotencyKey)];
 const ehUnique = (e: unknown) => (e as { code?: string } | null)?.code === 'P2002';
 
 function resultado(r: TransferenciaPix): ResultadoPagamento {
@@ -102,9 +118,12 @@ async function avancar(row: TransferenciaPix, provider: PixProvider): Promise<Tr
 
   // Sem providerId: o envio pode ter saído. Só tenta ACHAR (por externalReference); não reenvia.
   if (!atual.providerId && (atual.status === 'ENVIANDO' || atual.status === 'INCERTO')) {
-    let achada: { id: string; status: StatusPix } | null;
+    let achada: { id: string; status: StatusPix } | null = null;
     try {
-      achada = await provider.localizarPorChave(atual.idempotencyKey, atual.criadoEm);
+      for (const chave of todasAsChaves(atual)) {
+        achada = await provider.localizarPorChave(chave, atual.criadoEm);
+        if (achada) break;
+      }
     } catch (err) {
       if (err instanceof PspError) {
         console.error('[liquidacao-cedente] localizar falhou', err.code);
@@ -134,6 +153,9 @@ async function avancar(row: TransferenciaPix, provider: PixProvider): Promise<Tr
   }
   // CONCLUIDO
   if (c.valor !== undefined && !new Prisma.Decimal(c.valor).eq(atual.valor)) {
+    // O PSP concluiu um valor diferente do pedido: dinheiro saiu errado. Estado de alerta (INCERTO, com providerId:
+    // nada retoma sozinho), não fica PROCESSANDO em silêncio.
+    await marcar(atual.id, { status: 'INCERTO', motivoFalha: 'PSP_VALOR_DIVERGE', travaAte: null });
     throw new LiquidacaoCedenteError('VALOR_DIVERGE', 'PSP_VALOR_DIVERGE');
   }
 
@@ -187,45 +209,22 @@ async function executar(row: TransferenciaPix, provider: PixProvider, agora: Dat
   }
 }
 
-/**
- * Paga o titular. Idempotente por cessão: a 2ª chamada não paga de novo (devolve o estado). A chave Pix vem na
- * chamada e não é persistida.
- */
-export async function pagarTitular(
-  input: { cessaoId: string; valor: string; chavePix: string; tipoChave: TipoChavePix },
-  opts: { provider?: PixProvider; agora?: Date } = {},
-): Promise<ResultadoPagamento> {
+type EntradaPagamento = { cessaoId: string; valor: string; chavePix: string; tipoChave: TipoChavePix };
+
+/** Entrada validada (Zod strict) e chave Pix validada/normalizada POR TIPO, antes de qualquer claim ou envio. */
+function validarEntrada(input: EntradaPagamento): EntradaPagamento {
   const p = entrada.safeParse(input);
   if (!p.success) throw new LiquidacaoCedenteError('ENTRADA_INVALIDA');
-  const i = p.data;
-  const provider = opts.provider ?? obterPixProvider();
-  const agora = opts.agora ?? new Date();
+  const chave = validarChavePix(p.data.tipoChave, p.data.chavePix);
+  if (!chave) throw new LiquidacaoCedenteError('ENTRADA_INVALIDA', 'CHAVE_PIX_INVALIDA');
+  return { ...p.data, chavePix: chave };
+}
 
-  const existente = await db.transferenciaPix.findUnique({ where: { cessaoId: i.cessaoId } });
-  if (existente) {
-    if (!new Prisma.Decimal(i.valor).eq(existente.valor)) throw new LiquidacaoCedenteError('VALOR_DIVERGE');
-    if (existente.provedor !== provider.nome) throw new LiquidacaoCedenteError('PROVEDOR_DIVERGE');
-    return executar(existente, provider, agora);
-  }
-
-  // Claim ANTES de falar com o PSP.
-  let row: TransferenciaPix;
-  try {
-    row = await db.transferenciaPix.create({
-      data: {
-        cessaoId: i.cessaoId,
-        idempotencyKey: chaveDaCessao(i.cessaoId),
-        provedor: provider.nome,
-        valor: i.valor,
-        destinoMascarado: mascararDestino(i.tipoChave, i.chavePix),
-        travaAte: new Date(agora.getTime() + LEASE_PIX_MS),
-      },
-    });
-  } catch (err) {
-    if (!ehUnique(err)) throw err;
-    throw new LiquidacaoCedenteError('EM_ANDAMENTO'); // outra execução criou o claim agora
-  }
-
+/**
+ * Envia ao PSP UMA vez e segue o fluxo. `row` já é o claim (ENVIANDO, com lease nosso). Resposta ambígua → INCERTO
+ * (nunca reenvia); recusa do PSP → FALHOU (nada saiu).
+ */
+async function dispararEnvio(row: TransferenciaPix, i: EntradaPagamento, provider: PixProvider): Promise<ResultadoPagamento> {
   try {
     let enviada: { id: string; status: StatusPix };
     try {
@@ -256,6 +255,99 @@ export async function pagarTitular(
   } finally {
     await liberar(row.id);
   }
+}
+
+/**
+ * Paga o titular. Idempotente por cessão: a 2ª chamada não paga de novo (devolve o estado). A chave Pix vem na
+ * chamada e não é persistida; é validada por tipo antes do claim (typo não queima a tentativa).
+ */
+export async function pagarTitular(
+  input: EntradaPagamento,
+  opts: { provider?: PixProvider; agora?: Date } = {},
+): Promise<ResultadoPagamento> {
+  const i = validarEntrada(input);
+  const provider = opts.provider ?? obterPixProvider();
+  const agora = opts.agora ?? new Date();
+
+  const existente = await db.transferenciaPix.findUnique({ where: { cessaoId: i.cessaoId } });
+  if (existente) {
+    if (!new Prisma.Decimal(i.valor).eq(existente.valor)) throw new LiquidacaoCedenteError('VALOR_DIVERGE');
+    if (existente.provedor !== provider.nome) throw new LiquidacaoCedenteError('PROVEDOR_DIVERGE');
+    return executar(existente, provider, agora);
+  }
+
+  // Claim ANTES de falar com o PSP.
+  let row: TransferenciaPix;
+  try {
+    row = await db.transferenciaPix.create({
+      data: {
+        cessaoId: i.cessaoId,
+        idempotencyKey: chaveDaCessao(i.cessaoId),
+        provedor: provider.nome,
+        valor: i.valor,
+        destinoMascarado: mascararDestino(i.tipoChave, i.chavePix),
+        travaAte: new Date(agora.getTime() + LEASE_PIX_MS),
+      },
+    });
+  } catch (err) {
+    if (!ehUnique(err)) throw err;
+    throw new LiquidacaoCedenteError('EM_ANDAMENTO'); // outra execução criou o claim agora
+  }
+  return dispararEnvio(row, i, provider);
+}
+
+/**
+ * Reabre um pagamento FALHOU (confirmado pelo PSP: recusa 4xx, FAILED ou CANCELLED — nada saiu) e envia de novo com
+ * idempotencyKey NOVA (`pix-cedente:<cessao>:<n>`). Auditado: a tentativa anterior (chave, providerId, motivo, operador,
+ * hora) é acrescentada a `historico`; a recuperação de incerteza passa a olhar TODAS as chaves. Qualquer outro estado
+ * (INCERTO, PROCESSANDO, COMPROVADA) NÃO reabre: o dinheiro pode ter saído. Decisão do operador, nunca automática.
+ */
+export async function reabrirTransferencia(
+  input: EntradaPagamento & { operador: string },
+  opts: { provider?: PixProvider; agora?: Date } = {},
+): Promise<ResultadoPagamento> {
+  if (typeof input.operador !== 'string' || !/^[A-Za-z0-9:_.-]{1,80}$/.test(input.operador)) {
+    throw new LiquidacaoCedenteError('ENTRADA_INVALIDA', 'OPERADOR_INVALIDO');
+  }
+  const { operador, ...resto } = input;
+  const i = validarEntrada(resto);
+  const provider = opts.provider ?? obterPixProvider();
+  const agora = opts.agora ?? new Date();
+
+  const row = await db.transferenciaPix.findUnique({ where: { cessaoId: i.cessaoId } });
+  if (!row) throw new LiquidacaoCedenteError('TRANSFERENCIA_NAO_ENCONTRADA');
+  if (!new Prisma.Decimal(i.valor).eq(row.valor)) throw new LiquidacaoCedenteError('VALOR_DIVERGE');
+  if (row.provedor !== provider.nome) throw new LiquidacaoCedenteError('PROVEDOR_DIVERGE');
+  if (row.status !== 'FALHOU') throw new LiquidacaoCedenteError('NAO_REABRIVEL', row.status);
+
+  const nova = row.tentativa + 1;
+  const entrada: TentativaAnterior = {
+    tentativa: row.tentativa,
+    idempotencyKey: row.idempotencyKey,
+    providerId: row.providerId,
+    motivoFalha: row.motivoFalha,
+    reabertaEm: agora.toISOString(),
+    operador,
+  };
+  // Atômico: só reabre se continua FALHOU na MESMA tentativa (duas reaberturas simultâneas = uma só).
+  const r = await db.transferenciaPix.updateMany({
+    where: { id: row.id, status: 'FALHOU', tentativa: row.tentativa },
+    data: {
+      status: 'ENVIANDO',
+      tentativa: nova,
+      idempotencyKey: chaveDaCessao(row.cessaoId, nova),
+      historico: [...anteriores(row), entrada] as unknown as Prisma.InputJsonValue,
+      providerId: null,
+      e2eId: null,
+      motivoFalha: null,
+      destinoMascarado: mascararDestino(i.tipoChave, i.chavePix),
+      travaAte: new Date(agora.getTime() + LEASE_PIX_MS),
+    },
+  });
+  if (r.count !== 1) throw new LiquidacaoCedenteError('EM_ANDAMENTO');
+  const reaberta = await db.transferenciaPix.findUnique({ where: { cessaoId: row.cessaoId } });
+  if (!reaberta) throw new LiquidacaoCedenteError('TRANSFERENCIA_NAO_ENCONTRADA');
+  return dispararEnvio(reaberta, i, provider);
 }
 
 /** Retoma/consulta o pagamento de uma cessão (job ou operador). Nunca reenvia. */

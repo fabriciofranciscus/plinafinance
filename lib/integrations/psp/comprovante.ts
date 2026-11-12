@@ -16,7 +16,8 @@ export function mascararDestino(tipo: TipoChavePix, chave: string): string {
     const rotulo = dominio.split('.').pop() ?? '';
     return `EMAIL ${local.slice(0, 1)}***@***.${rotulo}`;
   }
-  return `${tipo} ***${c.slice(-4)}`;
+  // Chave curta demais sairia quase inteira: sem sufixo.
+  return c.length >= 8 ? `${tipo} ***${c.slice(-4)}` : `${tipo} ***`;
 }
 
 export interface ComprovanteInput {

@@ -17,7 +17,7 @@ vi.mock('@/lib/db', () => ({
         if (m.corrida.v || m.rows.some((r) => r.cessaoId === data.cessaoId)) throw Object.assign(new Error('unique'), { code: 'P2002' });
         const row = {
           id: `t${m.rows.length + 1}`, status: 'ENVIANDO', providerId: null, e2eId: null, comprovante: null, comprovanteSha256: null,
-          comprovantePath: null, ancoraTxHash: null, motivoFalha: null, criadoEm: new Date('2026-11-12T09:00:00.000Z'), ...data,
+          comprovantePath: null, ancoraTxHash: null, motivoFalha: null, tentativa: 1, historico: null, criadoEm: new Date('2026-11-12T09:00:00.000Z'), ...data,
         };
         m.rows.push(row);
         return row;
@@ -29,7 +29,7 @@ vi.mock('@/lib/db', () => ({
       },
       updateMany: async ({ where, data }: { where: Row; data: Row }) => {
         const alvo = m.rows.filter(
-          (r) => r.id === where.id && (!where.OR || where.OR.some((c: Row) => (c.travaAte === null ? r.travaAte == null : r.travaAte != null && r.travaAte < c.travaAte.lt))),
+          (r) => r.id === where.id && (!where.status || r.status === where.status) && (where.tentativa === undefined || r.tentativa === where.tentativa) && (!where.OR || where.OR.some((c: Row) => (c.travaAte === null ? r.travaAte == null : r.travaAte != null && r.travaAte < c.travaAte.lt))),
         );
         alvo.forEach((r) => Object.assign(r, data));
         return { count: alvo.length };
@@ -50,11 +50,12 @@ import { ComprovanteBlobError } from '@/lib/integrations/blob/comprovante-psp';
 import { criarSimuladoProvider } from '@/lib/integrations/psp/simulado';
 import { PspError, type ConsultaPix, type PixProvider } from '@/lib/integrations/psp/types';
 import { AncoraError } from '@/lib/stellar/ancora';
-import { avancarTransferencia, pagarTitular } from '@/lib/services/liquidacao-cedente';
+import { avancarTransferencia, pagarTitular, reabrirTransferencia } from '@/lib/services/liquidacao-cedente';
 
 const AGORA = new Date('2026-11-12T09:00:00.000Z');
 const CHAVE_PIX = 'maria.silva@example.com.br';
 const IN = { cessaoId: 'cessao_1', valor: '123.45', chavePix: CHAVE_PIX, tipoChave: 'EMAIL' as const };
+const CPF_OK = '529.982.247-25';
 const sha = (s: string) => createHash('sha256').update(Buffer.from(s, 'utf8')).digest('hex');
 
 /** Provedor de mentira: controla cada resposta e conta as chamadas. */
@@ -147,6 +148,10 @@ describe('pagarTitular — PSP ainda processando, falha e recusa', () => {
     await expect(pagarTitular(IN, { provider: p, agora: AGORA })).rejects.toMatchObject({ code: 'VALOR_DIVERGE' });
     expect(m.ancora).not.toHaveBeenCalled();
     expect(m.rows[0].comprovante).toBeNull();
+    // F-E12-2: não fica PROCESSANDO em silêncio: estado de alerta, e nada o retoma sozinho
+    expect(m.rows[0]).toMatchObject({ status: 'INCERTO', motivoFalha: 'PSP_VALOR_DIVERGE', travaAte: null });
+    expect((await avancarTransferencia('cessao_1', { provider: p, agora: AGORA })).status).toBe('INCERTO');
+    expect(p.enviarPix).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -253,5 +258,89 @@ describe('pagarTitular — entrada, divergência e concorrência', () => {
     const p = provedor();
     await expect(avancarTransferencia('nada', { provider: p, agora: AGORA })).rejects.toMatchObject({ code: 'TRANSFERENCIA_NAO_ENCONTRADA' });
     expect(p.consultarStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe('F-E12-1 — chave Pix validada por tipo antes do claim', () => {
+  it.each([
+    ['CPF com dígito verificador errado', { tipoChave: 'CPF' as const, chavePix: '529.982.247-26' }],
+    ['CPF de dígitos repetidos', { tipoChave: 'CPF' as const, chavePix: '111.111.111-11' }],
+    ['CNPJ inválido', { tipoChave: 'CNPJ' as const, chavePix: '11.222.333/0001-80' }],
+    ['telefone sem DDD', { tipoChave: 'PHONE' as const, chavePix: '999998877' }],
+    ['e-mail sem domínio', { tipoChave: 'EMAIL' as const, chavePix: 'maria@' }],
+    ['EVP que não é UUID', { tipoChave: 'EVP' as const, chavePix: 'abc' }],
+  ])('%s: ENTRADA_INVALIDA sem claim e sem PSP (a tentativa não é queimada)', async (_n, troca) => {
+    const p = provedor();
+    await expect(pagarTitular({ ...IN, ...troca }, { provider: p, agora: AGORA })).rejects.toMatchObject({ code: 'ENTRADA_INVALIDA', causa: 'CHAVE_PIX_INVALIDA' });
+    expect(m.rows).toHaveLength(0);
+    expect(p.enviarPix).not.toHaveBeenCalled();
+  });
+
+  it('CPF válido é normalizado (só dígitos) antes de ir ao PSP e a máscara usa a chave normalizada', async () => {
+    const p = provedor();
+    await pagarTitular({ ...IN, tipoChave: 'CPF', chavePix: CPF_OK }, { provider: p, agora: AGORA });
+    expect((p.enviarPix.mock.calls[0] as unknown as [Record<string, string>])[0].chavePix).toBe('52998224725');
+    expect(m.rows[0].destinoMascarado).toBe('CPF ***4725');
+  });
+});
+
+describe('F-E12-1 — reabrir um FALHOU confirmado pelo PSP (auditado, chave nova)', () => {
+  const recusa = () => provedor({ envio: async () => { throw new PspError('PSP_RECUSOU'); } });
+  const REABRIR = { ...IN, operador: 'admin-panel' };
+
+  it('FALHOU (PSP recusou) → reabre com idempotencyKey :2, guarda a tentativa anterior no histórico e conclui', async () => {
+    const p = recusa();
+    expect((await pagarTitular(IN, { provider: p, agora: AGORA })).status).toBe('FALHOU');
+    p.enviarPix.mockResolvedValue({ id: 'tra_2', status: 'PENDENTE' });
+    p.consultarStatus.mockResolvedValue({ id: 'tra_2', status: 'CONCLUIDO', valor: '123.45', e2eId: 'E2', efetivadoEm: '2026-11-12' });
+    const r = await reabrirTransferencia(REABRIR, { provider: p, agora: AGORA });
+    expect(r).toMatchObject({ status: 'COMPROVADA', transferenciaId: 'tra_2' });
+    expect(p.enviarPix).toHaveBeenCalledTimes(2);
+    expect((p.enviarPix.mock.calls[1] as unknown as [Record<string, string>])[0].idempotencyKey).toBe('pix-cedente:cessao_1:2');
+    expect(m.rows[0]).toMatchObject({ tentativa: 2, idempotencyKey: 'pix-cedente:cessao_1:2', status: 'COMPROVADA' });
+    expect(m.rows[0].historico).toEqual([
+      { tentativa: 1, idempotencyKey: 'pix-cedente:cessao_1', providerId: null, motivoFalha: 'PSP_RECUSOU', reabertaEm: AGORA.toISOString(), operador: 'admin-panel' },
+    ]);
+  });
+
+  it.each(['INCERTO', 'PROCESSANDO', 'COMPROVADA'] as const)('estado %s NÃO reabre (o dinheiro pode ter saído): NAO_REABRIVEL, 0 envios novos', async (estado) => {
+    const p = provedor({ consulta: async () => ({ id: 'tra_1', status: 'PENDENTE' }) });
+    await pagarTitular(IN, { provider: p, agora: AGORA });
+    Object.assign(m.rows[0], { status: estado });
+    p.enviarPix.mockClear();
+    await expect(reabrirTransferencia(REABRIR, { provider: p, agora: AGORA })).rejects.toMatchObject({ code: 'NAO_REABRIVEL', causa: estado });
+    expect(p.enviarPix).not.toHaveBeenCalled();
+  });
+
+  it('duas reaberturas simultâneas = UMA (a segunda não reenvia)', async () => {
+    const p = recusa();
+    await pagarTitular(IN, { provider: p, agora: AGORA });
+    p.enviarPix.mockClear();
+    p.enviarPix.mockResolvedValue({ id: 'tra_2', status: 'PENDENTE' });
+    p.consultarStatus.mockResolvedValue({ id: 'tra_2', status: 'PENDENTE' });
+    const [a, b] = await Promise.allSettled([reabrirTransferencia(REABRIR, { provider: p, agora: AGORA }), reabrirTransferencia(REABRIR, { provider: p, agora: AGORA })]);
+    expect([a.status, b.status].sort()).toEqual(['fulfilled', 'rejected']);
+    expect(p.enviarPix).toHaveBeenCalledTimes(1);
+  });
+
+  it('reaberta e ambígua: a recuperação procura a chave atual E a da tentativa anterior', async () => {
+    const p = recusa();
+    await pagarTitular(IN, { provider: p, agora: AGORA });
+    p.enviarPix.mockRejectedValue(new PspError('PSP_INCERTO'));
+    expect((await reabrirTransferencia(REABRIR, { provider: p, agora: AGORA })).status).toBe('INCERTO');
+    await avancarTransferencia('cessao_1', { provider: p, agora: AGORA });
+    const chaves = (p.localizarPorChave.mock.calls as unknown as string[][]).map((c) => c[0]);
+    expect(chaves).toEqual(expect.arrayContaining(['pix-cedente:cessao_1:2', 'pix-cedente:cessao_1']));
+    expect(p.enviarPix).toHaveBeenCalledTimes(2); // original + reabertura; a recuperação não reenviou
+  });
+
+  it('exige operador identificado, a chave Pix válida e o mesmo valor/provedor', async () => {
+    const p = recusa();
+    await pagarTitular(IN, { provider: p, agora: AGORA });
+    await expect(reabrirTransferencia({ ...REABRIR, operador: '' }, { provider: p })).rejects.toMatchObject({ code: 'ENTRADA_INVALIDA' });
+    await expect(reabrirTransferencia({ ...REABRIR, chavePix: 'sem-arroba' }, { provider: p })).rejects.toMatchObject({ code: 'ENTRADA_INVALIDA' });
+    await expect(reabrirTransferencia({ ...REABRIR, valor: '1.00' }, { provider: p })).rejects.toMatchObject({ code: 'VALOR_DIVERGE' });
+    await expect(reabrirTransferencia({ ...REABRIR, cessaoId: 'nada' }, { provider: p })).rejects.toMatchObject({ code: 'TRANSFERENCIA_NAO_ENCONTRADA' });
+    expect(p.enviarPix).toHaveBeenCalledTimes(1);
   });
 });

@@ -1099,6 +1099,10 @@ model TransferenciaPix {
   comprovanteSha256 String?
   comprovantePath   String?
   ancoraTxHash      String?
+  /// Tentativa atual (1, 2…). Reabrir só é possível a partir de FALHOU (confirmado pelo PSP), com idempotencyKey nova.
+  tentativa         Int                    @default(1)
+  /// Tentativas anteriores, só acrescenta: [{ tentativa, idempotencyKey, providerId, motivoFalha, reabertaEm, operador }].
+  historico         Json?
   /// Código constante (PSP_RECUSOU, PSP_FALHA…), nunca o texto do PSP.
   motivoFalha       String?
   /// Lease da execução em curso.
