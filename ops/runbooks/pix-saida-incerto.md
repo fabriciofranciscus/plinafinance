@@ -1,8 +1,28 @@
 # Pix de saída `INCERTO` — procedimento do operador
 
-Use este runbook quando o alerta de `GET /api/ops/pix-saida` informar uma
-cessão com pagamento `INCERTO`, valor divergente ou processamento antigo. A
-regra principal é: **não reenvie**. O PSP pode ter recebido ou concluído o Pix.
+Use a seção 0 antes do primeiro pagamento ou de qualquer reabertura. Use as
+demais seções quando o alerta de `GET /api/ops/pix-saida` informar uma cessão
+com pagamento `INCERTO`, valor divergente ou processamento antigo. A regra
+principal é: **não reenvie**. O PSP pode ter recebido ou concluído o Pix.
+
+## 0. Conferir titular antes de pagar ou reabrir
+
+1. No sistema restrito de operação, abra o laudo de validação da cota e o
+   cadastro do cedente da mesma cessão.
+2. Compare os dígitos normalizados do CPF/CNPJ do titular confirmado no laudo
+   com os do cadastro. Não copie nem exponha o documento durante a conferência.
+3. Se faltar documento, o titular não estiver confirmado, houver divergência,
+   ou o caso envolver espólio, cotitularidade ou procurador, **não pague nem
+   reabra**: encaminhe para tratamento manual.
+4. Se coincidir, registre a conferência em `EventoAudit` pela ação aprovada do
+   aplicativo, antes de pagar/reabrir: `cessaoId`, resultado, referência do
+   laudo, operador e horário. Não grave CPF/CNPJ, chave Pix, imagem ou trecho do
+   laudo no evento. Se a ação auditada não estiver disponível, pare; não use
+   SQL para suprir o registro.
+
+Essa conferência manual é temporária. O HMAC versionado do titular do laudo é
+pré-requisito pós-D30 para habilitar PSP de produção ou retirar a recusa em
+`STELLAR_NETWORK=PUBLIC`.
 
 ## Guardas
 
@@ -29,21 +49,25 @@ ROLLBACK;
 
 Pare se não houver exatamente uma linha, se o ambiente estiver incerto ou se o
 estado já for terminal. Não consulte nem exponha a chave Pix; ela não é
-persistida pelo serviço.
+persistida pelo serviço. Confirme que `idempotencyKey` é exatamente
+`pix-cedente:<cessaoId>`; divergência de referência é incidente e bloqueia a
+classificação.
 
 ## 2. Conferir duas fontes independentes
 
-1. Consulte a API do PSP pela referência externa da transferência
-   (`idempotencyKey`). Use `providerId` apenas como confirmação adicional; não
-   troque a referência por busca manual de destinatário.
+1. Consulte a API do PSP pela referência externa exata
+   `pix-cedente:<cessaoId>`. Use `providerId` apenas como confirmação adicional;
+   não troque a referência por busca manual de destinatário.
 2. No mesmo ambiente, consulte o extrato da conta de liquidação no intervalo
    entre `criadoEm` e o horário atual, procurando débito, estorno ou lançamento
    pendente com a mesma referência e o mesmo valor.
 3. Confira nas duas fontes status, valor, identificador E2E e comprovante. A
    API pode continuar pendente sem que exista débito no extrato; ausência em
    uma só fonte não prova falha.
-4. Guarde as duas evidências apenas no repositório restrito aprovado para
-   operação; não as copie para o OpenBot.
+4. Registre em `EventoAudit`, pela ação aprovada, o resultado da API e do
+   extrato e as referências/hashes das duas evidências. Guarde o material apenas
+   no repositório restrito de operação; não grave resposta bruta ou PII no
+   evento e não copie evidência para o OpenBot.
 
 ## 3. Classificar sem escrever no banco
 
@@ -56,11 +80,11 @@ persistida pelo serviço.
 | Valor diferente do pedido | Permanece `INCERTO` com severidade financeira; interrompa o fluxo e escale imediatamente. |
 
 `COMPROVADA` ou `FALHOU` só são aceitas com as duas fontes. A ação admin
-auditada, planejada para depois do D30, deve registrar em `EventoAudit` o
-resultado da API e do extrato, com suas referências de evidência, **antes** de
-colher a dupla aprovação. Não grave resposta bruta, CPF/CNPJ ou chave Pix no
-evento. Até essa ação existir, nenhuma classificação manual vira escrita no
-banco: o caso permanece bloqueado em incidente.
+auditada, planejada para depois do D30, deve validar que os dois resultados já
+estão em `EventoAudit`, com suas referências de evidência, **antes** de colher
+a dupla aprovação. Não grave resposta bruta, CPF/CNPJ ou chave Pix no evento.
+Até essa ação existir, nenhuma classificação manual vira escrita no banco: o
+caso permanece bloqueado em incidente.
 
 ## 4. Fechamento
 
