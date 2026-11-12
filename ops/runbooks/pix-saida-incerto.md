@@ -31,37 +31,44 @@ Pare se não houver exatamente uma linha, se o ambiente estiver incerto ou se o
 estado já for terminal. Não consulte nem exponha a chave Pix; ela não é
 persistida pelo serviço.
 
-## 2. Conferir no painel do PSP
+## 2. Conferir duas fontes independentes
 
-1. Entre no painel do ambiente correspondente: sandbox para testnet; produção
-   somente quando o provedor de produção estiver aprovado.
-2. Procure primeiro por `providerId`. Se estiver vazio, procure pela referência
-   externa `idempotencyKey` e pela janela de `criadoEm`.
-3. Confira status, valor, identificador E2E e comprovante. Guarde a evidência
-   apenas no repositório restrito aprovado para operação; não a copie para o
-   OpenBot.
+1. Consulte a API do PSP pela referência externa da transferência
+   (`idempotencyKey`). Use `providerId` apenas como confirmação adicional; não
+   troque a referência por busca manual de destinatário.
+2. No mesmo ambiente, consulte o extrato da conta de liquidação no intervalo
+   entre `criadoEm` e o horário atual, procurando débito, estorno ou lançamento
+   pendente com a mesma referência e o mesmo valor.
+3. Confira nas duas fontes status, valor, identificador E2E e comprovante. A
+   API pode continuar pendente sem que exista débito no extrato; ausência em
+   uma só fonte não prova falha.
+4. Guarde as duas evidências apenas no repositório restrito aprovado para
+   operação; não as copie para o OpenBot.
 
 ## 3. Classificar sem escrever no banco
 
-| Evidência do PSP | Decisão operacional agora |
+| API do PSP + extrato | Decisão operacional agora |
 |---|---|
-| `DONE`/concluído, valor exato e comprovante/identificador E2E válidos | Elegível a `COMPROVADA`; deixe o varredor consultar e fechar. Se ele não convergir, abra incidente e mantenha a cessão bloqueada. |
-| `FAILED`/cancelado com comprovante do PSP de que nada saiu | Elegível a `FALHOU`; deixe o varredor observar o estado. Se não convergir, abra incidente. |
-| `DONE` sem valor, não encontrado, pendente, resposta ilegível ou painel indisponível | Permanece `INCERTO`; não reenvie e não reabra. |
+| API `DONE`/concluído, valor exato e comprovante/identificador E2E válidos; extrato confirma o débito correspondente | Elegível a `COMPROVADA`; deixe o varredor consultar e fechar. Se ele não convergir, abra incidente e mantenha a cessão bloqueada. |
+| Após 24 h, API não registra transferência concluída e extrato não contém débito nem lançamento pendente correspondente | Elegível a `FALHOU` somente pela ação auditada e com dupla aprovação de Thais e Atlas. |
+| API pendente/não encontrada, extrato sem débito, prazo menor que 24 h, resposta ilegível ou qualquer fonte indisponível | Permanece `INCERTO`; não reenvie e não reabra. |
+| API e extrato divergem | Permanece `INCERTO` com severidade financeira; interrompa o fluxo e escale imediatamente. |
 | Valor diferente do pedido | Permanece `INCERTO` com severidade financeira; interrompa o fluxo e escale imediatamente. |
 
-`COMPROVADA` ou `FALHOU` só são aceitas com evidência do PSP. Antes da ação
-admin auditada planejada para depois do D30, nenhuma classificação manual vira
-escrita no banco. O estado só muda pelo caminho automático já idempotente; se
-esse caminho não convergir, o caso fica bloqueado em incidente.
+`COMPROVADA` ou `FALHOU` só são aceitas com as duas fontes. A ação admin
+auditada, planejada para depois do D30, deve registrar em `EventoAudit` o
+resultado da API e do extrato, com suas referências de evidência, **antes** de
+colher a dupla aprovação. Não grave resposta bruta, CPF/CNPJ ou chave Pix no
+evento. Até essa ação existir, nenhuma classificação manual vira escrita no
+banco: o caso permanece bloqueado em incidente.
 
 ## 4. Fechamento
 
 - `COMPROVADA`: confirme que existe `Pagamento`, comprovante no Blob e âncora
   com hash correspondente antes de liberar a cessão.
-- `FALHOU`: uma nova tentativa continua proibida sem a ação auditada e a regra
-  de aprovação vigente. Trocar o destino exige dupla aprovação e fica para
-  depois do D30.
+- `FALHOU`: uma nova tentativa continua proibida sem a ação auditada, as duas
+  evidências registradas e a dupla aprovação de Thais e Atlas. Trocar o destino
+  exige um fluxo próprio e fica para depois do D30.
 - `INCERTO`: mantenha o alerta aberto e registre a próxima checagem no sistema
   restrito de incidentes, sem PII.
 
