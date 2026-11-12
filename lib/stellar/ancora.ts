@@ -58,8 +58,8 @@ const FOLGA_SEC = 10;
 const FOLGA_DESDE_MS = 60 * 60 * 1000;
 /** `desde` aceito até 5 min à frente do relógio (folga de relógio); além disso esconderia âncora recente. */
 const FUTURO_MAX_MS = 5 * 60 * 1000;
-/** Com `desde`, teto generoso (50.000 txs) para nunca ler sem fim. */
-const MAX_PAGINAS_COM_DESDE = 250;
+/** Com `desde`, o mesmo teto de 50 páginas (10.000 txs) — decisão do Atlas. */
+const MAX_PAGINAS_COM_DESDE = 50;
 
 type Relogio = { agora: () => number; dormir: (ms: number) => Promise<void> };
 const REAL: Relogio = { agora: () => Date.now(), dormir: (ms) => new Promise((r) => setTimeout(r, ms)) };
@@ -89,7 +89,7 @@ type PaginaTx = { records: TxRec[]; next(): Promise<PaginaTx> };
  * Âncora já feita para este hash, ou `null`. Com `desde` (criação do claim),
  * lê as txs do distributor em ordem decrescente e PARA na primeira anterior a
  * `desde − 1 h` (S3 do Argus): o custo não cresce com o histórico (teto de
- * 50.000 txs, created_at ilegível → erro; `desde` > agora + 5 min → erro). Sem
+ * 10.000 txs, created_at ilegível → erro; `desde` > agora + 5 min → erro). Sem
  * `desde`, lê até 10.000 txs e, passando disso, ANCORA_HISTORICO_EXCEDE_LIMITE.
  * Limitação: a idempotência vale dentro da vida do claim (âncora mais velha que
  * `desde − 1 h` não é vista; custo de uma âncora a mais, sem perda de prova).
@@ -141,10 +141,11 @@ export async function buscarAncora(
 export async function ancorarSha256(input: {
   sha256Hex: string;
   contexto: AncoraContexto;
-  /** Criação do claim (S3): limita a busca de âncora existente. Passar sempre em produção. */
-  desde?: Date;
+  /** Criação do claim (S3): limita a busca de âncora existente. OBRIGATÓRIO (decisão do Atlas). */
+  desde: Date;
 }): Promise<{ txHash: string; reutilizada: boolean; ledgerCloseTime: string }> {
   exigirHash(input.sha256Hex);
+  if (!(input.desde instanceof Date)) throw new Error('ancorarSha256: desde (criação do claim) é obrigatório');
   const existente = await buscarAncora(input.sha256Hex, { desde: input.desde });
   if (existente) return { ...existente, reutilizada: true };
 

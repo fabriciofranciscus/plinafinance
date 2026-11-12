@@ -32,6 +32,8 @@ import {
 const SHA = createHash('sha256').update('snapshot-2026-11-11.json').digest('hex');
 const B64 = Buffer.from(SHA, 'hex').toString('base64');
 const DIST = distKp.publicKey();
+/** Claim criado antes das txs simuladas (created_at 2026-11-11T15:00Z). */
+const DESDE_CLAIM = new Date('2026-11-11T14:00:00Z');
 
 const txRec = (hash: string, over: Record<string, unknown> = {}) => ({
   hash, successful: true, source_account: DIST, memo_type: 'hash', memo: B64, created_at: '2026-11-11T15:00:00Z', ...over,
@@ -77,7 +79,7 @@ describe('ancorarSha256', () => {
     });
     buscarTxPorHash.mockResolvedValue({ found: true, successful: true, ledgerCloseTime: 'T' });
 
-    const r = await ancorarSha256({ sha256Hex: SHA, contexto: 'SNAPSHOT_NAV' });
+    const r = await ancorarSha256({ sha256Hex: SHA, contexto: 'SNAPSHOT_NAV', desde: DESDE_CLAIM });
 
     const tx = new Transaction(enviado, networkPassphrase);
     const [op] = tx.operations as Array<{ type: string; destination: string; amount: string }>;
@@ -90,7 +92,7 @@ describe('ancorarSha256', () => {
 
   it('idempotente: hash já ancorado → reutiliza, não submete', async () => {
     paginas = [[txRec('outra', { memo_type: 'none', memo: undefined })], [txRec('ja-ancorada')]];
-    const r = await ancorarSha256({ sha256Hex: SHA, contexto: 'DOCUSIGN_PDF' });
+    const r = await ancorarSha256({ sha256Hex: SHA, contexto: 'DOCUSIGN_PDF', desde: DESDE_CLAIM });
     expect(r).toEqual({ txHash: 'ja-ancorada', reutilizada: true, ledgerCloseTime: '2026-11-11T15:00:00Z' });
     expect(submitEnvelope).not.toHaveBeenCalled();
   });
@@ -104,27 +106,27 @@ describe('ancorarSha256', () => {
     let n = 0;
     buscarTxPorHash.mockImplementation(async () => (++n >= 3 ? { found: true, successful: true, ledgerCloseTime: 'T' } : { found: false }));
 
-    const r = await ancorarSha256({ sha256Hex: SHA, contexto: 'SNAPSHOT_NAV' });
+    const r = await ancorarSha256({ sha256Hex: SHA, contexto: 'SNAPSHOT_NAV', desde: DESDE_CLAIM });
     expect(r.reutilizada).toBe(false);
     expect(new Set(enviados).size).toBe(1);
   });
 
   it('ambíguo e nunca entra → ANCORA_NAO_CONFIRMADA depois do prazo', async () => {
     submitEnvelope.mockResolvedValue({ status: 'AMBIGUOUS', hash: 'h', reason: 'rede' });
-    const err = await ancorarSha256({ sha256Hex: SHA, contexto: 'SNAPSHOT_NAV' }).catch((e: unknown) => e);
+    const err = await ancorarSha256({ sha256Hex: SHA, contexto: 'SNAPSHOT_NAV', desde: DESDE_CLAIM }).catch((e: unknown) => e);
     expect((err as AncoraError).code).toBe('ANCORA_NAO_CONFIRMADA');
   });
 
   it('definitivo → ANCORA_FALHOU na hora', async () => {
     submitEnvelope.mockResolvedValue({ status: 'FAILED', hash: 'h', resultCodes: { transaction: 'tx_insufficient_fee' } });
-    const err = await ancorarSha256({ sha256Hex: SHA, contexto: 'SNAPSHOT_NAV' }).catch((e: unknown) => e);
+    const err = await ancorarSha256({ sha256Hex: SHA, contexto: 'SNAPSHOT_NAV', desde: DESDE_CLAIM }).catch((e: unknown) => e);
     expect((err as AncoraError).code).toBe('ANCORA_FALHOU');
     expect(submitEnvelope).toHaveBeenCalledTimes(1);
   });
 
   it('hash inválido: recusa antes da rede', async () => {
     for (const h of ['ABC', SHA.toUpperCase(), SHA.slice(1), '']) {
-      const err = await ancorarSha256({ sha256Hex: h, contexto: 'SNAPSHOT_NAV' }).catch((e: unknown) => e);
+      const err = await ancorarSha256({ sha256Hex: h, contexto: 'SNAPSHOT_NAV', desde: DESDE_CLAIM }).catch((e: unknown) => e);
       expect((err as AncoraError).code).toBe('ANCORA_HASH_INVALIDO');
     }
     expect(horizon.transactions).not.toHaveBeenCalled();
@@ -185,7 +187,7 @@ describe('busca limitada por data (S3 do Argus)', () => {
   });
 
   it('com desde, histórico grande NÃO vira ANCORA_HISTORICO_EXCEDE_LIMITE', async () => {
-    paginas = [...Array.from({ length: 60 }, () => paginaSem('2026-11-11T18:00:00Z')), paginaSem('2026-11-11T13:00:00Z')];
+    paginas = [...Array.from({ length: 40 }, () => paginaSem('2026-11-11T18:00:00Z')), paginaSem('2026-11-11T13:00:00Z')];
     expect(await buscarAncora(SHA, { desde: DESDE })).toBeNull();
   });
 
@@ -224,11 +226,11 @@ describe('recomendações da Vera ao S3', () => {
     expect(paginasLidas).toBe(1);
   });
 
-  it('S3-a: com desde, teto generoso de 250 páginas → ANCORA_HISTORICO_EXCEDE_LIMITE', async () => {
-    paginas = Array.from({ length: 300 }, () => paginaSem('2026-11-11T18:00:00Z'));
+  it('S3-a: com desde, teto de 50 páginas → ANCORA_HISTORICO_EXCEDE_LIMITE', async () => {
+    paginas = Array.from({ length: 60 }, () => paginaSem('2026-11-11T18:00:00Z'));
     const err = await buscarAncora(SHA, { desde: DESDE }).catch((e: unknown) => e);
     expect((err as AncoraError).code).toBe('ANCORA_HISTORICO_EXCEDE_LIMITE');
-    expect(paginasLidas).toBe(251);
+    expect(paginasLidas).toBe(51);
   });
 
   it('S3-b: desde no futuro (> agora + 5 min) → erro antes de ler', async () => {
@@ -237,4 +239,13 @@ describe('recomendações da Vera ao S3', () => {
     await expect(buscarAncora(SHA, { desde: new Date(agora + 4 * 60_000) })).resolves.toBeNull();
   });
 
+});
+
+describe('desde obrigatório no ancorarSha256 (decisão do Atlas)', () => {
+  it('sem desde → erro antes de qualquer leitura ou envio', async () => {
+    const semDesde = { sha256Hex: SHA, contexto: 'SNAPSHOT_NAV' } as unknown as Parameters<typeof ancorarSha256>[0];
+    await expect(ancorarSha256(semDesde)).rejects.toThrow(/desde/);
+    expect(paginasLidas).toBe(0);
+    expect(submitEnvelope).not.toHaveBeenCalled();
+  });
 });
