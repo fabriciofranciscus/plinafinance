@@ -181,6 +181,8 @@ enum AcaoAudit {
   TESOURARIA_LEGADA_REGISTRADA
   // Webhook assinado do anchor atualizou o KYC (E2-2)
   KYC_ATUALIZADO_WEBHOOK
+  // TES-3 — queima do excesso de PLINARF da posição da Plina (resíduo de testes); evento do mesmo registro do memo
+  TESOURARIA_EXCESSO_QUEIMADA
 }
 
 // Funil vendedor
