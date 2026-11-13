@@ -42,6 +42,7 @@ import { STELLAR_NETWORK, assetCode } from '../stellar/config';
 import { assetCodeForClasse, classeFromAssetCode } from '../stellar/classes';
 import { decrementarHolding } from './holdings';
 import { buildAuditPayload, registerOnChainHash } from '../stellar/audit';
+import { RegistroIncorporacaoError, ancorarRegistroIncorporacao } from './registro-incorporacao';
 
 export interface IncorporarCotaInput {
   tipoBem: TipoBem;
@@ -80,7 +81,8 @@ export type IncorporacaoBloqueioCodigo =
   | 'POSICAO_PLINA_AUSENTE'
   | 'CUSTO_INVALIDO'
   | 'PIX_DIVERGE_DO_CUSTO'
-  | 'VALOR_DIVERGE_DA_TENTATIVA';
+  | 'VALOR_DIVERGE_DA_TENTATIVA'
+  | 'ANCORA_INCORPORACAO_FALHOU';
 
 const BLOQUEIO_MENSAGEM: Record<IncorporacaoBloqueioCodigo, string> = {
   LAUDO_AUSENTE: 'Emissão recusada: laudo de validação legal não registrado (hashValidacao).',
@@ -95,6 +97,8 @@ const BLOQUEIO_MENSAGEM: Record<IncorporacaoBloqueioCodigo, string> = {
   PIX_DIVERGE_DO_CUSTO: 'Emissão recusada: valor do Pix difere do custo de aquisição.',
   VALOR_DIVERGE_DA_TENTATIVA:
     'Emissão recusada: já existe uma emissão em andamento ou confirmada para esta incorporação com outro valor de aporte. Restaure o valor original; o operador decide.',
+  ANCORA_INCORPORACAO_FALHOU:
+    'Emissão recusada: o registro canônico da incorporação não foi ancorado. Nada foi emitido; tente de novo (alerta).',
 };
 
 export class IncorporacaoBloqueadaError extends Error {
@@ -173,7 +177,15 @@ interface EmissaoOnChain {
   quantidade: Prisma.Decimal;
   navAntes: Prisma.Decimal;
   recuperada: boolean;
+  /** E1-p: âncora do registro feita NESTA chamada (tx nova), antes do build. */
+  ancora?: AncoraDoRegistro;
+  /** E1-p: `desde` para reencontrar a âncora na recuperação (criação da tentativa). */
+  desdeAncora?: Date;
+  /** Emissão anterior à tabela de tentativas (achada só pelo memo): não há registro anterior a ela. */
+  legado?: boolean;
 }
+
+type AncoraDoRegistro = Awaited<ReturnType<typeof ancorarRegistroIncorporacao>>;
 
 /** Item do histórico de uma `TentativaEmissao` (JSON): a tentativa que foi substituída ou encerrada. */
 interface ItemHistoricoTentativa {
@@ -220,8 +232,10 @@ async function obterEmissaoOnChain(input: {
   code: string;
   posicaoPlina: string;
   valorAporte: Prisma.Decimal;
+  /** E1-p: ancora o registro canônico com os números da tx NOVA, ANTES do build. Lança → nada é emitido. */
+  ancorarAntes: (quantidade: Prisma.Decimal, nav: Prisma.Decimal) => Promise<AncoraDoRegistro>;
 }): Promise<EmissaoOnChain> {
-  const { memoHash, code, posicaoPlina, valorAporte } = input;
+  const { memoHash, code, posicaoPlina, valorAporte, ancorarAntes } = input;
   const chave = memoHash.toString('hex');
   const tentativa = await db.tentativaEmissao.findUnique({ where: { memoHash: chave } });
   // Tentativa encerrada nesta chamada (vira item do histórico quando sai tx com sequence nova).
@@ -269,6 +283,7 @@ async function obterEmissaoOnChain(input: {
       quantidade: new Prisma.Decimal(t.quantidade),
       navAntes: new Prisma.Decimal(t.navPorToken),
       recuperada: true,
+      desdeAncora: tentativa?.criadaEm,
     };
   };
 
@@ -438,6 +453,7 @@ async function obterEmissaoOnChain(input: {
         // O supply do ledger já inclui esta emissão: NAV "antes" reconstruído de V ÷ q.
         navAntes: valorAporte.div(quantidade).toDecimalPlaces(8, Prisma.Decimal.ROUND_HALF_EVEN),
         recuperada: true,
+        legado: true,
       };
     }
   }
@@ -446,6 +462,8 @@ async function obterEmissaoOnChain(input: {
   // aporte (supply zero → 1,00); lança se o ledger não responde ou se PLINARFB circula (D3).
   // Constrói, COMMITA a tentativa e só então envia.
   const preco = await calcularPrecoDeEmissao({ valorBrl: valorAporte });
+  // E1-p: o registro canônico (com ESTES números) é ancorado ANTES do build/submit. Falhou → nada emitido.
+  const ancora = await ancorarAntes(preco.plinarfAmount, preco.navPorTokenNaCotacao);
   const built = await buildIssueAssetTx(
     issuerSigner(),
     posicaoPlina,
@@ -480,7 +498,7 @@ async function obterEmissaoOnChain(input: {
   const r = await submitEnvelope(built.xdr);
   if (r.status === 'SUCCESS') {
     await db.tentativaEmissao.update({ where: { memoHash: chave }, data: { status: 'CONFIRMADA' } });
-    return { txHash: r.hash, quantidade: preco.plinarfAmount, navAntes: preco.navPorTokenNaCotacao, recuperada: false };
+    return { txHash: r.hash, quantidade: preco.plinarfAmount, navAntes: preco.navPorTokenNaCotacao, recuperada: false, ancora };
   }
   if (r.status === 'FAILED' && ehTxTooLate(r.resultCodes)) {
     throw emAndamento({ maxTime: dados.maxTime }); // não prova que não entrou: fica PENDENTE
@@ -528,6 +546,7 @@ function cotaIdDaIncorporacao(memoHash: Buffer): string {
 export async function incorporarCota(
   input: IncorporarCotaInput,
 ): Promise<IncorporarCotaResult> {
+  const inicio = new Date(); // E1-p: `desde` da âncora do registro numa tx nova
   const issuerSecret = process.env.STELLAR_ISSUER_SECRET;
   if (!issuerSecret) {
     throw new Error('STELLAR_ISSUER_SECRET obrigatório.');
@@ -588,12 +607,44 @@ export async function incorporarCota(
       // 4–5) Emissão on-chain idempotente, com reenvio do MESMO envelope no erro
       // ambíguo (contrato 2026-11-10-reemissao-erro-ambiguo). Qualquer falha ou
       // "em andamento" sai daqui ANTES de qualquer escrita de domínio.
-      const emissao = await obterEmissaoOnChain({ memoHash, code, posicaoPlina, valorAporte });
+      // E1-p: registro canônico da incorporação, ancorado pelo distributor ANTES da emissão.
+      const ancorarRegistro = async (quantidade: Prisma.Decimal, nav: Prisma.Decimal, desde: Date) => {
+        try {
+          return await ancorarRegistroIncorporacao({
+            cotaId,
+            cessaoId: input.cessaoId ?? null,
+            hashLaudo: pre.hashValidacao,
+            valorIncorporadoBrl: valorAporte,
+            tokensEmitir: quantidade,
+            navPorTokenUsado: nav,
+            issuer: issuerPublico(),
+            asset: code,
+            desde,
+          });
+        } catch (err) {
+          if (err instanceof RegistroIncorporacaoError) {
+            logStellarError('[incorporarCota] âncora do registro da incorporação falhou', err);
+            throw new IncorporacaoBloqueadaError('ANCORA_INCORPORACAO_FALHOU');
+          }
+          throw err;
+        }
+      };
+      const emissao = await obterEmissaoOnChain({
+        memoHash,
+        code,
+        posicaoPlina,
+        valorAporte,
+        ancorarAntes: (q, nav) => ancorarRegistro(q, nav, inicio),
+      });
       const txHash = emissao.txHash;
       const quantidade = emissao.quantidade;
       const navAntes = emissao.navAntes;
       const recuperada = emissao.recuperada;
       const quantityStr = quantidade.toFixed(7);
+      // Recuperação: a âncora foi feita antes da 1ª tentativa; reencontra pelo hash (mesmos números).
+      const ancora = emissao.legado
+        ? null
+        : emissao.ancora ?? (await ancorarRegistro(quantidade, navAntes, emissao.desdeAncora ?? inicio));
 
       // 6) DB depois da chain, na mesma transação.
       await tx.cota.create({
@@ -623,7 +674,10 @@ export async function incorporarCota(
           operador: input.operador,
           cotaId,
           stellarTxHash: txHash,
+          // E1-p: o hash do evento é o memo da âncora do registro canônico (bytesCanonicos(registroCanonico)).
+          ...(ancora ? { payloadHash: ancora.sha256Hex } : {}),
           payloadJson: {
+            ...(ancora ? { registroCanonico: { ...ancora.registro }, ancoraTxHash: ancora.ancoraTxHash } : {}),
             quantity: quantityStr,
             valorCarta: input.valorCarta,
             desagioAquisicao: input.desagioAquisicao,
@@ -672,9 +726,11 @@ export async function incorporarCota(
 
       return { cotaId, txHash, tokensEmitidos: quantidade.toNumber() };
     },
-    // O trabalho dentro da transação é limitado (leituras + no máx. um envio e um
-    // reenvio): NÃO há espera de 120 s aqui — o erro ambíguo sai como
-    // EMISSAO_EM_ANDAMENTO e o reenvio é de uma nova chamada. Timeout mantido (não aumentado).
+    // O trabalho dentro da transação é limitado (leituras + no máx. um envio e um reenvio da emissão; o erro
+    // ambíguo da emissão sai como EMISSAO_EM_ANDAMENTO). ATENÇÃO (E1-p, I-EP-3 da Vera): a âncora do registro
+    // (ancorarSha256) roda aqui dentro e, num erro ambíguo, pode esperar até ~130 s. Se o timeout estourar, a
+    // transação desfaz: antes da emissão, nada sai; depois dela, a TentativaEmissao (fora da transação) fica
+    // PENDENTE e a próxima chamada recupera pelo hash. Timeout mantido (não aumentado).
     { timeout: 120_000, maxWait: 15_000 },
   );
 }
@@ -825,4 +881,10 @@ export async function atualizarStatusCota(input: AtualizarStatusCotaInput) {
     where: { id: input.cotaId },
     data: { status: input.status },
   });
+}
+
+/** Chave pública do issuer (o registro amarra o emissor). Vazia → o registro recusa (fail-closed). */
+function issuerPublico(): string {
+  const s = issuerSigner() as { publicKey?: () => string };
+  return (typeof s.publicKey === 'function' ? s.publicKey() : '') || '';
 }
