@@ -6,7 +6,7 @@ import {
   resolveLocaleFromAcceptLanguage,
 } from './lib/i18n/cookie';
 
-// Só a landing (`/`) tem i18n por enquanto — ver matcher abaixo.
+// Só a landing (`/`) e a /privacidade (LV9) têm i18n por enquanto — ver matcher abaixo.
 export function proxy(request: NextRequest) {
   const cookieLocale = request.cookies.get(LOCALE_COOKIE)?.value;
   const locale = isValidLocale(cookieLocale)
@@ -27,5 +27,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/'],
+  matcher: ['/', '/privacidade'],
 };

@@ -157,7 +157,26 @@ export interface LandingV2 {
     copyright: string[];
     linkTestnet: string;
     aviso: string;
+    /** Rótulo do link para /privacidade. */
+    privacidade: string;
   };
+}
+
+/** Página /privacidade (LV9, versão base da Norma; substituída pela /lgpd completa no LD4a). */
+export interface Privacidade {
+  title: string;
+  metaDescription: string;
+  versao: string;
+  estagio: string;
+  quem: { titulo: string; texto: string };
+  medicao: { titulo: string; texto: string; base: string };
+  idioma: { titulo: string; texto: string };
+  contato: { titulo: string; texto: string };
+  app: { titulo: string; texto: string };
+  naoUsamos: string;
+  internacional: { titulo: string; texto: string };
+  direitos: { titulo: string; texto: string };
+  mudancas: string;
 }
 
 export interface Dictionary {
@@ -169,4 +188,5 @@ export interface Dictionary {
     keywords: string[];
   };
   landingV2: LandingV2;
+  privacidade: Privacidade;
 }

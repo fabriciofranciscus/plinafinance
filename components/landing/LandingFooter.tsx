@@ -30,6 +30,7 @@ export function LandingFooter({ dict, ledgerUrl }: { dict: LandingV2; ledgerUrl:
               <a href="#transparencia">{f.transparencia}</a>
               <a href="#contato">{dict.nav.falar}</a>
               <a href={`mailto:${dict.contato.email}`}>{dict.contato.email}</a>
+              <a href="/privacidade">{f.privacidade}</a>
             </div>
           </div>
         </div>
