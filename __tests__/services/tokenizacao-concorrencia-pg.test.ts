@@ -69,7 +69,16 @@ vi.mock('@/lib/stellar/issuer', () => ({
     return { status: 'EM_ABERTO', hash: t.hash, maxTime: 0 };
   }),
 }));
-vi.mock('@/lib/stellar/signer', () => ({ issuerSigner: () => ({}) }));
+vi.mock('@/lib/stellar/signer', () => ({ issuerSigner: () => ({ publicKey: () => 'GISSUERQA' }) }));
+// E1-p: a incorporação ancora o registro canônico antes de emitir; aqui a âncora é simulada (idempotente por hash)
+// e o registro é o real.
+vi.mock('@/lib/stellar/ancora', () => ({
+  ancorarSha256: vi.fn(async ({ sha256Hex }: { sha256Hex: string }) => ({
+    txHash: `ancora-${sha256Hex.slice(0, 16)}`,
+    reutilizada: false,
+    ledgerCloseTime: 'T',
+  })),
+}));
 vi.mock('@/lib/stellar/supply', () => ({ fetchSupplyDasClasses: st.fetchSupplyDasClasses }));
 vi.mock('@/lib/stellar/audit', () => ({ buildAuditPayload: vi.fn(), registerOnChainHash: vi.fn() }));
 vi.mock('@/lib/services/holdings', () => ({ decrementarHolding: vi.fn() }));

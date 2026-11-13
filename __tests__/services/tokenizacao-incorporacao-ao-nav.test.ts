@@ -40,7 +40,26 @@ const st = vi.hoisted(() => ({
   fetchSupplyDasClasses: vi.fn(),
   eventoFind: vi.fn(),
   tail: Promise.resolve() as Promise<unknown>,
+  /** E1-p: chamadas da âncora do registro (q, nav, desde) e falha forçada. */
+  ancoras: [] as Array<{ tokensEmitir: string; navPorTokenUsado: string; desde: Date }>,
+  ancoraFalha: null as Error | null,
 }));
+vi.mock('@/lib/services/registro-incorporacao', () => {
+  class RegistroIncorporacaoError extends Error { readonly code = 'ANCORA_INCORPORACAO_FALHOU'; }
+  return {
+    RegistroIncorporacaoError,
+    ancorarRegistroIncorporacao: vi.fn(async (e: { tokensEmitir: { toFixed: (n: number) => string }; navPorTokenUsado: { toFixed: (n: number) => string }; desde: Date; cotaId: string }) => {
+      st.calls.push('ancora');
+      if (st.ancoraFalha) throw new RegistroIncorporacaoError('forçada');
+      const q = e.tokensEmitir.toFixed(7);
+      const nav = e.navPorTokenUsado.toFixed(8);
+      st.ancoras.push({ tokensEmitir: q, navPorTokenUsado: nav, desde: e.desde });
+      const registro = { tipo: 'COTA_INCORPORADA', cotaId: e.cotaId, tokensEmitir: q, navPorTokenUsado: nav };
+      const sha256Hex = createHash('sha256').update(JSON.stringify(registro)).digest('hex');
+      return { registro, sha256Hex, ancoraTxHash: `ancora-${sha256Hex.slice(0, 8)}` };
+    }),
+  };
+});
 
 vi.mock('@/lib/stellar/config', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/stellar/config')>();
@@ -262,6 +281,7 @@ beforeEach(() => {
   st.cfg.network = 'TESTNET';
   st.cotas = new Map(); st.audits = []; st.movs = []; st.tentativas = new Map(); st.chain = new Map();
   st.built = []; st.submits = []; st.submitScript = []; st.substitui = []; st.buildErro = null; st.consumo = null; st.consumoArgs = []; st.consumoHashes = []; st.calls = [];
+  st.ancoras = []; st.ancoraFalha = null;
   st.failAuditOnce = false; st.hashScript = []; st.failBuscarHash = null; st.failBuscarMemo = null; st.expiry = null; st.tail = Promise.resolve();
   resetNavSupplyCache();
   evidencias();
@@ -978,3 +998,55 @@ describe('incorporarCota — FAILED de envelope salvo é ambíguo (parecer do Ar
   });
 });
 
+
+describe('E1-p — registro da incorporação ancorado ANTES da emissão', () => {
+  it('tx nova: âncora antes do build e do submit, com os números exatos da emissão; evento leva payloadHash = memo e o registro', async () => {
+    const r = await incorporarCota(base);
+    expect(st.calls.indexOf('ancora')).toBeGreaterThanOrEqual(0);
+    expect(st.calls.indexOf('ancora')).toBeLessThan(st.calls.indexOf('build'));
+    expect(st.calls.indexOf('ancora')).toBeLessThan(st.calls.indexOf('submit'));
+    expect(st.calls.filter((c) => c === 'ancora')).toHaveLength(1); // sem 2ª busca logo depois de ancorar
+    expect(st.ancoras[0]).toMatchObject({ tokensEmitir: '400.0000000', navPorTokenUsado: '1.00000000' });
+    expect(st.built[0].amount).toBe(st.ancoras[0].tokensEmitir);
+    const ev = st.audits.find((a) => a.acao === 'COTA_INCORPORADA')!;
+    expect(ev.payloadHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(ev.payloadJson.registroCanonico).toMatchObject({ tipo: 'COTA_INCORPORADA', cotaId: r.cotaId, tokensEmitir: '400.0000000' });
+    expect(ev.payloadJson.ancoraTxHash).toBe(`ancora-${ev.payloadHash.slice(0, 8)}`);
+    expect(ev.stellarTxHash).toBe(r.txHash); // a tx do evento continua sendo a de emissão
+  });
+
+  it('âncora falha → ANCORA_INCORPORACAO_FALHOU: nada construído, nada enviado, nada gravado', async () => {
+    st.ancoraFalha = new Error('x');
+    const err = await incorporarCota(base).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(IncorporacaoBloqueadaError);
+    expect((err as IncorporacaoBloqueadaError).code).toBe('ANCORA_INCORPORACAO_FALHOU');
+    expect(st.built).toHaveLength(0);
+    expect(st.submits).toHaveLength(0);
+    expect(st.tentativas.size).toBe(0);
+    expect(st.cotas.size).toBe(0);
+    expect(st.audits).toHaveLength(0);
+  });
+
+  it('recuperação (emissão ambígua que entra): a âncora é reencontrada com os números da tentativa e desde = criação da tentativa', async () => {
+    st.submitScript = ['AMBIGUOUS_LANDS'];
+    await expect(incorporarCota(base)).rejects.toBeInstanceOf(IncorporacaoEmissaoError);
+    const t = [...st.tentativas.values()][0];
+    t.criadaEm = new Date(T0 - 60_000);
+    st.ancoras = []; st.calls = [];
+    await incorporarCota(base);
+    expect(st.calls).not.toContain('build'); // não remonta emissão
+    expect(st.ancoras).toHaveLength(1);
+    expect(st.ancoras[0]).toMatchObject({ tokensEmitir: '400.0000000', navPorTokenUsado: '1.00000000' });
+    expect(st.ancoras[0].desde.getTime()).toBe(T0 - 60_000);
+    expect(st.audits.find((a) => a.acao === 'COTA_INCORPORADA')!.payloadJson.registroCanonico).toBeDefined();
+  });
+
+  it('emissão antiga achada só pelo memo (legado): sem registro, sem âncora depois da emissão', async () => {
+    st.chain.set('hashLegado', { successful: true, amount: '400.0000000', memoHex: memoDe('ces_1') });
+    await incorporarCota(base);
+    expect(st.calls).not.toContain('ancora');
+    const ev = st.audits.find((a) => a.acao === 'COTA_INCORPORADA')!;
+    expect(ev.payloadJson.registroCanonico).toBeUndefined();
+    expect(ev.payloadJson.recuperadaPorMemo).toBe(true);
+  });
+});

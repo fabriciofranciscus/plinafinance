@@ -19,6 +19,7 @@
     "smoke:docusign": "tsx scripts/smoke-docusign.ts",
     "snapshot:verificar": "tsx scripts/snapshot-verificar.ts",
     "evidencia:plina-rf": "tsx scripts/gerar-evidencia-plina-rf.ts",
+    "evidencia:cota": "tsx scripts/evidencia-cota.ts",
     "test:e2e": "playwright test",
     "test:e2e:stub": "E2E_STUB=1 playwright test --project=e2e-stub",
     "prisma:seed": "DOTENV_CONFIG_PATH=.env.local node --require dotenv/config node_modules/tsx/dist/cli.mjs prisma/seed.ts",
