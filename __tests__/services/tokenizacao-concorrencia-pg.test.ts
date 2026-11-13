@@ -69,7 +69,16 @@ vi.mock('@/lib/stellar/issuer', () => ({
     return { status: 'EM_ABERTO', hash: t.hash, maxTime: 0 };
   }),
 }));
-vi.mock('@/lib/stellar/signer', () => ({ issuerSigner: () => ({}) }));
+vi.mock('@/lib/stellar/signer', () => ({ issuerSigner: () => ({ publicKey: () => 'GISSUERQA' }) }));
+// E1-p: a incorporação ancora o registro canônico antes de emitir; aqui a âncora é simulada (idempotente por hash)
+// e o registro é o real.
+vi.mock('@/lib/stellar/ancora', () => ({
+  ancorarSha256: vi.fn(async ({ sha256Hex }: { sha256Hex: string }) => ({
+    txHash: `ancora-${sha256Hex.slice(0, 16)}`,
+    reutilizada: false,
+    ledgerCloseTime: 'T',
+  })),
+}));
 vi.mock('@/lib/stellar/supply', () => ({ fetchSupplyDasClasses: st.fetchSupplyDasClasses }));
 vi.mock('@/lib/stellar/audit', () => ({ buildAuditPayload: vi.fn(), registerOnChainHash: vi.fn() }));
 vi.mock('@/lib/services/holdings', () => ({ decrementarHolding: vi.fn() }));
@@ -96,6 +105,10 @@ describe.skipIf(!PG)('TentativaEmissao — concorrência real no Postgres', () =
     process.env.STELLAR_PLINA_POSITION_PUBLIC = Keypair.random().publicKey();
   });
   afterAll(async () => {
+    // Não deixa Cota/movimentos no banco: mudariam o NAV de outros arquivos PG que rodem depois (Vera F4).
+    await db.$executeRawUnsafe(
+      'TRUNCATE "TentativaEmissao", "MovimentoFundo", "EventoAudit", "Cota" RESTART IDENTITY CASCADE',
+    );
     await db.$disconnect();
   });
   beforeEach(async () => {

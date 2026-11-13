@@ -144,10 +144,15 @@ describe.skipIf(!PG)('Varredor de reservas órfãs de subscrição — Postgres 
     await db.$executeRawUnsafe('TRUNCATE "OnRampOrder", "Quote", "MovimentoFundo", "EventoAudit", "HoldingPLINARF", "Investidor" RESTART IDENTITY CASCADE');
   });
   afterAll(async () => {
+    delete process.env.PRECO_TESOURO_REF_BRL;
+    delete process.env.PRECO_TESOURO_REF_DATA;
     await db.$disconnect();
   });
   beforeEach(async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    // F7 (850dae9): referência de preço do TESOURO válida, senão o cron responde alerta:true por referência ausente.
+    process.env.PRECO_TESOURO_REF_BRL = '5';
+    process.env.PRECO_TESOURO_REF_DATA = new Date().toISOString();
     chain.txs = new Map();
     chain.contaTxs = [];
     chain.ultimoLedger = { sequence: 1000, closed_at: new Date().toISOString() };
@@ -406,6 +411,20 @@ describe.skipIf(!PG)('Varredor de reservas órfãs de subscrição — Postgres 
     const r = await varrer();
     expect(r.vencidasSemProva).toBe(1);
     expect((await estado(id))?.submitXdrHash).not.toBeNull();
+  });
+
+  it('cron (c37c30a): swap órfão SEM prova (INDETERMINADO) marca alerta:true (o job falha) e a reserva segue para o operador; sem órfã sem prova volta a alerta:false', async () => {
+    const id = await semearReserva({ maxTimeAtrasoMin: 60 });
+    chain.sequenciaConta = '150'; // a conta passou de S e a consumidora não aparece
+    chain.contaTxs = [];
+    const r = await chamarRota({ authorization: `Bearer ${SECRET}` });
+    const j = JSON.parse(await r.text());
+    expect(r.status).toBe(200);
+    expect(j).toMatchObject({ vencidasSemProva: 1, alerta: true });
+    expect(st.alerta).not.toHaveBeenCalled(); // não é conflito de vigia: sem e-mail, o job é que falha
+    expect((await estado(id))?.submitXdrHash).not.toBeNull();
+    await db.quote.update({ where: { id }, data: { submitXdrHash: null, submitTxHash: null, submitMaxTime: null, submitXdr: null } });
+    expect(JSON.parse(await (await chamarRota({ authorization: `Bearer ${SECRET}` })).text())).toMatchObject({ vencidasSemProva: 0, alerta: false });
   });
 
   it('reserva sem hash nem XDR (anterior às colunas): semHash, nada é tocado', async () => {

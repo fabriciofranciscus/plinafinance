@@ -5,6 +5,7 @@ import { Account, Asset, Memo, Keypair, Operation, Transaction, TransactionBuild
 import { NavMudouError } from '@/lib/services/emissao';
 import { NavIndisponivelError } from '@/lib/services/nav-supply';
 import { networkPassphrase } from '@/lib/stellar/config';
+import { TrustlineNaoAutorizadaError } from '@/lib/stellar/trustline';
 
 const USER = Keypair.random();
 const USER_PK = USER.publicKey();
@@ -28,6 +29,7 @@ const {
   resolveTesouroAsset,
   preSignWithSigner,
   revalidarNav,
+  exigirTrustline,
 } = vi.hoisted(() => ({
   quoteFindUnique: vi.fn(),
   quoteUpdateMany: vi.fn(),
@@ -44,6 +46,7 @@ const {
   resolveTesouroAsset: vi.fn(),
   preSignWithSigner: vi.fn(),
   revalidarNav: vi.fn(),
+  exigirTrustline: vi.fn(),
 }));
 
 vi.mock('@/lib/wallet/auth-guard', () => ({
@@ -68,6 +71,7 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
 vi.mock('@/lib/db', () => ({
   db: {
     quote: { findUnique: quoteFindUnique, updateMany: quoteUpdateMany, findFirst: quoteFindFirst },
+    resgateCotacao: { findFirst: async () => null },
     $transaction: async (
       cb: (tx: {
         quote: { updateMany: typeof quoteUpdateMany };
@@ -95,6 +99,10 @@ vi.mock('@/lib/stellar/transactions', () => ({
   submitWithPrivySignature,
   txHashFromXdr,
   fetchTransactionByHash,
+}));
+vi.mock('@/lib/stellar/trustline', async (orig) => ({
+  ...(await orig<typeof import('@/lib/stellar/trustline')>()),
+  exigirEmissoesParaTrustlineAutorizada: exigirTrustline,
 }));
 vi.mock('@/lib/stellar/signer', () => ({ issuerSigner: () => ({ id: 'issuer' }) }));
 vi.mock('@/lib/stellar/fee', () => ({ getDynamicFee: vi.fn().mockResolvedValue('100') }));
@@ -174,6 +182,7 @@ beforeEach(() => {
   txHashFromXdr.mockReset().mockReturnValue('tx_real_hash');
   preSignWithSigner.mockReset().mockReturnValue({ pubkey: ISSUER.publicKey(), sigBase64: ISSUER_SIG });
   revalidarNav.mockReset().mockResolvedValue(undefined);
+  exigirTrustline.mockReset().mockResolvedValue(undefined);
   fetchTransactionByHash.mockReset().mockResolvedValue(null);
   assertElegivelParaTrustline.mockReset().mockResolvedValue(undefined);
   assertSwapXdrMatchesQuote.mockReset();
@@ -550,6 +559,81 @@ describe('POST /api/investidor/buy/swap/submit', () => {
       expect(r.status).toBe(409);
       expect(submitWithPrivySignature).not.toHaveBeenCalled();
       expect(quoteUpdateMany.mock.calls[1][0].data).toEqual({ submitXdrHash: null, submitTxHash: null, submitMaxTime: null, submitXdr: null, livreExpiradaVistaEm: null });
+    });
+  });
+
+  describe('N1-at: trustline revogada entre o build e o submit (Vera F-N1AT-1)', () => {
+    const LIBERA = { submitXdrHash: null, submitTxHash: null, submitMaxTime: null, submitXdr: null, livreExpiradaVistaEm: null };
+    const agoraSec = () => Math.floor(Date.now() / 1000);
+    const txComPrazo = (maxTimeSec: number) => {
+      const tx = new TransactionBuilder(new Account(USER_PK, '1'), { fee: '100', networkPassphrase })
+        .addOperation(Operation.payment({ source: USER_PK, destination: DIST_PK, asset: Asset.native(), amount: '1' }))
+        .setTimebounds(0, maxTimeSec)
+        .build();
+      tx.sign(USER);
+      return { xdr: tx.toXDR(), hash: createHash('sha256').update(tx.hash()).digest('hex') };
+    };
+    const liberou = () => quoteUpdateMany.mock.calls.some((c) => JSON.stringify(c[0].data) === JSON.stringify(LIBERA));
+
+    it.each(['TRUSTLINE_NAO_AUTORIZADA', 'TRUSTLINE_AUSENTE'] as const)(
+      '1º envio, guarda recusa (%s): 409 com o código, NADA vai à rede e a reserva é LIBERADA (o NAV não fecha)',
+      async (code) => {
+        quoteFindUnique.mockResolvedValueOnce(baseQuote());
+        exigirTrustline.mockRejectedValue(new TrustlineNaoAutorizadaError(code, USER_PK, `PLINARF:${ISSUER.publicKey()}`));
+        const r = await POST(req(FULL_BODY));
+        expect(r.status).toBe(409);
+        expect(await r.json()).toMatchObject({ code });
+        expect(submitWithPrivySignature).not.toHaveBeenCalled();
+        expect(liberou()).toBe(true);
+        expect(eventoAuditCreate).not.toHaveBeenCalled();
+      },
+    );
+
+    it('1º envio, a leitura da conta (Horizon) falha: nada foi enviado → libera a reserva e o erro propaga como antes (500)', async () => {
+      quoteFindUnique.mockResolvedValueOnce(baseQuote());
+      exigirTrustline.mockRejectedValue(new Error('horizon fora'));
+      const r = await POST(req(FULL_BODY));
+      expect(r.status).toBe(500);
+      expect(submitWithPrivySignature).not.toHaveBeenCalled();
+      expect(liberou()).toBe(true);
+    });
+
+    it('a guarda DENTRO do submitWithPrivySignature recusa (revogada entre a checagem e o envio): 409 e libera', async () => {
+      quoteFindUnique.mockResolvedValueOnce(baseQuote());
+      submitWithPrivySignature.mockRejectedValue(new TrustlineNaoAutorizadaError('TRUSTLINE_NAO_AUTORIZADA', USER_PK, 'x'));
+      const r = await POST(req(FULL_BODY));
+      expect(r.status).toBe(409);
+      expect((await r.json()).code).toBe('TRUSTLINE_NAO_AUTORIZADA');
+      expect(liberou()).toBe(true);
+    });
+
+    it('erro do envio à rede (não da guarda): NÃO libera (a tx pode ter entrado) — comportamento anterior', async () => {
+      quoteFindUnique.mockResolvedValueOnce(baseQuote());
+      submitWithPrivySignature.mockRejectedValue(new Error('timeout'));
+      const r = await POST(req(FULL_BODY));
+      expect(r.status).toBe(500);
+      expect(liberou()).toBe(false);
+    });
+
+    it('REENVIO de órfã com a guarda recusando: 409, mas a reserva FICA (a tx pode já ter entrado; o varredor decide)', async () => {
+      const { xdr, hash } = txComPrazo(agoraSec() + 100);
+      quoteFindUnique
+        .mockResolvedValueOnce(baseQuote({ submitXdrHash: hash }))
+        .mockResolvedValueOnce({ submitXdrHash: hash, consumedTxHash: null, consumedAt: null });
+      quoteUpdateMany.mockResolvedValueOnce({ count: 0 });
+      fetchTransactionByHash.mockResolvedValueOnce(null); // a tx NÃO está na chain (404)
+      exigirTrustline.mockRejectedValue(new TrustlineNaoAutorizadaError('TRUSTLINE_NAO_AUTORIZADA', USER_PK, 'x'));
+      const r = await POST(req({ quoteId: 'q_1', signedXdr: xdr }));
+      expect(r.status).toBe(409);
+      expect(submitWithPrivySignature).not.toHaveBeenCalled();
+      expect(liberou()).toBe(false);
+    });
+
+    it('com a trustline autorizada nada muda: confere a guarda ANTES do envio e envia', async () => {
+      quoteFindUnique.mockResolvedValueOnce(baseQuote());
+      const r = await POST(req(FULL_BODY));
+      expect(r.status).toBe(200);
+      expect(exigirTrustline.mock.invocationCallOrder[0]).toBeLessThan(submitWithPrivySignature.mock.invocationCallOrder[0]);
     });
   });
 

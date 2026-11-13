@@ -395,15 +395,24 @@ export async function cancelarReserva(
   const onChain = await registerOnChainHash(payload);
 
   await db.$transaction(async (tx) => {
-    await tx.reserva.update({
-      where: { id: reservaId },
+    // F-REAL-1: escrita condicional ao estado lido. Se `executarCaminhoA` venceu no meio (reserva CONFIRMADA), `count`
+    // é 0 e a transação inteira é desfeita: a cota vendida NÃO volta ao estoque e não sobra audit de um cancelamento que
+    // não prevaleceu. O memo on-chain deste perdedor já saiu e fica órfão (documentado, sem token nem dinheiro).
+    const cancelada = await tx.reserva.updateMany({
+      where: { id: reservaId, status: ReservaStatus.ATIVA },
       data: { status: ReservaStatus.CANCELADA },
     });
+    if (cancelada.count !== 1) {
+      throw new Error('Reserva não está mais ativa — alterada concorrentemente');
+    }
     if (reserva.cota.status === StatusCota.RESERVADA) {
-      await tx.cota.update({
-        where: { id: reserva.cotaId },
+      const liberada = await tx.cota.updateMany({
+        where: { id: reserva.cotaId, status: StatusCota.RESERVADA },
         data: { status: StatusCota.DISPONIVEL },
       });
+      if (liberada.count !== 1) {
+        throw new Error('Cota não está mais reservada — alterada concorrentemente');
+      }
     }
     await tx.eventoAudit.create({
       data: {
@@ -495,6 +504,24 @@ export async function executarCaminhoA(
   const onChain = await registerOnChainHash(payload);
 
   const realizacao = await db.$transaction(async (tx) => {
+    // F-REAL-1: a escrita é CONDICIONAL ao estado lido (leitura → memo on-chain → escrita pode ter um
+    // `cancelarReserva` no meio). Os dois flips vêm PRIMEIRO e valem só se o estado ainda é o lido; se outra ação
+    // venceu, `count !== 1` desfaz a transação inteira (nenhuma realização, nenhum caixa, nenhum audit). O memo
+    // on-chain deste perdedor já saiu e fica órfão (sem token nem dinheiro movido), como no flip de `criarReserva`.
+    const reservaConfirmada = await tx.reserva.updateMany({
+      where: { id: reserva.id, status: ReservaStatus.ATIVA },
+      data: { status: ReservaStatus.CONFIRMADA },
+    });
+    if (reservaConfirmada.count !== 1) {
+      throw new Error('Reserva não está mais ativa — alterada concorrentemente');
+    }
+    const cotaRealizada = await tx.cota.updateMany({
+      where: { id: reserva.cotaId, status: StatusCota.RESERVADA },
+      data: { status: StatusCota.REALIZADA },
+    });
+    if (cotaRealizada.count !== 1) {
+      throw new Error('Cota não está mais reservada — alterada concorrentemente');
+    }
     const created = await tx.realizacaoCaminho.create({
       data: {
         cotaId: reserva.cotaId,
@@ -514,14 +541,6 @@ export async function executarCaminhoA(
       chave: `realizacao:${created.id}`,
       cotaId: reserva.cotaId,
       refHash: onChain.txHash,
-    });
-    await tx.cota.update({
-      where: { id: reserva.cotaId },
-      data: { status: StatusCota.REALIZADA },
-    });
-    await tx.reserva.update({
-      where: { id: reserva.id },
-      data: { status: ReservaStatus.CONFIRMADA },
     });
     await tx.leadComprador.update({
       where: { id: reserva.leadCompradorId },
@@ -552,6 +571,12 @@ export async function executarCaminhoA(
       },
     });
     return created;
+  }).catch((err: unknown) => {
+    // `RealizacaoCaminho.cotaId` é @unique: outra realização da mesma cota que commitou antes vira o mesmo erro de corrida.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw new Error('Cota já realizada — reservada concorrentemente');
+    }
+    throw err;
   });
 
   return {

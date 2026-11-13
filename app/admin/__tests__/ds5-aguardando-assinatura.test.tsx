@@ -46,9 +46,10 @@ describe('DS5 — /admin', () => {
     expect(html).not.toContain('Executar Pix simulado');
   });
 
-  it('ASSINADA: o Pix volta a poder ser executado e não há aviso', () => {
+  it('ASSINADA: segue para a confirmação do titular (sem Pix avulso) e não há aviso', () => {
     const html = renderToStaticMarkup(<VendedorPipeline leads={[lead('ASSINADA')]} />);
-    expect(html).toContain('Executar Pix simulado');
+    expect(html).toContain('Confirmar titular do laudo');
+    expect(html).not.toContain('Executar Pix simulado');
     expect(html).not.toContain('cessao-aguardando-assinatura');
     expect(html).not.toContain('Aguardando assinatura');
   });

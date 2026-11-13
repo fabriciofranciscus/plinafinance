@@ -29,7 +29,7 @@ vi.mock('@/lib/db', () => {
     movimentoFundo: { createMany: vi.fn(async () => ({ count: 1 })) },
     holdingPLINARF: { upsert: vi.fn() },
   };
-  return { db: { quote: { findUnique: m.quoteFindUnique, updateMany: m.quoteUpdateMany, findFirst: async () => null }, $transaction: async (cb: (t: typeof tx) => unknown) => cb(tx) } };
+  return { db: { resgateCotacao: { findFirst: async () => null }, quote: { findUnique: m.quoteFindUnique, updateMany: m.quoteUpdateMany, findFirst: async () => null }, $transaction: async (cb: (t: typeof tx) => unknown) => cb(tx) } };
 });
 vi.mock('@/lib/stellar/account', () => ({
   horizon: { loadAccount: m.loadAccount },
@@ -76,7 +76,12 @@ const req = (body: object) =>
   new Request('http://x/submit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
 async function build() {
-  m.loadAccount.mockResolvedValue(new Account(USER.publicKey(), '10'));
+  m.loadAccount.mockResolvedValue(
+    // N1-at: investidor com trustline PLINARF autorizada.
+    Object.assign(new Account(USER.publicKey(), '10'), {
+      balances: [{ asset_type: 'credit_alphanum12', asset_code: 'PLINARF', asset_issuer: ISSUER.publicKey(), balance: '0', is_authorized: true }],
+    }),
+  );
   return buildSwapBridgeForPlinarfXdr({
     investorPubkey: USER.publicKey(),
     bridgeAsset: new Asset(BRIDGE.code, BRIDGE.issuer),
