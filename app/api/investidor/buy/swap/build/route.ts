@@ -26,6 +26,7 @@ import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { buildSwapBridgeForPlinarfXdr } from '@/lib/stellar/transactions';
+import { TrustlineNaoAutorizadaError } from '@/lib/stellar/trustline';
 import { issueAsset, createTrustline } from '@/lib/stellar/issuer';
 import { distributorSigner, issuerSigner } from '@/lib/stellar/signer';
 import { renovarCotacaoParaSwap } from '@/lib/services/cotacao-swap';
@@ -279,16 +280,24 @@ export const POST = withApi(async (req, { requestId }) => {
 
   // Perna TESOURO = quote.toAmount; perna PLINARF = quote.plinarfAmount
   // (quantidadeEmitida ao NAV da cotação). Valores distintos.
-  const { xdr, hashHex } = await buildSwapBridgeForPlinarfXdr({
-    investorPubkey,
-    bridgeAsset,
-    bridgeAmount,
-    plinarfAmount: stellarAmount,
-    issuerPubkey,
-    distributorPubkey,
-    plinarfCode,
-    memo: `q:${cotacao.id.slice(0, 24)}`,
-  });
+  let built;
+  try {
+    built = await buildSwapBridgeForPlinarfXdr({
+      investorPubkey,
+      bridgeAsset,
+      bridgeAmount,
+      plinarfAmount: stellarAmount,
+      issuerPubkey,
+      distributorPubkey,
+      plinarfCode,
+      memo: `q:${cotacao.id.slice(0, 24)}`,
+    });
+  } catch (err) {
+    // N1-at (Vera F-N1AT-2): trustline ausente/não autorizada é recusa de negócio (409 com código), não 500 opaco.
+    if (err instanceof TrustlineNaoAutorizadaError) throw new ApiError(err.code, 409, err.message);
+    throw err;
+  }
+  const { xdr, hashHex } = built;
 
   // N1 + L1-S1/S3: o build NÃO assina nada pela Plina nem devolve chave pública.
   // O investidor assina o envelope e o /swap/submit valida o XDR contra as
