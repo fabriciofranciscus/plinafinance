@@ -185,6 +185,8 @@ enum AcaoAudit {
   CESSAO_ENVIADA_DOCUSIGN
   // Envelope recusado/anulado no DocuSign (DS3)
   CESSAO_RECUSADA_DOCUSIGN
+  // TES-3 — queima do excesso de PLINARF da posição da Plina (resíduo de testes); evento do mesmo registro do memo
+  TESOURARIA_EXCESSO_QUEIMADA
 }
 
 // Funil vendedor
