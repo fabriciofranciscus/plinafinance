@@ -74,6 +74,14 @@ const entrada = z.strictObject({
   tipoChave: z.enum(['CPF', 'CNPJ', 'EMAIL', 'PHONE', 'EVP']),
 });
 
+/**
+ * Lock de transação (advisory) POR CESSÃO para toda mudança de estado do Pix que precise ser serializada: a reabertura e o
+ * fechamento do pagamento usam a mesma chave, então não correm entre si nem consigo mesmos.
+ */
+export async function bloquearPixDaCessao(tx: Pick<Prisma.TransactionClient, '$executeRaw'>, cessaoId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`plina:pix-cessao:${cessaoId}`}))`;
+}
+
 const chaveDaCessao = (cessaoId: string, tentativa = 1) =>
   tentativa === 1 ? `pix-cedente:${cessaoId}` : `pix-cedente:${cessaoId}:${tentativa}`;
 
@@ -374,34 +382,40 @@ export async function reabrirTransferencia(
   if (row.provedor !== provider.nome) throw new LiquidacaoCedenteError('PROVEDOR_DIVERGE');
   if (row.status !== 'FALHOU') throw new LiquidacaoCedenteError('NAO_REABRIVEL', row.status);
 
-  const nova = row.tentativa + 1;
-  const entrada: TentativaAnterior = {
-    tentativa: row.tentativa,
-    idempotencyKey: row.idempotencyKey,
-    providerId: row.providerId,
-    motivoFalha: row.motivoFalha,
-    reabertaEm: agora.toISOString(),
-    operador,
-  };
-  // Valores da tentativa substituída, capturados ANTES da transação (a auditoria descreve o que foi substituído).
-  const substituida: TentativaSubstituida = {
-    provedor: row.provedor,
-    tentativaAnterior: row.tentativa,
-    tentativaNova: nova,
-    idempotencyKeyAnterior: row.idempotencyKey,
-    motivoAnterior: row.motivoFalha,
-    providerIdAnterior: row.providerId,
-  };
-  // Atômico: só reabre se continua FALHOU na MESMA tentativa (duas reaberturas simultâneas = uma só); a auditoria
-  // (aoReabrir) roda na MESMA transação e só se a reabertura se aplicou.
+  // Tudo dentro de UMA transação sob o lock da cessão (F-REAB-1, Consuelo): trava, RELÊ a linha e só reabre se continua
+  // FALHOU na MESMA tentativa que o operador viu (duas reaberturas simultâneas = uma só). Os dados da tentativa
+  // substituída e o histórico saem da linha relida (já sob o lock), a auditoria (aoReabrir) roda na MESMA transação e só
+  // se a reabertura se aplicou. O envio ao PSP vem depois.
   await db.$transaction(async (tx) => {
+    await bloquearPixDaCessao(tx, row.cessaoId);
+    const atual = await tx.transferenciaPix.findUnique({ where: { cessaoId: row.cessaoId } });
+    if (!atual) throw new LiquidacaoCedenteError('TRANSFERENCIA_NAO_ENCONTRADA');
+    if (atual.status !== 'FALHOU') throw new LiquidacaoCedenteError('NAO_REABRIVEL', atual.status);
+    if (atual.tentativa !== row.tentativa) throw new LiquidacaoCedenteError('EM_ANDAMENTO'); // outra reabertura passou na frente
+    const nova = atual.tentativa + 1;
+    const substituida: TentativaSubstituida = {
+      provedor: atual.provedor,
+      tentativaAnterior: atual.tentativa,
+      tentativaNova: nova,
+      idempotencyKeyAnterior: atual.idempotencyKey,
+      motivoAnterior: atual.motivoFalha,
+      providerIdAnterior: atual.providerId,
+    };
+    const entrada: TentativaAnterior = {
+      tentativa: atual.tentativa,
+      idempotencyKey: atual.idempotencyKey,
+      providerId: atual.providerId,
+      motivoFalha: atual.motivoFalha,
+      reabertaEm: agora.toISOString(),
+      operador,
+    };
     const r = await tx.transferenciaPix.updateMany({
-      where: { id: row.id, status: 'FALHOU', tentativa: row.tentativa },
+      where: { id: atual.id, status: 'FALHOU', tentativa: atual.tentativa },
       data: {
         status: 'ENVIANDO',
         tentativa: nova,
-        idempotencyKey: chaveDaCessao(row.cessaoId, nova),
-        historico: [...anteriores(row), entrada] as unknown as Prisma.InputJsonValue,
+        idempotencyKey: chaveDaCessao(atual.cessaoId, nova),
+        historico: [...anteriores(atual), entrada] as unknown as Prisma.InputJsonValue,
         providerId: null,
         e2eId: null,
         motivoFalha: null,

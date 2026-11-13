@@ -13,9 +13,10 @@ import { validarChavePix, type PixProvider } from '../integrations/psp/types';
 import { STELLAR_NETWORK } from '../stellar/config';
 import { mascararDestino } from '../integrations/psp/comprovante';
 import { enviarAlertaOps } from './alerta-ops';
-import { TitularLaudoError, exigirTitularDoLaudo } from './titular-laudo';
+import { TitularLaudoError, exigirTitularDoLaudo, hashDoLaudo } from './titular-laudo';
 import {
   LiquidacaoCedenteError,
+  bloquearPixDaCessao,
   pagarTitular,
   reabrirTransferencia,
   type ResultadoPagamento,
@@ -112,6 +113,11 @@ async function contextoDoPagamento(cessaoId: string, provider?: PixProvider): Pr
   if (!cessao) throw new PagamentoCedenteError('CESSAO_NAO_ENCONTRADA');
   if (cessao.status !== 'ASSINADA') throw new PagamentoCedenteError('CESSAO_NAO_ASSINADA');
   if (cessao.pagamento?.status === 'EXECUTADO') throw new PagamentoCedenteError('PAGAMENTO_JA_EXECUTADO');
+
+  // Laudo de validação registrado (F-LAU-2): sem EventoAudit COTA_VALIDADA da cessão não se paga nem se reabre, mesmo com o
+  // titular atestado: o atestado não substitui a validação legal (contemplação, adimplência, ônus). Vale para pagar e para
+  // reabrir (contexto compartilhado) e vem antes de qualquer envio ao PSP. O evento é append-only: não some depois.
+  if (!(await hashDoLaudo(db, cessao.id))) throw new TitularLaudoError('LAUDO_AUSENTE');
 
   // Titular: o CPF da PESSOA ligada ao lead, que passou pelo KYC (fonte certa, apontada pelo Argus: `LeadVendedor.cpf`
   // é autodeclarado e nem sempre existe). O sistema MONTA a chave CPF a partir dele; ninguém digita destino. Recusa sem
@@ -266,7 +272,7 @@ export async function fecharPagamento(
 
   return db.$transaction(async (tx) => {
     // Serializa por cessão (F-FIA-2): admin e varredor fechando ao mesmo tempo gravam UM Pagamento e UM EventoAudit.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`plina:pix-fechar:${cessaoId}`}))`;
+    await bloquearPixDaCessao(tx, cessaoId);
     const atual = await tx.pagamento.findUnique({ where: { cessaoId }, select: { id: true, status: true } });
     if (atual?.status === 'EXECUTADO') return { criado: false, pagamentoId: atual.id };
     const dados = {

@@ -4,7 +4,8 @@ import { COMPROVANTE_TIPO, mascararDestino, montarComprovante } from '@/lib/inte
 import { criarSimuladoProvider } from '@/lib/integrations/psp/simulado';
 import { obterPixProvider } from '@/lib/integrations/psp';
 import { criarAsaasProvider } from '@/lib/integrations/psp/asaas';
-import { validarChavePix } from '@/lib/integrations/psp/types';
+import { redeEhPublica, validarChavePix } from '@/lib/integrations/psp/types';
+import { nomeDoProvedorConfigurado } from '@/lib/integrations/psp';
 
 describe('mascararDestino', () => {
   it.each([
@@ -125,5 +126,34 @@ describe('P1 (Argus): trava de mainnet — nenhum provedor atual existe em STELL
       expect(criarSimuladoProvider().nome).toBe('SIMULADO');
       expect(criarAsaasProvider({ apiKey: 'k'.repeat(20), fetch: vi.fn() }).nome).toBe('ASAAS');
     });
+  });
+});
+
+describe('nomeDoProvedorConfigurado e redeEhPublica (usados pelo atestado do titular, F-LAU-1)', () => {
+  const com = (env: Record<string, string | undefined>, fn: () => void) => {
+    const antes = { p: process.env.PSP_PROVIDER, n: process.env.STELLAR_NETWORK, k: process.env.ASAAS_API_KEY };
+    try {
+      for (const [k, v] of Object.entries(env)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+      fn();
+    } finally {
+      for (const [k, v] of [['PSP_PROVIDER', antes.p], ['STELLAR_NETWORK', antes.n], ['ASAAS_API_KEY', antes.k]] as const) {
+        if (v === undefined) delete process.env[k]; else process.env[k] = v;
+      }
+    }
+  };
+  it('padrão SIMULADO; ASAAS e simulado em qualquer caixa/espaço; SEM exigir credencial nem criar o provedor', () => {
+    com({ PSP_PROVIDER: undefined, ASAAS_API_KEY: undefined }, () => expect(nomeDoProvedorConfigurado()).toBe('SIMULADO'));
+    com({ PSP_PROVIDER: ' asaas ', ASAAS_API_KEY: undefined }, () => expect(nomeDoProvedorConfigurado()).toBe('ASAAS'));
+    com({ PSP_PROVIDER: 'Simulado' }, () => expect(nomeDoProvedorConfigurado()).toBe('SIMULADO'));
+  });
+  it('valor desconhecido → PSP_CONFIG (nunca cai em outro em silêncio)', () => {
+    com({ PSP_PROVIDER: 'STARK' }, () => expect(() => nomeDoProvedorConfigurado()).toThrow(expect.objectContaining({ code: 'PSP_CONFIG' })));
+  });
+  it.each([['PUBLIC', true], ['public', false], [' PUBLIC ', false], ['TESTNET', false], [undefined, false], ['', false]])('redeEhPublica(%j) = %s (só PUBLIC exato, como o config.ts)', (rede, esperado) => {
+    com({ STELLAR_NETWORK: rede as string | undefined }, () => expect(redeEhPublica()).toBe(esperado));
+  });
+  it('exigirRedeDeTeste usa a mesma regra: PUBLIC recusa o provedor; "public" não (o app roda na testnet)', () => {
+    com({ STELLAR_NETWORK: 'PUBLIC', PSP_PROVIDER: undefined }, () => expect(() => obterPixProvider()).toThrow(expect.objectContaining({ code: 'PSP_CONFIG' })));
+    com({ STELLAR_NETWORK: 'public', PSP_PROVIDER: undefined }, () => expect(obterPixProvider().nome).toBe('SIMULADO'));
   });
 });

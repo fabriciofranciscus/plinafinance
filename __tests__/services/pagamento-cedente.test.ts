@@ -13,6 +13,7 @@ const m = vi.hoisted(() => ({
   lock: vi.fn(),
   alerta: vi.fn(),
   pagFind: vi.fn(),
+  laudoFind: vi.fn(),
   transfUpdate: vi.fn(),
   ordem: [] as string[],
   rede: { v: 'TESTNET' },
@@ -30,7 +31,7 @@ vi.mock('@/lib/db', () => {
       cessao: { findUnique: m.cessao },
       pagamento: { findUnique: m.pagFind },
       transferenciaPix: { findUnique: m.transf, update: m.transfUpdate },
-      eventoAudit: { create: m.auditCreate },
+      eventoAudit: { create: m.auditCreate, findFirst: m.laudoFind },
       $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
     },
   };
@@ -79,6 +80,8 @@ beforeEach(() => {
   });
   m.alerta.mockResolvedValue(true);
   m.lock.mockResolvedValue(0);
+  // cessão COM laudo registrado (EventoAudit COTA_VALIDADA, sem nenhuma Cota ainda: a Cota só nasce depois do Pix)
+  m.laudoFind.mockResolvedValue({ payloadHash: 'c'.repeat(64) });
   m.transfUpdate.mockResolvedValue({});
   m.transf.mockResolvedValue(comprovada());
   m.pagamentoFind.mockResolvedValue(null);
@@ -369,6 +372,50 @@ describe('titular confirmado no laudo (condição da Consuelo, aceita pelo Atlas
   it('titular confere (HMAC igual, TITULAR_UNICO) → paga normalmente', async () => {
     await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).resolves.toMatchObject({ status: 'COMPROVADA' });
     expect(m.alerta).not.toHaveBeenCalled();
+  });
+});
+
+describe('F-LAU-2 (Consuelo/Vera): laudo registrado antes de pagar ou reabrir', () => {
+  const falhou = (over: Record<string, unknown> = {}) => comprovada({
+    status: 'FALHOU', tentativa: 1, idempotencyKey: 'pix-cedente:cessao_1', motivoFalha: 'PSP_RECUSOU', providerId: null,
+    comprovanteSha256: null, ancoraTxHash: null, destinoMascarado: 'CPF ***4725', ...over,
+  });
+  it('pagar SEM EventoAudit COTA_VALIDADA na cessão → LAUDO_AUSENTE; nada vai ao PSP, nada é gravado', async () => {
+    m.laudoFind.mockResolvedValue(null);
+    await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'LAUDO_AUSENTE' });
+    expect(m.pagar).not.toHaveBeenCalled();
+    expect(m.pagamentoUpsert).not.toHaveBeenCalled();
+    expect(m.auditCreate).not.toHaveBeenCalled();
+  });
+  it('reabrir SEM laudo → LAUDO_AUSENTE: sem evento de reabertura e sem novo envio', async () => {
+    m.laudoFind.mockResolvedValue(null);
+    m.transf.mockResolvedValue(falhou());
+    await expect(reabrirPagamentoCedente(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'LAUDO_AUSENTE' });
+    expect(m.reabrir).not.toHaveBeenCalled();
+    expect(m.auditCreate).not.toHaveBeenCalled();
+  });
+  it('o laudo vem do EventoAudit COTA_VALIDADA DA CESSÃO (com payloadHash), nunca da Cota: cessão com laudo e SEM Cota paga é paga', async () => {
+    // o mock não tem nenhuma tabela de Cota; só o evento do laudo: basta para pagar
+    await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).resolves.toMatchObject({ status: 'COMPROVADA' });
+    expect(m.laudoFind).toHaveBeenCalledWith({
+      where: { acao: 'COTA_VALIDADA', cessaoId: 'cessao_1', payloadHash: { not: null } },
+      orderBy: { criadoEm: 'desc' },
+      select: { payloadHash: true },
+    });
+    expect(m.pagar).toHaveBeenCalledOnce();
+  });
+  it('reabrir COM laudo registrado, sem exigir evento novo: segue o fluxo normal da reabertura', async () => {
+    m.transf.mockResolvedValue(falhou());
+    m.reabrir.mockResolvedValue({ status: 'PROCESSANDO' });
+    await expect(reabrirPagamentoCedente(IN, { provider: prov('ASAAS') })).resolves.toMatchObject({ status: 'PROCESSANDO' });
+    expect(m.reabrir).toHaveBeenCalledOnce();
+  });
+  it('o laudo é checado ANTES das demais recusas de documento/titular (primeira trava de domínio), e antes de qualquer PSP', async () => {
+    m.laudoFind.mockResolvedValue(null);
+    // mesmo com o titular não confirmado, o erro é o do laudo
+    m.cessao.mockResolvedValueOnce({ id: 'cessao_1', status: 'ASSINADA', titularDocHmac: null, titularSituacao: null, oferta: { valorLiquidoVendedor: D('1'), leadVendedorId: 'l', leadVendedor: lead() }, pagamento: null });
+    await expect(pagarCedenteDaCessao(IN, { provider: prov('ASAAS') })).rejects.toMatchObject({ code: 'LAUDO_AUSENTE' });
+    expect(m.pagar).not.toHaveBeenCalled();
   });
 });
 

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const m = vi.hoisted(() => ({ cessao: vi.fn(), update: vi.fn(), audit: vi.fn(), transf: vi.fn() }));
+const m = vi.hoisted(() => ({ cessao: vi.fn(), update: vi.fn(), audit: vi.fn(), transf: vi.fn(), laudo: vi.fn(), ordem: [] as string[] }));
 vi.mock('@/lib/db', () => {
-  const tx = { cessao: { update: m.update }, eventoAudit: { create: m.audit } };
+  const tx = { cessao: { update: m.update }, eventoAudit: { create: m.audit, findFirst: m.laudo } };
   return {
     db: {
       cessao: { findUnique: m.cessao },
@@ -27,6 +27,10 @@ beforeEach(() => {
   m.transf.mockReset().mockResolvedValue(null);
   m.update.mockReset().mockResolvedValue({});
   m.audit.mockReset().mockResolvedValue({});
+  // cessão COM laudo registrado (EventoAudit COTA_VALIDADA): o hash é o payloadHash do ÚLTIMO
+  m.laudo.mockReset().mockResolvedValue({ payloadHash: 'd'.repeat(64) });
+  delete process.env.PSP_PROVIDER;
+  delete process.env.STELLAR_NETWORK;
 });
 
 describe('hmacDoDocumento', () => {
@@ -59,6 +63,7 @@ describe('confirmarTitularDoLaudo — o operador ATESTA, o sistema lê o CPF do 
     expect(audit).toMatchObject({ acao: 'TITULAR_LAUDO_CONFIRMADO', operador: 'admin-panel', cessaoId: 'c1', leadVendedorId: 'lead_1' });
     expect(audit.payloadJson).toEqual({
       cessaoId: 'c1', situacao: 'TITULAR_UNICO', atestado: 'TITULAR_CONFIRMADO_IGUAL_AO_CPF_DO_CADASTRO', tipoDocumento: 'CPF', documentoHmac: hmac,
+      hashLaudo: 'd'.repeat(64), cpfSintetico: false,
     });
     expect(JSON.stringify([m.update.mock.calls, audit])).not.toContain(CPF);
   });
@@ -84,7 +89,6 @@ describe('confirmarTitularDoLaudo — o operador ATESTA, o sistema lê o CPF do 
     ['pessoa sem CPF', pessoa({ cpfNormalizado: null })],
     ['CPF inválido', pessoa({ cpfNormalizado: '52998224726' })],
     ['KYC não aprovado', pessoa({ kycAprovado: false })],
-    ['CPF sintético', pessoa({ isSyntheticCpf: true })],
   ])('cadastro sem o que atestar (%s) → CEDENTE_SEM_DOCUMENTO, nada gravado', async (_n, p) => {
     m.cessao.mockResolvedValue(cessaoDb(p));
     await expect(confirmarTitularDoLaudo(IN)).rejects.toMatchObject({ code: 'CEDENTE_SEM_DOCUMENTO' });
@@ -122,5 +126,95 @@ describe('exigirTitularDoLaudo', () => {
     ['espólio', { ...ok, titularSituacao: 'ESPOLIO' }, CPF, 'TRATAMENTO_MANUAL'],
   ])('%s → %s', (_n, cessao, doc, code) => {
     expect(() => exigirTitularDoLaudo(cessao as never, doc)).toThrow(expect.objectContaining({ code }));
+  });
+});
+
+describe('F-LAU-2: laudo registrado antes de atestar', () => {
+  it('SEM nenhum EventoAudit COTA_VALIDADA na cessão → LAUDO_AUSENTE e NADA gravado (nem HMAC, nem evento)', async () => {
+    m.laudo.mockResolvedValue(null);
+    await expect(confirmarTitularDoLaudo(IN)).rejects.toMatchObject({ code: 'LAUDO_AUSENTE' });
+    expect(m.update).not.toHaveBeenCalled();
+    expect(m.audit).not.toHaveBeenCalled();
+  });
+  it('hashLaudo = payloadHash do ÚLTIMO COTA_VALIDADA da cessão (consulta: da cessão, só com hash, mais recente primeiro; sem consultar Cota)', async () => {
+    m.laudo.mockResolvedValue({ payloadHash: 'e'.repeat(64) });
+    await confirmarTitularDoLaudo(IN);
+    expect(m.laudo).toHaveBeenCalledWith({
+      where: { acao: 'COTA_VALIDADA', cessaoId: 'c1', payloadHash: { not: null } },
+      orderBy: { criadoEm: 'desc' },
+      select: { payloadHash: true },
+    });
+    const payload = m.audit.mock.calls[0][0].data.payloadJson as Record<string, unknown>;
+    expect(payload.hashLaudo).toBe('e'.repeat(64));
+    // o payload não carrega CPF, nome nem e-mail
+    expect(JSON.stringify(payload)).not.toMatch(new RegExp(`${CPF}|nome|email|@`, 'i'));
+  });
+  it('a leitura do laudo é ANTES de qualquer escrita (nada gravado antes de saber se há laudo)', async () => {
+    const ordem: string[] = [];
+    m.laudo.mockImplementation(async () => { ordem.push('ler-laudo'); return { payloadHash: 'd'.repeat(64) }; });
+    m.update.mockImplementation(async () => { ordem.push('gravar-hmac'); return {}; });
+    m.audit.mockImplementation(async () => { ordem.push('gravar-evento'); return {}; });
+    await confirmarTitularDoLaudo(IN);
+    expect(ordem).toEqual(['ler-laudo', 'gravar-hmac', 'gravar-evento']);
+  });
+});
+
+describe('F-LAU-1: CPF sintético só com o provedor SIMULADO e fora da mainnet', () => {
+  const sintetica = () => cessaoDb(pessoa({ isSyntheticCpf: true }));
+  it('provedor SIMULADO (padrão) e rede de teste → aceita e marca cpfSintetico:true no evento', async () => {
+    m.cessao.mockResolvedValue(sintetica());
+    await expect(confirmarTitularDoLaudo(IN)).resolves.toMatchObject({ situacao: 'TITULAR_UNICO' });
+    expect((m.audit.mock.calls[0][0].data.payloadJson as Record<string, unknown>).cpfSintetico).toBe(true);
+  });
+  it('PSP_PROVIDER=SIMULADO explícito também aceita; CPF REAL marca cpfSintetico:false', async () => {
+    process.env.PSP_PROVIDER = 'simulado';
+    m.cessao.mockResolvedValue(sintetica());
+    await confirmarTitularDoLaudo(IN);
+    expect((m.audit.mock.calls[0][0].data.payloadJson as Record<string, unknown>).cpfSintetico).toBe(true);
+    m.audit.mockClear();
+    m.cessao.mockResolvedValue(cessaoDb());
+    await confirmarTitularDoLaudo(IN);
+    expect((m.audit.mock.calls[0][0].data.payloadJson as Record<string, unknown>).cpfSintetico).toBe(false);
+  });
+  it('provedor ASAAS (sandbox) → CPF_SINTETICO, nada gravado', async () => {
+    process.env.PSP_PROVIDER = 'ASAAS';
+    m.cessao.mockResolvedValue(sintetica());
+    await expect(confirmarTitularDoLaudo(IN)).rejects.toMatchObject({ code: 'CPF_SINTETICO' });
+    expect(m.update).not.toHaveBeenCalled();
+    expect(m.audit).not.toHaveBeenCalled();
+  });
+  it('rede PUBLIC (mainnet), mesmo com SIMULADO → CPF_SINTETICO, nada gravado', async () => {
+    process.env.STELLAR_NETWORK = 'PUBLIC';
+    m.cessao.mockResolvedValue(sintetica());
+    await expect(confirmarTitularDoLaudo(IN)).rejects.toMatchObject({ code: 'CPF_SINTETICO' });
+    expect(m.update).not.toHaveBeenCalled();
+  });
+  it('só o valor EXATO PUBLIC é a mainnet (como no config.ts, onde "public" roda na testnet): TESTNET e variações de caixa não recusam', async () => {
+    for (const rede of ['TESTNET', 'public']) {
+      process.env.STELLAR_NETWORK = rede;
+      m.cessao.mockResolvedValue(sintetica());
+      m.update.mockClear();
+      await expect(confirmarTitularDoLaudo(IN)).resolves.toBeDefined();
+    }
+  });
+  it('o provedor vem da CONFIGURAÇÃO (ou da opção injetada em teste), nunca do payload de quem chama', async () => {
+    m.cessao.mockResolvedValue(sintetica());
+    process.env.PSP_PROVIDER = 'ASAAS';
+    // um campo "provedor" no input é ignorado: continua recusando
+    await expect(confirmarTitularDoLaudo({ ...IN, provedor: 'SIMULADO' } as never)).rejects.toMatchObject({ code: 'CPF_SINTETICO' });
+    // a opção explícita (usada pelo código, não pelo operador) é o único desvio
+    await expect(confirmarTitularDoLaudo(IN, { provedor: 'SIMULADO' })).resolves.toBeDefined();
+  });
+  it('PSP_PROVIDER inválido → PSP_CONFIG (fail-closed), nada gravado', async () => {
+    process.env.PSP_PROVIDER = 'STARK';
+    m.cessao.mockResolvedValue(sintetica());
+    await expect(confirmarTitularDoLaudo(IN)).rejects.toMatchObject({ code: 'PSP_CONFIG' });
+    expect(m.update).not.toHaveBeenCalled();
+  });
+  it('só vale para o sintético: KYC não aprovado e CPF inválido continuam recusando mesmo com SIMULADO', async () => {
+    m.cessao.mockResolvedValue(cessaoDb(pessoa({ isSyntheticCpf: true, kycAprovado: false })));
+    await expect(confirmarTitularDoLaudo(IN)).rejects.toMatchObject({ code: 'CEDENTE_SEM_DOCUMENTO' });
+    m.cessao.mockResolvedValue(cessaoDb(pessoa({ isSyntheticCpf: true, cpfNormalizado: '52998224726' })));
+    await expect(confirmarTitularDoLaudo(IN)).rejects.toMatchObject({ code: 'CEDENTE_SEM_DOCUMENTO' });
   });
 });

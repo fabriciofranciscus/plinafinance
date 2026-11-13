@@ -111,8 +111,13 @@ export function validarChavePix(tipo: TipoChavePix, chave: string): string | nul
  * Trava de mainnet (P1 do Argus): hoje só existem provedores de SANDBOX/SIMULADO. Em `STELLAR_NETWORK=PUBLIC` nenhum
  * deles pode ser criado, senão uma transferência "comprovada" e ancorada seria só de mentira. Lê o env a cada chamada.
  */
+/** Mesma leitura do `lib/stellar/config.ts`: só o valor exato `PUBLIC` é a mainnet (qualquer outro valor roda na testnet). */
+export function redeEhPublica(): boolean {
+  return process.env.STELLAR_NETWORK === 'PUBLIC';
+}
+
 export function exigirRedeDeTeste(): void {
-  if (process.env.STELLAR_NETWORK === 'PUBLIC') throw new PspError('PSP_CONFIG');
+  if (redeEhPublica()) throw new PspError('PSP_CONFIG');
 }
 
 export const ID_TRANSFERENCIA = /^[A-Za-z0-9_-]{1,64}$/;

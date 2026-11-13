@@ -7,14 +7,20 @@ const m = vi.hoisted(() => ({
   blob: vi.fn(),
   ancora: vi.fn(),
   corrida: { v: false },
+  lockFn: vi.fn(),
 }));
 
 vi.mock('@/lib/db', () => ({
   db: {
     // a transação do mock reusa o mesmo banco em memória (sem rollback; o que importa é a ordem e a condição)
     $transaction: async (fn: (tx: unknown) => unknown) => fn((await import('@/lib/db')).db),
+    $executeRaw: async (...args: unknown[]) => m.lockFn(...args),
     transferenciaPix: {
-      findUnique: async ({ where }: { where: { cessaoId: string } }) => m.rows.find((r) => r.cessaoId === where.cessaoId) ?? null,
+      // cópia (como o banco real): a linha lida não muda sozinha quando outro ator a altera depois
+      findUnique: async ({ where }: { where: { cessaoId: string } }) => {
+        const r = m.rows.find((x) => x.cessaoId === where.cessaoId);
+        return r ? { ...r } : null;
+      },
       create: async ({ data }: { data: Row }) => {
         if (m.corrida.v || m.rows.some((r) => r.cessaoId === data.cessaoId)) throw Object.assign(new Error('unique'), { code: 'P2002' });
         const row = {
@@ -72,6 +78,7 @@ function provedor(over: Partial<{ nome: 'ASAAS' | 'SIMULADO'; envio: () => Promi
 }
 
 beforeEach(() => {
+  m.lockFn.mockReset().mockResolvedValue(0);
   m.rows.length = 0;
   m.corrida.v = false;
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -452,6 +459,34 @@ describe('F-E12-1 — reabrir um FALHOU confirmado pelo PSP (auditado, chave nov
       provedor: 'ASAAS', tentativaAnterior: 1, tentativaNova: 2, idempotencyKeyAnterior: 'pix-cedente:cessao_1', motivoAnterior: 'PSP_RECUSOU', providerIdAnterior: null,
     });
     expect(m.rows[0].tentativa).toBe(2); // a reabertura se aplicou junto com o hook
+  });
+
+  it('F-REAB-1 (Consuelo): a reabertura trava a cessão (advisory lock), RELÊ a linha sob o lock e só então aplica e audita', async () => {
+    const p = recusa();
+    await pagarTitular(IN, { provider: p, agora: AGORA });
+    p.enviarPix.mockResolvedValue({ id: 'tra_2', status: 'PENDENTE' });
+    p.consultarStatus.mockResolvedValue({ id: 'tra_2', status: 'PENDENTE' });
+    const ordem: string[] = [];
+    m.lockFn.mockImplementation(async (_s: unknown, chave: unknown) => { ordem.push(`lock:${String(chave)}`); return 0; });
+    await reabrirTransferencia(REABRIR, { provider: p, agora: AGORA, aoReabrir: async () => { ordem.push('hook'); } });
+    expect(ordem).toEqual(['lock:plina:pix-cessao:cessao_1', 'hook']); // o lock vem antes da auditoria; a mesma chave do fechamento
+  });
+
+  it('F-REAB-1: se a linha mudou ENTRE a primeira leitura e o lock (outro ator passou na frente), a releitura sob o lock recusa: nada é reaberto nem auditado', async () => {
+    const p = recusa();
+    await pagarTitular(IN, { provider: p, agora: AGORA });
+    const aoReabrir = vi.fn(async () => undefined);
+    // enquanto o lock é tomado, a linha deixa de ser FALHOU (ex.: foi reaberta e já está PROCESSANDO)
+    m.lockFn.mockImplementation(async () => { m.rows[0].status = 'PROCESSANDO'; return 0; });
+    await expect(reabrirTransferencia(REABRIR, { provider: p, agora: AGORA, aoReabrir })).rejects.toMatchObject({ code: 'NAO_REABRIVEL', causa: 'PROCESSANDO' });
+    expect(aoReabrir).not.toHaveBeenCalled();
+    expect(m.rows[0].tentativa).toBe(1);
+    expect(p.enviarPix).toHaveBeenCalledTimes(1); // nenhum envio novo
+    // e se outra reabertura trocou a tentativa mas voltou a FALHOU: a tentativa difere → EM_ANDAMENTO
+    m.rows[0].status = 'FALHOU';
+    m.lockFn.mockImplementation(async () => { m.rows[0].tentativa = 2; return 0; });
+    await expect(reabrirTransferencia(REABRIR, { provider: p, agora: AGORA, aoReabrir })).rejects.toMatchObject({ code: 'EM_ANDAMENTO' });
+    expect(aoReabrir).not.toHaveBeenCalled();
   });
 
   it('F-REAB-1: duas reaberturas simultâneas = UM aoReabrir (a perdedora não deixa evento nem envio); estado que não é FALHOU nunca chama o hook', async () => {
