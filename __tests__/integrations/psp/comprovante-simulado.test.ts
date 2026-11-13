@@ -1,0 +1,159 @@
+import { describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
+import { COMPROVANTE_TIPO, mascararDestino, montarComprovante } from '@/lib/integrations/psp/comprovante';
+import { criarSimuladoProvider } from '@/lib/integrations/psp/simulado';
+import { obterPixProvider } from '@/lib/integrations/psp';
+import { criarAsaasProvider } from '@/lib/integrations/psp/asaas';
+import { redeEhPublica, validarChavePix } from '@/lib/integrations/psp/types';
+import { nomeDoProvedorConfigurado } from '@/lib/integrations/psp';
+
+describe('mascararDestino', () => {
+  it.each([
+    ['CPF', '12345678901', 'CPF ***8901'],
+    ['PHONE', '11999998877', 'PHONE ***8877'],
+    ['EVP', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'EVP ***7890'],
+    ['EMAIL', 'maria.silva@example.com.br', 'EMAIL m***@***.br'],
+  ] as const)('%s', (tipo, chave, esperado) => {
+    expect(mascararDestino(tipo, chave)).toBe(esperado);
+  });
+});
+
+describe('mascararDestino — chave curta (F-E12-5)', () => {
+  it('abaixo de 8 caracteres não mostra sufixo (nada de chave inteira)', () => {
+    expect(mascararDestino('EVP', 'abc123')).toBe('EVP ***');
+    expect(mascararDestino('PHONE', '1199')).toBe('PHONE ***');
+  });
+});
+
+describe('validarChavePix', () => {
+  it.each([
+    ['CPF', '529.982.247-25', '52998224725'],
+    ['CPF', '52998224725', '52998224725'],
+    ['CNPJ', '11.222.333/0001-81', '11222333000181'],
+    ['PHONE', '(11) 99999-8877', '11999998877'],
+    ['EMAIL', ' Maria@Example.com ', 'maria@example.com'],
+    ['EVP', 'A1B2C3D4-E5F6-7890-ABCD-EF1234567890', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'],
+  ] as const)('%s válido e normalizado', (tipo, chave, esperado) => {
+    expect(validarChavePix(tipo, chave)).toBe(esperado);
+  });
+  it.each([
+    ['CPF', '52998224726'], ['CPF', '00000000000'], ['CPF', '1234'], ['CNPJ', '11222333000180'], ['CNPJ', '00000000000000'],
+    ['PHONE', '0999998877'], ['PHONE', '5511999998877'], ['EMAIL', 'a@b'], ['EMAIL', 'a b@c.com'], ['EVP', 'não-é-uuid'],
+  ] as const)('%s inválido (%s) → null', (tipo, chave) => {
+    expect(validarChavePix(tipo, chave)).toBeNull();
+  });
+});
+
+describe('montarComprovante', () => {
+  const base = {
+    provedor: 'ASAAS' as const, transferenciaId: 'tra_1', e2eId: 'E123', valor: '123.45',
+    efetivadoEm: '2026-11-12T10:00:00.000Z', destino: 'CPF ***8901', cessaoId: 'cessao_1', referencia: 'pix-cedente:cessao_1',
+  };
+  it('JSON canônico: sha256 = SHA-256 dos bytes, chaves em ordem, sem espaço, valores como string', () => {
+    const { bytes, sha256 } = montarComprovante(base);
+    expect(sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
+    const txt = bytes.toString('utf8');
+    expect(txt.startsWith('{"cessaoId":"cessao_1","destino":"CPF ***8901"')).toBe(true);
+    expect(JSON.parse(txt)).toMatchObject({ tipo: COMPROVANTE_TIPO, versao: 1, valor: '123.45', moeda: 'BRL', e2eId: 'E123' });
+  });
+  it('determinístico: mesma entrada, mesmos bytes e mesmo hash; e2eId ausente = null', () => {
+    expect(montarComprovante(base).sha256).toBe(montarComprovante({ ...base }).sha256);
+    expect(JSON.parse(montarComprovante({ ...base, e2eId: null }).bytes.toString('utf8')).e2eId).toBeNull();
+  });
+  it('não tem lugar para a chave Pix: o arquivo só carrega o destino mascarado', () => {
+    const txt = montarComprovante({ ...base, destino: mascararDestino('EMAIL', 'maria.silva@example.com.br') }).bytes.toString('utf8');
+    expect(txt).not.toMatch(/maria|silva|example/);
+  });
+});
+
+describe('provedor simulado e seletor', () => {
+  const envio = { valor: '10.00', chavePix: 'x@y.com', tipoChave: 'EMAIL' as const, idempotencyKey: 'pix-cedente:abc12345' };
+  it('conclui na hora com id determinístico; nunca "acha" transferência; recusa entrada inválida', async () => {
+    const p = criarSimuladoProvider(() => new Date('2026-11-12T10:00:00Z'));
+    const a = await p.enviarPix(envio);
+    expect(a).toEqual(await p.enviarPix(envio));
+    expect(a.status).toBe('CONCLUIDO');
+    expect(await p.consultarStatus(a.id)).toMatchObject({ status: 'CONCLUIDO', efetivadoEm: '2026-11-12T10:00:00.000Z' });
+    expect(await p.localizarPorChave('pix-cedente:abc12345', new Date())).toBeNull();
+    await expect(p.enviarPix({ ...envio, valor: 'abc' })).rejects.toMatchObject({ code: 'PSP_RECUSOU' });
+  });
+  it('PSP_PROVIDER: padrão SIMULADO; ASAAS sem chave → PSP_CONFIG; valor desconhecido → PSP_CONFIG (não cai em outro)', () => {
+    const antes = { p: process.env.PSP_PROVIDER, k: process.env.ASAAS_API_KEY };
+    try {
+      delete process.env.PSP_PROVIDER; delete process.env.ASAAS_API_KEY;
+      expect(obterPixProvider().nome).toBe('SIMULADO');
+      process.env.PSP_PROVIDER = 'asaas';
+      expect(() => obterPixProvider()).toThrow(expect.objectContaining({ code: 'PSP_CONFIG' }));
+      process.env.ASAAS_API_KEY = 'k'.repeat(20);
+      expect(obterPixProvider().nome).toBe('ASAAS');
+      process.env.PSP_PROVIDER = 'STARK';
+      expect(() => obterPixProvider()).toThrow(expect.objectContaining({ code: 'PSP_CONFIG' }));
+    } finally {
+      for (const [k, v] of [['PSP_PROVIDER', antes.p], ['ASAAS_API_KEY', antes.k]] as const) v === undefined ? delete process.env[k] : (process.env[k] = v);
+    }
+  });
+});
+
+describe('P1 (Argus): trava de mainnet — nenhum provedor atual existe em STELLAR_NETWORK=PUBLIC', () => {
+  const guardar = (fn: () => void) => {
+    const antes = { n: process.env.STELLAR_NETWORK, p: process.env.PSP_PROVIDER, k: process.env.ASAAS_API_KEY };
+    try {
+      fn();
+    } finally {
+      for (const [k, v] of [['STELLAR_NETWORK', antes.n], ['PSP_PROVIDER', antes.p], ['ASAAS_API_KEY', antes.k]] as const) {
+        if (v === undefined) delete process.env[k]; else process.env[k] = v;
+      }
+    }
+  };
+  it.each([[undefined], ['SIMULADO'], ['ASAAS']])('PSP_PROVIDER=%s em PUBLIC → PSP_CONFIG (inclusive o padrão)', (prov) => {
+    guardar(() => {
+      process.env.STELLAR_NETWORK = 'PUBLIC';
+      process.env.ASAAS_API_KEY = 'k'.repeat(20);
+      if (prov === undefined) delete process.env.PSP_PROVIDER; else process.env.PSP_PROVIDER = prov;
+      expect(() => obterPixProvider()).toThrow(expect.objectContaining({ code: 'PSP_CONFIG' }));
+    });
+  });
+  it('os construtores diretos também recusam em PUBLIC (simulado e Asaas)', () => {
+    guardar(() => {
+      process.env.STELLAR_NETWORK = 'PUBLIC';
+      expect(() => criarSimuladoProvider()).toThrow(expect.objectContaining({ code: 'PSP_CONFIG' }));
+      expect(() => criarAsaasProvider({ apiKey: 'k'.repeat(20), fetch: vi.fn() })).toThrow(expect.objectContaining({ code: 'PSP_CONFIG' }));
+    });
+  });
+  it('em TESTNET continua criando', () => {
+    guardar(() => {
+      process.env.STELLAR_NETWORK = 'TESTNET';
+      expect(criarSimuladoProvider().nome).toBe('SIMULADO');
+      expect(criarAsaasProvider({ apiKey: 'k'.repeat(20), fetch: vi.fn() }).nome).toBe('ASAAS');
+    });
+  });
+});
+
+describe('nomeDoProvedorConfigurado e redeEhPublica (usados pelo atestado do titular, F-LAU-1)', () => {
+  const com = (env: Record<string, string | undefined>, fn: () => void) => {
+    const antes = { p: process.env.PSP_PROVIDER, n: process.env.STELLAR_NETWORK, k: process.env.ASAAS_API_KEY };
+    try {
+      for (const [k, v] of Object.entries(env)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+      fn();
+    } finally {
+      for (const [k, v] of [['PSP_PROVIDER', antes.p], ['STELLAR_NETWORK', antes.n], ['ASAAS_API_KEY', antes.k]] as const) {
+        if (v === undefined) delete process.env[k]; else process.env[k] = v;
+      }
+    }
+  };
+  it('padrão SIMULADO; ASAAS e simulado em qualquer caixa/espaço; SEM exigir credencial nem criar o provedor', () => {
+    com({ PSP_PROVIDER: undefined, ASAAS_API_KEY: undefined }, () => expect(nomeDoProvedorConfigurado()).toBe('SIMULADO'));
+    com({ PSP_PROVIDER: ' asaas ', ASAAS_API_KEY: undefined }, () => expect(nomeDoProvedorConfigurado()).toBe('ASAAS'));
+    com({ PSP_PROVIDER: 'Simulado' }, () => expect(nomeDoProvedorConfigurado()).toBe('SIMULADO'));
+  });
+  it('valor desconhecido → PSP_CONFIG (nunca cai em outro em silêncio)', () => {
+    com({ PSP_PROVIDER: 'STARK' }, () => expect(() => nomeDoProvedorConfigurado()).toThrow(expect.objectContaining({ code: 'PSP_CONFIG' })));
+  });
+  it.each([['PUBLIC', true], ['public', false], [' PUBLIC ', false], ['TESTNET', false], [undefined, false], ['', false]])('redeEhPublica(%j) = %s (só PUBLIC exato, como o config.ts)', (rede, esperado) => {
+    com({ STELLAR_NETWORK: rede as string | undefined }, () => expect(redeEhPublica()).toBe(esperado));
+  });
+  it('exigirRedeDeTeste usa a mesma regra: PUBLIC recusa o provedor; "public" não (o app roda na testnet)', () => {
+    com({ STELLAR_NETWORK: 'PUBLIC', PSP_PROVIDER: undefined }, () => expect(() => obterPixProvider()).toThrow(expect.objectContaining({ code: 'PSP_CONFIG' })));
+    com({ STELLAR_NETWORK: 'public', PSP_PROVIDER: undefined }, () => expect(obterPixProvider().nome).toBe('SIMULADO'));
+  });
+});

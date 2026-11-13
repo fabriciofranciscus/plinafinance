@@ -10,10 +10,19 @@
  *     (Caminho A/B/C executados). Esse caixa **pertence ao fundo** — o spread
  *     fica como yield acumulado, materializando o §6.2 (Caminho A como fonte
  *     primária de yield).
- *   - NAV total do pool = NAV das cotas ativas + caixa realizado.
- *   - Tokens vivos = tokens emitidos das cotas ativas (denominador inalterado
- *     pra refletir lastro corrente; quando uma cota é realizada, seus tokens
- *     "saem" mas o caixa toma o lugar — NAV/token sobe pelo spread).
+ *   - NAV total do pool = NAV das cotas ativas + caixa realizado. É o lado do
+ *     **ativo**, e não depende do ledger.
+ *   - Denominador do NAV/token = supply **emitido e não queimado lido do
+ *     ledger** (`circulante + tesouraria`, `lib/stellar/supply.ts`), incluindo a
+ *     posição da Plina — nunca o estado da aplicação. Até 2026-11 o
+ *     denominador eram os `tokensEmitidos` das cotas ativas, o que fazia a
+ *     cota realizada sair do denominador enquanto seu caixa entrava no
+ *     numerador — dupla contagem — e colapsava o NAV a zero em runoff.
+ *   - Tesouraria legada (token cunhado e ainda no distributor) NÃO é deduzida
+ *     do ativo: é posição da Plina e fica no denominador (ADR 2026-11-09,
+ *     parecer da Consuelo C3). A dedução ao par que existia até então
+ *     transferia valor entre investidores e, no resgate sem queima,
+ *     deduzia duas vezes.
  *
  * Aritmética interna em `Prisma.Decimal` (audit F-10): valores R$10M+ com
  * desagio fracionário perdem centavos em IEEE-754. Funções públicas retornam
@@ -128,33 +137,157 @@ export function tokensEmitidosVivosAsDecimal(
     );
 }
 
-/** Soma de PLINA-RF emitidos vivos (cotas ativas). */
+/**
+ * Soma de PLINA-RF emitidos contra cotas ativas.
+ *
+ * **Não é o denominador do NAV** — ver a convenção no topo do arquivo. Segue
+ * exposto porque é a métrica honesta de "quanto token tem lastro de cota viva
+ * agora", útil no painel operacional ao lado do supply do ledger: a diferença
+ * entre os dois é exatamente o quanto do passivo já está coberto por caixa em
+ * vez de cota.
+ */
 export function tokensEmitidosVivos(cotas: CotaForNav[]): number {
   return tokensEmitidosVivosAsDecimal(cotas).toNumber();
 }
 
+/**
+ * Supply lido do ledger, na forma mínima que o cálculo precisa.
+ *
+ * Tipo estrutural de propósito: `pool.ts` é aritmética pura e não importa
+ * nada de `lib/stellar/`. O `SupplyOnChain` de `lib/stellar/supply.ts`
+ * satisfaz esta interface, e os testes passam números literais.
+ */
+export interface SupplyParaNav {
+  /** Token fora do distributor (investidores e posição da Plina). */
+  circulante: Numericable;
+  /**
+   * Token cunhado e ainda no distributor — a tesouraria LEGADA. Pela ADR
+   * 2026-11-09 (parecer da Consuelo, C3) é posição da Plina e continua no
+   * denominador: foi cunhada 1:1 contra cotas que seguem no numerador.
+   */
+  tesouraria: Numericable;
+}
+
+/**
+ * Denominador do NAV: supply emitido e ainda não queimado
+ * (`circulante + tesouraria`), incluindo a posição da Plina. Nada "ao par",
+ * nada excluído — mover token do distributor para a conta de posição da Plina
+ * não muda N.
+ */
+export function supplyEmitidoParaNavAsDecimal(supply: SupplyParaNav): Prisma.Decimal {
+  return toDecimal(supply.circulante).plus(toDecimal(supply.tesouraria));
+}
+
+/**
+ * Ativo do fundo atribuível ao supply emitido: o próprio NAV total (cotas
+ * ativas + caixa). Desde a ADR 2026-11-09 não há dedução da tesouraria ao par:
+ * ela deduzia duas vezes (no resgate sem queima) e transferia valor entre
+ * investidores. O argumento `supply` fica por compatibilidade de chamada.
+ */
+export function navAtribuivelAsDecimal(
+  cotas: CotaForNav[],
+  realizacoes: RealizacaoForNav[],
+  _supply?: SupplyParaNav,
+): Prisma.Decimal {
+  return navTotalDoPoolAsDecimal(cotas, realizacoes);
+}
+
+/** Ativo atribuível em BRL. */
+export function navAtribuivel(
+  cotas: CotaForNav[],
+  realizacoes: RealizacaoForNav[],
+  supply?: SupplyParaNav,
+): number {
+  return navAtribuivelAsDecimal(cotas, realizacoes, supply).toNumber();
+}
+
 export function navPorTokenAsDecimal(
   cotas: CotaForNav[],
-  realizacoes: RealizacaoForNav[] = [],
+  realizacoes: RealizacaoForNav[],
+  supply: SupplyParaNav,
 ): Prisma.Decimal {
-  const tokens = tokensEmitidosVivosAsDecimal(cotas);
-  if (tokens.isZero()) return new Prisma.Decimal(0);
-  return navTotalDoPoolAsDecimal(cotas, realizacoes)
-    .div(tokens)
+  const emitido = supplyEmitidoParaNavAsDecimal(supply);
+  // Nada emitido: não há passivo a precificar. Diferente do runoff — lá o
+  // supply é > 0 e o NAV vem do caixa.
+  if (emitido.lte(0)) return new Prisma.Decimal(0);
+  return navAtribuivelAsDecimal(cotas, realizacoes, supply)
+    .div(emitido)
     .toDecimalPlaces(8, Prisma.Decimal.ROUND_HALF_EVEN);
 }
 
 /**
- * NAV por token. Incluindo caixa realizado, NAV/token > 1 sinaliza yield
- * acumulado pelo fundo. Sem cotas vivas mas com caixa, retorna 0 (pool
- * em runoff — todas as cotas foram realizadas e os investidores devem
- * liquidar).
+ * NAV por token, precificado contra o supply circulante do ledger.
+ *
+ * NAV/token > 1 sinaliza yield acumulado pelo fundo. Em runoff — todas as
+ * cotas realizadas, caixa no lugar delas — o número **continua válido**:
+ * passa a ser caixa / circulante, que é exatamente o que um investidor
+ * liquidando deve receber.
+ *
+ * `supply` é obrigatório por decisão de tipo: o denominador errado é o bug
+ * que este cálculo existe pra eliminar, e um parâmetro opcional deixaria a
+ * regressão voltar em silêncio.
  */
 export function navPorToken(
   cotas: CotaForNav[],
-  realizacoes: RealizacaoForNav[] = [],
+  realizacoes: RealizacaoForNav[],
+  supply: SupplyParaNav,
 ): number {
-  return navPorTokenAsDecimal(cotas, realizacoes).toNumber();
+  return navPorTokenAsDecimal(cotas, realizacoes, supply).toNumber();
+}
+
+/** NAV/token inicial: com supply circulante zero o token vale R$ 1,00 (ADR 2026-11-09, cond. 5). */
+export const NAV_INICIAL_POR_TOKEN = new Prisma.Decimal(1);
+
+/**
+ * NAV/token a usar na emissão. Supply circulante zero → R$ 1,00 (a 1ª emissão
+ * reproduz a prova do SOW: R$ 400 → 400 tokens). Com circulante > 0 vale o NAV
+ * do ledger (mesma função da tela e do resgate); NAV não positivo lança —
+ * sem preço honesto não se emite.
+ */
+export function navParaEmissao(
+  cotas: CotaForNav[],
+  realizacoes: RealizacaoForNav[],
+  supply: SupplyParaNav,
+): Prisma.Decimal {
+  if (supplyEmitidoParaNavAsDecimal(supply).lte(0)) return NAV_INICIAL_POR_TOKEN;
+  const nav = navPorTokenAsDecimal(cotas, realizacoes, supply);
+  if (nav.lte(0)) {
+    throw new RangeError('NAV/token não positivo: emissão recusada');
+  }
+  return nav;
+}
+
+/**
+ * Tolerância relativa entre o NAV congelado na cotação e o NAV relido no
+ * build/submit: 1 bp (0,01%). Acima disso a compra é recusada (409 NAV_MUDOU)
+ * e o investidor recota — o preço da cotação não vale mais (L1-S2).
+ */
+export const NAV_TOLERANCIA_RELATIVA = new Prisma.Decimal('0.0001');
+
+/** `true` se |atual − cotação| ÷ cotação > `NAV_TOLERANCIA_RELATIVA`. NAV ≤ 0 em qualquer lado → mudou. */
+export function navMudou(navNaCotacao: Numericable, navAtual: Numericable): boolean {
+  const cot = toDecimal(navNaCotacao);
+  const atual = toDecimal(navAtual);
+  if (cot.lte(0) || atual.lte(0)) return true;
+  return atual.minus(cot).abs().div(cot).gt(NAV_TOLERANCIA_RELATIVA);
+}
+
+/**
+ * Quantidade de PLINA-RF emitida para `valorBrl` integralizado ao NAV/token
+ * dado: `valorBrl ÷ navPorToken`, **truncada** (ROUND_DOWN) a 7 casas — a
+ * precisão do Stellar. Nunca emite mais do que o BRL pago compra, e o NAV de
+ * quem já é holder não cai com a emissão (R$ 400 a NAV 1,0625 → 376,4705882).
+ * Fórmula única para incorporação e subscrição. NAV ≤ 0 ou valor < 0 lança.
+ */
+export function quantidadeEmitida(
+  valorBrl: Numericable,
+  navPorToken: Numericable,
+): Prisma.Decimal {
+  const valor = toDecimal(valorBrl);
+  const nav = toDecimal(navPorToken);
+  if (!nav.gt(0)) throw new RangeError('navPorToken deve ser > 0');
+  if (valor.lt(0)) throw new RangeError('valorBrl não pode ser negativo');
+  return valor.div(nav).toDecimalPlaces(7, Prisma.Decimal.ROUND_DOWN);
 }
 
 /**

@@ -12,6 +12,7 @@ const ORIG = {
 
 // Keypair determinístico pro teste — secret + public batem.
 import { Account, Keypair } from '@stellar/stellar-sdk';
+import { mockFeeStats } from '../../helpers/stellar-hermetico';
 const FUNDER_KP = Keypair.fromRawEd25519Seed(Buffer.alloc(32, 7));
 const FUNDER_SECRET = FUNDER_KP.secret();
 const FUNDER_PUBLIC = FUNDER_KP.publicKey();
@@ -75,6 +76,7 @@ describe('fundViaCreateAccount (N-09)', () => {
   it('log warn quando saldo do funder abaixo do floor (não bloqueia)', async () => {
     vi.resetModules();
     const account = await import('@/lib/stellar/account');
+    mockFeeStats(account.horizon); // sem Horizon real (getDynamicFee)
     // accountExists → false (destino novo).
     vi.spyOn(account.horizon, 'loadAccount')
       .mockRejectedValueOnce({ response: { status: 404 } })
@@ -110,6 +112,7 @@ describe('fundViaCreateAccount (N-09)', () => {
   it('happy path: count below cap + balance ok → submit + audit', async () => {
     vi.resetModules();
     const account = await import('@/lib/stellar/account');
+    mockFeeStats(account.horizon); // sem Horizon real (getDynamicFee)
     vi.spyOn(account.horizon, 'loadAccount')
       .mockRejectedValueOnce({ response: { status: 404 } })
       .mockResolvedValueOnce(

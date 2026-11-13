@@ -1,29 +1,23 @@
-# PSP — Pix real (M1)
+# PSP — Pix de SAÍDA ao titular (E1-2)
 
-Ver `docs/PRD-plina-v1.md` §M1 (F-M1-2).
+Contrato: `contratos/2026-11-11-e1-2-psp-pix-saida.md` (Plina-wt/backend2, `~/OpenBot/Shared/plina`).
 
-Cliente Pix de um PSP regulado (candidatos: Stark Infra, BTG OpenFinance,
-Inter, Itaú Connect). Em testnet/staging cair pro modo `PIX_SIMULADO` atual
-(`Pagamento.metodo=PIX_SIMULADO`).
+A porta `PixProvider` (`types.ts`) paga o titular (cedente) por Pix de saída; não é cobrança. Provedores:
 
-Interface mínima:
+| Arquivo | Provedor | Quando |
+|---|---|---|
+| `asaas.ts` | Asaas, **só sandbox** (`https://api-sandbox.asaas.com`, fixo por código) | `PSP_PROVIDER=ASAAS` + `ASAAS_API_KEY` |
+| `simulado.ts` | simulado, sem dinheiro nem rede | padrão (`PSP_PROVIDER` ausente) |
 
-```ts
-export interface PixProvider {
-  criarCobranca(payload: {
-    valor: string;
-    descricao: string;
-    idempotencyKey: string;
-    chavePix?: string;
-    dadosFavorecido: { documento: string; nome: string };
-  }): Promise<{ txid: string; brcode: string; expiraEm: Date }>;
+Seletor: `obterPixProvider()` (`index.ts`); valor desconhecido → `PSP_CONFIG`, nunca cai em outro provedor.
 
-  consultarStatus(txid: string): Promise<'PENDENTE' | 'PAGO' | 'EXPIRADO' | 'CANCELADO'>;
+**O Asaas não tem idempotência no POST nem filtro por `externalReference`.** Por isso o serviço
+(`lib/services/liquidacao-cedente.ts`) grava o claim antes de falar com o PSP, usa a `idempotencyKey`
+(`pix-cedente:<cessaoId>`) como `externalReference` e **nunca reenvia sozinho** após resposta ambígua: só tenta achar a
+transferência (`localizarPorChave`). Reenvio é decisão do operador.
 
-  webhookHandler(req: Request): Promise<{ txid: string; status: string }>;  // HMAC validate
-}
-```
+`comprovante.ts` monta o comprovante canônico (RFC 8785, sem PII, destino mascarado). O SHA-256 dele é o Memo.hash da
+âncora (`ancorarSha256`, contexto `COMPROVANTE_PIX`). A chave Pix do titular nunca é gravada.
 
-Idempotência: usar `Pagamento.idempotencyKey @unique` (já no schema).
-
-Bloqueado por: conta PJ + contrato com PSP (trilha A do PRD).
+Sandbox Asaas (doc): chaves `cliente-a00001@pix.bcb.gov.br` … `a00005` simulam Pix concluído.
+Smoke: `scripts/smoke-pix-saida.ts` (testnet + Neon dev, provedor simulado).

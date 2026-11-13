@@ -1,0 +1,54 @@
+name: Ops emission, subscription and Pix alarms
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ops-emission-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    if: vars.OPS_SCHEDULE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      OPS_BASE_URL: ${{ vars.OPS_BASE_URL || 'https://plina.finance' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Check pending issuance
+        env:
+          OPS_CRON_SECRET: ${{ secrets.OPS_CRON_SECRET }}
+          OPS_ROUTE_LABEL: pending issuance
+          OPS_ROUTE_PATH: /api/ops/emissao-pendente
+        run: node .github/scripts/call-ops-route.mjs
+
+      - name: Reconcile orphan subscriptions
+        if: always()
+        env:
+          OPS_CRON_SECRET: ${{ secrets.OPS_CRON_SECRET }}
+          OPS_ROUTE_LABEL: orphan subscription reconciliation
+          OPS_ROUTE_PATH: /api/ops/reconciliar-subscricoes
+        run: node .github/scripts/call-ops-route.mjs
+
+      - name: Reconcile outgoing Pix
+        if: always()
+        env:
+          OPS_CRON_SECRET: ${{ secrets.OPS_CRON_SECRET }}
+          OPS_ROUTE_LABEL: outgoing Pix reconciliation
+          OPS_ROUTE_PATH: /api/ops/pix-saida
+        run: node .github/scripts/call-ops-route.mjs
+
+      - name: Check NAV snapshot freshness
+        if: always()
+        run: node .github/scripts/check-nav-snapshot-freshness.mjs

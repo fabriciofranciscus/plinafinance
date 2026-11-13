@@ -42,7 +42,8 @@ function buildSwapXdr(plinarfCode: string, amount = '100.0000000'): string {
     )
     .addOperation(
       Operation.payment({
-        source: DIST.publicKey(),
+        // N1: a perna 2 é emissão nova (issuer → investidor).
+        source: ISSUER.publicKey(),
         destination: INV.publicKey(),
         asset: new Asset(plinarfCode, ISSUER.publicKey()),
         amount,
@@ -63,7 +64,8 @@ describe('assertSwapXdrMatchesQuote · F-M3-3', () => {
         distributorPubkey: DIST.publicKey(),
         issuerPubkey: ISSUER.publicKey(),
         bridgeAsset: { code: 'TESOURO', issuer: BRIDGE_ISSUER.publicKey() },
-        expectedAmount: '100.0000000',
+        expectedBridgeAmount: '100.0000000',
+        expectedPlinarfAmount: '100.0000000',
         plinarfCode: 'PLINARFB',
       }),
     ).not.toThrow();
@@ -77,7 +79,8 @@ describe('assertSwapXdrMatchesQuote · F-M3-3', () => {
         distributorPubkey: DIST.publicKey(),
         issuerPubkey: ISSUER.publicKey(),
         bridgeAsset: { code: 'TESOURO', issuer: BRIDGE_ISSUER.publicKey() },
-        expectedAmount: '100.0000000',
+        expectedBridgeAmount: '100.0000000',
+        expectedPlinarfAmount: '100.0000000',
         plinarfCode: 'PLINARF',
       }),
     ).toThrow(/leg2 asset/);
@@ -91,7 +94,8 @@ describe('assertSwapXdrMatchesQuote · F-M3-3', () => {
         distributorPubkey: DIST.publicKey(),
         issuerPubkey: ISSUER.publicKey(),
         bridgeAsset: { code: 'TESOURO', issuer: BRIDGE_ISSUER.publicKey() },
-        expectedAmount: '100.0000000',
+        expectedBridgeAmount: '100.0000000',
+        expectedPlinarfAmount: '100.0000000',
       }),
     ).not.toThrow();
   });

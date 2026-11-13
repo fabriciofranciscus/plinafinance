@@ -41,6 +41,13 @@ vi.mock('@/lib/stellar/account', async () => {
   return { ...actual, horizon: { loadAccount: mockLoadAccount } };
 });
 
+// O fee não é o assunto desta rota, e o `getDynamicFee` real chamaria o Horizon de
+// verdade (rede + timeout intermitente sob carga). Mock explícito, sem importActual.
+vi.mock('@/lib/stellar/fee', () => ({
+  getDynamicFee: vi.fn(async () => '100'),
+  _resetFeeCacheForTests: vi.fn(),
+}));
+
 import { POST } from '@/app/api/investidor/buy/claim/build/route';
 
 function req(body: object): Request {

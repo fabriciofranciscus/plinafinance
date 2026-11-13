@@ -3,9 +3,11 @@
  *
  * Parseia a XDR enviada pelo cliente em `/buy/swap/submit` e valida que as
  * 2 ops `payment` batem exatamente com o que o backend espera: leg 1 leva
- * `bridgeAsset` (TESOURO) do investor pro distributor, leg 2 leva PLINARF
- * do distributor pro investor; ambos amounts iguais a `expectedAmount`
- * (derivado server-side de `quote.toAmount`).
+ * `bridgeAsset` (TESOURO) do investor pro distributor no valor
+ * `expectedBridgeAmount` (= `quote.toAmount`); leg 2 leva PLINARF emitido pelo
+ * issuer pro investor (N1) no valor `expectedPlinarfAmount`
+ * (= `quote.plinarfAmount`, BRL ÷ NAV — M1-3, emissão ao NAV). As duas
+ * pernas têm amounts distintos; cada uma é conferida contra o seu.
  *
  * Por que: signature em rawSign cobre o `tx.hash()`. Stellar aceita
  * qualquer XDR válida com hash assinado — não há ligação cripto entre
@@ -14,7 +16,7 @@
  * passar pelo submit.
  */
 import { Asset, Transaction, type Operation } from '@stellar/stellar-sdk';
-import { networkPassphrase, assetCode } from './config';
+import { networkPassphrase, assetCode, STELLAR_TX_TIMEOUT_SEC } from './config';
 
 type AnyOp = Transaction['operations'][number];
 
@@ -23,13 +25,101 @@ export interface SwapXdrExpectation {
   distributorPubkey: string;
   issuerPubkey: string;
   bridgeAsset: { code: string; issuer: string };
-  expectedAmount: string;
+  /** Perna 1 (TESOURO pago) = `quote.toAmount`, 7 casas. */
+  expectedBridgeAmount: string;
+  /** Perna 2 (PLINARF emitido) = `quote.plinarfAmount`, 7 casas. */
+  expectedPlinarfAmount: string;
   /** Code do asset emitido (PLINARF Sênior / PLINARFB Subordinada). Default PLINARF. */
   plinarfCode?: string;
+  /** Prazo do quote (N1-S1): maxTime do envelope ≤ quoteExpiresAt + 120 s. */
+  quoteExpiresAt?: Date;
+  /** Memo.text que o build gerou (ex.: `q:<quoteId>`); se informado, o envelope tem de trazê-lo igual. */
+  memoTexto?: string;
 }
 
 function isPayment(op: AnyOp): op is Operation.Payment {
   return op.type === 'payment';
+}
+
+/** Amount Stellar canônico: positivo, exatamente 7 casas (como `op.amount`). */
+const STELLAR_AMOUNT = /^\d{1,12}\.\d{7}$/;
+
+function assertExpectedAmount(nome: string, valor: unknown): void {
+  if (
+    typeof valor !== 'string' ||
+    !STELLAR_AMOUNT.test(valor) ||
+    /^0+\.0+$/.test(valor)
+  ) {
+    throw new Error(
+      `expectativa ${nome} inválida: precisa ser amount Stellar > 0 com 7 casas`,
+    );
+  }
+}
+
+/** Folga de relógio entre o servidor e quem montou o envelope (s). */
+const FOLGA_RELOGIO_MAX_SEC = 60;
+const FOLGA_RELOGIO_MIN_SEC = 5;
+
+/**
+ * Janela de validade (N1 C1): o investidor monta e assina o envelope e o issuer
+ * co-assina, então ela tem de ser curta e já aberta. Exige timeBounds;
+ * 0 < maxTime ≤ agora + 120 s (build) + 60 s; minTime ≤ agora + 5 s. Tx já
+ * expirada passa: quem barra é a rede. Relógio do servidor (não do Horizon).
+ */
+function assertJanelaDeValidade(tx: Transaction, agoraSec: number): void {
+  const tb = tx.timeBounds;
+  if (!tb) throw new Error('xdr sem timeBounds: a janela de validade é obrigatória');
+  const maxTime = Number(tb.maxTime);
+  const minTime = Number(tb.minTime);
+  const limite = agoraSec + STELLAR_TX_TIMEOUT_SEC + FOLGA_RELOGIO_MAX_SEC;
+  if (!Number.isFinite(maxTime) || maxTime <= 0) {
+    throw new Error('xdr maxTime ausente (0): a tx valeria para sempre');
+  }
+  if (maxTime > limite) {
+    throw new Error(`xdr maxTime=${maxTime} além do limite ${limite} (agora + ${STELLAR_TX_TIMEOUT_SEC + FOLGA_RELOGIO_MAX_SEC} s)`);
+  }
+  if (!Number.isFinite(minTime) || minTime > agoraSec + FOLGA_RELOGIO_MIN_SEC) {
+    throw new Error(`xdr minTime=${minTime} no futuro (agora=${agoraSec})`);
+  }
+}
+
+/**
+ * Precondições v2 (N1-S1): a nossa tx não usa nenhuma. minAccountSequence foi o
+ * vetor do HIGH (tx_bad_seq → reserva órfã → reenvio dias depois com NAV velho).
+ */
+function assertSemPrecondicoesV2(tx: Transaction): void {
+  const lb = tx.ledgerBounds;
+  if (lb && (Number(lb.minLedger) !== 0 || Number(lb.maxLedger) !== 0)) {
+    throw new Error('xdr com precondição ledgerBounds: não permitida');
+  }
+  if (tx.minAccountSequence !== undefined && tx.minAccountSequence !== null) {
+    throw new Error('xdr com precondição minAccountSequence: não permitida');
+  }
+  if (Number(tx.minAccountSequenceAge ?? 0) !== 0) {
+    throw new Error('xdr com precondição minAccountSequenceAge: não permitida');
+  }
+  if (Number(tx.minAccountSequenceLedgerGap ?? 0) !== 0) {
+    throw new Error('xdr com precondição minAccountSequenceLedgerGap: não permitida');
+  }
+  if ((tx.extraSigners?.length ?? 0) > 0) {
+    throw new Error('xdr com precondição extraSigners: não permitida');
+  }
+}
+
+/** maxTime do envelope não pode passar do prazo do quote + 120 s (N1-S1). */
+function assertDentroDoQuote(tx: Transaction, quoteExpiresAt: Date): void {
+  const expira = quoteExpiresAt instanceof Date ? quoteExpiresAt.getTime() : NaN;
+  if (!Number.isFinite(expira)) throw new Error('expectativa quoteExpiresAt inválida');
+  const limite = Math.floor(expira / 1000) + STELLAR_TX_TIMEOUT_SEC;
+  const maxTime = Number(tx.timeBounds?.maxTime ?? 0);
+  if (maxTime > limite) {
+    throw new Error(`xdr maxTime=${maxTime} além do prazo do quote + ${STELLAR_TX_TIMEOUT_SEC} s (${limite})`);
+  }
+}
+
+function assertMemo(tx: Transaction, memoTexto: string): void {
+  const valor = tx.memo.type === 'text' ? Buffer.from(tx.memo.value as Buffer | string).toString('utf8') : null;
+  if (valor !== memoTexto) throw new Error('xdr memo diferente do gerado no build');
 }
 
 function fmtAsset(a: Asset): string {
@@ -39,7 +129,13 @@ function fmtAsset(a: Asset): string {
 export function assertSwapXdrMatchesQuote(
   xdr: string,
   expected: SwapXdrExpectation,
+  opts?: { agoraSec?: number },
 ): void {
+  // Fail-closed antes de olhar o XDR: expectativa malformada (ou chamador
+  // legado com `expectedAmount`) nunca vira comparação frouxa.
+  assertExpectedAmount('expectedBridgeAmount', expected.expectedBridgeAmount);
+  assertExpectedAmount('expectedPlinarfAmount', expected.expectedPlinarfAmount);
+
   let tx: Transaction;
   try {
     tx = new Transaction(xdr, networkPassphrase);
@@ -48,6 +144,11 @@ export function assertSwapXdrMatchesQuote(
       `xdr inválida ou networkPassphrase divergente: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
+
+  assertJanelaDeValidade(tx, opts?.agoraSec ?? Math.floor(Date.now() / 1000));
+  if (expected.quoteExpiresAt !== undefined) assertDentroDoQuote(tx, expected.quoteExpiresAt);
+  assertSemPrecondicoesV2(tx);
+  if (expected.memoTexto !== undefined) assertMemo(tx, expected.memoTexto);
 
   if (tx.source !== expected.investorPubkey) {
     throw new Error(
@@ -86,20 +187,23 @@ export function assertSwapXdrMatchesQuote(
       `leg1 asset=${fmtAsset(op1.asset)} ≠ ${fmtAsset(bridge)}`,
     );
   }
-  if (op1.amount !== expected.expectedAmount) {
+  if (op1.amount !== expected.expectedBridgeAmount) {
     throw new Error(
-      `leg1 amount=${op1.amount} ≠ esperado=${expected.expectedAmount}`,
+      `leg1 amount=${op1.amount} ≠ esperado=${expected.expectedBridgeAmount}`,
     );
   }
 
-  // Leg 2: distributor → investor, PLINARF (Sênior) ou PLINARFB (Subordinada).
+  // Leg 2: issuer → investor, PLINARF (Sênior) ou PLINARFB (Subordinada).
+  // N1: a subscrição EMITE token novo. Perna 2 vinda do distributor (venda da
+  // tesouraria, que inflava o NAV) ou de qualquer outra conta é recusada —
+  // inclusive sem source explícito, que herdaria o investidor.
   const plinarf = new Asset(
     expected.plinarfCode ?? assetCode,
     expected.issuerPubkey,
   );
   const op2Source = op2.source ?? tx.source;
-  if (op2Source !== expected.distributorPubkey) {
-    throw new Error(`leg2 source=${op2Source} ≠ distributor`);
+  if (op2Source !== expected.issuerPubkey) {
+    throw new Error(`leg2 source=${op2Source} ≠ issuer`);
   }
   if (op2.destination !== expected.investorPubkey) {
     throw new Error(`leg2 destination=${op2.destination} ≠ investor`);
@@ -109,9 +213,9 @@ export function assertSwapXdrMatchesQuote(
       `leg2 asset=${fmtAsset(op2.asset)} ≠ ${fmtAsset(plinarf)}`,
     );
   }
-  if (op2.amount !== expected.expectedAmount) {
+  if (op2.amount !== expected.expectedPlinarfAmount) {
     throw new Error(
-      `leg2 amount=${op2.amount} ≠ esperado=${expected.expectedAmount}`,
+      `leg2 amount=${op2.amount} ≠ esperado=${expected.expectedPlinarfAmount}`,
     );
   }
 }

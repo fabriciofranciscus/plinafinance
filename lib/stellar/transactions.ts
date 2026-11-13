@@ -52,12 +52,17 @@ export async function buildTrustlineXdr(
 }
 
 /**
- * Monta tx de swap atômico: investidor envia TESOURO pro distributor Plina +
- * distributor devolve PLINARF pro investidor. Dois payments no mesmo envelope.
+ * Monta tx de swap atômico (subscrição): investidor envia o ativo-ponte
+ * (TESOURO) pro distributor — caixa do fundo — e o issuer EMITE PLINARF novo
+ * pro investidor. Dois payments no mesmo envelope.
  *
- * Source = investidor (paga fee). Investidor + distributor assinam.
- * Distributor é assinado server-side com STELLAR_DISTRIBUTOR_SECRET.
- * Investidor assina via Privy (frontend).
+ * N1 (Consuelo; Thais escolheu a opção a, 2026-11-10): a perna 2 sai do
+ * issuer, não do distributor. Vender da tesouraria punha o BRL no caixa sem
+ * aumentar o supply e o NAV subia a cada venda; emitindo, supply +q e caixa
+ * +BRL andam juntos e o NAV fica estável.
+ *
+ * Source = investidor (paga fee). Assinam investidor (Privy) + issuer
+ * (server-side, `issuerSigner()`). O distributor não assina.
  */
 export async function buildSwapBridgeForPlinarfXdr(input: {
   investorPubkey: string;
@@ -87,7 +92,8 @@ export async function buildSwapBridgeForPlinarfXdr(input: {
     )
     .addOperation(
       Operation.payment({
-        source: input.distributorPubkey,
+        // Emissão nova: issuer → investidor (N1).
+        source: input.issuerPubkey,
         destination: input.investorPubkey,
         asset: plinarf,
         amount: input.plinarfAmount,

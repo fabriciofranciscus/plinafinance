@@ -22,14 +22,15 @@
 import { PrivyClient } from '@privy-io/server-auth';
 import { StrKey } from '@stellar/stellar-sdk';
 import { db } from '@/lib/db';
+import { privyStubAtivo } from '../auth/privy-stub';
 
 let _privy: PrivyClient | null = null;
 
 /**
  * E2E stub: retorna um PrivyClient fake que aceita Bearer
- * `e2e-stub-<G…>` (pubkey Stellar válido). Só ativa com
- * `PRIVY_VERIFY_STUB=true` (env de CI). Pareado com `lib/hooks/privy.ts`
- * client-side stub. Branch morto em produção via env constant fold.
+ * `e2e-stub-<G…>` (pubkey Stellar válido). Só ativa quando `privyStubAtivo()`
+ * (lib/auth/privy-stub.ts): flag E ambiente de teste E nunca produção/PUBLIC.
+ * Pareado com `lib/hooks/privy.ts` client-side stub.
  */
 function getStubPrivyClient(): PrivyClient {
   return {
@@ -65,7 +66,7 @@ function getStubPrivyClient(): PrivyClient {
 export function getPrivyClient(): PrivyClient {
   if (_privy) return _privy;
 
-  if (process.env.PRIVY_VERIFY_STUB === 'true') {
+  if (privyStubAtivo()) {
     _privy = getStubPrivyClient();
     return _privy;
   }
