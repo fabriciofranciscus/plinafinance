@@ -33,10 +33,11 @@ const TIPO_BEM_LABEL: Record<string, string> = {
 };
 
 const STATUS_ESTOQUE_LABEL: Record<string, string> = {
-  VERDE: 'Ativa',
-  AMARELO: 'Em revisão',
-  VERMELHO: 'Em liquidação',
-  BAIXA: 'Baixada',
+  // P7 (Consuelo): o enum é a idade do estoque (schema), não o estado da cota.
+  VERDE: '0–45 dias em estoque',
+  AMARELO: '46–75 dias',
+  VERMELHO: '76–90 dias',
+  BAIXA: 'Mais de 90 dias',
 };
 
 function brl(value: number): string {
@@ -105,16 +106,22 @@ export default async function PoolPage() {
         </h1>
         <div className="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <p className="font-text max-w-3xl text-lg text-base/80 leading-relaxed">
-            Direito creditório de cotas de consórcio contempladas adquiridas
-            com capital próprio. Cada token PLINA-RF representa R$ 1,00 de NAV
-            ajustado pela curva de realização. Auditável em tempo real via
-            Stellar Expert.
+            Cotas contempladas de consórcio de demonstração, registradas em
+            rede de testes; nenhuma é uma aquisição real. O valor de cada token
+            é o valor do pool dividido pelos tokens emitidos. As emissões podem
+            ser conferidas no Stellar Expert; o valor do pool é calculado pela
+            Plina.
+          </p>
+          <p className="font-text max-w-3xl text-sm text-base/70 leading-relaxed mt-3">
+            Dados da rede de testes. Esta página mostra o registro público em
+            rede; não é oferta nem solicitação de investimento, nem promessa de
+            retorno ou de liquidez.
           </p>
           <a
             href="/investir"
             className="self-start whitespace-nowrap bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors"
           >
-            Acesso institucional →
+            Ver simulação em testnet →
           </a>
         </div>
       </header>
@@ -154,12 +161,12 @@ export default async function PoolPage() {
             <Metric
               label="Caixa realizado"
               value={brl(caixa)}
-              sublabel="BRL retornado ao fundo via realização de cotas (Caminho A/B/C)"
+              sublabel="Valor recebido pelo pool na revenda ou no recebimento do crédito das cotas"
             />
             <Metric
-              label="Yield realizado acumulado"
+              label="Diferença realizada acumulada"
               value={brl(spreadAcumulado)}
-              sublabel="Spread capturado em realizações já executadas"
+              sublabel="Diferença entre o valor recebido e o custo de aquisição das cotas já realizadas (dados de teste)"
             />
             <Metric
               label="NAV por token"
@@ -181,10 +188,10 @@ export default async function PoolPage() {
                 <Th>Tipo de bem</Th>
                 <Th>Valor da carta</Th>
                 <Th>Deságio aquisição</Th>
-                <Th>NAV</Th>
+                <Th>Custo de aquisição</Th>
                 <Th>PLINA-RF emitido</Th>
                 <Th>Local aprox.</Th>
-                <Th>Prazo</Th>
+                <Th>Prazo restante (meses)</Th>
                 <Th>Status</Th>
               </tr>
             </thead>
@@ -230,9 +237,9 @@ export default async function PoolPage() {
 
         <p className="font-text text-xs text-base/60 mt-4">
           Administradoras e identificadores específicos das cotas ficam
-          off-chain, sob custódia do gestor do FIDC. On-chain expomos apenas
-          NAV, hash de emissão e endereços públicos. Política de privacidade
-          off-chain conforme LGPD.
+          fora da rede, sob guarda da Plina. Na rede expomos apenas o valor por
+          token, o hash de emissão e endereços públicos. Política de
+          privacidade conforme LGPD.
         </p>
       </section>
 
@@ -273,8 +280,8 @@ export default async function PoolPage() {
             {parametros.distributorPubkey}
           </a>
           <p className="text-xs text-base/60 mt-2">
-            Conta operacional da Plina. Recebe emissões do issuer e distribui
-            para investidores qualificados após onboarding institucional.
+            Conta operacional da Plina. Recebe as emissões do issuer e as
+            entrega aos participantes autorizados, hoje só em rede de testes.
           </p>
         </div>
       </section>
