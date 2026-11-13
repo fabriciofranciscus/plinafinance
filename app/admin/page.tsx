@@ -61,6 +61,13 @@ const STATUS_COTA_LABEL: Record<string, string> = {
   REVERTIDA: 'Revertida',
 };
 
+/** Anuência da administradora: o evento mais recente (eventos vêm do mais novo ao mais antigo) com status válido. */
+function anuenciaDe(eventos: Array<{ acao: string; payloadJson: unknown }>): string | null {
+  const e = eventos.find((x) => x.acao === 'ANUENCIA_REGISTRADA');
+  const st = (e?.payloadJson as { status?: string } | null | undefined)?.status;
+  return st === 'CONFIRMADA' || st === 'DECLARADA_PENDENTE' ? st : null;
+}
+
 export default async function AdminPage() {
   if (!(await isAdminAuthenticated())) {
     return <LoginForm />;
@@ -89,8 +96,12 @@ export default async function AdminPage() {
               include: {
                 pagamento: true,
                 cota: true,
-                // etapa do pipeline: o laudo registrado é o evento COTA_VALIDADA da cessão
-                eventos: { where: { acao: 'COTA_VALIDADA' }, select: { id: true }, take: 1 },
+                // etapas do pipeline: laudo = COTA_VALIDADA; anuência = ANUENCIA_REGISTRADA (o último vence)
+                eventos: {
+                  where: { acao: { in: ['COTA_VALIDADA', 'ANUENCIA_REGISTRADA'] } },
+                  select: { acao: true, payloadHash: true, payloadJson: true },
+                  orderBy: { criadoEm: 'desc' },
+                },
               },
             },
           },
@@ -267,7 +278,9 @@ export default async function AdminPage() {
                         }
                       : null,
                     cota: o.cessao.cota ? { id: o.cessao.cota.id } : null,
-                    laudoRegistrado: o.cessao.eventos.length > 0,
+                    laudoRegistrado: o.cessao.eventos.some((e) => e.acao === 'COTA_VALIDADA'),
+                    laudoHash: o.cessao.eventos.find((e) => e.acao === 'COTA_VALIDADA')?.payloadHash ?? null,
+                    anuenciaStatus: anuenciaDe(o.cessao.eventos),
                     titularSituacao: o.cessao.titularSituacao,
                     pixStatus: pixPorCessao.get(o.cessao.id) ?? null,
                   }

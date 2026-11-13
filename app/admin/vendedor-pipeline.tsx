@@ -47,6 +47,10 @@ interface PipelineLead {
       titularSituacao?: string | null;
       /** Situação da transferência Pix da cessão (StatusTransferenciaPix), se existir. */
       pixStatus?: string | null;
+      /** Hash do laudo (payloadHash do COTA_VALIDADA): é o `hashValidacao` da anuência. */
+      laudoHash?: string | null;
+      /** Anuência da administradora registrada (CONFIRMADA | DECLARADA_PENDENTE), se houver. */
+      anuenciaStatus?: string | null;
     } | null;
   }>;
 }
@@ -103,6 +107,8 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
   const [laudoUrl, setLaudoUrl] = useState('');
   const [situacao, setSituacao] = useState('TITULAR_UNICO');
   const [atestado, setAtestado] = useState(false);
+  const [anuenciaTipo, setAnuenciaTipo] = useState('DECLARADA_PENDENTE');
+  const [anuenciaRef, setAnuenciaRef] = useState('');
 
   async function call(action: string, payload: Record<string, unknown>) {
     setBusy(true);
@@ -117,8 +123,13 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
         body: JSON.stringify({ action, ...payload }),
       });
       if (!res.ok) {
-        const j = (await res.json()) as { error?: string };
-        throw new Error(j.error ?? `HTTP ${res.status}`);
+        // Só a mensagem fixa de domínio + o code; sem corpo cru (pode ter detalhe de validação).
+        const j = (await res.json().catch(() => ({}))) as { error?: unknown; code?: unknown };
+        throw new Error(
+          typeof j.code === 'string' && typeof j.error === 'string'
+            ? `${j.error} (${j.code})`
+            : `Falha ao executar a ação (HTTP ${res.status}).`,
+        );
       }
       router.refresh();
     } catch (err) {
@@ -213,6 +224,22 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
               Ver comprovante
             </a>
 
+            <ul className="mt-2 font-text text-xs text-base/80 space-y-0.5" aria-label="Estado da cessão">
+              <li>Laudo: {cessao.laudoRegistrado ? 'registrado' : 'pendente'}</li>
+              <li>
+                Assinatura:{' '}
+                {cessao.status === 'ASSINADA'
+                  ? 'assinada'
+                  : cessao.status === 'ENVIADA_DOCUSIGN'
+                    ? 'aguardando assinatura'
+                    : 'não enviada'}
+              </li>
+              <li>Titular do laudo: {cessao.titularSituacao ?? 'não confirmado'}</li>
+              <li>Anuência da administradora: {cessao.anuenciaStatus ?? 'não registrada'}</li>
+              <li>Pix ao cedente: {cessao.pixStatus ?? 'não iniciado'}</li>
+              <li>Cota: {cota ? 'incorporada' : 'não incorporada'}</li>
+            </ul>
+
             {cessao.status === 'PENDENTE' && !cessao.laudoRegistrado && (
               <div className="mt-2 space-y-2">
                 <label className="block">
@@ -297,16 +324,83 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
               </p>
             )}
 
+            {cessao.laudoRegistrado && cessao.laudoHash && !cessao.anuenciaStatus && !cota && (
+              <div className="mt-2 space-y-2">
+                <label className="block">
+                  <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
+                    Anuência da administradora
+                  </span>
+                  <select
+                    value={anuenciaTipo}
+                    onChange={(e) => setAnuenciaTipo(e.target.value)}
+                    className="mt-1 w-full min-h-[44px] bg-white border border-base/55 px-3 py-2 font-text text-sm"
+                  >
+                    <option value="DECLARADA_PENDENTE">Declarada, pendente (anuência simulada na testnet)</option>
+                    <option value="CONFIRMADA">Confirmada pela administradora</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
+                    Referência (opcional)
+                  </span>
+                  <input
+                    type="text"
+                    maxLength={200}
+                    value={anuenciaRef}
+                    onChange={(e) => setAnuenciaRef(e.target.value)}
+                    className="mt-1 w-full min-h-[44px] bg-white border border-base/55 px-3 py-2 font-text text-sm"
+                  />
+                </label>
+                <button
+                  onClick={() =>
+                    call('registrar-anuencia', {
+                      hashValidacao: cessao.laudoHash,
+                      status: anuenciaTipo,
+                      ...(anuenciaRef.trim() ? { referencia: anuenciaRef.trim() } : {}),
+                    })
+                  }
+                  disabled={busy}
+                  className={BTN}
+                >
+                  Registrar anuência
+                </button>
+              </div>
+            )}
+
             {cessao.status === 'ASSINADA' &&
               cessao.titularSituacao === 'TITULAR_UNICO' &&
+              cessao.pixStatus !== 'COMPROVADA' &&
               (!pagamento || pagamento.status !== 'EXECUTADO') && (
                 <div className="mt-2">
-                  {cessao.pixStatus && (
-                    <p className="font-mono text-[10px] text-base/60 mb-2">Transferência Pix: {cessao.pixStatus}</p>
+                  {cessao.pixStatus === 'FALHOU' ? (
+                    <>
+                      <p className="font-text text-xs text-base/70 mb-2">
+                        O Pix falhou e foi confirmado pelo PSP. Reabrir pagamento é uma ação auditada.
+                      </p>
+                      <button
+                        onClick={() => call('reabrir-pagamento-cedente', { cessaoId: cessao.id })}
+                        disabled={busy}
+                        className={BTN}
+                      >
+                        Reabrir pagamento
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {cessao.pixStatus && (
+                        <p className="font-text text-xs text-base/70 mb-2">
+                          Pix em andamento ({cessao.pixStatus}). Repetir a ação só reconsulta o estado; não paga de novo.
+                        </p>
+                      )}
+                      <button
+                        onClick={() => call('pagar-cedente', { cessaoId: cessao.id })}
+                        disabled={busy}
+                        className={BTN}
+                      >
+                        {cessao.pixStatus ? 'Reconsultar pagamento' : 'Pagar cedente (Pix)'}
+                      </button>
+                    </>
                   )}
-                  <button onClick={() => call('pagar-cedente', { cessaoId: cessao.id })} disabled={busy} className={BTN}>
-                    Pagar cedente (Pix)
-                  </button>
                 </div>
               )}
           </div>
@@ -331,10 +425,13 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
 
             {!cota && cessao && (
               <div className="mt-2">
+                {!cessao.anuenciaStatus && (
+                  <p className="font-text text-xs text-base/70 mb-2">Falta registrar a anuência da administradora.</p>
+                )}
                 <button
                   onClick={() => call('incorporar-cota', { cessaoId: cessao.id })}
-                  disabled={busy}
-                  className="bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-primary-deep transition-colors disabled:opacity-50"
+                  disabled={busy || !cessao.anuenciaStatus}
+                  className={BTN}
                 >
                   Incorporar cota ao pool · emitir PLINA-RF
                 </button>

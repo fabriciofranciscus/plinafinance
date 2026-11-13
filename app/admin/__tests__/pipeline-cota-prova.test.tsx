@@ -134,6 +134,9 @@ describe('VendedorPipeline: fluxo da cota de prova', () => {
           status: 'ASSINADA',
           laudoRegistrado: true,
           titularSituacao: 'TITULAR_UNICO',
+          pixStatus: 'COMPROVADA',
+          laudoHash: 'a'.repeat(64),
+          anuenciaStatus: 'DECLARADA_PENDENTE',
           pagamento: { id: 'p1', status: 'EXECUTADO', onChainTxHash: null },
         })}
       />,
@@ -141,5 +144,55 @@ describe('VendedorPipeline: fluxo da cota de prova', () => {
     fireEvent.click(screen.getByRole('button', { name: /Incorporar cota ao pool/ }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(corpo()).toMatchObject({ action: 'incorporar-cota', cessaoId: 'c1' });
+  });
+
+  it('registra a anuência com o hash do laudo; incorporar fica bloqueado sem ela', async () => {
+    const hash = 'b'.repeat(64);
+    const base = { status: 'ASSINADA', laudoRegistrado: true, laudoHash: hash, titularSituacao: 'TITULAR_UNICO', pixStatus: 'COMPROVADA', pagamento: { id: 'p1', status: 'EXECUTADO', onChainTxHash: null } };
+    const { unmount } = render(<VendedorPipeline leads={leads(base)} />);
+    expect((screen.getByRole('button', { name: /Incorporar cota ao pool/ }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar anuência' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(corpo()).toMatchObject({ action: 'registrar-anuencia', hashValidacao: hash, status: 'DECLARADA_PENDENTE' });
+    unmount();
+    render(<VendedorPipeline leads={leads({ ...base, anuenciaStatus: 'CONFIRMADA' })} />);
+    expect(screen.queryByRole('button', { name: 'Registrar anuência' })).toBeNull();
+    expect((screen.getByRole('button', { name: /Incorporar cota ao pool/ }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('Pix FALHOU: oferece reabrir (reabrir-pagamento-cedente), não pagar de novo', async () => {
+    render(<VendedorPipeline leads={leads({ status: 'ASSINADA', laudoRegistrado: true, titularSituacao: 'TITULAR_UNICO', pixStatus: 'FALHOU' })} />);
+    expect(screen.queryByRole('button', { name: /Pagar cedente/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Reabrir pagamento' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(corpo()).toMatchObject({ action: 'reabrir-pagamento-cedente', cessaoId: 'c1' });
+  });
+
+  it('Pix em andamento ou comprovado: sem "Reabrir"; comprovado sem botão de pagar', () => {
+    const { unmount } = render(<VendedorPipeline leads={leads({ status: 'ASSINADA', laudoRegistrado: true, titularSituacao: 'TITULAR_UNICO', pixStatus: 'INCERTO' })} />);
+    expect(screen.queryByRole('button', { name: 'Reabrir pagamento' })).toBeNull();
+    unmount();
+    render(<VendedorPipeline leads={leads({ status: 'ASSINADA', laudoRegistrado: true, titularSituacao: 'TITULAR_UNICO', pixStatus: 'COMPROVADA' })} />);
+    expect(screen.queryByRole('button', { name: /Pagar cedente|Reconsultar|Reabrir/ })).toBeNull();
+  });
+
+  it('erro de domínio mostra só a mensagem fixa e o code; corpo sem code vira mensagem genérica', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'Envio recusado: falta o laudo.', code: 'LAUDO_AUSENTE', detalhe: 'x' }), { status: 409 }),
+    );
+    render(<VendedorPipeline leads={leads({ laudoRegistrado: true })} />);
+    fireEvent.click(screen.getByRole('button', { name: /Enviar para assinatura/ }));
+    expect(await screen.findByText('Envio recusado: falta o laudo. (LAUDO_AUSENTE)')).toBeTruthy();
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'stack interno' }), { status: 500 }));
+    fireEvent.click(screen.getByRole('button', { name: /Enviar para assinatura/ }));
+    expect(await screen.findByText('Falha ao executar a ação (HTTP 500).')).toBeTruthy();
+  });
+
+  it('mostra o estado de cada etapa da cessão', () => {
+    render(<VendedorPipeline leads={leads({ status: 'ENVIADA_DOCUSIGN', laudoRegistrado: true })} />);
+    const lista = screen.getByRole('list', { name: 'Estado da cessão' });
+    expect(lista.textContent).toContain('Assinatura: aguardando assinatura');
+    expect(lista.textContent).toContain('Laudo: registrado');
+    expect(lista.textContent).toContain('Anuência da administradora: não registrada');
   });
 });
