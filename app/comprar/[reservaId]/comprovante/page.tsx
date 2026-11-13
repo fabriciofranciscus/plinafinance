@@ -76,7 +76,7 @@ export default async function ComprovanteCompradorPage({ params }: PageProps) {
           <>
             <Row label="Valor pago" value={BRL.format(Number(realizacao.valorRealizado))} mono />
             <Row
-              label="Economia"
+              label="Diferença para o valor de face"
               value={BRL.format(
                 Number(reserva.cota.valorCarta) - Number(realizacao.valorRealizado),
               )}

@@ -97,7 +97,6 @@ export function BuscarScreen({
 
 function CotaCard({ cota, onSelect }: { cota: CotaResumo; onSelect: () => void }) {
   const paga = valorRevenda(cota.valorCarta, cota.desagioRevenda);
-  const economia = cota.valorCarta - paga;
   const descontoPct = ((cota.desagioRevenda ?? 0) * 100).toFixed(1);
 
   return (
@@ -119,13 +118,13 @@ function CotaCard({ cota, onSelect }: { cota: CotaResumo; onSelect: () => void }
 
       <div className="mt-3 border border-primary-deep/30 bg-primary-deep/5 p-3">
         <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/50">
-          Você paga · −{descontoPct}%
+          Entrada (−{descontoPct}% sobre o valor de face)
         </p>
         <p className="font-mono text-2xl font-bold text-primary-deep">
           {BRL.format(paga)}
         </p>
-        <p className="font-mono text-[11px] text-base/55 mt-1">
-          poupa {BRL.format(economia)}
+        <p className="font-text text-[11px] text-base/65 mt-1 leading-snug">
+          Valor de face {BRL.format(cota.valorCarta)}. Nesta fase, só são aceitas cotas quitadas (sem parcelas restantes).
         </p>
       </div>
 
