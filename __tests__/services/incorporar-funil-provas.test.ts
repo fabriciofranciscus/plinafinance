@@ -34,7 +34,7 @@ const cessao = (over: Record<string, unknown> = {}) => ({
   oferta: {
     tipoBem: 'VEICULO', administradora: 'Adm', valorCarta: new Prisma.Decimal('500'),
     desagioAquisicao: new Prisma.Decimal('0.2'), prazoRestanteMeses: null, leadVendedorId: 'lead_1',
-    leadVendedor: { email: 'a@exemplo.test', nome: 'Ana' },
+    leadVendedor: { email: 'a@exemplo.test', nome: 'Ana', status: 'PIX_EXECUTADO' },
   },
   ...over,
 });
@@ -82,12 +82,43 @@ describe('incorporarCotaDoFunil — provas antes de emitir (qualquer rede)', () 
     expect(m.incorporar).not.toHaveBeenCalled();
   });
 
-  it('Pagamento ausente ou não EXECUTADO continua recusando (como antes)', async () => {
+  it('Pagamento ausente ou não EXECUTADO: erro TIPADO PAGAMENTO_NAO_EXECUTADO (a rota devolve 409), sem emitir', async () => {
     m.cessaoFind.mockResolvedValue(cessao({ pagamento: null }));
-    await expect(run()).rejects.toThrow(/Pix precisa estar EXECUTADO/);
+    await expect(run()).rejects.toMatchObject({ code: 'PAGAMENTO_NAO_EXECUTADO' });
     m.cessaoFind.mockResolvedValue(cessao({ pagamento: { status: 'PENDENTE', valor: new Prisma.Decimal('1') } }));
-    await expect(run()).rejects.toThrow(/Pix precisa estar EXECUTADO/);
+    await expect(run()).rejects.toBeInstanceOf(IncorporacaoFunilBloqueadaError);
     expect(m.incorporar).not.toHaveBeenCalled();
+  });
+
+  const COTA = { id: 'cota_1', emissaoTxHash: 'tx_emissao', tokensEmitidos: new Prisma.Decimal('12.5') };
+
+  it('Cota já incorporada E lead já COTA_INCORPORADA: erro tipado COTA_JA_INCORPORADA, sem emitir nem notificar', async () => {
+    m.cessaoFind.mockResolvedValue(cessao({ cota: COTA, oferta: { ...cessao().oferta, leadVendedor: { email: 'a@exemplo.test', nome: 'Ana', status: 'COTA_INCORPORADA' } } }));
+    await expect(run()).rejects.toMatchObject({ code: 'COTA_JA_INCORPORADA' });
+    expect(m.incorporar).not.toHaveBeenCalled();
+    expect(m.notify).not.toHaveBeenCalled();
+  });
+
+  it('RETOMADA: a Cota existe mas o lead não foi marcado (queda no meio): NÃO emite de novo e completa o vínculo e o e-mail', async () => {
+    m.cessaoFind.mockResolvedValue(cessao({ cota: COTA }));
+    const r = await run();
+    expect(r).toEqual({ cotaId: 'cota_1', txHash: 'tx_emissao', tokensEmitidos: 12.5 });
+    expect(m.incorporar).not.toHaveBeenCalled();
+    expect(m.leadUpdate).toHaveBeenCalledWith({ where: { id: 'lead_1' }, data: { status: 'COTA_INCORPORADA' } });
+    expect(m.auditUpdateMany).toHaveBeenCalledWith({
+      where: { cotaId: 'cota_1', acao: 'COTA_INCORPORADA' },
+      data: { leadVendedorId: 'lead_1', cessaoId: 'ces_1' },
+    });
+    expect(m.notify).toHaveBeenCalledOnce();
+  });
+
+  it('a retomada também exige as provas (cessão ASSINADA e Pix COMPROVADO)', async () => {
+    m.cessaoFind.mockResolvedValue(cessao({ cota: COTA, status: 'PENDENTE' }));
+    await expect(run()).rejects.toMatchObject({ code: 'CESSAO_NAO_ASSINADA' });
+    m.cessaoFind.mockResolvedValue(cessao({ cota: COTA }));
+    m.pixFind.mockResolvedValue({ status: 'FALHOU' });
+    await expect(run()).rejects.toMatchObject({ code: 'PIX_NAO_COMPROVADO' });
+    expect(m.leadUpdate).not.toHaveBeenCalled();
   });
 
   it('a mensagem do erro é fixa, sem dado do cedente', async () => {

@@ -498,14 +498,17 @@ export async function executarPixSimulado(input: {
 
 // ─── 6. Incorporação ao pool (wrapper de tokenizacao.incorporarCota) ────────
 
+const MENSAGENS_FUNIL = {
+  CESSAO_NAO_ASSINADA: 'Incorporação recusada: a cessão precisa estar ASSINADA.',
+  PIX_NAO_COMPROVADO: 'Incorporação recusada: o Pix ao cedente precisa estar COMPROVADO (pagar-cedente).',
+  PAGAMENTO_NAO_EXECUTADO: 'Incorporação recusada: o pagamento ao cedente precisa estar EXECUTADO.',
+  COTA_JA_INCORPORADA: 'Esta cessão já teve a cota incorporada.',
+} as const;
+
 /** Incorporação do funil recusada por falta de prova (cessão não assinada, Pix não comprovado): nada foi emitido. */
 export class IncorporacaoFunilBloqueadaError extends Error {
-  constructor(readonly code: 'CESSAO_NAO_ASSINADA' | 'PIX_NAO_COMPROVADO') {
-    super(
-      code === 'CESSAO_NAO_ASSINADA'
-        ? 'Incorporação recusada: a cessão precisa estar ASSINADA.'
-        : 'Incorporação recusada: o Pix ao cedente precisa estar COMPROVADO (pagar-cedente).',
-    );
+  constructor(readonly code: 'CESSAO_NAO_ASSINADA' | 'PIX_NAO_COMPROVADO' | 'PAGAMENTO_NAO_EXECUTADO' | 'COTA_JA_INCORPORADA') {
+    super(MENSAGENS_FUNIL[code]);
     this.name = 'IncorporacaoFunilBloqueadaError';
   }
 }
@@ -519,16 +522,20 @@ export async function incorporarCotaDoFunil(input: {
   const cessao = await db.cessao.findUnique({
     where: { id: input.cessaoId },
     include: {
-      oferta: { include: { leadVendedor: { select: { email: true, nome: true } } } },
+      oferta: { include: { leadVendedor: { select: { email: true, nome: true, status: true } } } },
       pagamento: true,
       cota: true,
     },
   });
   if (!cessao) throw new Error('Cessão não encontrada');
   if (cessao.pagamento?.status !== PagamentoStatus.EXECUTADO) {
-    throw new Error('Pix precisa estar EXECUTADO antes de incorporar');
+    throw new IncorporacaoFunilBloqueadaError('PAGAMENTO_NAO_EXECUTADO');
   }
-  if (cessao.cota) throw new Error('Cota já incorporada pra esta cessão');
+  // Retomada (runbook: "timeout ou 500 → chamar de novo"): a Cota já existe, mas os passos finais do funil podem não ter
+  // completado (queda entre o commit da Cota e o vínculo ao lead). Se o lead já está COTA_INCORPORADA, está tudo feito.
+  if (cessao.cota && cessao.oferta.leadVendedor?.status === LeadVendedorStatus.COTA_INCORPORADA) {
+    throw new IncorporacaoFunilBloqueadaError('COTA_JA_INCORPORADA');
+  }
   // Atlas/Consuelo (13/11), em QUALQUER rede: só se emite depois das provas. Cessão ASSINADA e Pix COMPROVADO (a
   // TransferenciaPix do `pagar-cedente`, com comprovante e âncora); `Pagamento` EXECUTADO sozinho não basta (o Pix
   // legado também o produz, sem comprovante). Sem isso o registro ancorado nasce com elos nulos, sem conserto.
@@ -547,8 +554,15 @@ export async function incorporarCotaDoFunil(input: {
     select: { payloadHash: true },
   });
 
-  // Re-usa tokenizacao.incorporarCota (já emite on-chain + audit COTA_INCORPORADA).
-  const result = await incorporarCota({
+  // Re-usa tokenizacao.incorporarCota (já emite on-chain + audit COTA_INCORPORADA). Retomada: a Cota já existe (os passos
+  // finais abaixo é que não completaram) → não emite nada, só completa o vínculo ao lead.
+  const result = cessao.cota
+    ? {
+        cotaId: cessao.cota.id,
+        txHash: cessao.cota.emissaoTxHash ?? '',
+        tokensEmitidos: new Prisma.Decimal(cessao.cota.tokensEmitidos).toNumber(),
+      }
+    : await incorporarCota({
     tipoBem: cessao.oferta.tipoBem,
     administradora: cessao.oferta.administradora,
     valorCarta: cessao.oferta.valorCarta.toString(),

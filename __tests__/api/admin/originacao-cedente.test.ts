@@ -202,7 +202,7 @@ describe('registrar-cessao / enviar-cessao (laudo antes do envelope)', () => {
 });
 
 describe('incorporar-cota — provas do funil (IncorporacaoFunilBloqueadaError → 409)', () => {
-  it.each(['CESSAO_NAO_ASSINADA', 'PIX_NAO_COMPROVADO'] as const)('%s → 409 com o código e mensagem fixa', async (code) => {
+  it.each(['CESSAO_NAO_ASSINADA', 'PIX_NAO_COMPROVADO', 'PAGAMENTO_NAO_EXECUTADO', 'COTA_JA_INCORPORADA'] as const)('%s → 409 com o código e mensagem fixa', async (code) => {
     const erro = new IncorporacaoFunilBloqueadaError(code);
     m.incorporar.mockRejectedValue(erro);
     const r = await POST(req({ action: 'incorporar-cota', cessaoId: 'ces_1' }));
