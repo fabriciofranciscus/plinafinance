@@ -726,11 +726,14 @@ export async function incorporarCota(
 
       return { cotaId, txHash, tokensEmitidos: quantidade.toNumber() };
     },
-    // O trabalho dentro da transação é limitado (leituras + no máx. um envio e um reenvio da emissão; o erro
-    // ambíguo da emissão sai como EMISSAO_EM_ANDAMENTO). ATENÇÃO (E1-p, I-EP-3 da Vera): a âncora do registro
-    // (ancorarSha256) roda aqui dentro e, num erro ambíguo, pode esperar até ~130 s. Se o timeout estourar, a
-    // transação desfaz: antes da emissão, nada sai; depois dela, a TentativaEmissao (fora da transação) fica
-    // PENDENTE e a próxima chamada recupera pelo hash. Timeout mantido (não aumentado).
+    // ATENÇÃO (E1-p, I1 do Argus / I-EP-3 da Vera): a âncora do registro (ancorarSha256) roda AQUI DENTRO e, num erro
+    // ambíguo, pode esperar até ~130 s. `obterEmissaoOnChain` é chamado SEM `tx`: ele grava a TentativaEmissao e submete
+    // a emissão pelo `db` global e pelo Horizon, FORA desta transação. Logo, se o timeout (120 s) estourar durante a espera
+    // da âncora, a emissão AINDA é submetida depois; só as escritas de domínio desta transação (Cota, MovimentoFundo,
+    // EventoAudit) falham e desfazem. Resultado: emissão na rede SEM Cota, com o NAV fechado (TentativaEmissao PENDENTE),
+    // até a próxima chamada recuperar pelo memo/hash. Sem perda nem duplicação de dinheiro. Procedimento: timeout ou
+    // 500 na incorporação → CHAMAR DE NOVO a mesma incorporação (nunca recriar a cessão/laudo). A correção estrutural
+    // (âncora fora da transação) é a dívida M3, depois do D30. Timeout mantido (não aumentado).
     { timeout: 120_000, maxWait: 15_000 },
   );
 }
