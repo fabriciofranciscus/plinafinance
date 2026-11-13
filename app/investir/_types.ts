@@ -56,7 +56,12 @@ export interface OnboardData {
 export interface QuoteData {
   quoteId: string;
   fromAmount: string;
+  /** Valor em TESOURO que o investidor paga na perna 1 do swap. */
   toAmount: string;
+  /** Tokens a emitir pelo NAV (N1), calculado no servidor. Ausente em cotação antiga. */
+  plinarfAmount?: string | null;
+  /** NAV por token que o servidor usou na cotação (só informativo). */
+  navPorTokenNaCotacao?: string | null;
   exchangeRate: string;
   fee: string;
   expiresAt: string;
@@ -99,13 +104,24 @@ export interface ClaimResult {
 export interface SwapEnvelope {
   xdr: string;
   hashHex: string;
-  distributorSigBase64: string;
-  distributorPubkey: string;
+  /**
+   * Quote a usar no submit. O build renova a cotação (recotar): é o mesmo id,
+   * ou um NOVO se o quote anterior expirou. O submit usa SEMPRE este id.
+   */
+  quoteId: string;
+  /**
+   * Tokens a emitir e NAV por token do quote VIGENTE usado neste envelope
+   * (strings decimais). O build renova o preço: estes valores valem mais que
+   * os do /quote inicial. Contrato do Atlas (N1).
+   */
+  plinarfAmount: string;
+  navPorTokenNaCotacao: string;
   mock: false;
 }
 
 export interface SwapMockResult {
   txHash: string;
+  quoteId?: string;
   mock: true;
   alreadyExecuted: true;
 }

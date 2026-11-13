@@ -18,6 +18,10 @@ import {
 } from '@/lib/hooks/privy';
 import { useCallback, useEffect, useState } from 'react';
 import { unwrapEnvelope } from '@/lib/http/client';
+import { SACAR, resultadoSaque } from '@/lib/sacar/microcopy';
+
+// Estados em que a Etherfuse não vai mais avançar o pedido (além de processing/completed).
+const STATUS_TERMINAL_RUIM = ['failed', 'cancelled', 'canceled', 'refunded'];
 
 const NUMBER_BR = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 });
 const BRL = new Intl.NumberFormat('pt-BR', {
@@ -232,7 +236,11 @@ export default function SacarPage() {
         const data = await unwrapEnvelope<OffRampStatusData>(res);
         if (cancelled) return;
         setFinalStatus(data);
-        if (data.status === 'processing' || data.status === 'completed') {
+        if (
+          data.status === 'processing' ||
+          data.status === 'completed' ||
+          STATUS_TERMINAL_RUIM.includes(data.status)
+        ) {
           setStep('done');
         }
       } catch {
@@ -246,6 +254,18 @@ export default function SacarPage() {
       clearInterval(id);
     };
   }, [step, offRamp, getAccessToken]);
+
+  const statusFinal = finalStatus?.status ?? '';
+  const terminalRuim = STATUS_TERMINAL_RUIM.includes(statusFinal);
+  const resultado =
+    terminalRuim && offRamp
+      ? resultadoSaque({
+          status: statusFinal === 'canceled' ? 'cancelled' : statusFinal,
+          // o app só opera em rede de testes nesta fase: o Pix é sempre simulado
+          simulado: true,
+          pedido: offRamp.orderId,
+        })
+      : null;
 
   if (!ready) {
     return (
@@ -288,6 +308,12 @@ export default function SacarPage() {
         </p>
       </div>
 
+      <a
+        href="/minha-posicao"
+        className="inline-flex items-center min-h-[44px] mb-2 font-details text-[10px] tracking-[0.2em] uppercase underline underline-offset-4 text-base/70 hover:text-base"
+      >
+        ← Voltar à minha posição
+      </a>
       <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
         Sacar BRL · TESOURO → PIX
       </p>
@@ -295,7 +321,8 @@ export default function SacarPage() {
         {step === 'quote' && 'Cotação TESOURO → BRL'}
         {step === 'signing' && 'Assine o burn da Etherfuse'}
         {step === 'processing' && 'Etherfuse confirmando burn…'}
-        {step === 'done' && 'Off-ramp em processing'}
+        {step === 'done' &&
+          (terminalRuim && resultado ? resultado.titulo : 'Off-ramp em processing')}
       </h1>
 
       {step === 'quote' && (
@@ -372,7 +399,9 @@ export default function SacarPage() {
       {(step === 'processing' || step === 'done') && offRamp && (
         <div className="mt-10">
           <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
-            {step === 'done'
+            {step === 'done' && terminalRuim && resultado
+              ? resultado.texto
+              : step === 'done'
               ? 'Burn confirmado on-chain. Etherfuse moveu o off-ramp pra `processing`. Em produção, PIX cai na sua conta nos próximos minutos. Sandbox PIX/BRL não settla pra banco real (constraint upstream).'
               : 'Polling status da off-ramp a cada 3s. Etherfuse precisa indexar o burn (~10s).'}
           </p>
@@ -405,9 +434,16 @@ export default function SacarPage() {
           role="alert"
           className="mt-10 px-5 py-4 bg-red-50 border border-red-200 text-red-900 font-mono text-[11px]"
         >
-          {error}
-          <button onClick={() => setError(null)} className="ml-4 underline">
-            fechar
+          {/* Mensagem amigável; o texto técnico fica só em "Detalhes técnicos". */}
+          <p className="font-text text-sm">{SACAR.erro.generico}</p>
+          <details className="mt-2">
+            <summary className="min-h-[44px] flex items-center cursor-pointer">
+              {SACAR.detalhes.resumo}
+            </summary>
+            <p className="break-all">{error}</p>
+          </details>
+          <button onClick={() => setError(null)} className="mt-2 underline min-h-[44px] px-2">
+            {SACAR.erro.fechar}
           </button>
         </div>
       )}
