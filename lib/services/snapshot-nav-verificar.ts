@@ -75,6 +75,35 @@ export interface ResultadoVerificacao {
   conferencias: Conferencia[];
   /** 0 tudo conferido · 1 alguma conferência falhou · 2 nada falhou mas há conferência que o Horizon não permite refazer */
   codigoSaida: 0 | 1 | 2;
+  /**
+   * Resumo das emissões por cota (só dos fatos on-chain): `e14` = emissão do modelo E1-4 confirmada na rede (bem-sucedida,
+   * do issuer, com memo do tipo hash); `legadas` = confirmadas por operação de emissão, sem Memo.hash. `null` se o arquivo
+   * não foi lido até a seção das cotas.
+   */
+  cotas: { total: number; e14: number; legadas: number } | null;
+}
+
+/**
+ * Mensagem final impressa pelo script (texto da Norma, Consuelo e Atlas; só texto, nenhuma lógica nova):
+ *  · código 0 CONFERIDO: diz o que foi refeito no Horizon e o que NÃO é (o numerador é registro contábil da Plina), com a
+ *    contagem K (modelo E1-4) e L (LEGADO); o valor do memo não é conferido contra a incorporação só com o Horizon;
+ *  · código 1 REPROVADO: alguma conferência falhou (✗); "NÃO CONFERIDO" fica só para os itens "?" do código 2.
+ */
+export function mensagemFinal(r: Pick<ResultadoVerificacao, 'codigoSaida'> & Partial<Pick<ResultadoVerificacao, 'cotas'>>): string {
+  if (r.codigoSaida === 1) return 'REPROVADO: alguma conferência falhou. Veja os "✗" acima.';
+  if (r.codigoSaida === 2) {
+    return 'NÃO CONFERIDO: nada falhou, mas há itens que não deu para conferir (ex.: distributor fora do ACCOUNTS do toml, domínio do toml, ou saldos que mudaram depois do snapshot). Veja os "?" acima.';
+  }
+  const base =
+    'CONFERIDO: o Memo.hash da âncora (tx do distributor informado) é o SHA-256 do arquivo; denominador e conciliação refeitos do Horizon. ' +
+    'O numerador (cotas e caixa) é registro contábil da Plina, publicado no arquivo; o valor das cotas é custo de aquisição.';
+  const c = r.cotas;
+  if (!c || c.total === 0) return `${base} O arquivo não traz cotas ativas.`;
+  const legado = c.legadas > 0 ? ` e ${c.legadas} são LEGADO, sem cadeia de hashes (ver acima)` : '';
+  return (
+    `${base} Das ${c.total} cotas, ${c.e14} têm emissão do modelo E1-4 confirmada na rede (bem-sucedida, do issuer, com memo do tipo hash)${legado}. ` +
+    'O valor do memo de cada emissão não é conferido contra o registro de incorporação só com o Horizon.'
+  );
 }
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -142,10 +171,12 @@ export async function verificarSnapshot(
   const conf: Conferencia[] = [];
   const add = (id: string, estado: Estado, detalhe: string) => conf.push({ id, estado, detalhe });
   const sha256 = createHash('sha256').update(bytes).digest('hex');
+  let cotas: ResultadoVerificacao['cotas'] = null;
   const fim = (): ResultadoVerificacao => ({
     sha256,
     conferencias: conf,
     codigoSaida: conf.some((c) => c.estado === 'falhou') ? 1 : conf.some((c) => c.estado === 'nao_conferido') ? 2 : 0,
+    cotas,
   });
 
   // 1. O arquivo é o documento canônico (RFC 8785) e tem o formato esperado.
@@ -221,7 +252,7 @@ export async function verificarSnapshot(
     add('ancora', 'falhou', `a tx ${opts.txHash} não tem esse memo (âncora(s) achada(s): ${txs.map((t) => t.hash).join(', ')})`);
   } else {
     add('ancora', 'ok', `tx ${txs[0].hash} (${txs[0].created_at}): Memo.hash = SHA-256 do arquivo, source = distributor`);
-    if (txs.length > 1) add('ancora-unica', 'nao_conferido', `${txs.length} âncoras com o mesmo hash (inofensivo, mas operador confere)`);
+    if (txs.length > 1) add('ancora-unica', 'nao_conferido', `há mais de uma âncora (${txs.length}) com o mesmo hash; o verificador usa a do distributor informado`);
   }
 
   // S4: o distributor informado por argumento tem de constar em ACCOUNTS do stellar.toml PÚBLICO da Plina; domínio
@@ -364,9 +395,10 @@ export async function verificarSnapshot(
       } else if (tx.memo_type !== 'hash') legadas.push(i.cotaId);
       else fortes++;
     }
+    cotas = { total: itens.length, e14: fortes, legadas: legadas.length };
     if (reprovadas.length > 0) add('cotas-emissao', 'falhou', reprovadas.join(' | '));
     else if (semHash.length > 0 || naoConferidas.length > 0) {
-      const partes = [`${fortes} de ${itens.length} cotas com emissão E1-4 conferida no Horizon`];
+      const partes = [`${fortes} de ${itens.length} cotas com emissão E1-4 confirmada na rede (bem-sucedida, do issuer, memo do tipo hash)`];
       if (naoConferidas.length > 0) partes.push(`${naoConferidas.length} sem a operação de emissão esperada: ${naoConferidas.join(' | ')}`);
       if (semHash.length > 0) partes.push(`${semHash.length} sem emissaoTxHash no arquivo, não classificáveis (${semHash.map((i) => i.cotaId).join(', ')})`);
       add('cotas-emissao', 'nao_conferido', partes.join('; '));
@@ -374,7 +406,7 @@ export async function verificarSnapshot(
       // Nada reprovou (código não muda), mas NENHUMA emissão do modelo E1-4 apareceu: a linha diz isso, nunca "ok".
       add('cotas-emissao', 'aviso', `${legadas.length} cotas legadas, conferidas por operação de emissão, sem memo (0 de ${itens.length} do modelo E1-4: nenhuma emissão E1-4 foi conferida neste snapshot)`);
     } else {
-      add('cotas-emissao', 'ok', `${fortes} de ${itens.length} cotas: emissão do modelo E1-4 conferida no Horizon (pagamento do ativo, valor = tokensEmitidos, do issuer, com Memo.hash); ${legadas.length} LEGADA(S) listada(s) à parte`);
+      add('cotas-emissao', 'ok', `${fortes} de ${itens.length} cotas com emissão do modelo E1-4 confirmada na rede (pagamento do ativo, valor = tokensEmitidos, bem-sucedida, do issuer, memo do tipo hash); ${legadas.length} LEGADO listada(s) à parte`);
     }
     if (legadas.length > 0 && reprovadas.length === 0) {
       add(

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { canonicalizar } from '@/lib/services/json-canonico';
 import { montarNumerador, recalcularNav, type ArquivoSnapshotNav } from '@/lib/services/snapshot-nav-arquivo';
-import { desdeDaAncora, verificarSnapshot, type LeitorHorizon, type TxHorizon } from '@/lib/services/snapshot-nav-verificar';
+import { desdeDaAncora, mensagemFinal, verificarSnapshot, type LeitorHorizon, type TxHorizon } from '@/lib/services/snapshot-nav-verificar';
 
 const D = (v: string) => new Prisma.Decimal(v);
 const DIST = 'GDIST';
@@ -393,6 +393,47 @@ describe('verificarSnapshot (a prova do avaliador)', () => {
       }
       // com ledger no mesmo ponto e tudo o mais conferido, o resultado continua CONFERIDO (saída 0)
       expect((await verificarSnapshot(b, leitor({ tesouro: '100', ledger: 101 }), { ...PLINA, tesouro: T })).codigoSaida).toBe(0);
+    });
+  });
+
+  describe('textos finais (Norma): CONFERIDO com K/L, REPROVADO (1) e NÃO CONFERIDO (2)', () => {
+    it('saída 0 com cota E1-4: diz K de N, "confirmada na rede", memo do tipo hash e o limite do numerador', async () => {
+      const r = await verificarSnapshot(bytesDe(arquivoBase()), leitor(), PLINA);
+      expect(r.cotas).toEqual({ total: 1, e14: 1, legadas: 0 });
+      const m = mensagemFinal(r);
+      expect(m).toMatch(/^CONFERIDO: o Memo\.hash da âncora/);
+      expect(m).toMatch(/Das 1 cotas, 1 têm emissão do modelo E1-4 confirmada na rede \(bem-sucedida, do issuer, com memo do tipo hash\)\./);
+      expect(m).toMatch(/numerador \(cotas e caixa\) é registro contábil da Plina/);
+      expect(m).toMatch(/não é conferido contra o registro de incorporação só com o Horizon/);
+      expect(m).not.toMatch(/LEGADO/);
+    });
+    it('saída 0 com cota LEGADA: cita L e manda ver acima', async () => {
+      const r = await verificarSnapshot(bytesDe(arquivoBase()), leitor({ tx: ((h: string) => ({ hash: h, successful: true, source_account: 'GISS', memo_type: 'none', created_at: 'x' })) as never }), PLINA);
+      expect(r.codigoSaida).toBe(0);
+      expect(mensagemFinal(r)).toMatch(/Das 1 cotas, 0 têm emissão do modelo E1-4 confirmada na rede .* e 1 são LEGADO, sem cadeia de hashes \(ver acima\)/);
+    });
+    it('sem cotas ativas: não inventa K/L', () => {
+      expect(mensagemFinal({ codigoSaida: 0, cotas: { total: 0, e14: 0, legadas: 0 } })).toMatch(/O arquivo não traz cotas ativas\.$/);
+      expect(mensagemFinal({ codigoSaida: 0 })).toMatch(/O arquivo não traz cotas ativas\.$/);
+    });
+    it('saída 1 → REPROVADO; saída 2 → NÃO CONFERIDO; nenhuma das duas diz CONFERIDO', async () => {
+      const falho = await verificarSnapshot(Buffer.from('não é json'), leitor());
+      expect(mensagemFinal(falho)).toMatch(/^REPROVADO: /);
+      expect(mensagemFinal(falho)).not.toMatch(/CONFERIDO: o Memo/);
+      const semFixar = await verificarSnapshot(bytesDe(arquivoBase()), leitor());
+      expect(semFixar.codigoSaida).toBe(2);
+      expect(mensagemFinal(semFixar)).toMatch(/^NÃO CONFERIDO: nada falhou, mas há itens que não deu para conferir/);
+      expect(mensagemFinal(semFixar)).not.toMatch(/^CONFERIDO/);
+    });
+    it('mais de uma âncora com o mesmo hash: texto da Norma, usa a do distributor informado', async () => {
+      const dois = (m: string) => [
+        { hash: 'tx1', successful: true, source_account: DIST, memo_type: 'hash', memo: m, created_at: '2026-11-12T09:00:06Z' },
+        { hash: 'tx2', successful: true, source_account: DIST, memo_type: 'hash', memo: m, created_at: '2026-11-12T09:00:09Z' },
+      ];
+      const r = await verificarSnapshot(bytesDe(arquivoBase()), leitor({ txs: dois }), PLINA);
+      const c = r.conferencias.find((x) => x.id === 'ancora-unica');
+      expect(c?.estado).toBe('nao_conferido');
+      expect(c?.detalhe).toMatch(/mais de uma âncora \(2\) com o mesmo hash; o verificador usa a do distributor informado/);
     });
   });
 

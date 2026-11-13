@@ -9,9 +9,10 @@
  *     domínio padrão plina.finance, troque com --toml-domain).
  * A saída diz de onde veio cada conta. Confere: (1) o arquivo é o JSON canônico; (2) contas e rede = as informadas;
  * (3) Memo.hash da tx com source = distributor informado = SHA-256 do arquivo; (4) o NAV refeito do conteúdo;
- * (5) o distributor consta em ACCOUNTS do stellar.toml da Plina (domínio ≠ plina.finance = aviso); (6) cada cota ativa: emissaoTxHash existe no Horizon, do issuer, com Memo.hash; (7) circulante, saldo do distributor e Σ trustlines autorizadas refeitos no Horizon. Saída 0 = tudo conferido ·
- * 1 = NÃO CONFERIDO (alguma conferência falhou) · 2 = nada falhou, mas há itens não conferidos (saldos mudaram
- * depois do snapshot: o Horizon não guarda saldo histórico).
+ * (5) o distributor consta em ACCOUNTS do stellar.toml da Plina (domínio ≠ plina.finance = aviso); (6) cada cota ativa: emissaoTxHash existe na rede, bem-sucedida,
+ * saída do issuer em vigor, com pagamento do ativo de valor = tokensEmitidos (com memo do tipo hash = modelo E1-4; sem memo = LEGADO, aviso); (7) circulante, saldo do distributor e
+ * Σ trustlines autorizadas refeitos no Horizon. Saídas: 0 = CONFERIDO · 1 = REPROVADO (alguma conferência falhou) · 2 = NÃO CONFERIDO (nada falhou, mas há itens que não deu
+ * para conferir: saldos que mudaram depois do snapshot, distributor fora do ACCOUNTS do toml…; o Horizon não guarda saldo histórico).
  *
  * O leitor de Horizon abaixo é código PRÓPRIO do script, independente de `lib/stellar` (o verificador não pode
  * usar o mesmo caminho que produziu o número).
@@ -19,6 +20,7 @@
 import { Asset, Horizon, StellarToml } from '@stellar/stellar-sdk';
 import { Prisma } from '@prisma/client';
 import {
+  mensagemFinal,
   verificarSnapshot,
   type LeitorHorizon,
   type TxHorizon,
@@ -177,13 +179,7 @@ async function main() {
     toml: { dominio, accounts: Array.isArray(toml?.ACCOUNTS) ? toml.ACCOUNTS : null },
   });
   for (const c of r.conferencias) console.log(`${ICONE[c.estado]} ${c.id}: ${c.detalhe}`);
-  console.log(
-    r.codigoSaida === 0
-      ? '\nCONFERIDO: o Memo.hash da âncora (tx do distributor informado) é o SHA-256 do arquivo; denominador e conciliação refeitos do Horizon; numerador = insumos publicados, cada cota com o seu hash de validação ancorado.'
-      : r.codigoSaida === 2
-        ? '\nINCOMPLETO: nada falhou, mas há itens NÃO conferidos (ex.: distributor fora do ACCOUNTS do toml, domínio do toml, ou saldos que mudaram depois do snapshot). Veja os "?" acima.'
-        : '\nNÃO CONFERIDO: alguma conferência falhou. Veja os "✗" acima.',
-  );
+  console.log(`\n${mensagemFinal(r)}`);
   process.exit(r.codigoSaida);
 }
 
