@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { Keypair } from '@stellar/stellar-sdk';
+import { ApiError } from '@/lib/api/errors';
+import { NavIndisponivelError } from '@/lib/services/nav-supply';
 
 const USER_PK = Keypair.random().publicKey();
 const OTHER_PK = Keypair.random().publicKey();
@@ -10,25 +12,35 @@ const {
   quoteUpdateMany,
   investidorUpdate,
   eventoAuditCreate,
+  movimentoCreateMany,
   holdingUpsert,
   buildSwapBridgeForPlinarfXdr,
   preSignWithSigner,
-  distribute,
+  issueAsset,
+  renovarCotacao,
+  issuerSigner,
+  distributorSigner,
   buildAsset,
   resolveTesouroAsset,
   assertElegivelParaTrustline,
+  loadAccount,
 } = vi.hoisted(() => ({
   quoteFindUnique: vi.fn(),
   quoteUpdateMany: vi.fn(),
   investidorUpdate: vi.fn(),
   eventoAuditCreate: vi.fn(),
+  movimentoCreateMany: vi.fn(),
   holdingUpsert: vi.fn(),
   buildSwapBridgeForPlinarfXdr: vi.fn(),
   preSignWithSigner: vi.fn(),
-  distribute: vi.fn(),
+  issueAsset: vi.fn(),
+  renovarCotacao: vi.fn(),
+  issuerSigner: vi.fn(() => ({ id: 'issuer' })),
+  distributorSigner: vi.fn(() => ({ id: 'distributor' })),
   buildAsset: vi.fn(),
   resolveTesouroAsset: vi.fn(),
   assertElegivelParaTrustline: vi.fn(),
+  loadAccount: vi.fn(),
 }));
 
 vi.mock('@/lib/wallet/auth-guard', async (importOriginal) => {
@@ -57,6 +69,7 @@ vi.mock('@/lib/db', () => ({
         quote: { updateMany: typeof quoteUpdateMany };
         investidor: { update: typeof investidorUpdate };
         eventoAudit: { create: typeof eventoAuditCreate };
+        movimentoFundo: { createMany: typeof movimentoCreateMany };
         holdingPLINARF: { upsert: typeof holdingUpsert };
       }) => Promise<unknown>,
     ) =>
@@ -64,6 +77,7 @@ vi.mock('@/lib/db', () => ({
         quote: { updateMany: quoteUpdateMany },
         investidor: { update: investidorUpdate },
         eventoAudit: { create: eventoAuditCreate },
+        movimentoFundo: { createMany: movimentoCreateMany },
         holdingPLINARF: { upsert: holdingUpsert },
       }),
   },
@@ -73,12 +87,15 @@ vi.mock('@/lib/stellar/transactions', () => ({
   buildSwapBridgeForPlinarfXdr,
   preSignWithSigner,
 }));
-vi.mock('@/lib/stellar/issuer', () => ({ distribute }));
-vi.mock('@/lib/stellar/account', () => ({ buildAsset }));
+vi.mock('@/lib/stellar/issuer', () => ({ issueAsset, createTrustline: vi.fn() }));
+vi.mock('@/lib/services/cotacao-swap', () => ({ renovarCotacaoParaSwap: renovarCotacao }));
+vi.mock('@/lib/stellar/signer', () => ({ issuerSigner, distributorSigner }));
+vi.mock('@/lib/stellar/account', () => ({ buildAsset, loadAccount }));
 vi.mock('@/lib/anchors/etherfuse/tesouro', () => ({ resolveTesouroAsset }));
 vi.mock('@/lib/services/investidor', () => ({ assertElegivelParaTrustline }));
 
 process.env.STELLAR_ISSUER_PUBLIC = 'GISSUER';
+process.env.STELLAR_ISSUER_SECRET = 'SISS';
 process.env.STELLAR_DISTRIBUTOR_SECRET = 'SDIST';
 process.env.STELLAR_DISTRIBUTOR_PUBLIC = 'GDIST';
 
@@ -98,7 +115,10 @@ function baseQuote(overrides: Partial<Record<string, unknown>> = {}) {
     investidorId: 'inv_1',
     consumedAt: null,
     expiresAt: new Date(Date.now() + 60_000),
+    fromAmount: new Prisma.Decimal('100'),
     toAmount: new Prisma.Decimal('99.5'),
+    navPorTokenNaCotacao: new Prisma.Decimal('1'),
+    plinarfAmount: new Prisma.Decimal('99.5'),
     investidor: { publicKey: USER_PK },
     onRampOrder: {
       id: 'ord_1',
@@ -114,8 +134,16 @@ beforeEach(() => {
   quoteUpdateMany.mockReset().mockResolvedValue({ count: 1 });
   investidorUpdate.mockReset().mockResolvedValue({});
   eventoAuditCreate.mockReset().mockResolvedValue({});
+  movimentoCreateMany.mockReset().mockResolvedValue({ count: 1 });
   holdingUpsert.mockReset().mockResolvedValue({});
-  distribute.mockReset().mockResolvedValue({ hash: 'tx_mock_hash' });
+  issueAsset.mockReset().mockResolvedValue({ hash: 'tx_mock_hash' });
+  // padrão: o preço renovado é o do próprio quote (sem mudança de NAV)
+  renovarCotacao.mockReset().mockImplementation(async (q: Record<string, any>) => ({
+    id: q.id,
+    navPorTokenNaCotacao: q.navPorTokenNaCotacao ?? new Prisma.Decimal('1'),
+    plinarfAmount: q.plinarfAmount ?? new Prisma.Decimal('99.5'),
+    renovada: false,
+  }));
   buildSwapBridgeForPlinarfXdr.mockReset();
   preSignWithSigner.mockReset();
   buildAsset.mockReset().mockReturnValue({});
@@ -152,7 +180,7 @@ describe('POST /api/investidor/buy/swap/build', () => {
     expect(r.status).toBe(409);
   });
 
-  it('200 mock path executa distribute + audit log', async () => {
+  it('200 mock path executa a emissão (issuer) + audit log', async () => {
     quoteFindUnique.mockResolvedValueOnce(baseQuote());
     const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
     expect(r.status).toBe(200);
@@ -160,10 +188,195 @@ describe('POST /api/investidor/buy/swap/build', () => {
     expect(json.data.mock).toBe(true);
     expect(json.data.alreadyExecuted).toBe(true);
     expect(json.data.txHash).toBe('tx_mock_hash');
-    expect(distribute).toHaveBeenCalledOnce();
+    expect(issueAsset).toHaveBeenCalledOnce();
     expect(eventoAuditCreate).toHaveBeenCalledOnce();
     expect(eventoAuditCreate.mock.calls[0][0].data.acao).toBe('SWAP_EXECUTADO');
     expect(eventoAuditCreate.mock.calls[0][0].data.payloadJson.mock).toBe(true);
     expect(eventoAuditCreate.mock.calls[0][0].data.privyId).toBe('did:privy:abc');
   });
+
+  it('quote legado sem preço de emissão: o build o PRECIFICA (recotar) em vez de recusar, e nunca cai em 1:1', async () => {
+    quoteFindUnique.mockResolvedValueOnce(
+      baseQuote({ plinarfAmount: null, navPorTokenNaCotacao: null }),
+    );
+    renovarCotacao.mockResolvedValueOnce({
+      id: 'q_1',
+      navPorTokenNaCotacao: new Prisma.Decimal('1.0625'),
+      plinarfAmount: new Prisma.Decimal('94.1176470'),
+      renovada: false,
+    });
+    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+    expect(r.status).toBe(200);
+    expect(renovarCotacao).toHaveBeenCalledOnce();
+    expect(issueAsset.mock.calls[0][2]).toBe('94.1176470'); // o preço novo, não o TESOURO
+  });
+
+  it('mock path emite o PLINARF do quote, não o TESOURO (NAV 1,0625)', async () => {
+    quoteFindUnique.mockResolvedValueOnce(
+      baseQuote({
+        fromAmount: new Prisma.Decimal('400'),
+        toAmount: new Prisma.Decimal('344'),
+        navPorTokenNaCotacao: new Prisma.Decimal('1.0625'),
+        plinarfAmount: new Prisma.Decimal('376.4705882'),
+      }),
+    );
+    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+    expect(r.status).toBe(200);
+    // E2-5: o BRL integralizado (fromAmount) entra no caixa com os q tokens emitidos.
+    const mov = movimentoCreateMany.mock.calls[0][0].data[0];
+    expect(mov.tipo).toBe('SUBSCRICAO');
+    expect(mov.valorBrl.toFixed(2)).toBe('400.00');
+    expect(mov.deltaCaixa.toFixed(2)).toBe('400.00');
+    expect(mov.deltaTokens.toFixed(7)).toBe('376.4705882');
+    expect(mov.chave).toBe('subscricao:q_1');
+    expect(issueAsset.mock.calls[0][2]).toBe('376.4705882');
+    expect(issueAsset.mock.calls[0][0]).toEqual({ id: 'issuer' }); // N1: emite o issuer, não o distributor
+    expect(issueAsset.mock.calls[0][1]).toBe(USER_PK);
+    expect(issueAsset.mock.calls[0][4].memoHash).toHaveLength(32);
+    expect(eventoAuditCreate.mock.calls[0][0].data.payloadJson.amount).toBe('376.4705882');
+    expect(eventoAuditCreate.mock.calls[0][0].data.payloadJson.navPorTokenNaCotacao).toBe('1.06250000');
+  });
+
+  it('real path: perna ponte = toAmount e perna PLINARF = plinarfAmount (valores distintos)', async () => {
+    quoteFindUnique.mockResolvedValueOnce(
+      baseQuote({
+        toAmount: new Prisma.Decimal('344'),
+        navPorTokenNaCotacao: new Prisma.Decimal('1.0625'),
+        plinarfAmount: new Prisma.Decimal('376.4705882'),
+        onRampOrder: { id: 'ord_1', status: 'completed', paymentInstructionsJson: {} },
+      }),
+    );
+    resolveTesouroAsset.mockResolvedValueOnce({ code: 'TESOURO', issuer: 'GTES', identifier: 'TESOURO:GTES' });
+    loadAccount.mockResolvedValueOnce({ balances: [{ asset_code: 'TESOURO', asset_issuer: 'GTES' }] });
+    buildSwapBridgeForPlinarfXdr.mockResolvedValueOnce({ xdr: 'XDR', hashHex: '0xabc' });
+    preSignWithSigner.mockReturnValueOnce({ sigBase64: 'sig', pubkey: 'GISSUER' });
+    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+    expect(r.status).toBe(200);
+    const args = buildSwapBridgeForPlinarfXdr.mock.calls[0][0];
+    expect(args.bridgeAmount).toBe('344.0000000');
+    expect(args.plinarfAmount).toBe('376.4705882');
+    // N1 + L1-S1/S3: o build NÃO assina nada pela Plina (nem issuer nem distributor) e
+    // não devolve assinatura nem chave pública; a Plina assina só no submit.
+    expect(preSignWithSigner).not.toHaveBeenCalled();
+    expect(issuerSigner).not.toHaveBeenCalled();
+    const data = (await r.json()).data;
+    // sem assinatura nem chave pública (N1); + os dois campos do contrato Atlas/Flora (aditivos).
+    expect(data).toEqual({
+      xdr: 'XDR', hashHex: '0xabc', quoteId: 'q_1', mock: false,
+      plinarfAmount: args.plinarfAmount, navPorTokenNaCotacao: expect.stringMatching(/^\d+\.\d{8}$/),
+    });
+    // o distributor segue só como destino da perna ponte
+    expect(args.distributorPubkey).toBe('GDIST');
+    expect(args.issuerPubkey).toBe('GISSUER');
+  });
+
+  it('N1: o caminho real não precisa do segredo do issuer (só o mock emite no build)', async () => {
+    const saved = process.env.STELLAR_ISSUER_SECRET;
+    delete process.env.STELLAR_ISSUER_SECRET;
+    try {
+      quoteFindUnique.mockResolvedValueOnce(baseQuote({ onRampOrder: { id: 'ord_1', status: 'completed', paymentInstructionsJson: {} } }));
+      resolveTesouroAsset.mockResolvedValueOnce({ code: 'TESOURO', issuer: 'GTES', identifier: 'TESOURO:GTES' });
+      loadAccount.mockResolvedValueOnce({ balances: [{ asset_code: 'TESOURO', asset_issuer: 'GTES' }] });
+      buildSwapBridgeForPlinarfXdr.mockResolvedValueOnce({ xdr: 'XDR', hashHex: '0xabc' });
+      const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+      expect(r.status).toBe(200);
+      // o mock path, que emite pelo issuer, recusa sem o segredo e não emite
+      quoteFindUnique.mockResolvedValueOnce(baseQuote());
+      const r2 = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+      expect(r2.status).toBe(500);
+      expect(issueAsset).not.toHaveBeenCalled();
+    } finally {
+      process.env.STELLAR_ISSUER_SECRET = saved;
+    }
+  });
+
+  it('recotar: o build usa o PREÇO RENOVADO (NAV e plinarfAmount novos) para montar as pernas', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote({
+      onRampOrder: { id: 'ord_1', status: 'completed', paymentInstructionsJson: {} },
+    }));
+    renovarCotacao.mockResolvedValueOnce({
+      id: 'q_1', navPorTokenNaCotacao: new Prisma.Decimal('1.0700'), plinarfAmount: new Prisma.Decimal('93.4579439'), renovada: false,
+    });
+    resolveTesouroAsset.mockResolvedValueOnce({ code: 'TESOURO', issuer: 'GTES', identifier: 'TESOURO:GTES' });
+    loadAccount.mockResolvedValueOnce({ balances: [{ asset_code: 'TESOURO', asset_issuer: 'GTES' }] });
+    buildSwapBridgeForPlinarfXdr.mockResolvedValueOnce({ xdr: 'XDR', hashHex: '0xabc' });
+    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+    expect(r.status).toBe(200);
+    const args = buildSwapBridgeForPlinarfXdr.mock.calls[0][0];
+    expect(args.plinarfAmount).toBe('93.4579439');
+    expect(args.bridgeAmount).toBe('99.5000000'); // o TESOURO pago não muda
+  });
+
+  it('recotar: quote expirado → quote NOVO; a resposta traz o quoteId a usar no submit', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote({
+      expiresAt: new Date(Date.now() - 1_000),
+      onRampOrder: { id: 'ord_1', status: 'completed', paymentInstructionsJson: {} },
+    }));
+    renovarCotacao.mockResolvedValueOnce({
+      id: 'q_novo', navPorTokenNaCotacao: new Prisma.Decimal('1'), plinarfAmount: new Prisma.Decimal('99.5'), renovada: true,
+    });
+    resolveTesouroAsset.mockResolvedValueOnce({ code: 'TESOURO', issuer: 'GTES', identifier: 'TESOURO:GTES' });
+    loadAccount.mockResolvedValueOnce({ balances: [{ asset_code: 'TESOURO', asset_issuer: 'GTES' }] });
+    buildSwapBridgeForPlinarfXdr.mockResolvedValueOnce({ xdr: 'XDR', hashHex: '0xabc' });
+    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+    expect(r.status).toBe(200);
+    expect((await r.json()).data.quoteId).toBe('q_novo');
+    expect(buildSwapBridgeForPlinarfXdr.mock.calls[0][0].memo).toBe('q:q_novo');
+  });
+
+  it('contrato Atlas/Flora: a resposta traz plinarfAmount e navPorTokenNaCotacao do quote VIGENTE (string decimal)', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote({
+      expiresAt: new Date(Date.now() - 1_000),
+      onRampOrder: { id: 'ord_1', status: 'completed', paymentInstructionsJson: {} },
+    }));
+    renovarCotacao.mockResolvedValueOnce({
+      id: 'q_novo', navPorTokenNaCotacao: new Prisma.Decimal('1.0650'), plinarfAmount: new Prisma.Decimal('93.4579439'), renovada: true,
+    });
+    resolveTesouroAsset.mockResolvedValueOnce({ code: 'TESOURO', issuer: 'GTES', identifier: 'TESOURO:GTES' });
+    loadAccount.mockResolvedValueOnce({ balances: [{ asset_code: 'TESOURO', asset_issuer: 'GTES' }] });
+    buildSwapBridgeForPlinarfXdr.mockResolvedValueOnce({ xdr: 'XDR', hashHex: '0xabc' });
+    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+    expect(r.status).toBe(200);
+    const data = (await r.json()).data;
+    expect(data).toMatchObject({
+      xdr: 'XDR', hashHex: '0xabc', quoteId: 'q_novo', mock: false,
+      plinarfAmount: '93.4579439', navPorTokenNaCotacao: '1.06500000',
+    });
+    expect(typeof data.plinarfAmount).toBe('string');
+    expect(data.plinarfAmount).toBe(buildSwapBridgeForPlinarfXdr.mock.calls[0][0].plinarfAmount); // o mesmo valor do envelope
+  });
+
+  it('recotar: o mock path grava SUBSCRICAO e consome o quote NOVO (não o expirado)', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote({ expiresAt: new Date(Date.now() - 1_000) }));
+    renovarCotacao.mockResolvedValueOnce({
+      id: 'q_novo', navPorTokenNaCotacao: new Prisma.Decimal('1'), plinarfAmount: new Prisma.Decimal('99.5'), renovada: true,
+    });
+    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+    expect(r.status).toBe(200);
+    expect(quoteUpdateMany.mock.calls[0][0].where.id).toBe('q_novo');
+    expect(movimentoCreateMany.mock.calls[0][0].data[0].chave).toBe('subscricao:q_novo');
+    expect((await r.json()).data.quoteId).toBe('q_novo');
+  });
+
+  it('recotar: quote já em submissão → 409 (o preço da XDR em curso não pode mudar)', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote({ submitXdrHash: 'h' }));
+    renovarCotacao.mockRejectedValueOnce(new ApiError('CONFLICT', 409, 'swap já em submissão para esta cotação — reenvie o mesmo XDR ao submit'));
+    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+    expect(r.status).toBe(409);
+    expect(issueAsset).not.toHaveBeenCalled();
+    expect(buildSwapBridgeForPlinarfXdr).not.toHaveBeenCalled();
+  });
+
+  it('L1-S2: sem NAV (ledger fora / PLINARFB) → 503 LEDGER_UNAVAILABLE constante', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    renovarCotacao.mockRejectedValueOnce(new NavIndisponivelError('LEDGER_LEITURA_FALHOU', { cause: new Error('ENOTFOUND horizon') }));
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+    expect(r.status).toBe(503);
+    const body = await r.json();
+    expect(body.error.code).toBe('LEDGER_UNAVAILABLE');
+    expect(JSON.stringify(body)).not.toMatch(/ENOTFOUND|horizon/i);
+    expect(issueAsset).not.toHaveBeenCalled();
+  });
+
 });

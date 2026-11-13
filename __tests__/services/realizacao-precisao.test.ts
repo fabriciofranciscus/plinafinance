@@ -50,6 +50,7 @@ beforeEach(() => {
   txRunner.mockReset().mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       realizacaoCaminho: { create: realizacaoCreate },
+      movimentoFundo: { createMany: async () => ({ count: 1 }) },
       cota: { update: cotaUpdate },
       reserva: { update: reservaUpdate },
       leadComprador: { update: leadUpdate },

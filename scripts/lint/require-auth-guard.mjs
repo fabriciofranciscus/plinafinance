@@ -26,6 +26,7 @@ const MARKERS = [
   '@/lib/wallet/pessoa-auth', // withPessoaAuth / requirePessoa
   '@/lib/auth/admin', // isAdminAuthenticated (admin/* importa este)
   '@/lib/auth/admin-csrf', // requireAdminCsrf (admin/logout)
+  '@/lib/auth/ops-cron', // requireOpsCron: Bearer OPS_CRON_SECRET (404 sem ele) — ops/*
 ];
 
 // Públicas por design — sem guard, intencional. Chave = caminho relativo a

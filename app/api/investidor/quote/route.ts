@@ -29,6 +29,13 @@ import {
   mainnetCutoverGuard,
 } from '@/lib/env/feature-gates';
 import { ticketMinimoFor } from '@/lib/config/suitability';
+import { sensitiveAuthLimiter, clientIp } from '@/lib/rate-limit/config';
+import { calcularPrecoDeEmissao } from '@/lib/services/emissao';
+import { assertClasseDisponivel, valorLiquidoDaCotacao } from '@/lib/services/regras-swap';
+import { assertSemSwapEmConferencia } from '@/lib/services/swap-orfao';
+import { navUnavailableResponse } from '@/lib/api/nav-unavailable';
+import { internalErrorResponse } from '@/lib/api/internal-error';
+import { ApiError } from '@/lib/api/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,6 +61,11 @@ const Schema = z
   );
 
 export const POST = withAuth(async (req, { user }) => {
+  // L1-S4: cada cotação chama a Etherfuse, lê o ledger e grava no banco — o
+  // limiter de rotas autenticadas com custo (10/min por IP) vem antes de tudo.
+  if (!(await sensitiveAuthLimiter.consume(clientIp(req)))) {
+    return NextResponse.json({ error: 'too many requests' }, { status: 429 });
+  }
   const cutover = await mainnetCutoverGuard();
   if (cutover) return cutover;
   const parsed = await parseBody(req, Schema);
@@ -62,6 +74,10 @@ export const POST = withAuth(async (req, { user }) => {
   try {
     const { customerId, stellarAddress } = body;
     const direction = body.direction ?? 'onramp';
+    // N1: Subordinada sem NAV próprio → recusada antes de qualquer chamada ao anchor.
+    if (direction === 'onramp') assertClasseDisponivel(body.classe);
+    // Mitigação de disponibilidade: com swap em conferência (reserva órfã), não cria cotação nova.
+    if (direction === 'onramp') await assertSemSwapEmConferencia(user.investidorId);
 
     let sourceAmount: string;
     let fromCurrency: string;
@@ -201,6 +217,17 @@ export const POST = withAuth(async (req, { user }) => {
       );
     }
 
+    // M1-3: preço de emissão ao NAV, congelado na cotação (só onramp). O BRL é
+    // `fromAmount`; o PLINARF NÃO é 1:1 com o TESOURO. Fail-closed: sem NAV
+    // honesto (ledger fora, PLINARFB circulando) não há cotação de compra.
+    const preco =
+      direction === 'offramp'
+        ? null
+        : await calcularPrecoDeEmissao({
+            // N1: V = valor LÍQUIDO que chega ao fundo (BRL menos o fee da Etherfuse), não o bruto.
+            valorBrl: valorLiquidoDaCotacao({ fromAmount, fee: quote.fee }),
+          });
+
     await db.quote.create({
       data: {
         id: quote.id,
@@ -218,6 +245,8 @@ export const POST = withAuth(async (req, { user }) => {
         // F-M3-4: classe escolhida pelo investidor (só onramp). Default SENIOR
         // quando ausente — preserva o comportamento single-asset legado.
         classe: direction === 'offramp' ? null : (body.classe ?? 'SENIOR'),
+        navPorTokenNaCotacao: preco?.navPorTokenNaCotacao ?? null,
+        plinarfAmount: preco?.plinarfAmount ?? null,
       },
     });
 
@@ -228,11 +257,16 @@ export const POST = withAuth(async (req, { user }) => {
       exchangeRate: quote.exchangeRate,
       fee: quote.fee,
       expiresAt: quote.expiresAt,
+      // Aditivo: quanto PLINARF o BRL compra ao NAV congelado (null no off-ramp).
+      plinarfAmount: preco?.plinarfAmount.toFixed(7) ?? null,
+      navPorTokenNaCotacao: preco?.navPorTokenNaCotacao.toFixed(8) ?? null,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'unknown' },
-      { status: 500 },
-    );
+    const indisponivel = navUnavailableResponse(err, 'quote');
+    if (indisponivel) return indisponivel;
+    if (err instanceof ApiError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
+    return internalErrorResponse(err, 'quote');
   }
 });

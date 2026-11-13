@@ -21,11 +21,18 @@ import {
   executarPixSimulado,
   gerarOferta,
   incorporarCotaDoFunil,
+  registrarAnuencia,
+  registrarLaudoDaCessao,
   registrarCessao,
 } from '@/lib/services/originacao';
+import { registrarTesourariaLegada } from '@/lib/services/tesouraria-legada';
 import { TipoBem } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
+// A ação `incorporar-cota` faz envio on-chain (com reenvio) dentro de uma $transaction de até 120 s
+// (exceção registrada em testnet, E1-4 M3): o limite da função precisa cobrir isso. Em Server Actions
+// o `maxDuration` vai na PÁGINA que as usa (app/admin/page.tsx, dona: Flora).
+export const maxDuration = 150;
 
 const NumericString = z.string().regex(/^\d+(\.\d+)?$/, 'valor numérico inválido');
 
@@ -52,6 +59,22 @@ const Schema = z.discriminatedUnion('action', [
     .object({
       action: z.literal('executar-pix-simulado'),
       cessaoId: z.string().min(1).max(60),
+    })
+    .strict(),
+  z.object({ action: z.literal('registrar-tesouraria-legada') }).strict(),
+  z
+    .object({
+      action: z.literal('registrar-laudo'),
+      cessaoId: z.string().min(1).max(60),
+      laudoUrl: z.string().url().max(500),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('registrar-anuencia'),
+      hashValidacao: z.string().regex(/^[0-9a-f]{64}$/i, 'hash sha-256 hex'),
+      status: z.enum(['CONFIRMADA', 'DECLARADA_PENDENTE']),
+      referencia: z.string().min(1).max(200).optional(),
     })
     .strict(),
   z
@@ -98,6 +121,27 @@ export async function POST(req: Request) {
       case 'executar-pix-simulado': {
         const result = await executarPixSimulado({
           cessaoId: body.cessaoId,
+          operador: 'admin-panel',
+        });
+        return NextResponse.json(result);
+      }
+      case 'registrar-tesouraria-legada': {
+        const result = await registrarTesourariaLegada({ operador: 'admin-panel' });
+        return NextResponse.json(result);
+      }
+      case 'registrar-laudo': {
+        const result = await registrarLaudoDaCessao({
+          cessaoId: body.cessaoId,
+          laudoUrl: body.laudoUrl,
+          operador: 'admin-panel',
+        });
+        return NextResponse.json(result);
+      }
+      case 'registrar-anuencia': {
+        const result = await registrarAnuencia({
+          hashValidacao: body.hashValidacao,
+          status: body.status,
+          referencia: body.referencia,
           operador: 'admin-panel',
         });
         return NextResponse.json(result);

@@ -15,6 +15,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { calcularValorLiquidacao } from '@/lib/services/liquidacao';
 import { withAuth } from '@/lib/wallet/auth-guard';
+import { navUnavailableResponse } from '@/lib/api/nav-unavailable';
+import { internalErrorResponse } from '@/lib/api/internal-error';
 import { parseBody } from '@/lib/http/parse-body';
 import { sensitiveAuthLimiter, clientIp } from '@/lib/rate-limit/config';
 
@@ -44,9 +46,8 @@ export const POST = withAuth(async (req, _ctx) => {
     });
     return NextResponse.json(result);
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'unknown' },
-      { status: 500 },
-    );
+    const indisponivel = navUnavailableResponse(err, 'liquidar:quote');
+    if (indisponivel) return indisponivel;
+    return internalErrorResponse(err, 'liquidar:quote');
   }
 });
