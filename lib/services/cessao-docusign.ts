@@ -21,6 +21,8 @@ import {
   transactionIdDeterministico,
 } from '../integrations/docusign';
 import { buildCessaoPdf } from '../comprovante/cessao-pdf';
+import { STELLAR_NETWORK } from '../stellar/config';
+import { hashDoLaudo } from './titular-laudo';
 
 /** Janela em que um envio em curso não pode ser assumido por outro (> timeouts do cliente). */
 export const DOCUSIGN_ENVIO_JANELA_MS = 120_000;
@@ -115,6 +117,8 @@ export async function enviarCessaoParaAssinatura(input: {
         valorCarta: BRL.format(Number(o.valorCarta)),
         valorLiquido: BRL.format(Number(o.valorLiquidoVendedor)),
         desagioPct: `${(Number(o.desagioAquisicao) * 100).toFixed(2)}%`,
+        demonstracao: STELLAR_NETWORK !== 'PUBLIC',
+        hashLaudo: await hashDoLaudo(db, cessao.id),
       });
       try {
         envelopeId = (

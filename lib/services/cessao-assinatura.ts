@@ -30,7 +30,8 @@ import {
 import { ancorarSha256 } from '../stellar/ancora';
 import { notifyCedente } from '../email/notify-cedente';
 
-export const CONCLUSAO_JANELA_MS = 120_000;
+/** A âncora leva cerca de 130 s (Argus D1): o claim tem de durar mais que ela, senão outro chamador assume no meio. */
+export const CONCLUSAO_JANELA_MS = 300_000;
 
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 

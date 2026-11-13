@@ -1,288 +1,197 @@
 import type { Dictionary } from '../types';
 
+/**
+ * Textos da landing v2: Norma, `contexto/landing-v2-textos.md` (LD2). Não
+ * editar o sentido aqui; mudança de texto volta para a Norma/Consuelo.
+ * Títulos em linhas seguem a referência da Íris (SPEC §3).
+ */
 export const ptBR: Dictionary = {
   meta: {
-    title: 'Plina',
+    title: 'Plina — Liquidez para cotas contempladas de consórcio (em desenvolvimento)',
     description:
-      'Conectando capital global ao direito creditório brasileiro. PLINA-RF: token institucional lastreado em FIDC sob CVM 175, distribuído via Stellar.',
+      'A Plina está desenvolvendo uma estrutura de liquidez para cotas contempladas de consórcio. Conheça o modelo, o estágio do projeto e os registros em rede de testes.',
     twitterDescription:
-      'Conectando capital global ao direito creditório brasileiro via Stellar. FIDC sob CVM 175.',
+      'Cotas contempladas de consórcio, com registro verificável em rede de testes. Em desenvolvimento.',
     keywords: [
-      'tokenização institucional',
-      'direito creditório',
-      'FIDC',
-      'CVM 175',
+      'cotas contempladas',
+      'consórcio',
       'Stellar',
-      'RWA',
-      'consórcio contemplado',
-      'PLINA-RF',
+      'registro verificável',
+      'rede de testes',
     ],
   },
-  siteHeader: {
-    skipLink: 'Pular para conteúdo',
-    nav: {
-      produto: 'Produto',
-      tese: 'Tese',
-      compliance: 'Compliance',
-      equipe: 'Equipe',
+  landingV2: {
+    a11y: {
+      pular: 'Pular para o conteúdo',
+      inicio: 'Plina, início',
+      voltarInicio: 'Plina, voltar ao início',
+      navPrincipal: 'Navegação principal',
+      resumoAtivo: 'Resumo do ativo',
+      menu: 'Menu',
+      pausarMovimento: 'Pausar movimento',
+      ativarMovimento: 'Retomar movimento',
+      idioma: 'Idioma',
     },
-    painel: 'Painel',
-    sair: 'Sair',
-    registrarInteresse: 'Registrar interesse',
-    menuAbrir: 'Abrir menu',
-    menuFechar: 'Fechar menu',
     languageSwitcher: { pt: 'PT', en: 'EN' },
-  },
-  consoleStrip: {
-    aberto: 'Captação aberta para investidores institucionais qualificados',
-    cta: 'Registrar interesse →',
-  },
-  hero: {
-    linha1: 'Liquidez para o cotista.',
-    linha2: 'Desconto para o comprador.',
-    yieldDestaque: 'Yield institucional',
-    linha3Fim: 'para o mundo.',
-    subPrefix: 'Pool tokenizado de cotas de consórcio contempladas, estruturado como FIDC sob CVM 175 e emitido na Stellar como',
-    subSuffix: '.',
-  },
-  produto: {
-    numMarker: '01',
-    marker: 'Produto',
-    titulo: ['PLINA', '-RF', '.'],
-    intro:
-      'Cota de FIDC representada por um instrumento digital regulado, emitido sob a CVM 175. Não é uma corretora. Não é um fundo aberto de varejo. É o próprio instrumento financeiro tokenizado, com originação, custódia regulada e controles de conformidade integrados.',
-    especificacoes: [
-      {
-        label: 'Lastro',
-        value: '1 PLINA-RF = R$ 1,00',
-        detail: 'Lastro em direito creditório com valor ajustado diariamente.',
-      },
-      {
-        label: 'Veículo',
-        value: 'FIDC · CVM 175',
-        detail: 'Classes sênior e subordinada, prestadores registrados, auditoria Big Four.',
-      },
-      {
-        label: 'Custódia',
-        value: 'Custodiante regulado',
-        detail: 'Registro digital auditável com bloqueio, autorização e reversibilidade institucional.',
-      },
-      {
-        label: 'Aporte',
-        value: 'USD · EUR · BRL',
-        detail: 'Investidores internacionais e domésticos, com liquidação em USDC, EURC e moeda local.',
-      },
-    ],
-  },
-  tese: {
-    numMarker: '02',
-    marker: 'Tese',
-    titulo: ['Três caminhos.', 'Um pool.'],
-    intro:
-      'Modelo híbrido de realização de valor. Geridos ativamente pelo gestor do FIDC e auditados trimestralmente. É onde a Plina constrói vantagem competitiva durável sobre incumbentes restritos ao Caminho B.',
-    tableCaption:
-      'Comparação dos três caminhos de realização de valor — duration, yield, mix-alvo e curva projetada',
-    colCaminho: 'Caminho',
-    rowDuration: 'Duration',
-    rowYield: 'Yield',
-    rowMix: 'Mix-Alvo',
-    rowCurva: 'Curva projetada',
-    caminhos: [
-      {
-        letra: 'A',
-        titulo: ['Revenda ao', 'Comprador-Usuário'],
-        duration: '30-90 dias',
-        yieldLabel: 'Alto',
-        mix: '40-60%',
-        body: 'A diferença entre o preço pago ao vendedor original e o preço cobrado do comprador-usuário do bem é a fonte primária de yield. Operamos canal comercial dedicado para revenda de cotas a quem efetivamente vai usar a carta de crédito — pessoa física, construtora, transportadora, empresário.',
-      },
-      {
-        letra: 'B',
-        titulo: ['Liquidação por', 'Administradora'],
-        duration: '90-180 dias',
-        yieldLabel: 'Médio',
-        mix: '30-50%',
-        body: 'Para cotas elegíveis sob a Circular BACEN 3.432/2009, a administradora converte a contemplação em pagamento em dinheiro em até 180 dias. Caminho predominante dos incumbentes — operado pela Plina dentro da estrutura formal do FIDC, sem exposição regulatória de zona cinza.',
-      },
-      {
-        letra: 'C',
-        titulo: ['Liquidação por', 'Prazo de Grupo'],
-        duration: '12-36 meses',
-        yieldLabel: 'Contratado',
-        mix: '10-20%',
-        body: 'Para cotas não realizadas pelos caminhos A ou B, o direito creditório é realizado ao final do prazo regulado pelo BACEN com correção monetária contratual. Funciona como reserva técnica e piso de yield do pool.',
-      },
-    ],
-    rodape:
-      'Composição inicial-alvo documentada no regulamento do FIDC. Mix ajustado continuamente pelo gestor com base em condições de mercado.',
-  },
-  bigStatement: {
-    numMarker: '03',
-    marker: 'Marco Regulatório',
-    p1: 'A Lei 11.795 regulamentou o mercado brasileiro de consórcios em 2008. Há quase duas décadas o direito creditório de cotas contempladas é juridicamente constituído, mas nunca chegou ao capital institucional global.',
-    p2: 'A Plina é a primeira tokenizadora institucional sob CVM 175 desde a origem.',
-    milestones: [
-      { year: '2008', label: 'Lei 11.795 regulamenta consórcios brasileiros' },
-      { year: '2023', label: 'CVM 175 estrutura tokenização institucional' },
-      { year: '2026', label: 'Plina · primeira tokenizadora de direito creditório de consórcio' },
-    ],
-  },
-  compliance: {
-    numMarker: '04',
-    marker: 'Compliance',
-    titulo: ['Compliance', 'nativo.'],
-    intro:
-      'Para mesa de risco institucional, reversibilidade não é limitação. É requisito. Family offices e gestoras reguladas não alocam em ativo digital sem mecanismo formal de bloqueio e recuperação. Sem isso, o produto não passa em compliance.',
-    principios: [
-      {
-        num: '01',
-        titulo: 'Auditável',
-        tag: 'Verificável publicamente · Registro imutável',
-        detalhe:
-          'Cada cota incorporada ao pool tem registro digital verificável publicamente, com lastro jurídico formal e imutável.',
-      },
-      {
-        num: '02',
-        titulo: 'Regulada',
-        tag: 'CVM 175 · Lei 11.795/2008',
-        detalhe:
-          'CVM 175 e Lei 11.795/2008 desde a origem. FIDC formal, prestadores registrados, auditoria Big Four.',
-      },
-      {
-        num: '03',
-        titulo: 'Reversível',
-        tag: 'Clawback · Autorização · Revogabilidade',
-        detalhe:
-          'Política de clawback pública, restrita a quatro hipóteses jurídicas explícitas. Reversibilidade institucional como diferencial competitivo, não como limitação técnica.',
-      },
-    ],
-  },
-  equipe: {
-    numMarker: '05',
-    marker: 'Equipe Fundadora',
-    membros: [
-      {
-        operatorId: '01',
-        nome: 'Fabrício Santos',
-        cargo: 'CEO & Founder',
-        bio: 'Sócio fundador da Citrino, assessoria financeira de planejamento e gestão patrimonial. Atuou em estratégias de receita, custo e experiência do cliente na plataforma digital de crédito Simplic, e liderou na TOTVS a implementação do sistema corporativo de KPIs para a Diretoria e o Conselho Administrativo.',
-      },
-      {
-        operatorId: '02',
-        nome: 'Thais Reis',
-        cargo: 'CTO & Protocol Lead',
-        bio: 'Engenheira full-stack com cinco anos em infraestrutura blockchain — engenharia de dados, backend, contratos automatizados em Rust e interfaces em React/TypeScript. Fundadora e Lead Engineer do Karn Ecosystem, plataforma de governança de código aberto. Premiada em competições nacionais e internacionais de tecnologia descentralizada e inteligência artificial.',
-      },
-    ],
-  },
-  leadCapture: {
-    numMarker: '06',
-    marker: 'Onboarding',
-    headingIdle: ['Registre seu', 'interesse.'],
-    headingSuccess: ['Interesse', 'registrado.'],
-    subIdle:
-      'Preencha os campos abaixo para manifestar interesse no PLINA-RF. Nossa equipe entrará em contato em até 48 horas para apresentação detalhada do instrumento.',
-    subSuccess:
-      'Nossa equipe entrará em contato em até 48 horas com apresentação detalhada do instrumento e documentação do FIDC.',
-    fields: {
-      nome: 'Nome completo *',
-      nomePlaceholder: 'Nome e sobrenome',
-      org: 'Organização *',
-      orgPlaceholder: 'Family office, gestora, fundo...',
-      email: 'E-mail corporativo *',
-      emailPlaceholder: 'nome@organização.com',
-      telefone: 'Telefone / WhatsApp',
-      telefonePlaceholder: '+55 11 99999-9999',
-      perfil: 'Perfil do investidor *',
-      jurisdicao: 'Jurisdição principal',
-      jurisdicaoPlaceholder: 'Brasil, EUA, Cingapura...',
-      ticket: 'Tíquete indicativo *',
-      moeda: 'Moeda de preferência',
-      classe: 'Classe de interesse',
-      prazo: 'Prazo de decisão',
-      observacoes: 'Observações / perguntas',
-      observacoesPlaceholder: 'Restrições de compliance, exigências específicas de estrutura, perguntas iniciais...',
-      selecione: 'Selecione',
-      selecioneOpcional: 'Selecione (opcional)',
+    nav: {
+      ativo: 'O ativo',
+      percurso: 'O percurso',
+      estagio: 'Estágio',
+      paraQuem: 'Para quem',
+      falar: 'Falar com o time',
     },
-    selectOptions: {
-      profile: {
-        'family-office-br': 'Family office brasileiro',
-        'family-office-int': 'Family office internacional',
-        'gestora-br': 'Gestora de fundos (BR)',
-        'gestora-int': 'Gestora multi-mercado (Internacional)',
-        'fintech-latam': 'Fintech de investimento LATAM',
-        outro: 'Outro — descrever nas observações',
-      },
-      ticket: {
-        '100k-500k': 'US$ 100k – 500k',
-        '500k-1m': 'US$ 500k – 1M',
-        '1m-5m': 'US$ 1M – 5M',
-        '5m+': 'US$ 5M+',
-        '500k-2m-brl': 'R$ 500k – 2M',
-        '2m-10m-brl': 'R$ 2M – 10M',
-        '10m+brl': 'R$ 10M+',
-      },
-      currency: {
-        USDC: 'USDC',
-        EURC: 'EURC',
-        'BRL stablecoin (BRZ / BRLA)': 'BRL stablecoin (BRZ / BRLA)',
-        'BRL fiat': 'BRL fiat',
-        'Ainda indefinido': 'Ainda indefinido',
-      },
-      classe: {
-        Sênior: 'Sênior (menor risco, retorno prioritário)',
-        Subordinada: 'Subordinada (primeiras perdas, maior retorno potencial)',
-        Ambas: 'Ambas — sujeito a modelagem',
-        Indefinido: 'Indefinido',
-      },
-      timeline: {
-        'Até 30 dias': 'Até 30 dias',
-        '1 a 3 meses': '1 a 3 meses',
-        '3 a 6 meses': '3 a 6 meses',
-        'Mais de 6 meses': 'Mais de 6 meses',
-        'Fase exploratória': 'Fase exploratória',
+    hero: {
+      kicker: 'Consórcio brasileiro · Em desenvolvimento',
+      titulo: ['Cotas contempladas', 'de consórcio, com', 'registro verificável.'],
+      sub: 'Uma estrutura em desenvolvimento para conectar o crédito de consórcios brasileiros a novas possibilidades.',
+      ctaFalar: 'Falar com o time',
+      ctaEstrutura: 'Conhecer a estrutura',
+      marca: 'Plina Finance / Brasil',
+      estagioRotulo: 'Estágio do projeto',
+      estagioValor: 'Modelo em desenvolvimento.',
+      estagioLink: 'Conheça o estágio do projeto',
+    },
+    ativo: {
+      numero: '01 / O ativo',
+      rotulo: 'PLINA / COTAS CONTEMPLADAS',
+      titulo: ['O crédito já existe.', 'O caminho é que muda.'],
+      texto:
+        'Uma cota contemplada reúne o crédito para comprar um bem e as parcelas que ainda faltam pagar, sob as regras do grupo e da administradora. A Plina está desenvolvendo um modelo para adquirir essas cotas por cessão, com anuência da administradora.',
+      link: 'Entenda o percurso',
+      card: {
+        rotulo: 'ATIVO SUBJACENTE',
+        pais: 'BR / CONSÓRCIO',
+        titulo: ['Cota', 'contemplada'],
+        descricao:
+          'Análise da titularidade, das condições de cessão e das possibilidades de realização.',
+        origemRotulo: 'Origem',
+        origemValor: 'Cessão pelo titular, com anuência da administradora',
       },
     },
-    lgpdNotice:
-      'Autorizo o uso dos dados fornecidos para contato sobre o PLINA-RF. As informações são tratadas com confidencialidade, em conformidade com a LGPD, e não são compartilhadas com terceiros sem consentimento.',
-    submitIdle: 'Registrar interesse',
-    submitPending: 'Enviando…',
-    footerNote:
-      'Processo confidencial · Não caracteriza oferta pública · Oferta restrita · Investidor qualificado · CVM 175',
-    successPanel: {
-      protocolo: 'Protocolo',
-      passos: [
-        { ordem: '01', titulo: 'Confirmação imediata', detalhe: 'Recebemos seu interesse no PLINA-RF e o registro foi gerado.' },
-        { ordem: '02', titulo: 'Em até 48 horas', detalhe: 'Nossa equipe de RI envia apresentação detalhada do instrumento e documentação do FIDC.' },
-        { ordem: '03', titulo: 'Roadshow institucional', detalhe: 'Agendamento com o time fundador. Slots em Miami, São Paulo, Cingapura e Londres.' },
-      ],
-      duvidas: 'Dúvidas?',
+    percurso: {
+      numero: '02 / O percurso',
+      rotulo: 'DA ORIGEM À REALIZAÇÃO',
+      titulo: ['Da cota', 'à realização.'],
+      intro: 'O modelo prevê que cada cota seja analisada e documentada antes de integrar a operação.',
+      notaEtapas: 'Etapas do modelo; assinatura e Pix reais ainda em desenvolvimento.',
+      passo1: {
+        titulo: 'Analisar.',
+        texto: 'Contemplação, titularidade, adimplência e ausência de ônus.',
+      },
+      passo2: {
+        titulo: 'Formalizar.',
+        texto:
+          'Proposta com deságio, assinatura da cessão, anuência da administradora e pagamento ao titular.',
+      },
+      passo3: {
+        titulo: 'Realizar.',
+        texto:
+          'Revenda a um comprador aprovado pela administradora, ou recebimento do crédito nas condições do grupo.',
+      },
+      ressalva: 'Modelo sujeito à análise da cota e à anuência da administradora.',
     },
-  },
-  footer: {
-    tagline: 'Conectando o crédito brasileiro ao capital global por meio de infraestrutura digital regulada.',
-    navegacao: 'Navegação',
-    navLinks: {
-      produto: 'Produto',
-      tese: 'Tese',
-      compliance: 'Compliance',
-      equipe: 'Equipe',
-      registrarInteresse: 'Registrar interesse',
+    estagio: {
+      numero: '03 / Estágio',
+      rotulo: 'TESTNET → PRÓXIMAS FASES',
+      titulo: ['Clareza sobre', 'o estágio.'],
+      intro:
+        'A tecnologia está sendo demonstrada em ambiente de testes. A operação com dinheiro real e a estrutura de investimento dependem de etapas distintas.',
+      demonstrado: {
+        rotulo: '01 / DEMONSTRADO',
+        titulo: 'Na rede de testes.',
+        texto: 'Registros de eventos da cota e uma prova de entrada do investidor na Stellar testnet.',
+      },
+      desenvolvimento: {
+        rotulo: '02 / EM DESENVOLVIMENTO',
+        titulo: 'Para operar.',
+        texto:
+          'Fechamento da cessão, integração de assinatura e Pix, cálculo do NAV e saída pelo produto.',
+      },
+      futuro: {
+        rotulo: '03 / FASE FUTURA',
+        titulo: 'Mais adiante.',
+        texto:
+          'Estrutura institucional prevista para uma fase futura, sujeita a aprovação regulatória e à documentação aplicável. Não há oferta em andamento.',
+      },
+      nota: 'O registro digital documenta eventos. A validade de cada cessão também depende dos instrumentos jurídicos e da administradora.',
     },
-    contato: 'Contato',
-    disclaimer:
-      'A Plina Finance não é uma corretora. Atua como estruturadora de ativos digitais regulados sob o framework da CVM 175.',
-    copyright: '© 2026 Plina Finance. Todos os direitos reservados.',
-  },
-  consoleFooter: {
-    flags: [
-      'Plina-RF v1',
-      'FIDC CVM 175',
-      'Lei 11.795/2008',
-      'Auditoria Big Four',
-      'Custódia Regulada',
-      'Reversibilidade Institucional',
-    ],
+    paraQuem: {
+      numero: '04 / Para quem',
+      rotulo: 'TRÊS PONTOS DE PARTIDA',
+      titulo: ['Uma estrutura.', 'Entradas diferentes.'],
+      intro: 'Comece pelo seu papel na operação.',
+      instituicoes: {
+        titulo: 'Instituições e parceiros',
+        texto: 'Conheça a tese, a originação e o estágio do projeto.',
+      },
+      titular: {
+        titulo: 'Titulares de cotas',
+        texto:
+          'Tem uma cota contemplada e não quer usar o crédito? No modelo, a cessão prevê pagamento com deságio e, aprovada a transferência pela administradora, as parcelas restantes deixam de ser suas. Ainda não compramos cotas: hoje conversamos e analisamos. Não prometemos preço nem prazo.',
+      },
+      compradores: {
+        titulo: 'Compradores e parceiros',
+        texto:
+          'A revenda a compradores é uma etapa futura do modelo. Se quer acompanhar o desenvolvimento, fale com o time.',
+      },
+    },
+    contato: {
+      numero: '05 / Contato',
+      titulo: ['Vamos falar', 'sobre o próximo passo.'],
+      intro: 'Conte seu objetivo. Sem CPF, documentos ou dados bancários no primeiro contato.',
+      email: 'contato@plina.finance',
+      aviso: 'Contato exploratório. Esta página não é oferta nem solicitação de investimento.',
+      form: {
+        titulo: 'Seu contato',
+        nome: 'Seu nome *',
+        nomePlaceholder: 'Nome',
+        nomeErro: 'Informe seu nome.',
+        email: 'E-mail *',
+        emailPlaceholder: 'voce@empresa.com',
+        interesse: 'Interesse *',
+        interesseSelecione: 'Selecione o motivo do contato',
+        opcoes: {
+          tese: 'Conhecer a tese institucional',
+          cota: 'Conversar sobre uma cota contemplada',
+          parceria: 'Quero propor uma parceria',
+          outro: 'Outro assunto',
+        },
+        organizacao: 'Organização (opcional)',
+        organizacaoPlaceholder: 'Empresa ou instituição',
+        mensagem: 'Mensagem (opcional)',
+        mensagemPlaceholder: 'Como podemos ajudar?',
+        preparar: 'Preparar meu contato',
+        avisoMailto:
+          'Você revisa e envia pelo seu e-mail. Esta página não envia nem armazena o que você digita no formulário.',
+      },
+      rascunho: {
+        titulo: 'Seu contato está pronto.',
+        texto:
+          'Revise abaixo. A mensagem só será enviada quando você confirmar no seu aplicativo de e-mail.',
+        abrir: 'Abrir meu e-mail',
+        copiar: 'Copiar mensagem',
+        copiado: 'Mensagem copiada. Cole no seu e-mail para contato@plina.finance.',
+        selecionado: 'Texto selecionado. Use Ctrl+C ou ⌘C para copiar.',
+      },
+      semJs:
+        'Para entrar em contato, escreva para contato@plina.finance. A preparação de mensagem requer JavaScript.',
+      mailto: {
+        assunto: 'Contato Plina — {interesse}',
+        corpo:
+          'Olá, time Plina.\n\nMeu nome é {nome}.\nE-mail para contato: {email}\nInteresse: {interesse}{organizacao}\n\n{mensagem}\n\nObrigado,\n{nome}',
+        mensagemPadrao: 'Gostaria de conversar sobre os próximos passos.',
+        linhaOrganizacao: '\nOrganização: {organizacao}',
+      },
+    },
+    footer: {
+      tagline: ['Cotas contempladas de consórcio,', 'com registro verificável em rede de testes.'],
+      conheca: 'Conheça',
+      converse: 'Converse',
+      transparencia: 'Transparência',
+      copyright: ['© 2026 Plina Finance.', 'Registros em rede de testes.'],
+      linkTestnet: 'Ver registros na rede de testes',
+      aviso:
+        'Esta página apresenta a tese e o modelo em desenvolvimento da Plina. Não constitui oferta de valores mobiliários, promessa de rentabilidade ou garantia de liquidez. Uma estrutura institucional é planejada para fase futura, sujeita à sua constituição e à documentação aplicável.',
+    },
   },
 };

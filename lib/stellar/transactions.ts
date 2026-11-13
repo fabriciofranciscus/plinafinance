@@ -112,16 +112,26 @@ export async function buildSwapBridgeForPlinarfXdr(input: {
  * ClaimableBalance criado pela anchor (Etherfuse PIX/BRL paga TESOURO via
  * CB depois do onramp completed — PLINA-MOD-007).
  * Source = investor (paga fee). Investor assina via Privy.
+ *
+ * Com `trustAsset`, a tx abre a trustline (`changeTrust`, limite máximo) e
+ * reclama o CB no MESMO XDR — o formato da execução de referência do anchor.
+ * Sem trustline o claim falha com `op_no_trust`. Quem decide se a trustline
+ * falta (e se há reserva de XLM) é `prepararClaimXdr` em `./claim`.
  */
 export async function buildClaimClaimableBalanceXdr(input: {
   investorPubkey: string;
   balanceId: string;
+  trustAsset?: Asset;
 }): Promise<{ xdr: string; hashHex: string }> {
   const account = await horizon.loadAccount(input.investorPubkey);
-  const tx = new TransactionBuilder(account, {
+  const builder = new TransactionBuilder(account, {
     fee: await getDynamicFee(),
     networkPassphrase,
-  })
+  });
+  if (input.trustAsset) {
+    builder.addOperation(Operation.changeTrust({ asset: input.trustAsset }));
+  }
+  const tx = builder
     .addOperation(
       Operation.claimClaimableBalance({ balanceId: input.balanceId }),
     )

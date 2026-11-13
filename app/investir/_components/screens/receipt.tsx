@@ -26,8 +26,8 @@ export function ReceiptScreen({
         <span className="font-mono text-2xl md:text-3xl text-base/55 ml-3">PLINA-RF</span>
       </h1>
       <p className="font-text text-base mt-6 text-base/80 leading-relaxed max-w-prose">
-        Na sua wallet Stellar institucional. Lastreado em direito creditório
-        brasileiro sob CVM 175.{' '}
+        Na sua wallet Stellar, em rede de testes. Token de demonstração, sem
+        valor financeiro.{' '}
         {buyResult.mock
           ? 'Sandbox sem PIX real: distribuição direta server-side (PLINA-MOD-005 bypass).'
           : 'Swap atômico — 2 legs commitam juntas, settlement on-chain real.'}

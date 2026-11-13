@@ -104,6 +104,10 @@ describe('DS3 — conclusão: PDF guardado → SHA-256 → memo → ASSINADA', (
     expect(st.downloads).toHaveLength(1);
   });
 
+  it('a janela do claim cobre a âncora (~130 s): ≥ 300 s (Argus D1)', () => {
+    expect(CONCLUSAO_JANELA_MS).toBeGreaterThanOrEqual(300_000);
+  });
+
   it('a âncora vai com contexto DOCUSIGN_PDF e desde = Cessao.criadaEm (limite estável, não o claim renovável)', async () => {
     await processarEnvelopeDocusign(ENV);
     expect(st.ancorarArgs).toHaveLength(1);

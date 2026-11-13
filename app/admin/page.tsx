@@ -188,7 +188,7 @@ export default async function AdminPage() {
             />
             <Metric label="Caixa realizado" value={brl(caixa)} />
             <Metric
-              label="Yield realizado acumulado"
+              label="Diferença realizada acumulada"
               value={brl(spreadAcumulado)}
             />
           </section>

@@ -36,8 +36,10 @@ export function KycScreen({
         Verificação de identidade.
       </h1>
       <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
-        KYC obrigatório antes da assinatura da cessão. Verificação AML conforme
-        CVM 175. Seus dados pessoais ficam off-chain.
+        Verificação de identidade (KYC) antes da assinatura da cessão, como
+        parte da prevenção à lavagem de dinheiro. Seus dados pessoais ficam
+        fora da rede. A transferência da cota também depende da aprovação da
+        administradora, que analisa a capacidade de pagamento do comprador.
       </p>
 
       <div className="mt-8 space-y-4 max-w-md">

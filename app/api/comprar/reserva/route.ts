@@ -8,6 +8,9 @@
  * `leadCompradorId` é derivado server-side da sessão Privy — o client NÃO o
  * envia. Roda antes do KYC, então a Pessoa pode ainda não existir (pessoaId
  * null); o lead é resolvido por email e carimbado depois.
+ *
+ * Rota ÚNICA de reserva (E1-3): `/api/comprar/reservar` foi removida. Uma
+ * chamada = uma `criarReserva` = um memo on-chain por ciclo de reserva.
  */
 
 import { NextResponse } from 'next/server';

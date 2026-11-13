@@ -79,7 +79,10 @@ vi.mock('@/lib/db', () => {
       return { count };
     },
   };
-  const eventoAudit = { create: async ({ data }: { data: Row }) => { st.audits.push(data); return data; } };
+  const eventoAudit = {
+    create: async ({ data }: { data: Row }) => { st.audits.push(data); return data; },
+    findFirst: async () => ({ payloadHash: 'b'.repeat(64) }), // laudo registrado (COTA_VALIDADA)
+  };
   return {
     db: {
       oferta: { findUnique: async () => (st.oferta ? { ...st.oferta, cessao: [...st.cessoes.values()][0] ?? null } : null) },

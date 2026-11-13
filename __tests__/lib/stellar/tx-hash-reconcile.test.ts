@@ -7,6 +7,7 @@ import {
   fetchTransactionByHash,
 } from '@/lib/stellar/transactions';
 import { horizon } from '@/lib/stellar/account';
+import { mockFeeStats } from '../../helpers/stellar-hermetico';
 import { networkPassphrase } from '@/lib/stellar/config';
 
 const INVESTOR_PUBKEY = 'GCV34BIZKP6ATAOI3RTQQ7CRL5KOP3XCEEYQYB3ZD654CMO6XNJQQ5TQ';
@@ -22,6 +23,7 @@ function mockTransactionCall(impl: () => Promise<unknown>) {
 
 describe('txHashFromXdr (#6)', () => {
   beforeEach(() => {
+    mockFeeStats(horizon); // sem Horizon real (getDynamicFee)
     vi.spyOn(horizon, 'loadAccount').mockResolvedValue(
       new Account(INVESTOR_PUBKEY, '12345') as unknown as Awaited<
         ReturnType<typeof horizon.loadAccount>

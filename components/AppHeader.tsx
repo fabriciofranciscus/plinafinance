@@ -60,14 +60,14 @@ export function AppHeader({ isAdmin }: AppHeaderProps) {
       ? [
           ...base,
           ...(isInvestidor || !isCedente
-            ? [{ href: '/investir', label: 'Investir' }]
+            ? [{ href: '/investir', label: 'Investir (testnet)' }]
             : []),
           ...(isInvestidor
             ? [{ href: '/minha-posicao', label: 'Minha posição' }]
             : []),
           ...(isCedente ? [{ href: '/vender', label: 'Vender' }] : []),
         ]
-      : [...base, { href: '/investir', label: 'Investir' }];
+      : [...base, { href: '/investir', label: 'Investir (testnet)' }];
 
   return (
     <header className="bg-white border-b border-light-hairline sticky top-0 z-40">
