@@ -61,12 +61,14 @@ const sha = (b: Buffer | string) => createHash('sha256').update(b).digest('hex')
 const PDF = Buffer.from('%PDF-assinado-pelo-cedente');
 let seq = 0;
 
-async function semear(over: { status?: 'PENDENTE' | 'ENVIADA_DOCUSIGN' | 'ASSINADA' | 'CANCELADA' | 'EXPIRADA'; envelope?: boolean; email?: string | null; criadaEm?: Date } = {}) {
+async function semear(over: { status?: 'PENDENTE' | 'ENVIADA_DOCUSIGN' | 'ASSINADA' | 'CANCELADA' | 'EXPIRADA'; envelope?: boolean; email?: string | null; criadaEm?: Date; laudo?: boolean } = {}) {
   seq += 1;
   const lead = await db.leadVendedor.create({ data: { nome: 'Cedente de Teste', email: over.email === null ? `lead${seq}@plina.test` : (over.email ?? `lead${seq}@plina.test`) } });
   const oferta = await db.oferta.create({ data: { leadVendedorId: lead.id, tipoBem: 'IMOVEL', valorCarta: '100000.00', administradora: 'Adm Ficticia', desagioAquisicao: '0.2000', valorLiquidoVendedor: '80000.00', validade: new Date(Date.now() + 86_400_000), status: 'ACEITA' } });
   const status = over.status ?? 'ENVIADA_DOCUSIGN';
   const cessao = await db.cessao.create({ data: { ofertaId: oferta.id, status, ...(over.envelope === false || status === 'PENDENTE' ? {} : { docusignEnvelopeId: ENV_ID }), ...(over.criadaEm ? { criadaEm: over.criadaEm } : {}) } });
+  // fix/admin-fluxo-cota-prova (0ae791a): o envio exige laudo em QUALQUER rede; por padrão a cessão semeada já o tem.
+  if (over.laudo !== false) await db.eventoAudit.create({ data: { acao: 'COTA_VALIDADA', operador: 'op', cessaoId: cessao.id, payloadJson: {}, payloadHash: 'a'.repeat(64) } as never });
   return { leadId: lead.id, ofertaId: oferta.id, cessaoId: cessao.id };
 }
 const linha = (id: string) => db.cessao.findUniqueOrThrow({ where: { id } });
@@ -451,7 +453,7 @@ describe.skipIf(!PG)('DS2/DS3 — cessão no DocuSign, conclusão e âncora (Pos
     });
 
     it('o PDF recebe os fatos do serviço: demonstracao = (rede ≠ PUBLIC), hashLaudo = payloadHash do ÚLTIMO COTA_VALIDADA da cessão, valores formatados; sem PII além do nome do cedente (que só vai ao DocuSign)', async () => {
-      const s = await semear({ status: 'PENDENTE' });
+      const s = await semear({ status: 'PENDENTE', laudo: false });
       const t0 = Date.now();
       await db.eventoAudit.create({ data: { acao: 'COTA_VALIDADA', operador: 'op', cessaoId: s.cessaoId, payloadJson: {}, payloadHash: 'a'.repeat(64), criadoEm: new Date(t0 - 5000) } as never });
       await db.eventoAudit.create({ data: { acao: 'COTA_VALIDADA', operador: 'op', cessaoId: s.cessaoId, payloadJson: {}, payloadHash: 'b'.repeat(64), criadoEm: new Date(t0 - 1000) } as never });
@@ -462,12 +464,12 @@ describe.skipIf(!PG)('DS2/DS3 — cessão no DocuSign, conclusão e âncora (Pos
       if (st.pdf.mock.calls[0]) expect(st.pdf.mock.calls[0][0]).toMatchObject({ demonstracao: false });
     });
 
-    // F-DS2-1 (FECHADO em 28c8371): em PUBLIC o envio sem laudo registrado é recusado ANTES do claim e do DocuSign; em testnet segue.
-    describe('F-DS2-1 — laudo para enviar na mainnet', () => {
+    // F-DS2-1 (fix 0ae791a, Atlas 13/11): o envio sem laudo registrado é recusado ANTES do claim e do DocuSign em QUALQUER rede.
+    describe('F-DS2-1 — laudo para enviar (qualquer rede)', () => {
       const laudo = (cessaoId: string, hash = 'a'.repeat(64), criadoEm?: Date) => db.eventoAudit.create({ data: { acao: 'COTA_VALIDADA', operador: 'op', cessaoId, payloadJson: {}, payloadHash: hash, ...(criadoEm ? { criadoEm } : {}) } as never });
-      it('PUBLIC sem laudo → EnvioDocusignLaudoAusenteError (LAUDO_AUSENTE): nenhum claim (marca nula), nenhum envelope, nenhum PDF, nenhum audit; a cessão continua PENDENTE', async () => {
-        st.rede = 'PUBLIC';
-        const s = await semear({ status: 'PENDENTE' });
+      it.each(['TESTNET', 'PUBLIC'])('%s sem laudo → EnvioDocusignLaudoAusenteError (LAUDO_AUSENTE): nenhum claim (marca nula), nenhum envelope, nenhum PDF, nenhum audit; a cessão continua PENDENTE', async (rede) => {
+        st.rede = rede;
+        const s = await semear({ status: 'PENDENTE', laudo: false });
         const e = await erro(enviarCessaoParaAssinatura({ cessaoId: s.cessaoId, operador: 'op' }));
         expect(e).toBeInstanceOf(EnvioDocusignLaudoAusenteError); expect((e as { code?: string }).code).toBe('LAUDO_AUSENTE');
         expect(await linha(s.cessaoId)).toMatchObject({ status: 'PENDENTE', docusignEnvioIniciadoEm: null, docusignEnvelopeId: null });
@@ -475,8 +477,8 @@ describe.skipIf(!PG)('DS2/DS3 — cessão no DocuSign, conclusão e âncora (Pos
       });
       it('PUBLIC COM laudo → envia, e o PDF recebe demonstracao:false e o hashLaudo do ÚLTIMO laudo; laudo de OUTRA cessão não vale', async () => {
         st.rede = 'PUBLIC';
-        const outra = await semear({ status: 'PENDENTE' }); await laudo(outra.cessaoId, 'c'.repeat(64));
-        const s = await semear({ status: 'PENDENTE' });
+        const outra = await semear({ status: 'PENDENTE', laudo: false }); await laudo(outra.cessaoId, 'c'.repeat(64));
+        const s = await semear({ status: 'PENDENTE', laudo: false });
         expect(await erro(enviarCessaoParaAssinatura({ cessaoId: s.cessaoId, operador: 'op' }))).toBeInstanceOf(EnvioDocusignLaudoAusenteError);
         const t0 = Date.now(); await laudo(s.cessaoId, 'a'.repeat(64), new Date(t0 - 4000)); await laudo(s.cessaoId, 'b'.repeat(64), new Date(t0 - 1000));
         await enviarCessaoParaAssinatura({ cessaoId: s.cessaoId, operador: 'op' });
@@ -485,21 +487,24 @@ describe.skipIf(!PG)('DS2/DS3 — cessão no DocuSign, conclusão e âncora (Pos
       });
       it('PUBLIC com laudo de payloadHash nulo → também recusa (laudo sem hash não é laudo)', async () => {
         st.rede = 'PUBLIC';
-        const s = await semear({ status: 'PENDENTE' });
+        const s = await semear({ status: 'PENDENTE', laudo: false });
         await db.eventoAudit.create({ data: { acao: 'COTA_VALIDADA', operador: 'op', cessaoId: s.cessaoId, payloadJson: {}, payloadHash: null } as never });
         expect(await erro(enviarCessaoParaAssinatura({ cessaoId: s.cessaoId, operador: 'op' }))).toBeInstanceOf(EnvioDocusignLaudoAusenteError);
       });
-      it('testnet sem laudo → segue (PDF de demonstração com hashLaudo nulo); a idempotência continua: cessão já ENVIADA devolve o envelope SEM exigir o laudo, mesmo em PUBLIC', async () => {
-        const s = await semear({ status: 'PENDENTE' });
-        await enviarCessaoParaAssinatura({ cessaoId: s.cessaoId, operador: 'op' });
-        expect(st.pdf.mock.calls[0][0]).toMatchObject({ hashLaudo: null, demonstracao: true });
-        st.rede = 'PUBLIC';
-        expect(await enviarCessaoParaAssinatura({ cessaoId: s.cessaoId, operador: 'op' })).toMatchObject({ jaEnviada: true, envelopeId: ENV_ID });
-        expect(st.criar).toHaveBeenCalledTimes(1);
+      it('a idempotência continua: cessão já ENVIADA devolve o envelope SEM exigir o laudo (em qualquer rede); sem envelope e sem laudo, TESTNET também recusa', async () => {
+        const s = await semear({ status: 'ENVIADA_DOCUSIGN', laudo: false });
+        for (const rede of ['TESTNET', 'PUBLIC']) {
+          st.rede = rede;
+          expect(await enviarCessaoParaAssinatura({ cessaoId: s.cessaoId, operador: 'op' })).toMatchObject({ jaEnviada: true, envelopeId: ENV_ID });
+        }
+        expect(st.criar).not.toHaveBeenCalled();
+        st.rede = 'TESTNET';
+        const p = await semear({ status: 'PENDENTE', laudo: false });
+        expect(await erro(enviarCessaoParaAssinatura({ cessaoId: p.cessaoId, operador: 'op' }))).toBeInstanceOf(EnvioDocusignLaudoAusenteError);
       });
       it('a ordem das recusas em PUBLIC: cedente sem e-mail e cessão inexistente continuam recusando; a falta de laudo é checada ANTES do claim mesmo com 5 envios simultâneos (0 claims, 0 envelopes)', async () => {
         st.rede = 'PUBLIC';
-        const s = await semear({ status: 'PENDENTE' });
+        const s = await semear({ status: 'PENDENTE', laudo: false });
         const rs = await Promise.all(Array.from({ length: 5 }, () => erro(enviarCessaoParaAssinatura({ cessaoId: s.cessaoId, operador: 'op' }))));
         expect(rs.every((e) => e instanceof EnvioDocusignLaudoAusenteError)).toBe(true);
         expect(st.criar).not.toHaveBeenCalled();
@@ -507,11 +512,11 @@ describe.skipIf(!PG)('DS2/DS3 — cessão no DocuSign, conclusão e âncora (Pos
       });
     });
 
-    it('F-DS2-1 (caracterização) — hoje, SEM laudo, o envio segue e o PDF é gerado com hashLaudo = null (em testnet isso é só demonstração)', async () => {
-      const s = await semear({ status: 'PENDENTE' });
-      await enviarCessaoParaAssinatura({ cessaoId: s.cessaoId, operador: 'op' });
-      expect(st.pdf.mock.calls[0][0]).toMatchObject({ hashLaudo: null, demonstracao: true });
-      expect(st.criar).toHaveBeenCalledTimes(1);
+    it('F-DS2-1 (fechado em 0ae791a): SEM laudo, mesmo em testnet, o envio é recusado e o PDF de demonstração com hashLaudo nulo NUNCA é gerado', async () => {
+      const s = await semear({ status: 'PENDENTE', laudo: false });
+      expect(await erro(enviarCessaoParaAssinatura({ cessaoId: s.cessaoId, operador: 'op' }))).toBeInstanceOf(EnvioDocusignLaudoAusenteError);
+      expect(st.pdf).not.toHaveBeenCalled();
+      expect(st.criar).not.toHaveBeenCalled();
     });
 
     it('ciclo completo: PENDENTE → enviar → ENVIADA_DOCUSIGN → webhook concluído → ASSINADA com hash e âncora, cada passo uma vez', async () => {

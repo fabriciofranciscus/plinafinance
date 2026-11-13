@@ -17,7 +17,7 @@ const PG = vi.hoisted(() => {
   process.env.PIX_MAX_BRL = '50000';
   return url;
 });
-const st = vi.hoisted(() => ({ criar: vi.fn(), buscar: vi.fn(), pdf: vi.fn(), ancora: vi.fn(), blob: vi.fn(), alerta: vi.fn(), rede: 'TESTNET', admin: true, csrf: null as null | Response }));
+const st = vi.hoisted(() => ({ incorporar: vi.fn(), criar: vi.fn(), buscar: vi.fn(), pdf: vi.fn(), ancora: vi.fn(), blob: vi.fn(), alerta: vi.fn(), rede: 'TESTNET', admin: true, csrf: null as null | Response }));
 vi.mock('@/lib/auth/admin', () => ({ isAdminAuthenticated: async () => st.admin }));
 vi.mock('@/lib/auth/admin-csrf', () => ({ requireAdminCsrf: () => st.csrf }));
 vi.mock('@/lib/stellar/ancora', async (orig) => ({ ...(await orig<typeof import('@/lib/stellar/ancora')>()), ancorarSha256: st.ancora }));
@@ -30,6 +30,7 @@ vi.mock('@/lib/stellar/audit', async (orig) => {
   const { createHash: h } = await import('node:crypto');
   return { ...m, registerOnChainHash: async (p: unknown) => ({ payloadHash: h('sha256').update(JSON.stringify(p)).digest('hex'), txHash: 'e'.repeat(64) }) };
 });
+vi.mock('@/lib/services/tokenizacao', async (orig) => ({ ...(await orig<typeof import('@/lib/services/tokenizacao')>()), incorporarCota: st.incorporar }));
 vi.mock('@/lib/stellar/config', async (orig) => ({ ...(await orig<typeof import('@/lib/stellar/config')>()), get STELLAR_NETWORK() { return st.rede; } }));
 
 import { createHash } from 'node:crypto';
@@ -58,7 +59,7 @@ describe.skipIf(!PG)('rota admin/originacao (D3) com serviços reais — Postgre
   afterAll(async () => { await db.$disconnect(); });
   beforeEach(async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    st.rede = 'TESTNET'; st.admin = true; st.csrf = null;
+    st.rede = 'TESTNET'; st.admin = true; st.csrf = null; st.incorporar.mockReset().mockResolvedValue({ cotaId: 'inc_x', txHash: 'h'.repeat(64), tokensEmitidos: 1 });
     st.ancora.mockReset().mockImplementation(async ({ sha256Hex }: { sha256Hex: string }) => ({ txHash: sha256Hex.slice(0, 64), reutilizada: false, ledgerCloseTime: '2026-11-13T12:00:00Z' }));
     st.criar.mockReset().mockResolvedValue({ envelopeId: '11111111-2222-3333-4444-555555555555' }); st.buscar.mockReset().mockResolvedValue(null); st.pdf.mockReset().mockResolvedValue(Buffer.from('%PDF-x'));
     st.blob.mockReset().mockResolvedValue({ pathname: 'comprovantes-psp/x.json' }); st.alerta.mockReset().mockResolvedValue(true);
@@ -189,44 +190,134 @@ describe.skipIf(!PG)('rota admin/originacao (D3) com serviços reais — Postgre
     });
   });
 
-  describe('F-DS2-1 pela rota: registrar-cessao (cria a cessão E envia) × laudo', () => {
+  describe('fluxo da cota de prova (fix/admin-fluxo-cota-prova 0ae791a): registrar-cessao só CRIA; enviar-cessao envia só com laudo, em qualquer rede', () => {
     async function ofertaAceita() {
       seq += 1;
       const lead = await db.leadVendedor.create({ data: { nome: 'Lead D3', email: `leadof${seq}@plina.test` } });
       return db.oferta.create({ data: { leadVendedorId: lead.id, tipoBem: 'IMOVEL', valorCarta: '100000.00', administradora: 'Adm Ficticia', desagioAquisicao: '0.2000', valorLiquidoVendedor: '1500.00', validade: new Date(Date.now() + 86_400_000), status: 'ACEITA' } });
     }
-    it('MAINNET: o 1º registrar-cessao cria a cessão PENDENTE e responde 409 LAUDO_AUSENTE (mensagem fixa, nada enviado); registra-se o laudo; o 2º registrar-cessao envia (idempotente: sem 2ª cessão)', async () => {
-      st.rede = 'PUBLIC';
+    it.each(['TESTNET', 'PUBLIC'])('%s: registrar-cessao cria a cessão PENDENTE e NÃO envia (nenhum PDF, nenhum envelope); repetir devolve a mesma cessão sem 2ª', async (rede) => {
+      st.rede = rede;
       const o = await ofertaAceita();
       const r1 = await chamar({ action: 'registrar-cessao', ofertaId: o.id });
-      expect(r1.status).toBe(409); expect(r1.json).toEqual({ error: expect.any(String), code: 'LAUDO_AUSENTE' }); expect(r1.texto).not.toMatch(/@plina\.test|Lead D3/);
-      const c = await db.cessao.findUniqueOrThrow({ where: { ofertaId: o.id } });
-      expect(c.status).toBe('PENDENTE'); expect(st.criar).not.toHaveBeenCalled(); expect(st.pdf).not.toHaveBeenCalled();
-      const l = await chamar({ action: 'registrar-laudo', cessaoId: c.id, laudoUrl: 'https://laudo.exemplo.test/l.pdf#sha256=' + 'a'.repeat(64) });
-      expect(l.status).toBe(200);
+      expect(r1.status).toBe(200); expect(r1.json).toMatchObject({ status: 'PENDENTE', jaEnviada: false });
+      expect(st.criar).not.toHaveBeenCalled(); expect(st.pdf).not.toHaveBeenCalled();
       const r2 = await chamar({ action: 'registrar-cessao', ofertaId: o.id });
-      expect(r2.status).toBe(200); expect(r2.json).toMatchObject({ status: 'ENVIADA_DOCUSIGN', jaEnviada: false });
+      expect(r2.json.cessaoId).toBe(r1.json.cessaoId);
       expect(await db.cessao.count({ where: { ofertaId: o.id } })).toBe(1);
-      expect((st.pdf.mock.calls[0][0] as { hashLaudo: string; demonstracao: boolean })).toMatchObject({ demonstracao: false, hashLaudo: l.json.hashValidacao });
+      expect(st.criar).not.toHaveBeenCalled();
     });
-    // LIMITAÇÃO para a cota de prova (testnet): `registrarCessao` cria E envia no mesmo passo e o laudo só pode existir DEPOIS de a cessão
-    // existir (registrarLaudoDaCessao exige cessaoId); então na testnet o 1º registrar-cessao ENVIA sem laudo e o PDF de demonstração
-    // sai com "laudo … ainda não registrado". Sem `enviar:false` + case "enviar-cessao" (proposta do Bento, pendente do Atlas) o PDF
-    // assinado da cota de prova não carrega o hash do laudo.
-    it('TESTNET (limitação, caracterização): o 1º registrar-cessao envia SEM laudo — o PDF de demonstração recebe hashLaudo = null', async () => {
-      st.rede = 'TESTNET';
+    it.each(['TESTNET', 'PUBLIC'])('%s: enviar-cessao SEM laudo → 409 LAUDO_AUSENTE (mensagem fixa, nada enviado, cessão continua PENDENTE); registra-se o laudo; enviar-cessao envia e o PDF cita o hash do laudo (demonstracao = rede≠PUBLIC)', async (rede) => {
+      st.rede = rede;
       const o = await ofertaAceita();
+      const c = await chamar({ action: 'registrar-cessao', ofertaId: o.id });
+      const e1 = await chamar({ action: 'enviar-cessao', cessaoId: c.json.cessaoId });
+      expect(e1.status).toBe(409); expect(e1.json).toEqual({ error: expect.any(String), code: 'LAUDO_AUSENTE' }); expect(e1.texto).not.toMatch(/@plina\.test|Lead D3/);
+      expect((await db.cessao.findUniqueOrThrow({ where: { id: c.json.cessaoId } })).status).toBe('PENDENTE');
+      expect(st.criar).not.toHaveBeenCalled(); expect(st.pdf).not.toHaveBeenCalled();
+      const l = await chamar({ action: 'registrar-laudo', cessaoId: c.json.cessaoId, laudoUrl: 'https://laudo.exemplo.test/l.pdf#sha256=' + 'a'.repeat(64) });
+      expect(l.status).toBe(200);
+      const e2 = await chamar({ action: 'enviar-cessao', cessaoId: c.json.cessaoId });
+      expect(e2.status).toBe(200); expect(e2.json).toMatchObject({ status: 'ENVIADA_DOCUSIGN', jaEnviada: false });
+      expect(st.pdf.mock.calls[0][0]).toMatchObject({ demonstracao: rede !== 'PUBLIC', hashLaudo: l.json.hashValidacao });
+      const e3 = await chamar({ action: 'enviar-cessao', cessaoId: c.json.cessaoId });
+      expect(e3.json).toMatchObject({ jaEnviada: true }); expect(st.criar).toHaveBeenCalledTimes(1);
+    });
+    it('enviar-cessao: corpo estrito (campo extra → 400), cessão inexistente → erro sem efeito, sem sessão → 401, sem CSRF → recusa', async () => {
+      const o = await ofertaAceita();
+      const c = await chamar({ action: 'registrar-cessao', ofertaId: o.id });
+      const extra = await chamar({ action: 'enviar-cessao', cessaoId: c.json.cessaoId, operador: 'x' });
+      expect(extra.status).toBe(400);
+      const nao = await chamar({ action: 'enviar-cessao', cessaoId: 'nao_existe' });
+      expect(nao.status).toBeGreaterThanOrEqual(400); expect(st.criar).not.toHaveBeenCalled();
+      st.admin = false;
+      expect((await chamar({ action: 'enviar-cessao', cessaoId: c.json.cessaoId })).status).toBe(401);
+      st.admin = true; st.csrf = new Response(null, { status: 403 });
+      expect((await chamar({ action: 'enviar-cessao', cessaoId: c.json.cessaoId })).status).toBe(403);
+      expect(st.criar).not.toHaveBeenCalled();
+    });
+    it('oferta que não está ACEITA → registrar-cessao falha sem criar cessão', async () => {
+      const o = await ofertaAceita();
+      await db.oferta.update({ where: { id: o.id }, data: { status: 'RASCUNHO' as never } });
       const r = await chamar({ action: 'registrar-cessao', ofertaId: o.id });
-      expect(r.status).toBe(200); expect(r.json).toMatchObject({ status: 'ENVIADA_DOCUSIGN' });
-      expect(st.pdf.mock.calls[0][0]).toMatchObject({ demonstracao: true, hashLaudo: null });
+      expect(r.status).toBeGreaterThanOrEqual(400);
+      expect(await db.cessao.count()).toBe(0);
     });
-    it('registrar-cessao é idempotente: repetir devolve o mesmo envelope (jaEnviada) e não cria 2ª cessão nem 2º envelope; oferta que não está ACEITA → erro', async () => {
-      const o = await ofertaAceita();
-      await chamar({ action: 'registrar-cessao', ofertaId: o.id });
-      const r2 = await chamar({ action: 'registrar-cessao', ofertaId: o.id });
-      expect(r2.json).toMatchObject({ jaEnviada: true });
-      expect(st.criar).toHaveBeenCalledTimes(1); expect(await db.cessao.count()).toBe(1);
-      await db.oferta.update({ where: { id: o.id }, data: { status: 'RECUSADA' as never } }).catch(() => undefined);
+  });
+
+  describe('incorporar-cota do funil exige cessão ASSINADA + Pix COMPROVADO (em qualquer rede)', () => {
+    async function comPagamento(o: { cessao: 'ASSINADA' | 'ENVIADA_DOCUSIGN'; pix: 'COMPROVADA' | 'FALHOU' | null }) {
+      const s = await semear({ status: o.cessao as never });
+      await db.pagamento.create({ data: { cessaoId: s.cessaoId, metodo: 'PIX_SIMULADO', valor: '1500.00', status: 'EXECUTADO', executadoEm: new Date() } as never });
+      if (o.pix) await db.transferenciaPix.create({ data: { cessaoId: s.cessaoId, idempotencyKey: `pix-cedente:${s.cessaoId}`, provedor: 'SIMULADO', status: o.pix, valor: '1500.00', destinoMascarado: 'CPF ***4725' } });
+      return s;
+    }
+    it.each(['TESTNET', 'PUBLIC'])('%s: cessão NÃO assinada (com Pagamento EXECUTADO forjado) → 409 CESSAO_NAO_ASSINADA, nada emitido', async (rede) => {
+      st.rede = rede;
+      const s = await comPagamento({ cessao: 'ENVIADA_DOCUSIGN', pix: 'COMPROVADA' });
+      const r = await chamar({ action: 'incorporar-cota', cessaoId: s.cessaoId });
+      expect(r.status).toBe(409); expect(r.json.code).toBe('CESSAO_NAO_ASSINADA');
+      expect(st.incorporar).not.toHaveBeenCalled();
+    });
+    it.each(['TESTNET', 'PUBLIC'])('%s: Pagamento EXECUTADO sem TransferenciaPix (o Pix legado) → 409 PIX_NAO_COMPROVADO; Pix FALHOU também; nada emitido', async (rede) => {
+      st.rede = rede;
+      const a = await comPagamento({ cessao: 'ASSINADA', pix: null });
+      const ra = await chamar({ action: 'incorporar-cota', cessaoId: a.cessaoId });
+      expect(ra.status).toBe(409); expect(ra.json.code).toBe('PIX_NAO_COMPROVADO');
+      const b = await comPagamento({ cessao: 'ASSINADA', pix: 'FALHOU' });
+      const rb = await chamar({ action: 'incorporar-cota', cessaoId: b.cessaoId });
+      expect(rb.status).toBe(409); expect(rb.json.code).toBe('PIX_NAO_COMPROVADO');
+      expect(st.incorporar).not.toHaveBeenCalled();
+      expect(await db.leadVendedor.count({ where: { status: 'COTA_INCORPORADA' } })).toBe(0);
+    });
+    it('cessão ASSINADA + Pix COMPROVADO → passa pelos gates e chama a incorporação UMA vez com o laudo registrado da cessão (a emissão em si é do E1-P)', async () => {
+      const s = await comPagamento({ cessao: 'ASSINADA', pix: 'COMPROVADA' });
+      const r = await chamar({ action: 'incorporar-cota', cessaoId: s.cessaoId });
+      expect(st.incorporar).toHaveBeenCalledTimes(1);
+      expect(st.incorporar.mock.calls[0][0]).toMatchObject({ cessaoId: s.cessaoId, operador: 'admin-panel' });
+      expect(st.incorporar.mock.calls[0][0].hashValidacao).toMatch(/^[0-9a-f]{64}$/);
+      expect(r.status).toBe(200);
+    });
+    it('e659d62: sem Pagamento EXECUTADO → 409 PAGAMENTO_NAO_EXECUTADO (tipado, mensagem fixa), nada emitido', async () => {
+      const s = await semear({ status: 'ASSINADA' });
+      const r = await chamar({ action: 'incorporar-cota', cessaoId: s.cessaoId });
+      expect(r.status).toBe(409); expect(r.json).toEqual({ error: expect.any(String), code: 'PAGAMENTO_NAO_EXECUTADO' });
+      expect(st.incorporar).not.toHaveBeenCalled();
+    });
+    async function cotaExistente(cessaoId: string) {
+      const c = await db.cota.create({ data: { id: `inc_${cessaoId}`, tipoBem: 'IMOVEL', administradora: 'Adm Ficticia', valorCarta: '100000.00', desagioAquisicao: '0.2000', desagioRevenda: '0.1000', status: 'DISPONIVEL', tokensEmitidos: '1200.0000000', emissaoTxHash: 'f'.repeat(64), cessaoId } as never });
+      await db.eventoAudit.create({ data: { acao: 'COTA_INCORPORADA', operador: 'admin-panel', cotaId: c.id, stellarTxHash: c.emissaoTxHash, payloadJson: {} } as never });
+      return c;
+    }
+    it('RETOMADA (runbook "chame de novo"): a Cota já existe mas o lead não foi marcado ⇒ NÃO emite de novo, completa o vínculo (lead COTA_INCORPORADA, audit ligado ao lead e à cessão) e devolve a Cota; a chamada seguinte ⇒ 409 COTA_JA_INCORPORADA', async () => {
+      const s = await comPagamento({ cessao: 'ASSINADA', pix: 'COMPROVADA' });
+      const c = await cotaExistente(s.cessaoId);
+      const r = await chamar({ action: 'incorporar-cota', cessaoId: s.cessaoId });
+      expect(r.status).toBe(200); expect(r.json).toMatchObject({ cotaId: c.id, txHash: 'f'.repeat(64) });
+      expect(st.incorporar).not.toHaveBeenCalled();
+      expect((await db.leadVendedor.findUniqueOrThrow({ where: { id: s.leadId } })).status).toBe('COTA_INCORPORADA');
+      const ev = await db.eventoAudit.findFirstOrThrow({ where: { cotaId: c.id, acao: 'COTA_INCORPORADA' } });
+      expect(ev).toMatchObject({ leadVendedorId: s.leadId, cessaoId: s.cessaoId });
+      const de_novo = await chamar({ action: 'incorporar-cota', cessaoId: s.cessaoId });
+      expect(de_novo.status).toBe(409); expect(de_novo.json.code).toBe('COTA_JA_INCORPORADA');
+      expect(st.incorporar).not.toHaveBeenCalled();
+      expect(await db.cota.count()).toBe(1);
+    });
+    it('a retomada TAMBÉM exige cessão ASSINADA + Pix COMPROVADO (Cota existente não contorna o gate)', async () => {
+      const a = await comPagamento({ cessao: 'ENVIADA_DOCUSIGN', pix: 'COMPROVADA' }); await cotaExistente(a.cessaoId);
+      expect((await chamar({ action: 'incorporar-cota', cessaoId: a.cessaoId })).json.code).toBe('CESSAO_NAO_ASSINADA');
+      const b = await comPagamento({ cessao: 'ASSINADA', pix: 'FALHOU' }); await cotaExistente(b.cessaoId);
+      expect((await chamar({ action: 'incorporar-cota', cessaoId: b.cessaoId })).json.code).toBe('PIX_NAO_COMPROVADO');
+      expect(await db.leadVendedor.count({ where: { status: 'COTA_INCORPORADA' } })).toBe(0);
+    });
+    it('3 chamadas SIMULTÂNEAS na retomada: nenhuma emite, a Cota continua UMA e o audit COTA_INCORPORADA continua UM (vínculo idempotente); as perdedoras recebem 200 ou 409 COTA_JA_INCORPORADA, nunca 500', async () => {
+      const s = await comPagamento({ cessao: 'ASSINADA', pix: 'COMPROVADA' });
+      const c = await cotaExistente(s.cessaoId);
+      const rs = await Promise.all(Array.from({ length: 3 }, () => chamar({ action: 'incorporar-cota', cessaoId: s.cessaoId })));
+      expect(rs.filter((r) => r.status === 500)).toHaveLength(0);
+      expect(rs.every((r) => r.status === 200 || r.json.code === 'COTA_JA_INCORPORADA')).toBe(true);
+      expect(st.incorporar).not.toHaveBeenCalled();
+      expect(await db.eventoAudit.count({ where: { cotaId: c.id, acao: 'COTA_INCORPORADA' } })).toBe(1);
     });
   });
 
@@ -242,28 +333,21 @@ describe.skipIf(!PG)('rota admin/originacao (D3) com serviços reais — Postgre
         expect(r.status).toBe(500);
       } finally { delete process.env.STELLAR_NETWORK; }
     });
-    it('executar-pix-simulado em PUBLIC → 409 PIX_SIMULADO_EM_MAINNET sem efeito', async () => {
-      const s = await semear(); st.rede = 'PUBLIC';
-      const r = await chamar({ action: 'executar-pix-simulado', cessaoId: s.cessaoId });
-      expect(r.status).toBe(409); expect(r.json.code).toBe('PIX_SIMULADO_EM_MAINNET');
-      expect(await db.pagamento.count()).toBe(0);
-    });
   });
 
-  describe('caminho LEGADO executar-pix-simulado (testnet) — Argus A1', () => {
-    // Pré-existente: só exige cessão ASSINADA e contorna laudo, atestado do titular, KYC, PSP, comprovante e âncora do E1-2, mas
-    // habilita a incorporação. Na cota de prova usar SÓ pagar-cedente; o legado é decisão do Atlas (sair ou exigir os mesmos controles).
-    it.fails('F-D3-1 (BAIXO, Argus A1) — executar-pix-simulado deve exigir o mesmo laudo/atestado: sem laudo, sem atestado e sem KYC ele NÃO pode marcar Pagamento EXECUTADO', async () => {
+  describe('executar-pix-simulado SAIU da rota admin (fecha F-D3-1)', () => {
+    it.each(['TESTNET', 'PUBLIC'])('%s: a action não existe mais (400, corpo estrito) e nada é marcado — nem sem laudo/atestado/KYC', async (rede) => {
+      st.rede = rede;
       const s = await semear({ laudo: false, kyc: false });
       const r = await chamar({ action: 'executar-pix-simulado', cessaoId: s.cessaoId });
-      expect(r.status).toBeGreaterThanOrEqual(400);
+      expect(r.status).toBe(400);
       expect(await db.pagamento.count()).toBe(0);
+      expect(await db.eventoAudit.count({ where: { acao: 'PIX_SIMULADO_EXECUTADO' } })).toBe(0);
     });
-    it('caracterização — o legado marca o Pix executado SEM laudo, SEM atestado e SEM KYC (testnet)', async () => {
+    it('o único pagamento pela rota é pagar-cedente: sem laudo/atestado ele recusa (409) e com eles paga com os controles do E1-2', async () => {
       const s = await semear({ laudo: false, kyc: false });
-      const r = await chamar({ action: 'executar-pix-simulado', cessaoId: s.cessaoId });
-      expect(r.status).toBe(200);
-      expect(await db.pagamento.count({ where: { cessaoId: s.cessaoId } })).toBe(1);
+      expect((await chamar({ action: 'pagar-cedente', cessaoId: s.cessaoId })).status).toBe(409);
+      expect(await db.pagamento.count()).toBe(0);
     });
   });
 
