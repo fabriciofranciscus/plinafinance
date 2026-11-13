@@ -31,6 +31,11 @@ describe('app/pool/page.tsx', () => {
     expect(semComentarios).toMatch(/Valor do pool ÷/);
   });
 
+  it('o cartão "emitido" usa o supply do ledger (o mesmo do denominador), não os tokens das cotas do banco', () => {
+    expect(semComentarios).toMatch(/const tokensNoLedger = supply \? Number\(supply\.circulante\) \+ Number\(supply\.tesouraria\) : null/);
+    expect(semComentarios).not.toMatch(/tokensEmitidosVivos/);
+  });
+
   it('sem os termos barrados (R$ 1,00 de NAV, yield, institucional, FIDC, qualificados, capital próprio)', () => {
     expect(semComentarios).not.toMatch(/R\$ 1,00|yield|institucional|FIDC|qualificad|capital próprio|Em liquidação|Baixada|gestor do/i);
   });

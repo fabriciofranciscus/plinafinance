@@ -17,7 +17,6 @@ import {
   navPorToken,
   navTotalDoPool,
   spreadRealizadoAcumulado,
-  tokensEmitidosVivos,
 } from '@/lib/services/pool';
 import { NavIndisponivelError, lerSupplyDoNav } from '@/lib/services/nav-supply';
 import { caixaParaNav } from '@/lib/services/razao-fundo';
@@ -95,7 +94,6 @@ export default async function PoolPage() {
   }
 
   const navTotal = navTotalDoPool(cotas, caixaNav);
-  const tokensVivos = tokensEmitidosVivos(cotas);
   const caixa = caixaRealizado(caixaNav);
 
   // O denominador do NAV vem do ledger, pela MESMA leitura da API /api/pool/summary
@@ -108,6 +106,9 @@ export default async function PoolPage() {
   } catch (err) {
     if (!(err instanceof NavIndisponivelError)) console.error('[pool] leitura do supply falhou');
   }
+  // O cartão "emitido" usa o MESMO supply do ledger que divide o NAV (Consuelo): os tokens das
+  // cotas no banco divergem do ledger e, lado a lado, os dois números se contradiziam.
+  const tokensNoLedger = supply ? Number(supply.circulante) + Number(supply.tesouraria) : null;
   const navUnit = supply ? navPorToken(cotas, caixaNav, supply) : null;
   const navUnitLabel = navUnit === null ? '—' : brlPorToken(navUnit);
   // M2: o NAV divide por circulante + tesouraria; o rótulo diz o mesmo número.
@@ -157,7 +158,7 @@ export default async function PoolPage() {
         />
         <Metric
           label={`${parametros.assetCode} emitido`}
-          value={tokenFmt(tokensVivos)}
+          value={tokensNoLedger === null ? '—' : tokenFmt(tokensNoLedger)}
           sublabel={`NAV por token · ${navUnitLabel}`}
         />
         <Metric
