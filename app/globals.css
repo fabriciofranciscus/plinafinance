@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-@theme {
+@theme static {
   --color-base: #132728;
   --color-primary: #0EA7C7;
   --color-primary-deep: #057A99;
@@ -17,10 +17,17 @@
   --color-stellar-mid: #4A9ED4;
   --color-glacier-tint: #A0CFE7;
 
-  --font-title: 'Chillax', sans-serif;
-  --font-text: 'Satoshi', sans-serif;
-  --font-details: 'Geist', sans-serif;
-  --font-mono: 'Geist Mono', monospace;
+  /* design-system/tokens.json: signal.500 / signal.700 (700 é o único destaque
+     permitido como texto e anel de foco sobre fundo claro: 5,99:1 no branco) */
+  --color-signal-500: #0EA7C7;
+  --color-signal-700: #046C88;
+
+  /* Chillax/Satoshi (ITF) só existem se os arquivos estiverem em
+     public/fonts/itf/ (fora do Git); sem eles, cai para Geist. */
+  --font-title: 'Chillax', var(--font-geist), 'Geist', system-ui, sans-serif;
+  --font-text: 'Satoshi', var(--font-geist), 'Geist', system-ui, sans-serif;
+  --font-details: var(--font-geist), 'Geist', system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), 'Geist Mono', ui-monospace, monospace;
 }
 
 body {

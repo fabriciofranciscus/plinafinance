@@ -1,6 +1,4 @@
 import { expect, test } from '@playwright/test';
-import { en } from '../lib/i18n/dictionaries/en';
-import { ptBR } from '../lib/i18n/dictionaries/pt-BR';
 
 /**
  * Smoke das superfícies públicas — cada rota renderiza 200 e contém um
@@ -31,10 +29,12 @@ for (const { path, expectText } of ROUTES) {
 /** Caixa e acento não escondem um nome ("Fabrício" = "fabricio"). */
 const semAcento = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
-/** Nomes das pessoas da equipe nos dicionários da landing, mais os fundadores como piso fixo. */
+/**
+ * Nomes de pessoa que não podem aparecer no stellar.toml: os fundadores. A landing v2 não tem
+ * a seção de equipe (os nomes antes vinham de `dict.equipe`), então o piso fixo é a lista.
+ */
 function nomesDePessoas(): string[] {
-  const doDicionario = [ptBR, en].flatMap((d) => d.equipe.membros.map((m) => m.nome));
-  return [...new Set([...doDicionario, 'Thais Reis', 'Fabricio Santos'].map(semAcento))];
+  return ['Thais Reis', 'Fabricio Santos'].map(semAcento);
 }
 
 const EMAIL_OFICIAL = 'contato@plina.finance';

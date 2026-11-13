@@ -1,10 +1,15 @@
 import type { Dictionary } from '../types';
 
+/**
+ * Textos da landing v2: Norma, `contexto/landing-v2-textos.md` (LD2). Não
+ * editar o sentido aqui; mudança de texto volta para a Norma/Consuelo.
+ * Títulos em linhas seguem a referência da Íris (SPEC §3).
+ */
 export const ptBR: Dictionary = {
   meta: {
-    title: 'Plina',
+    title: 'Plina — Liquidez para cotas contempladas de consórcio (em desenvolvimento)',
     description:
-      'A Plina está desenvolvendo uma estrutura para cotas contempladas de consórcio, com registros verificáveis em rede de testes. Sem oferta de investimento.',
+      'A Plina está desenvolvendo uma estrutura de liquidez para cotas contempladas de consórcio. Conheça o modelo, o estágio do projeto e os registros em rede de testes.',
     twitterDescription:
       'Cotas contempladas de consórcio, com registro verificável em rede de testes. Em desenvolvimento.',
     keywords: [
@@ -15,235 +20,178 @@ export const ptBR: Dictionary = {
       'rede de testes',
     ],
   },
-  siteHeader: {
-    skipLink: 'Pular para conteúdo',
-    nav: {
-      produto: 'Modelo',
-      tese: 'Tese',
-      compliance: 'Compliance',
-      equipe: 'Equipe',
+  landingV2: {
+    a11y: {
+      pular: 'Pular para o conteúdo',
+      inicio: 'Plina, início',
+      voltarInicio: 'Plina, voltar ao início',
+      navPrincipal: 'Navegação principal',
+      resumoAtivo: 'Resumo do ativo',
+      menu: 'Menu',
+      pausarMovimento: 'Pausar movimento',
+      ativarMovimento: 'Retomar movimento',
+      idioma: 'Idioma',
     },
-    painel: 'Painel',
-    sair: 'Sair',
-    registrarInteresse: 'Falar com o time',
-    menuAbrir: 'Abrir menu',
-    menuFechar: 'Fechar menu',
     languageSwitcher: { pt: 'PT', en: 'EN' },
-  },
-  consoleStrip: {
-    aberto: 'Em desenvolvimento · Rede de testes · Sem oferta em andamento',
-    cta: 'Falar com o time →',
-  },
-  hero: {
-    linha1: 'Cotas contempladas de consórcio.',
-    linha2: 'Registro verificável.',
-    destaque: 'Em desenvolvimento,',
-    linha3Fim: 'em rede de testes.',
-    sub: 'Estamos desenvolvendo a originação de cotas contempladas de consórcio, com registros verificáveis na Stellar testnet. Esta página não é oferta nem solicitação de investimento.',
-  },
-  produto: {
-    numMarker: '01',
-    marker: 'Modelo',
-    titulo: ['Estrutura', ' em testes', '.'],
-    intro:
-      'Estamos desenvolvendo a originação de cotas contempladas de consórcio, com registro digital dos eventos de cada cota. A Plina não é corretora. Esta página não é oferta nem solicitação de investimento.',
-    especificacoes: [
-      {
-        label: 'Ativo',
-        value: 'Cota contemplada de consórcio',
-        detail: 'Direito de crédito sujeito às regras do grupo e à anuência da administradora.',
-      },
-      {
-        label: 'Estágio',
-        value: 'Rede de testes',
-        detail:
-          'Estrutura institucional planejada para fase futura, sujeita a aprovação regulatória e à documentação aplicável.',
-      },
-      {
-        label: 'Registro',
-        value: 'Digital, em testnet',
-        detail: 'Cada evento da cota deixa um registro verificável na Stellar testnet.',
-      },
-      {
-        label: 'Contato',
-        value: 'Exploratório',
-        detail: 'Nenhuma oferta de investimento em andamento.',
-      },
-    ],
-  },
-  tese: {
-    numMarker: '02',
-    marker: 'Tese',
-    titulo: ['Três caminhos.', 'Um modelo.'],
-    intro:
-      'O modelo prevê três caminhos de realização, conforme as regras de cada grupo e administradora. Tudo aqui está em desenvolvimento.',
-    tableCaption: 'Os três caminhos de realização previstos no modelo',
-    colCaminho: 'Caminho',
-    rowDuration: 'Prazo',
-    rowEstagio: 'Estágio',
-    rowMix: 'Peso no modelo',
-    caminhos: [
-      {
-        letra: 'A',
-        titulo: ['Revenda ao', 'Comprador-Usuário'],
-        duration: 'A definir',
-        estagio: 'Em desenvolvimento',
-        mix: 'A definir',
-        body: 'O modelo prevê a revenda da cota a um comprador aprovado pela administradora. Esse canal ainda não está em operação.',
-      },
-      {
-        letra: 'B',
-        titulo: ['Liquidação por', 'Administradora'],
-        duration: 'Conforme a administradora',
-        estagio: 'Em desenvolvimento',
-        mix: 'A definir',
-        body: 'Para cotas elegíveis, a administradora pode converter a contemplação em pagamento em dinheiro, conforme a regulamentação aplicável. Caminho previsto no modelo, ainda em desenvolvimento.',
-      },
-      {
-        letra: 'C',
-        titulo: ['Liquidação por', 'Prazo de Grupo'],
-        duration: 'Conforme o prazo do grupo',
-        estagio: 'Em desenvolvimento',
-        mix: 'A definir',
-        body: 'Para cotas não realizadas pelos caminhos A ou B, o crédito é realizado ao final do prazo do grupo, nas condições contratuais. Sem garantia de prazo ou de valor.',
-      },
-    ],
-    rodape:
-      'Nenhuma composição, prazo ou resultado está definido ou garantido. O modelo está em desenvolvimento.',
-  },
-  bigStatement: {
-    numMarker: '03',
-    marker: 'Marco Regulatório',
-    p1: 'A Lei 11.795 regulamentou o mercado brasileiro de consórcios em 2008. Há quase duas décadas o direito creditório de cotas contempladas é juridicamente constituído. A Plina estuda novos caminhos de realização para ele.',
-    p2: 'A Plina desenvolve a originação dessas cotas, com registro verificável em rede de testes.',
-    milestones: [
-      { year: '2008', label: 'Lei 11.795 regulamenta consórcios brasileiros' },
-      { year: '2026', label: 'Plina · registros em rede de testes' },
-      { year: 'Depois', label: 'Fases seguintes, sujeitas a aprovação regulatória' },
-    ],
-  },
-  compliance: {
-    numMarker: '04',
-    marker: 'Compliance',
-    titulo: ['Compliance', 'desde o desenho.'],
-    intro:
-      'Reversibilidade e rastreabilidade são requisitos de qualquer estrutura regulada. A Plina os trata como requisito de desenho desde o início.',
-    principios: [
-      {
-        num: '01',
-        titulo: 'Auditável',
-        tag: 'Verificável · Rede de testes',
-        detalhe:
-          'No modelo, cada evento da cota gera um registro digital verificável. Hoje, em rede de testes.',
-      },
-      {
-        num: '02',
-        titulo: 'Base legal',
-        tag: 'Lei 11.795/2008',
-        detalhe:
-          'O modelo parte da Lei 11.795/2008, dos consórcios. Uma estrutura institucional é planejada para fase futura, sujeita a aprovação regulatória.',
-      },
-      {
-        num: '03',
-        titulo: 'Reversível',
-        tag: 'Clawback · Autorização · Revogabilidade',
-        detalhe:
-          'Política de clawback pública, restrita a quatro hipóteses jurídicas explícitas. Reversibilidade institucional como diferencial competitivo, não como limitação técnica.',
-      },
-    ],
-  },
-  equipe: {
-    numMarker: '05',
-    marker: 'Equipe Fundadora',
-    membros: [
-      {
-        operatorId: '01',
-        nome: 'Fabrício Santos',
-        cargo: 'CEO & Founder',
-        bio: 'Sócio fundador da Citrino, assessoria financeira de planejamento e gestão patrimonial. Atuou em estratégias de receita, custo e experiência do cliente na plataforma digital de crédito Simplic, e liderou na TOTVS a implementação do sistema corporativo de KPIs para a Diretoria e o Conselho Administrativo.',
-      },
-      {
-        operatorId: '02',
-        nome: 'Thais Reis',
-        cargo: 'CTO & Protocol Lead',
-        bio: 'Engenheira full-stack com cinco anos em infraestrutura blockchain — engenharia de dados, backend, contratos automatizados em Rust e interfaces em React/TypeScript. Fundadora e Lead Engineer do Karn Ecosystem, plataforma de governança de código aberto. Premiada em competições nacionais e internacionais de tecnologia descentralizada e inteligência artificial.',
-      },
-    ],
-  },
-  leadCapture: {
-    numMarker: '06',
-    marker: 'Contato',
-    headingIdle: ['Fale com', 'o time.'],
-    headingSuccess: ['Contato', 'registrado.'],
-    subIdle:
-      'Preencha os campos abaixo para falar com a equipe da Plina. Contato exploratório: esta página não é oferta nem solicitação de investimento.',
-    subSuccess: 'Recebemos seu contato. Nossa equipe responderá por e-mail.',
-    fields: {
-      nome: 'Nome completo *',
-      nomePlaceholder: 'Nome e sobrenome',
-      org: 'Organização *',
-      orgPlaceholder: 'Family office, gestora, fundo...',
-      email: 'E-mail corporativo *',
-      emailPlaceholder: 'nome@organização.com',
-      telefone: 'Telefone / WhatsApp',
-      telefonePlaceholder: '+55 11 99999-9999',
-      perfil: 'Perfil *',
-      jurisdicao: 'Jurisdição principal',
-      jurisdicaoPlaceholder: 'Brasil, EUA, Cingapura...',
-      observacoes: 'Observações / perguntas',
-      observacoesPlaceholder: 'Restrições de compliance, exigências específicas de estrutura, perguntas iniciais...',
-      selecione: 'Selecione',
+    nav: {
+      ativo: 'O ativo',
+      percurso: 'O percurso',
+      estagio: 'Estágio',
+      paraQuem: 'Para quem',
+      falar: 'Falar com o time',
     },
-    selectOptions: {
-      profile: {
-        'family-office-br': 'Family office brasileiro',
-        'family-office-int': 'Family office internacional',
-        'gestora-br': 'Gestora de fundos (BR)',
-        'gestora-int': 'Gestora multi-mercado (Internacional)',
-        'fintech-latam': 'Fintech de investimento LATAM',
-        outro: 'Outro — descrever nas observações',
+    hero: {
+      kicker: 'Consórcio brasileiro · Em desenvolvimento',
+      titulo: ['Cotas contempladas', 'de consórcio, com', 'registro verificável.'],
+      sub: 'Uma estrutura em desenvolvimento para conectar o crédito de consórcios brasileiros a novas possibilidades.',
+      ctaFalar: 'Falar com o time',
+      ctaEstrutura: 'Conhecer a estrutura',
+      marca: 'Plina Finance / Brasil',
+      estagioRotulo: 'Estágio do projeto',
+      estagioValor: 'Modelo em desenvolvimento.',
+      estagioLink: 'Conheça o estágio do projeto',
+    },
+    ativo: {
+      numero: '01 / O ativo',
+      rotulo: 'PLINA / COTAS CONTEMPLADAS',
+      titulo: ['O crédito já existe.', 'O caminho é que muda.'],
+      texto:
+        'Uma cota contemplada reúne o crédito para comprar um bem e as parcelas que ainda faltam pagar, sob as regras do grupo e da administradora. A Plina está desenvolvendo um modelo para adquirir essas cotas por cessão, com anuência da administradora.',
+      link: 'Entenda o percurso',
+      card: {
+        rotulo: 'ATIVO SUBJACENTE',
+        pais: 'BR / CONSÓRCIO',
+        titulo: ['Cota', 'contemplada'],
+        descricao:
+          'Análise da titularidade, das condições de cessão e das possibilidades de realização.',
+        origemRotulo: 'Origem',
+        origemValor: 'Cessão pelo titular, com anuência da administradora',
       },
     },
-    lgpdNotice:
-      'Autorizo a Plina Finance a usar os dados deste formulário para responder a este contato. Eles ficam em provedores de e-mail e hospedagem contratados pela Plina, são guardados pelo tempo necessário para responder e não são usados para outra finalidade. Para pedir acesso, correção ou eliminação, escreva para contato@plina.finance.',
-    submitIdle: 'Enviar contato',
-    submitPending: 'Enviando…',
-    footerNote:
-      'Contato exploratório · Esta página não é oferta nem solicitação de investimento · Em desenvolvimento',
-    successPanel: {
-      protocolo: 'Protocolo',
-      passos: [
-        { ordem: '01', titulo: 'Confirmação imediata', detalhe: 'Recebemos seu contato e o registro foi gerado.' },
-        {
-          ordem: '02',
-          titulo: 'Resposta',
-          detalhe: 'Nossa equipe responde por e-mail. Não há documentação de oferta: nenhuma oferta está em andamento.',
+    percurso: {
+      numero: '02 / O percurso',
+      rotulo: 'DA ORIGEM À REALIZAÇÃO',
+      titulo: ['Da cota', 'à realização.'],
+      intro: 'O modelo prevê que cada cota seja analisada e documentada antes de integrar a operação.',
+      notaEtapas: 'Etapas do modelo; assinatura e Pix reais ainda em desenvolvimento.',
+      passo1: {
+        titulo: 'Analisar.',
+        texto: 'Contemplação, titularidade, adimplência e ausência de ônus.',
+      },
+      passo2: {
+        titulo: 'Formalizar.',
+        texto:
+          'Proposta com deságio, assinatura da cessão, anuência da administradora e pagamento ao titular.',
+      },
+      passo3: {
+        titulo: 'Realizar.',
+        texto:
+          'Revenda a um comprador aprovado pela administradora, ou recebimento do crédito nas condições do grupo.',
+      },
+      ressalva: 'Modelo sujeito à análise da cota e à anuência da administradora.',
+    },
+    estagio: {
+      numero: '03 / Estágio',
+      rotulo: 'TESTNET → PRÓXIMAS FASES',
+      titulo: ['Clareza sobre', 'o estágio.'],
+      intro:
+        'A tecnologia está sendo demonstrada em ambiente de testes. A operação com dinheiro real e a estrutura de investimento dependem de etapas distintas.',
+      demonstrado: {
+        rotulo: '01 / DEMONSTRADO',
+        titulo: 'Na rede de testes.',
+        texto: 'Registros de eventos da cota e uma prova de entrada do investidor na Stellar testnet.',
+      },
+      desenvolvimento: {
+        rotulo: '02 / EM DESENVOLVIMENTO',
+        titulo: 'Para operar.',
+        texto:
+          'Fechamento da cessão, integração de assinatura e Pix, cálculo do NAV e saída pelo produto.',
+      },
+      futuro: {
+        rotulo: '03 / FASE FUTURA',
+        titulo: 'Mais adiante.',
+        texto:
+          'Estrutura institucional prevista para uma fase futura, sujeita a aprovação regulatória e à documentação aplicável. Não há oferta em andamento.',
+      },
+      nota: 'O registro digital documenta eventos. A validade de cada cessão também depende dos instrumentos jurídicos e da administradora.',
+    },
+    paraQuem: {
+      numero: '04 / Para quem',
+      rotulo: 'TRÊS PONTOS DE PARTIDA',
+      titulo: ['Uma estrutura.', 'Entradas diferentes.'],
+      intro: 'Comece pelo seu papel na operação.',
+      instituicoes: {
+        titulo: 'Instituições e parceiros',
+        texto: 'Conheça a tese, a originação e o estágio do projeto.',
+      },
+      titular: {
+        titulo: 'Titulares de cotas',
+        texto:
+          'Tem uma cota contemplada e não quer usar o crédito? No modelo, a cessão prevê pagamento com deságio e, aprovada a transferência pela administradora, as parcelas restantes deixam de ser suas. Ainda não compramos cotas: hoje conversamos e analisamos. Não prometemos preço nem prazo.',
+      },
+      compradores: {
+        titulo: 'Compradores e parceiros',
+        texto:
+          'A revenda a compradores é uma etapa futura do modelo. Se quer acompanhar o desenvolvimento, fale com o time.',
+      },
+    },
+    contato: {
+      numero: '05 / Contato',
+      titulo: ['Vamos falar', 'sobre o próximo passo.'],
+      intro: 'Conte seu objetivo. Sem CPF, documentos ou dados bancários no primeiro contato.',
+      email: 'contato@plina.finance',
+      aviso: 'Contato exploratório. Esta página não é oferta nem solicitação de investimento.',
+      form: {
+        titulo: 'Seu contato',
+        nome: 'Seu nome *',
+        nomePlaceholder: 'Nome',
+        nomeErro: 'Informe seu nome.',
+        email: 'E-mail *',
+        emailPlaceholder: 'voce@empresa.com',
+        interesse: 'Interesse *',
+        interesseSelecione: 'Selecione o motivo do contato',
+        opcoes: {
+          tese: 'Conhecer a tese institucional',
+          cota: 'Conversar sobre uma cota contemplada',
+          parceria: 'Quero propor uma parceria',
+          outro: 'Outro assunto',
         },
-        {
-          ordem: '03',
-          titulo: 'Conversa com o time',
-          detalhe: 'Se fizer sentido, agendamos uma conversa com o time fundador.',
-        },
-      ],
-      duvidas: 'Dúvidas?',
+        organizacao: 'Organização (opcional)',
+        organizacaoPlaceholder: 'Empresa ou instituição',
+        mensagem: 'Mensagem (opcional)',
+        mensagemPlaceholder: 'Como podemos ajudar?',
+        preparar: 'Preparar meu contato',
+        avisoMailto:
+          'Você revisa e envia pelo seu e-mail. Esta página não envia nem armazena o que você digita no formulário.',
+      },
+      rascunho: {
+        titulo: 'Seu contato está pronto.',
+        texto:
+          'Revise abaixo. A mensagem só será enviada quando você confirmar no seu aplicativo de e-mail.',
+        abrir: 'Abrir meu e-mail',
+        copiar: 'Copiar mensagem',
+        copiado: 'Mensagem copiada. Cole no seu e-mail para contato@plina.finance.',
+        selecionado: 'Texto selecionado. Use Ctrl+C ou ⌘C para copiar.',
+      },
+      semJs:
+        'Para entrar em contato, escreva para contato@plina.finance. A preparação de mensagem requer JavaScript.',
+      mailto: {
+        assunto: 'Contato Plina — {interesse}',
+        corpo:
+          'Olá, time Plina.\n\nMeu nome é {nome}.\nE-mail para contato: {email}\nInteresse: {interesse}{organizacao}\n\n{mensagem}\n\nObrigado,\n{nome}',
+        mensagemPadrao: 'Gostaria de conversar sobre os próximos passos.',
+        linhaOrganizacao: '\nOrganização: {organizacao}',
+      },
     },
-  },
-  footer: {
-    tagline: 'Cotas contempladas de consórcio, com registro verificável em rede de testes.',
-    navegacao: 'Navegação',
-    navLinks: {
-      produto: 'Modelo',
-      tese: 'Tese',
-      compliance: 'Compliance',
-      equipe: 'Equipe',
-      registrarInteresse: 'Falar com o time',
+    footer: {
+      tagline: ['Cotas contempladas de consórcio,', 'com registro verificável em rede de testes.'],
+      conheca: 'Conheça',
+      converse: 'Converse',
+      transparencia: 'Transparência',
+      copyright: ['© 2026 Plina Finance.', 'Registros em rede de testes.'],
+      linkTestnet: 'Ver registros na rede de testes',
+      aviso:
+        'Esta página apresenta a tese e o modelo em desenvolvimento da Plina. Não constitui oferta de valores mobiliários, promessa de rentabilidade ou garantia de liquidez. Uma estrutura institucional é planejada para fase futura, sujeita à sua constituição e à documentação aplicável.',
     },
-    contato: 'Contato',
-    disclaimer:
-      'A Plina Finance não é corretora. Esta página apresenta um modelo em desenvolvimento, em rede de testes. Não constitui oferta de valores mobiliários, promessa de rentabilidade ou garantia de liquidez. Uma estrutura institucional é planejada para fase futura, sujeita a aprovação regulatória e à documentação aplicável.',
-    copyright: '© 2026 Plina Finance. Todos os direitos reservados.',
-  },
-  consoleFooter: {
-    flags: ['Testnet', 'Em desenvolvimento', 'Lei 11.795/2008', 'Sem oferta em andamento'],
   },
 };

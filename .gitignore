@@ -77,3 +77,8 @@ docs/M0-foundation-fase1.md
 
 # fontes embutidas do dossiê (regeneráveis)
 scripts/dossie/fonts/
+
+# fontes ITF (Chillax, Satoshi): licença proíbe redistribuir em repositório público.
+# Colocar os 4 .woff2 localmente (ver public/fonts/itf/README.md); sem eles o site cai para Geist.
+/public/fonts/itf/*
+!/public/fonts/itf/README.md
