@@ -1,3 +1,4 @@
+import { TrustlineNaoAutorizadaError } from '@/lib/stellar/trustline';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { Keypair } from '@stellar/stellar-sdk';
@@ -236,6 +237,27 @@ describe('POST /api/investidor/buy/swap/build', () => {
     expect(eventoAuditCreate.mock.calls[0][0].data.payloadJson.amount).toBe('376.4705882');
     expect(eventoAuditCreate.mock.calls[0][0].data.payloadJson.navPorTokenNaCotacao).toBe('1.06250000');
   });
+
+  it.each(['TRUSTLINE_AUSENTE', 'TRUSTLINE_NAO_AUTORIZADA'] as const)(
+    'N1-at (Vera F-N1AT-2): %s no build → 409 com o código (não 500 opaco), sem assinar nada',
+    async (code) => {
+      quoteFindUnique.mockResolvedValueOnce(
+        baseQuote({
+          toAmount: new Prisma.Decimal('344'),
+          navPorTokenNaCotacao: new Prisma.Decimal('1.0625'),
+          plinarfAmount: new Prisma.Decimal('376.4705882'),
+          onRampOrder: { id: 'ord_1', status: 'completed', paymentInstructionsJson: {} },
+        }),
+      );
+      resolveTesouroAsset.mockResolvedValueOnce({ code: 'TESOURO', issuer: 'GTES', identifier: 'TESOURO:GTES' });
+      loadAccount.mockResolvedValueOnce({ balances: [{ asset_code: 'TESOURO', asset_issuer: 'GTES' }] });
+      buildSwapBridgeForPlinarfXdr.mockRejectedValueOnce(new TrustlineNaoAutorizadaError(code, USER_PK, 'PLINARF:GX'));
+      const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+      expect(r.status).toBe(409);
+      expect((await r.json()).error).toMatchObject({ code });
+      expect(preSignWithSigner).not.toHaveBeenCalled();
+    },
+  );
 
   it('real path: perna ponte = toAmount e perna PLINARF = plinarfAmount (valores distintos)', async () => {
     quoteFindUnique.mockResolvedValueOnce(

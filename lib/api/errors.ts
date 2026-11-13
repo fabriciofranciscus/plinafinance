@@ -22,6 +22,8 @@ export const API_ERROR_CODES = [
   'NAV_MUDOU',             // 409 — NAV divergiu da cotação além de 1 bp; recotar
   'SWAP_EM_CONFERENCIA',   // 409 — o investidor tem um swap em conferência (reserva órfã): sem quote/reserva novos
   'CLASSE_INDISPONIVEL',   // 422 — classe (Subordinada) sem NAV próprio: recusada por enquanto
+  'TRUSTLINE_AUSENTE',     // 409 — a carteira não tem trustline do token a emitir (N1-at)
+  'TRUSTLINE_NAO_AUTORIZADA', // 409 — a trustline não está autorizada pelo emissor (N1-at)
   'RATE_LIMITED',          // 429 — rate-limit estourado
   'STELLAR_SUBMIT_FAILED', // 502 — Horizon retornou erro
   'LEDGER_UNAVAILABLE',    // 503 — leitura do ledger falhou; NAV indisponível
