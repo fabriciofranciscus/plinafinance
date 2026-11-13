@@ -1049,3 +1049,33 @@ model PrestadorRegulado {
 
   @@index([papel])
 }
+
+/// Snapshot diário do NAV (E3-1, contrato 2026-11-11-e3-1-snapshot-nav). `conteudo` são os BYTES canônicos
+/// (RFC 8785) que foram hasheados, publicados e ancorados: retomar após queda reenvia estes bytes, nunca
+/// recalcula (o hash ancorado tem de ser o do arquivo publicado). `data` (UTC) é a idempotência: 1 snapshot
+/// e 1 âncora por dia. `PUBLICANDO` = claim gravado antes da chain; `PUBLICADO` = arquivo no ar + tx ancorada.
+model SnapshotNav {
+  id          String             @id @default(cuid())
+  /// Dia UTC, YYYY-MM-DD.
+  data        String             @unique
+  status      StatusSnapshotNav  @default(PUBLICANDO)
+  conteudo    String
+  /// SHA-256 hex dos bytes UTF-8 de `conteudo` = Memo.hash da âncora.
+  sha256      String
+  navPorToken Decimal            @db.Decimal(20, 8)
+  /// Ledger do Horizon lido antes das leituras de saldo.
+  ledger      Int
+  url         String?
+  txHash      String?
+  /// Lease da execução em curso (evita duas execuções publicando a mesma linha).
+  travaAte    DateTime?
+  criadoEm    DateTime           @default(now())
+  publicadoEm DateTime?
+
+  @@index([status])
+}
+
+enum StatusSnapshotNav {
+  PUBLICANDO
+  PUBLICADO
+}

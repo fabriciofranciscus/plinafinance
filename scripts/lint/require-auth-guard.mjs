@@ -37,6 +37,7 @@ const PUBLIC_ROUTES = new Map([
   ['vender/simular', 'simulador read-only, sem persistência'],
   ['webhooks/anchor', 'webhook — autenticado por assinatura HMAC (X-Signature), dedupe por eventoId'],
   ['pool/summary', 'agregados públicos read-only'],
+  ['nav-snapshot/[data]', 'arquivo público do snapshot do NAV (E3-1): read-only, sem PII, rate-limit, só serve se o SHA-256 bate com o ancorado'],
   ['comprovante/[cessaoId]', 'recibo — cessaoId é bearer token na URL'],
 ]);
 
