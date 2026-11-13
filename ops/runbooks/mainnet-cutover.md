@@ -20,6 +20,24 @@ Fase 01 (D30): só cota **quitada**; preço e NAV valem para saldo devedor zero.
 | 8 | **Clawback e congelamento:** runbook com as 4 hipóteses e dupla aprovação ensaiado em testnet; política de KYC negado (hoje o resgate e o off-ramp seguem abertos) | P1 | Argus + Consuelo + Norma | ensaio registrado com hashes; política escrita |
 | 9 | **Contraparte do ativo-ponte:** registrar se o TESOURO de produção tem clawback ou revogação habilitados pelo emissor (risco de congelamento do caixa do fundo) | P1 | Consuelo + Atlas | resposta do emissor por escrito |
 
+### A.1 Estado dos 9 itens em 2026-11-13 (Farol, só leitura; sobre `4f337e8`)
+
+Legenda: ✓ atendido · ◐ parcial · ✗ aberto · ? não verificável pelo Farol (dono indicado). Isto é **estado do dia**, não aprovação: quem aprova é a coluna "Quem aprova" da tabela.
+
+| # | Estado | O que foi conferido (testnet, salvo indicação) | Falta |
+|---|---|---|---|
+| 1 | ◐ | Issuer `GBRG4JKO…` no Horizon: `AUTH_REQUIRED`, `AUTH_REVOCABLE`, `AUTH_CLAWBACK_ENABLED` ligados, `AUTH_IMMUTABLE` desligado, `home_domain = plina.finance`; `stellar.toml` responde 200 e cita o ativo e o issuer | **Multisig ausente:** 1 só assinante (a master key, peso 1) e limiares 0. Peso 0 na master depois do multisig é pré-requisito. Em mainnet o ativo nasce limpo: refazer flags antes da 1ª trustline |
+| 2 | ✗ | `next` 16.2.12 na `main`. `pnpm audit --prod` (13/11): **5 critical e 34 high**; os critical são todos do `next`, corrigidos só em `>=16.3.3`/`16.3.6`/`16.4.1`; high também em `axios`, `follow-redirects`, `undici`, `nodemailer`, `sharp`, `zod`, `toml`, `@grpc/grpc-js` e outros | Upgrade do `next` (1 PR, changelog lido, gates, Argus), depois as demais por PR. Parecer do Argus no SHA candidato |
+| 3 | ◐ | Só nomes: `NEXT_PUBLIC_*` = só `NEXT_PUBLIC_PRIVY_APP_ID` (público por desenho). `STELLAR_ISSUER_SECRET` e `STELLAR_DISTRIBUTOR_SECRET` existem em Production, Preview e Development; `STELLAR_FUNDER_SECRET` só em Preview e Development | **Não dá para provar pelo nome** que os de Production são diferentes dos de testnet: hoje não existe chave de mainnet. Na virada: chaves de mainnet só em Production, nunca em Preview/Development; Argus varre o bundle cliente |
+| 4 | ✗ | Posição `GB4PELA6…` no Horizon: 1 assinante (peso 1), limiares 0; sem multisig. A chave secreta existe como arquivo local único (`~/.plina-custodia/`), tratada como exposta; rotação é bloqueante no M6 | Multisig da posição, issuer e distributor; funder como exceção declarada com `FUNDER_DAILY_CAP`; rotação da chave da posição |
+| 5 | ✗ | `ANCHOR_WEBHOOK_SECRET` existe **só no Preview de uma branch** (já mergeada); **não existe em Production** | Segredo de produção da Etherfuse (diferente do sandbox) no Production, 503 quando ausente, runbook de rotação; limiter distribuído |
+| 6 | ✗ | O código usa Upstash quando `UPSTASH_REDIS_REST_URL`/`_TOKEN` existem (`lib/rate-limit/config.ts`); **nenhuma variável Upstash em Production nem em Preview** (por nome) → todos os limiters rodam em memória | Instâncias Upstash de production e preview; decidir fail-open/fail-closed; teste por limiter. Mudança em rate-limit passa pelo Argus |
+| 7 | ? | Não verificado pelo Farol | Argus (login, sessão, CSRF) e Bento (incorporação manual fechada na fase 01) |
+| 8 | ? | Não verificado pelo Farol | Argus + Consuelo + Norma (runbook das 4 hipóteses ensaiado; política de KYC negado) |
+| 9 | ? | Não verificado pelo Farol | Consuelo + Atlas (resposta do emissor do TESOURO por escrito) |
+
+Resumo: **0 de 5 P0 fechados**. #1 ◐ (flags prontas, falta multisig), #2 ✗ (Next com critical; upgrade pendente), #3 ◐, #4 ✗, #5 ✗. P1: #6 ✗; #7–#9 fora do escopo do Farol.
+
 ## B. M6 — o que falta e o que é do fornecedor
 
 - [ ] **Etherfuse (fornecedor):** a ordem de produção devolve instrução de depósito vazia para o mercado brasileiro; sem rail BR/PIX de produção o produto não sai. Dono: Etherfuse; contato e prazo por escrito. Aprova: Thais.
