@@ -161,3 +161,52 @@ describe('dec (decimal canônico)', () => {
     expect(dec(null)).toBeNull();
   });
 });
+
+describe('E1-P sobre a main 4f337e8 (D5 do Atlas)', () => {
+  const runP = (f: Fontes, pend: ('CESSAO' | 'INCORPORACAO')[]) =>
+    montarEvidencia('c1', f, () => new Date('2026-11-14T12:00:00Z'), { pendentesNestaBase: pend });
+
+  it('liquidação mostra o endToEndId do PSP junto do SHA-256 do comprovante', async () => {
+    const f = mundo({ pagamento: async () => ({ status: 'COMPROVADA', onChainTxHash: TX('c'), hashComprovante: sha256Hex(COMP), e2eId: 'E1234567820261113120000ABCDEF12' }) });
+    const p = passo(await run(f), 'LIQUIDACAO');
+    expect(p.confere).toBe(true);
+    expect(p.documento).toContain('endToEndId E1234567820261113120000ABCDEF12');
+  });
+
+  it('liquidação com transferência ainda não comprovada não confere', async () => {
+    const f = mundo({ pagamento: async () => ({ status: 'INCERTO', onChainTxHash: TX('c'), hashComprovante: sha256Hex(COMP) }) });
+    expect(passo(await run(f), 'LIQUIDACAO').motivo).toMatch(/LIQUIDACAO_NAO_COMPROVADA/);
+  });
+
+  it('cessão sem nenhum artefato do DS3 e marcada como pendente nesta base → PENDENTE, não falha', async () => {
+    const f = mundo({
+      cessao: async () => ({ status: 'PENDENTE', hashDocumento: null, onChainTxHash: null }),
+      pdfCessao: async () => null,
+    });
+    const e = await runP(f, ['CESSAO']);
+    expect(passo(e, 'CESSAO')).toMatchObject({ confere: false, pendente: true });
+    expect(passo(e, 'CESSAO').motivo).toMatch(/^PENDENTE/);
+    expect(e.todosConferem).toBe(false);
+    expect(e.conferemExcetoPendentes).toBe(true);
+    expect(paraMarkdown(e)).toMatch(/pendente/i);
+  });
+
+  it('pendente NÃO mascara prova quebrada: com artefato parcial do DS3 o passo é conferido e reprova', async () => {
+    const f = mundo({ pdfCessao: async () => Buffer.from('outro pdf') });
+    const e = await runP(f, ['CESSAO']);
+    expect(passo(e, 'CESSAO')).toMatchObject({ confere: false, pendente: false });
+    expect(e.conferemExcetoPendentes).toBe(false);
+  });
+
+  it('incorporação sem registro canônico e marcada como pendente → PENDENTE', async () => {
+    const e = await runP(mundo({ registroIncorporacao: async () => null }), ['INCORPORACAO']);
+    expect(passo(e, 'INCORPORACAO')).toMatchObject({ pendente: true });
+    expect(e.conferemExcetoPendentes).toBe(true);
+  });
+
+  it('sem a lista de pendentes, o comportamento é o anterior (falha)', async () => {
+    const e = await run(mundo({ registroIncorporacao: async () => null }));
+    expect(passo(e, 'INCORPORACAO')).toMatchObject({ confere: false, pendente: false });
+    expect(e.conferemExcetoPendentes).toBe(false);
+  });
+});

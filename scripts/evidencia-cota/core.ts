@@ -55,7 +55,8 @@ export interface Fontes {
   } | null>;
   /** Bytes GUARDADOS do PDF assinado (Blob privado, DS3). Nunca baixa de novo no DocuSign. */
   pdfCessao(cessaoId: string): Promise<Buffer | null>;
-  pagamento(cessaoId: string): Promise<{ status: string; onChainTxHash: string | null; hashComprovante?: string | null } | null>;
+  /** Liquidação ao cedente (main: TransferenciaPix). `e2eId` = EndToEndId do Pix (não é dado pessoal). */
+  pagamento(cessaoId: string): Promise<{ status: string; onChainTxHash: string | null; hashComprovante?: string | null; e2eId?: string | null } | null>;
   /** Bytes GUARDADOS do comprovante do PSP (E1-2). */
   comprovante(cessaoId: string): Promise<Buffer | null>;
   /** Registro canônico da incorporação guardado + âncora própria; null = o app ainda não gerou. */
@@ -90,6 +91,8 @@ export interface PassoEvidencia {
   /** Memo.hash lido da tx. */
   memoOnChain: string | null;
   confere: boolean;
+  /** Passo cuja funcionalidade ainda não está nesta base e SEM nenhum artefato: aparece como pendente, não como falha. */
+  pendente: boolean;
   /** Preenchido sempre que confere=false: por que a prova não fecha. */
   motivo?: string;
 }
@@ -100,6 +103,16 @@ export interface EvidenciaCota {
   network: 'TESTNET';
   passos: PassoEvidencia[];
   todosConferem: boolean;
+  /** Todos os passos conferem, salvo os PENDENTES (funcionalidade ainda fora desta base). */
+  conferemExcetoPendentes: boolean;
+}
+
+export interface OpcoesEvidencia {
+  /**
+   * Passos cuja funcionalidade ainda não está nesta base (ex.: CESSAO sem o DS3, INCORPORACAO sem o registro canônico).
+   * Só viram PENDENTE se não houver NENHUM artefato do passo; artefato parcial é conferido normalmente (não mascara).
+   */
+  pendentesNestaBase?: PassoId[];
 }
 
 export const sha256Hex = (b: Buffer | string): string => createHash('sha256').update(b).digest('hex');
@@ -121,7 +134,7 @@ export const memoDaIncorporacao = (chave: string): string => sha256Hex(`plina:in
 function base(ordem: number, passo: PassoId, rotulo: string): PassoEvidencia {
   return {
     ordem, passo, rotulo, txHash: null, explorerUrl: null, documento: null,
-    sha256Documento: null, sha256Registrado: null, memoOnChain: null, confere: false,
+    sha256Documento: null, sha256Registrado: null, memoOnChain: null, confere: false, pendente: false,
   };
 }
 
@@ -179,7 +192,22 @@ async function validarRegistro(
   return null;
 }
 
-export async function montarEvidencia(cotaId: string, f: Fontes, agora: () => Date = () => new Date()): Promise<EvidenciaCota> {
+const MOTIVO_PENDENTE: Partial<Record<PassoId, string>> = {
+  CESSAO: 'PENDENTE: cessão via DocuSign (DS3) ainda não publicada nesta base',
+  INCORPORACAO: 'PENDENTE: registro canônico da incorporação (E1-p) ainda não publicado nesta base',
+};
+
+function marcarPendente(p: PassoEvidencia): PassoEvidencia {
+  return { ...p, confere: false, pendente: true, motivo: MOTIVO_PENDENTE[p.passo] ?? 'PENDENTE' };
+}
+
+export async function montarEvidencia(
+  cotaId: string,
+  f: Fontes,
+  agora: () => Date = () => new Date(),
+  opcoes: OpcoesEvidencia = {},
+): Promise<EvidenciaCota> {
+  const pendentes = new Set(opcoes.pendentesNestaBase ?? []);
   const cota = await f.cota(cotaId);
   if (!cota) throw new Error(`Cota ${cotaId} não encontrada.`);
   const passos: PassoEvidencia[] = [];
@@ -213,7 +241,8 @@ export async function montarEvidencia(cotaId: string, f: Fontes, agora: () => Da
       r.motivo = `CESSAO_NAO_ASSINADA: status=${cessao.status}`;
     }
     if (!cota.cessaoId) r.motivo = 'COTA_SEM_CESSAO: cota incorporada direto, sem funil de cessão';
-    passos.push(r);
+    const semNadaDoDs3 = cota.cessaoId && !pdf && !cessao?.hashDocumento && !cessao?.onChainTxHash;
+    passos.push(pendentes.has('CESSAO') && semNadaDoDs3 ? marcarPendente(r) : r);
   }
 
   // 3. Liquidação: documento = bytes GUARDADOS do comprovante do PSP (sem sobrescrita: allowOverwrite=false no E1-2).
@@ -228,7 +257,13 @@ export async function montarEvidencia(cotaId: string, f: Fontes, agora: () => Da
     const tx = pg?.onChainTxHash ?? null;
     const memo = tx ? (await f.tx(tx))?.memoHex ?? null : null;
     const reg = pg?.hashComprovante !== undefined ? pg.hashComprovante : memo;
-    passos.push(await conferir(p, f, { doc, reg, tx }));
+    const r = await conferir(p, f, { doc, reg, tx });
+    if (r.confere && pg && !['COMPROVADA', 'EXECUTADO'].includes(pg.status)) {
+      r.confere = false;
+      r.motivo = `LIQUIDACAO_NAO_COMPROVADA: status=${pg.status}`;
+    }
+    if (pg?.e2eId) r.documento = `${r.documento ?? 'comprovante do PSP'} · endToEndId ${pg.e2eId}`;
+    passos.push(r);
   }
 
   // 4. Incorporação: transição PRÓPRIA (Atlas): registro canônico JSON guardado + âncora (Memo.hash = sha256 dos
@@ -240,7 +275,7 @@ export async function montarEvidencia(cotaId: string, f: Fontes, agora: () => Da
     p.documento = reg ? 'registro canônico da incorporação guardado (JSON)' : null;
     if (!reg) {
       p.motivo = 'SEM_REGISTRO_INCORPORACAO: o registro canônico da incorporação não existe (transição própria ainda não gerada)';
-      passos.push(p);
+      passos.push(pendentes.has('INCORPORACAO') ? marcarPendente(p) : p);
     } else {
       const r = await conferir(p, f, { doc: sha256Hex(reg.bytes), reg: reg.hashRegistrado, tx: reg.txHash });
       if (r.confere) {
@@ -274,19 +309,26 @@ export async function montarEvidencia(cotaId: string, f: Fontes, agora: () => Da
     passos.push(r);
   }
 
-  return { cotaId, geradaEm: agora().toISOString(), network: 'TESTNET', passos, todosConferem: passos.every((x) => x.confere) };
+  return {
+    cotaId,
+    geradaEm: agora().toISOString(),
+    network: 'TESTNET',
+    passos,
+    todosConferem: passos.every((x) => x.confere),
+    conferemExcetoPendentes: passos.every((x) => x.confere || x.pendente),
+  };
 }
 
 export function paraMarkdown(e: EvidenciaCota): string {
   const linhas = [
     `# Evidência da cota ${e.cotaId}`,
     '',
-    `Rede: ${e.network} · gerada em ${e.geradaEm} · resultado: **${e.todosConferem ? 'TODOS CONFEREM' : 'HÁ PASSO SEM PROVA'}**`,
+    `Rede: ${e.network} · gerada em ${e.geradaEm} · resultado: **${e.todosConferem ? 'TODOS CONFEREM' : e.conferemExcetoPendentes ? 'CONFEREM, COM PASSO PENDENTE' : 'HÁ PASSO SEM PROVA'}**`,
     '',
     '| # | Passo | Tx (explorer) | SHA-256 do documento | Memo on-chain | Confere |',
     '|---|---|---|---|---|---|',
     ...e.passos.map((p) =>
-      `| ${p.ordem} | ${p.rotulo} | ${p.txHash ? `[${p.txHash.slice(0, 12)}…](${p.explorerUrl})` : '—'} | ${p.sha256Documento ?? '—'} | ${p.memoOnChain ?? '—'} | ${p.confere ? '✓' : `✗ ${p.motivo ?? ''}`} |`),
+      `| ${p.ordem} | ${p.rotulo} | ${p.txHash ? `[${p.txHash.slice(0, 12)}…](${p.explorerUrl})` : '—'} | ${p.sha256Documento ?? '—'} | ${p.memoOnChain ?? '—'} | ${p.confere ? '✓' : p.pendente ? `⏳ pendente — ${p.motivo ?? ''}` : `✗ ${p.motivo ?? ''}`} |`),
   ];
   return linhas.join('\n') + '\n';
 }

@@ -3,12 +3,13 @@
  *
  * Lista em ordem validação → cessão → liquidação → incorporação (registro canônico ancorado ANTES da emissão) → emissão (o pagamento que emitiu PLINA-RF), com link do explorer,
  * documento e SHA-256 de cada passo, e CONFERE sha256(documento guardado) == hash no banco ==
- * Memo.hash on-chain. Só leitura. Só testnet (recusa PUBLIC). Sai com código 1 se algum passo não fecha.
+ * Memo.hash on-chain. Só leitura. Só testnet (recusa PUBLIC). Código de saída: 0 todos conferem; 2 conferem com
+ * passo PENDENTE (funcionalidade fora desta base, sem nenhum artefato); 1 algum passo não fecha.
  * Saída: exports/evidencia-cota-<id>.{md,json} (gitignored) + tabela no terminal.
  *
- * Pathnames do Blob (sobrescreva com env se o dono mudar): EVIDENCIA_BLOB_CESSAO_PATH, EVIDENCIA_BLOB_COMPROVANTE_PATH
- * (use {cessaoId}) e EVIDENCIA_BLOB_INCORPORACAO_PATH (use {cotaId}). Padrões: DS3 `cessoes/{cessaoId}/assinada.pdf`;
- * E1-2 `comprovantes/{cessaoId}.pdf`; incorporação `cotas/{cotaId}/incorporacao.json` (Bento, ainda não publicado).
+ * Pathnames do Blob (sobrescreva com env se o dono mudar): EVIDENCIA_BLOB_CESSAO_PATH (use {cessaoId}) e
+ * EVIDENCIA_BLOB_INCORPORACAO_PATH (use {cotaId}). Padrões: DS3 `cessoes/{cessaoId}/assinada.pdf`; E1-2: o comprovante
+ * vem do banco (TransferenciaPix.comprovante + comprovanteSha256 + ancoraTxHash + e2eId), não do Blob; incorporação `cotas/{cotaId}/incorporacao.json` (Bento, ainda não publicado).
  * Incorporação: a tx da âncora é achada no histórico do distributor por Memo.hash = sha256(bytes) (sem confiar no banco);
  * o hash REGISTRADO no banco fica null até o Bento publicar o campo (fail-closed: reprova SEM_HASH_REGISTRADO).
  */
@@ -78,8 +79,19 @@ async function main() {
       db.eventoAudit.findFirst({ where: { acao: 'COTA_VALIDADA', payloadHash: h }, select: { payloadJson: true, payloadHash: true } }),
     cessao: (id) => db.cessao.findUnique({ where: { id }, select: { status: true, hashDocumento: true, onChainTxHash: true } }),
     pdfCessao: (id) => lerBlob(caminho(process.env.EVIDENCIA_BLOB_CESSAO_PATH, 'cessoes/{cessaoId}/assinada.pdf', id)),
-    pagamento: (id) => db.pagamento.findUnique({ where: { cessaoId: id }, select: { status: true, onChainTxHash: true } }),
-    comprovante: (id) => lerBlob(caminho(process.env.EVIDENCIA_BLOB_COMPROVANTE_PATH, 'comprovantes/{cessaoId}.pdf', id)),
+    // Liquidação (E1-2, main): TransferenciaPix. Os BYTES canônicos do comprovante ficam no banco (fonte da verdade;
+    // o Blob é espelho). Só os campos da prova: nunca destinoMascarado nem dados do titular (sem PII na saída).
+    async pagamento(id) {
+      const t = await db.transferenciaPix.findUnique({
+        where: { cessaoId: id },
+        select: { status: true, ancoraTxHash: true, comprovanteSha256: true, e2eId: true },
+      });
+      return t && { status: t.status, onChainTxHash: t.ancoraTxHash, hashComprovante: t.comprovanteSha256, e2eId: t.e2eId };
+    },
+    async comprovante(id) {
+      const t = await db.transferenciaPix.findUnique({ where: { cessaoId: id }, select: { comprovante: true } });
+      return t?.comprovante ? Buffer.from(t.comprovante, 'utf8') : null;
+    },
     async aporte(id) {
       const m = await db.movimentoFundo.findFirst({ where: { cotaId: id, tipo: 'APORTE_COTA' } });
       return m && { txHash: m.txHash, hashValidacao: m.hashValidacao, valorBrl: m.valorBrl.toString(), navPorToken: m.navPorToken?.toString() ?? null };
@@ -100,13 +112,16 @@ async function main() {
     },
   };
 
-  const ev = await montarEvidencia(cotaId, fontes);
+  // Nesta base (fabricio/main 4f337e8) o DS3 e o registro canônico da incorporação (E1-p) ainda não existem:
+  // esses passos saem como PENDENTE se não houver nenhum artefato deles. Tire da lista quando entrarem.
+  const ev = await montarEvidencia(cotaId, fontes, undefined, { pendentesNestaBase: ['CESSAO', 'INCORPORACAO'] });
   mkdirSync('exports', { recursive: true });
   writeFileSync(`exports/evidencia-cota-${cotaId}.json`, JSON.stringify(ev, null, 2));
   writeFileSync(`exports/evidencia-cota-${cotaId}.md`, paraMarkdown(ev));
   console.log(paraMarkdown(ev));
   await db.$disconnect();
-  if (!ev.todosConferem) process.exit(1);
+  // 0 = todos conferem; 2 = conferem, com passo pendente; 1 = há passo sem prova.
+  if (!ev.todosConferem) process.exit(ev.conferemExcetoPendentes ? 2 : 1);
 }
 
 main().catch((e) => { console.error(e instanceof Error ? e.message : e); process.exit(1); });
