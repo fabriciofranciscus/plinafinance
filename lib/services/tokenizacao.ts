@@ -726,9 +726,11 @@ export async function incorporarCota(
 
       return { cotaId, txHash, tokensEmitidos: quantidade.toNumber() };
     },
-    // O trabalho dentro da transação é limitado (leituras + no máx. um envio e um
-    // reenvio): NÃO há espera de 120 s aqui — o erro ambíguo sai como
-    // EMISSAO_EM_ANDAMENTO e o reenvio é de uma nova chamada. Timeout mantido (não aumentado).
+    // O trabalho dentro da transação é limitado (leituras + no máx. um envio e um reenvio da emissão; o erro
+    // ambíguo da emissão sai como EMISSAO_EM_ANDAMENTO). ATENÇÃO (E1-p, I-EP-3 da Vera): a âncora do registro
+    // (ancorarSha256) roda aqui dentro e, num erro ambíguo, pode esperar até ~130 s. Se o timeout estourar, a
+    // transação desfaz: antes da emissão, nada sai; depois dela, a TentativaEmissao (fora da transação) fica
+    // PENDENTE e a próxima chamada recupera pelo hash. Timeout mantido (não aumentado).
     { timeout: 120_000, maxWait: 15_000 },
   );
 }
