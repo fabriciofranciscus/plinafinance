@@ -68,6 +68,7 @@ vi.mock('@/lib/wallet/auth-guard', () => ({
 vi.mock('@/lib/db', () => ({
   db: {
     quote: { findUnique: quoteFindUnique, updateMany: quoteUpdateMany, findFirst: quoteFindFirst },
+    resgateCotacao: { findFirst: async () => null }, // gate do NAV (E2-6) na árvore integrada
     $transaction: async (
       cb: (tx: {
         quote: { updateMany: typeof quoteUpdateMany };
