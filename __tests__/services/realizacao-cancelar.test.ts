@@ -19,14 +19,14 @@ vi.mock('@/lib/db', () => ({
     reserva: { findUnique: reservaFindUnique },
     $transaction: async (
       cb: (tx: {
-        reserva: { update: typeof reservaUpdate };
-        cota: { update: typeof cotaUpdate };
+        reserva: { updateMany: typeof reservaUpdate };
+        cota: { updateMany: typeof cotaUpdate };
         eventoAudit: { create: typeof eventoAuditCreate };
       }) => Promise<unknown>,
     ) =>
       cb({
-        reserva: { update: reservaUpdate },
-        cota: { update: cotaUpdate },
+        reserva: { updateMany: reservaUpdate },
+        cota: { updateMany: cotaUpdate },
         eventoAudit: { create: eventoAuditCreate },
       }),
   },
@@ -51,8 +51,8 @@ const ACTIVE_RESERVA = {
 
 beforeEach(() => {
   reservaFindUnique.mockReset();
-  reservaUpdate.mockReset().mockResolvedValue({});
-  cotaUpdate.mockReset().mockResolvedValue({});
+  reservaUpdate.mockReset().mockResolvedValue({ count: 1 });
+  cotaUpdate.mockReset().mockResolvedValue({ count: 1 });
   eventoAuditCreate.mockReset().mockResolvedValue({});
   registerOnChainHash
     .mockReset()
@@ -85,11 +85,11 @@ describe('cancelarReserva — N-13', () => {
     expect(result).toEqual({ payloadHash: 'hash_x', txHash: 'tx_x' });
     expect(registerOnChainHash).toHaveBeenCalledOnce();
     expect(reservaUpdate).toHaveBeenCalledWith({
-      where: { id: 'res_1' },
+      where: { id: 'res_1', status: 'ATIVA' }, // escrita condicional ao estado lido (F-REAL-1)
       data: { status: 'CANCELADA' },
     });
     expect(cotaUpdate).toHaveBeenCalledWith({
-      where: { id: 'cota_1' },
+      where: { id: 'cota_1', status: 'RESERVADA' },
       data: { status: 'DISPONIVEL' },
     });
     expect(eventoAuditCreate).toHaveBeenCalledOnce();
@@ -110,5 +110,20 @@ describe('cancelarReserva — N-13', () => {
     expect(reservaUpdate).toHaveBeenCalledOnce();
     expect(cotaUpdate).not.toHaveBeenCalled();
     expect(eventoAuditCreate).toHaveBeenCalledOnce();
+  });
+
+  it('F-REAL-1: outra ação venceu (reserva já não está ATIVA na escrita): erro de estado e nenhum audit', async () => {
+    reservaFindUnique.mockResolvedValueOnce(ACTIVE_RESERVA);
+    reservaUpdate.mockResolvedValueOnce({ count: 0 });
+    await expect(cancelarReserva('res_1', 'admin')).rejects.toThrow(/alterada concorrentemente/);
+    expect(cotaUpdate).not.toHaveBeenCalled();
+    expect(eventoAuditCreate).not.toHaveBeenCalled();
+  });
+
+  it('F-REAL-1: a cota deixou de estar RESERVADA entre a leitura e a escrita: erro de estado (a transação desfaz tudo) e nenhum audit', async () => {
+    reservaFindUnique.mockResolvedValueOnce(ACTIVE_RESERVA);
+    cotaUpdate.mockResolvedValueOnce({ count: 0 });
+    await expect(cancelarReserva('res_1', 'admin')).rejects.toThrow(/alterada concorrentemente/);
+    expect(eventoAuditCreate).not.toHaveBeenCalled();
   });
 });
