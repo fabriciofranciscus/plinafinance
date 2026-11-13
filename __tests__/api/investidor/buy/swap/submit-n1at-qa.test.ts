@@ -267,13 +267,28 @@ describe('QA N1-at — swap/submit com a trustline recusada pela guarda (fix 0f4
     expect(liberou()).toBe(true);
   });
 
-  it('falha de LEITURA do Horizon na guarda da rota (nada enviado): 500 sem vazar e reserva liberada', async () => {
+  it('falha de LEITURA do Horizon na guarda da rota (nada enviado; 849fee1): 503 LEDGER_UNAVAILABLE tipado, sem vazar a causa, e a reserva liberada', async () => {
     vitest.spyOn(horizon, 'loadAccount').mockRejectedValue(new Error('horizon 503 https://h.test/accounts/G...'));
     quoteFindUnique.mockResolvedValueOnce(baseQuote());
     const r = await POST(req(BODY_I));
-    expect(r.status).toBe(500);
-    expect(JSON.stringify(await r.json())).not.toContain('horizon 503');
+    expect(r.status).toBe(503);
+    const j = await r.json();
+    expect(j.code).toBe('LEDGER_UNAVAILABLE');
+    expect(JSON.stringify(j)).not.toContain('horizon 503');
     expect(liberou()).toBe(true);
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+  });
+
+  it('REENVIO de órfã com a leitura da guarda falhando: 503 e a reserva FICA (a tx pode já ter entrado)', async () => {
+    vitest.spyOn(horizon, 'loadAccount').mockRejectedValue(new Error('horizon fora'));
+    quoteFindUnique
+      .mockResolvedValueOnce(baseQuote({ submitXdrHash: HASH_I }))
+      .mockResolvedValueOnce({ submitXdrHash: HASH_I, consumedTxHash: null, consumedAt: null });
+    quoteUpdateMany.mockResolvedValueOnce({ count: 0 });
+    fetchTransactionByHash.mockResolvedValueOnce(null);
+    const r = await POST(req(BODY_I));
+    expect(r.status).toBe(503);
+    expect(liberou()).toBe(false);
     expect(submitWithPrivySignature).not.toHaveBeenCalled();
   });
 
