@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 type Row = Record<string, any>;
 const ENV = '11111111-2222-4333-8444-555555555555';
 
+const CRIADA = new Date('2026-11-12T10:00:00Z');
 const st = vi.hoisted(() => ({
   cessao: null as Row | null,
   audits: [] as Row[],
@@ -15,6 +16,7 @@ const st = vi.hoisted(() => ({
   puts: 0,
   anchors: new Map<string, string>(), // hash → txHash
   ancorar: vi.fn(),
+  ancorarArgs: [] as Array<{ sha256Hex: string; contexto: string; desde: Date }>,
   falhaAncora: false,
   falhaPut: false,
   notify: vi.fn(),
@@ -43,14 +45,17 @@ vi.mock('@/lib/comprovante/cessao-store', () => ({
     return `cessoes/${id}/assinada.pdf`;
   }),
 }));
-vi.mock('@/lib/services/ancora-sha256', () => ({
-  buscarAncora: vi.fn(async (h: string) => (st.anchors.has(h) ? { txHash: st.anchors.get(h)! } : null)),
-  ancorar: vi.fn(async (h: string) => {
-    st.ancorar(h);
+vi.mock('@/lib/stellar/ancora', () => ({
+  // Como o real: acha a âncora existente pelo hash (reutilizada, sem submeter) ou ancora uma vez.
+  ancorarSha256: vi.fn(async (i: { sha256Hex: string; contexto: string; desde: Date }) => {
+    st.ancorarArgs.push(i);
+    const ja = st.anchors.get(i.sha256Hex);
+    if (ja) return { txHash: ja, reutilizada: true, ledgerCloseTime: 'x' };
+    st.ancorar(i.sha256Hex);
     if (st.falhaAncora) throw new Error('âncora down');
     const tx = `tx_${st.anchors.size + 1}`;
-    st.anchors.set(h, tx);
-    return { txHash: tx };
+    st.anchors.set(i.sha256Hex, tx);
+    return { txHash: tx, reutilizada: false, ledgerCloseTime: 'x' };
   }),
 }));
 vi.mock('@/lib/db', () => {
@@ -79,9 +84,9 @@ import { CONCLUSAO_JANELA_MS, processarEnvelopeDocusign, sha256Hex, sincronizarC
 import { POST } from '@/app/api/webhooks/docusign/route';
 
 beforeEach(() => {
-  st.cessao = { id: 'ces_1', ofertaId: 'of_1', status: 'ENVIADA_DOCUSIGN', docusignEnvelopeId: ENV, hashDocumento: null, onChainTxHash: null, docusignConclusaoIniciadaEm: null };
+  st.cessao = { id: 'ces_1', ofertaId: 'of_1', status: 'ENVIADA_DOCUSIGN', docusignEnvelopeId: ENV, hashDocumento: null, onChainTxHash: null, docusignConclusaoIniciadaEm: null, criadaEm: CRIADA };
   st.audits = []; st.lead = { status: 'OFERTA_ACEITA' }; st.docStatus = 'concluido'; st.downloads = [];
-  st.blob = new Map(); st.puts = 0; st.anchors = new Map(); st.ancorar.mockReset(); st.falhaAncora = false; st.falhaPut = false; st.notify.mockReset();
+  st.blob = new Map(); st.puts = 0; st.anchors = new Map(); st.ancorarArgs = []; st.ancorar.mockReset(); st.falhaAncora = false; st.falhaPut = false; st.notify.mockReset();
 });
 
 describe('DS3 — conclusão: PDF guardado → SHA-256 → memo → ASSINADA', () => {
@@ -97,6 +102,13 @@ describe('DS3 — conclusão: PDF guardado → SHA-256 → memo → ASSINADA', (
     expect(st.audits[0]).toMatchObject({ acao: 'CESSAO_ASSINADA', payloadHash: r.hashDocumento, stellarTxHash: r.txHash });
     expect(st.notify).toHaveBeenCalledOnce();
     expect(st.downloads).toHaveLength(1);
+  });
+
+  it('a âncora vai com contexto DOCUSIGN_PDF e desde = Cessao.criadaEm (limite estável, não o claim renovável)', async () => {
+    await processarEnvelopeDocusign(ENV);
+    expect(st.ancorarArgs).toHaveLength(1);
+    expect(st.ancorarArgs[0]).toMatchObject({ contexto: 'DOCUSIGN_PDF' });
+    expect(st.ancorarArgs[0].desde.getTime()).toBe(CRIADA.getTime());
   });
 
   it('um 2º download seria DIFERENTE: o hash ancorado nunca vem dele (retomada usa os bytes guardados)', async () => {
@@ -189,7 +201,7 @@ describe('DS3 — conclusão: PDF guardado → SHA-256 → memo → ASSINADA', (
   it('polling de fallback (/admin) reconcilia a cessão pendente; falha vira ERRO sem vazar a causa', async () => {
     const r = await sincronizarCessoesDocusign({ operador: 'adm' });
     expect(r).toEqual({ processadas: 1, resultados: [{ cessaoId: 'ces_1', resultado: 'ASSINADA' }] });
-    st.cessao = { ...st.cessao!, status: 'ENVIADA_DOCUSIGN', hashDocumento: null, docusignConclusaoIniciadaEm: null };
+    st.cessao = { ...st.cessao!, status: 'ENVIADA_DOCUSIGN', hashDocumento: null, docusignConclusaoIniciadaEm: null, criadaEm: CRIADA };
     st.blob = new Map(); st.falhaPut = true;
     const r2 = await sincronizarCessoesDocusign({});
     expect(r2.resultados[0].resultado).toBe('ERRO');

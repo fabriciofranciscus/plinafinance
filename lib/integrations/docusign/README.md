@@ -94,4 +94,4 @@ Ver `docs/PRD-plina-v1.md` §M1 (F-M1-1, F-M1-6), §M2 (F-M2-3), §M3 (F-M3-7).
 ## DS2/DS3 — uso pela cessão (medido em testes com DocuSign simulado; smoke sandbox do DS2: envelope criado, reenvio devolve o mesmo)
 - `registrarCessao` → `enviarCessaoParaAssinatura` (`lib/services/cessao-docusign.ts`): `ENVIADA_DOCUSIGN`, sem memo.
 - Webhook/polling → `processarEnvelopeDocusign` (`lib/services/cessao-assinatura.ts`): status relido na API; PDF baixado UMA vez e guardado (Blob privado `cessoes/<id>/assinada.pdf`, sem sobrescrita); `hashDocumento` = SHA-256 dos bytes guardados; memo = esse hash; só então `ASSINADA`.
-- Não verificado: Connect real entregando no sandbox; Blob real (sem `BLOB_READ_WRITE_TOKEN` o armazenamento falha fechado); âncora real (porta `ancora-sha256.ts` aguarda `lib/stellar/anchor`, Estela).
+- Não verificado: Connect real entregando no sandbox; Blob real (sem `BLOB_READ_WRITE_TOKEN` o armazenamento falha fechado); âncora real contra a testnet com um PDF assinado de verdade (o DS3 usa `ancorarSha256` da Estela com `desde` = `Cessao.criadaEm`; testada só com mock).

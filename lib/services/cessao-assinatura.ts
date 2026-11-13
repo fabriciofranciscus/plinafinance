@@ -12,7 +12,9 @@
  *   2. bytes: se já guardados, usa os guardados; senão baixa e guarda UMA vez
  *      (o 2º download do DocuSign não é idêntico — nunca se re-baixa para hashear);
  *   3. `hashDocumento` = SHA-256 dos bytes guardados (gravado só se ainda nulo);
- *   4. âncora: procura memo com esse hash antes de ancorar de novo;
+ *   4. âncora (`ancorarSha256`, que já procura memo com esse hash antes de ancorar de novo), com `desde` = `Cessao.criadaEm`:
+ *      limite estável e anterior a qualquer âncora deste PDF (o claim de conclusão é renovado a cada tentativa e a
+ *      marca de envio volta a nulo; qualquer um deles perderia uma âncora de tentativa antiga e ancoraria duas vezes);
  *   5. ASSINADA + EventoAudit (payloadHash = hash, stellarTxHash) + e-mail.
  * Dedupe: por estado da cessão (já ASSINADA → duplicada) + claim; sem tabela de eventos.
  */
@@ -25,7 +27,7 @@ import {
   guardarCessaoAssinada,
   lerCessaoAssinada,
 } from '../comprovante/cessao-store';
-import { ancorar, buscarAncora } from './ancora-sha256';
+import { ancorarSha256 } from '../stellar/ancora';
 import { notifyCedente } from '../email/notify-cedente';
 
 export const CONCLUSAO_JANELA_MS = 120_000;
@@ -106,7 +108,7 @@ export async function processarEnvelopeDocusign(
     }
 
     // 4) âncora (memo = SHA-256 dos bytes guardados); procura antes de ancorar
-    const txHash = (await buscarAncora(hash))?.txHash ?? (await ancorar(hash)).txHash;
+    const { txHash } = await ancorarSha256({ sha256Hex: hash, contexto: 'DOCUSIGN_PDF', desde: cessao.criadaEm });
 
     // 5) ASSINADA
     await db.$transaction(async (tx) => {
