@@ -84,7 +84,16 @@ export default async function AdminPage() {
         ofertas: {
           orderBy: { versao: 'desc' },
           take: 1,
-          include: { cessao: { include: { pagamento: true, cota: true } } },
+          include: {
+            cessao: {
+              include: {
+                pagamento: true,
+                cota: true,
+                // etapa do pipeline: o laudo registrado é o evento COTA_VALIDADA da cessão
+                eventos: { where: { acao: 'COTA_VALIDADA' }, select: { id: true }, take: 1 },
+              },
+            },
+          },
         },
       },
     }),
@@ -106,6 +115,15 @@ export default async function AdminPage() {
       select: { valorRealizado: true, spread: true },
     }),
   ]);
+
+  // Situação do Pix de cada cessão do funil (a tabela não tem relação direta na Cessao).
+  const cessaoIds = leadsVendedor.flatMap((l) => l.ofertas.map((o) => o.cessao?.id).filter((x): x is string => !!x));
+  const pixPorCessao = new Map(
+    (cessaoIds.length
+      ? await db.transferenciaPix.findMany({ where: { cessaoId: { in: cessaoIds } }, select: { cessaoId: true, status: true } })
+      : []
+    ).map((t) => [t.cessaoId, t.status as string]),
+  );
 
   const navTotal = navTotalDoPool(cotas, realizacoes);
   const tokensVivos = tokensEmitidosVivos(cotas);
@@ -249,6 +267,9 @@ export default async function AdminPage() {
                         }
                       : null,
                     cota: o.cessao.cota ? { id: o.cessao.cota.id } : null,
+                    laudoRegistrado: o.cessao.eventos.length > 0,
+                    titularSituacao: o.cessao.titularSituacao,
+                    pixStatus: pixPorCessao.get(o.cessao.id) ?? null,
                   }
                 : null,
             })),

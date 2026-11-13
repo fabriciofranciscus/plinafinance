@@ -2,8 +2,11 @@
 
 /**
  * Pipeline kanban dos vendedores no /admin. Cada lead mostra estágio
- * atual + botão pra próxima ação (gerar oferta → registrar cessão →
- * executar pix → incorporar cota).
+ * atual + botão pra próxima ação. Fluxo da cota de prova (Atlas/Bento):
+ * gerar oferta → registrar cessão (só cria, PENDENTE) → registrar laudo
+ * (URL com #sha256) → enviar à assinatura (DocuSign) → sincronizar assinatura →
+ * confirmar titular do laudo → pagar cedente → incorporar cota.
+ * O Pix simulado avulso saiu da rota (400): o único pagamento é `pagar-cedente`.
  *
  * Cada ação chama /api/admin/originacao (server-side) e revalida via
  * router.refresh.
@@ -38,6 +41,12 @@ interface PipelineLead {
         onChainTxHash: string | null;
       } | null;
       cota: { id: string } | null;
+      /** Existe o laudo registrado (evento COTA_VALIDADA da cessão). */
+      laudoRegistrado?: boolean;
+      /** Titular confirmado no laudo (E1-2): null = ainda não confirmado. */
+      titularSituacao?: string | null;
+      /** Situação da transferência Pix da cessão (StatusTransferenciaPix), se existir. */
+      pixStatus?: string | null;
     } | null;
   }>;
 }
@@ -54,6 +63,9 @@ const STATUS_LABEL: Record<string, string> = {
   COTA_INCORPORADA: 'Cota incorporada',
   PERDIDO: 'Perdido',
 };
+
+const BTN =
+  'min-h-[44px] bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-primary-deep transition-colors disabled:opacity-50';
 
 function explorerTx(hash: string) {
   return `https://stellar.expert/explorer/testnet/tx/${hash}`;
@@ -88,6 +100,9 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
   const cessao = ofertaCorrente?.cessao ?? null;
   const pagamento = cessao?.pagamento ?? null;
   const cota = cessao?.cota ?? null;
+  const [laudoUrl, setLaudoUrl] = useState('');
+  const [situacao, setSituacao] = useState('TITULAR_UNICO');
+  const [atestado, setAtestado] = useState(false);
 
   async function call(action: string, payload: Record<string, unknown>) {
     setBusy(true);
@@ -198,17 +213,102 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
               Ver comprovante
             </a>
 
-            {!pagamento || pagamento.status !== 'EXECUTADO' ? (
-              <div className="mt-2">
+            {cessao.status === 'PENDENTE' && !cessao.laudoRegistrado && (
+              <div className="mt-2 space-y-2">
+                <label className="block">
+                  <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
+                    URL do laudo (com #sha256 do documento)
+                  </span>
+                  <input
+                    type="url"
+                    value={laudoUrl}
+                    onChange={(e) => setLaudoUrl(e.target.value)}
+                    placeholder="https://…/laudo.pdf#sha256=…"
+                    className="mt-1 w-full min-h-[44px] bg-white border border-base/55 px-3 py-2 font-mono text-xs"
+                  />
+                </label>
                 <button
-                  onClick={() => call('executar-pix-simulado', { cessaoId: cessao.id })}
-                  disabled={busy}
-                  className="bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-primary-deep transition-colors disabled:opacity-50"
+                  onClick={() => call('registrar-laudo', { cessaoId: cessao.id, laudoUrl: laudoUrl.trim() })}
+                  disabled={busy || !/^https?:\/\//.test(laudoUrl.trim())}
+                  className={BTN}
                 >
-                  Executar Pix simulado
+                  Registrar laudo
                 </button>
               </div>
-            ) : null}
+            )}
+
+            {cessao.status === 'PENDENTE' && cessao.laudoRegistrado && (
+              <div className="mt-2">
+                <p className="font-text text-xs text-base/70 mb-2">Laudo registrado. Falta enviar à assinatura.</p>
+                <button onClick={() => call('enviar-cessao', { cessaoId: cessao.id })} disabled={busy} className={BTN}>
+                  Enviar para assinatura (DocuSign)
+                </button>
+              </div>
+            )}
+
+            {cessao.status === 'ENVIADA_DOCUSIGN' && (
+              <div className="mt-2">
+                <p className="font-text text-xs text-base/70 mb-2">Aguardando assinatura do cedente.</p>
+                <button onClick={() => call('sincronizar-cessoes', { cessaoId: cessao.id })} disabled={busy} className={BTN}>
+                  Sincronizar assinatura
+                </button>
+              </div>
+            )}
+
+            {cessao.status === 'ASSINADA' && !cessao.titularSituacao && !pagamento && (
+              <div className="mt-2 space-y-2">
+                <label className="block">
+                  <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
+                    Titular confirmado no laudo
+                  </span>
+                  <select
+                    value={situacao}
+                    onChange={(e) => setSituacao(e.target.value)}
+                    className="mt-1 w-full min-h-[44px] bg-white border border-base/55 px-3 py-2 font-text text-sm"
+                  >
+                    <option value="TITULAR_UNICO">Titular único</option>
+                    <option value="ESPOLIO">Espólio</option>
+                    <option value="COTITULARIDADE">Cotitularidade</option>
+                    <option value="PROCURADOR">Procurador</option>
+                  </select>
+                </label>
+                <label className="flex items-start gap-2 font-text text-xs text-base/80">
+                  <input
+                    type="checkbox"
+                    checked={atestado}
+                    onChange={(e) => setAtestado(e.target.checked)}
+                    className="mt-0.5 w-5 h-5 accent-primary-deep"
+                  />
+                  Atesto que o titular confirmado no laudo é o CPF do cadastro do cedente.
+                </label>
+                <button
+                  onClick={() => call('confirmar-titular-laudo', { cessaoId: cessao.id, situacao, atestado })}
+                  disabled={busy || !atestado}
+                  className={BTN}
+                >
+                  Confirmar titular do laudo
+                </button>
+              </div>
+            )}
+
+            {cessao.status === 'ASSINADA' && cessao.titularSituacao && cessao.titularSituacao !== 'TITULAR_UNICO' && (
+              <p className="mt-2 font-text text-xs text-base/80">
+                Situação do titular: {cessao.titularSituacao}. Fora do fluxo automático (tratamento manual pela equipe).
+              </p>
+            )}
+
+            {cessao.status === 'ASSINADA' &&
+              cessao.titularSituacao === 'TITULAR_UNICO' &&
+              (!pagamento || pagamento.status !== 'EXECUTADO') && (
+                <div className="mt-2">
+                  {cessao.pixStatus && (
+                    <p className="font-mono text-[10px] text-base/60 mb-2">Transferência Pix: {cessao.pixStatus}</p>
+                  )}
+                  <button onClick={() => call('pagar-cedente', { cessaoId: cessao.id })} disabled={busy} className={BTN}>
+                    Pagar cedente (Pix)
+                  </button>
+                </div>
+              )}
           </div>
         )}
 
@@ -216,7 +316,7 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
         {pagamento && pagamento.status === 'EXECUTADO' && (
           <div className="border-l-2 border-primary pl-4 py-2">
             <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
-              Pix simulado · executado
+              Pix · executado
             </p>
             {pagamento.onChainTxHash && (
               <a
