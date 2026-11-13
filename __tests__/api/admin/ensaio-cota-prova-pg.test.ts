@@ -183,27 +183,28 @@ describe.skipIf(!PG)('ENSAIO — cota de prova inteira pela tela do /admin (bodi
   });
 
   /** Percorre a tela até o ponto pedido; devolve ids e hashes. */
-  async function percorrer(ate: 'incorporar' | 'pix' | 'anuencia' | 'titular' | 'assinatura' | 'envio' | 'laudo' | 'cessao') {
+  type Percurso = { cessaoId: string; leadId: string; ofertaId: string; pessoaId: string; hashLaudo: string; cotaId: string; txEmissao: string };
+  async function percorrer(ate: 'incorporar' | 'pix' | 'anuencia' | 'titular' | 'assinatura' | 'envio' | 'laudo' | 'cessao'): Promise<Percurso> {
     const s = await semearOferta();
     const c = await tela('registrar-cessao', { ofertaId: s.ofertaId }); expect(c.status, c.texto).toBe(200);
     const cessaoId = c.json.cessaoId as string;
-    if (ate === 'cessao') return { ...s, cessaoId };
+    if (ate === 'cessao') return { ...s, cessaoId } as Percurso;
     const l = await tela('registrar-laudo', { cessaoId, laudoUrl: LAUDO_URL }); expect(l.status, l.texto).toBe(200);
     const hashLaudo = l.json.hashValidacao as string;
-    if (ate === 'laudo') return { ...s, cessaoId, hashLaudo };
+    if (ate === 'laudo') return { ...s, cessaoId, hashLaudo } as Percurso;
     const e = await tela('enviar-cessao', { cessaoId }); expect(e.status, e.texto).toBe(200);
-    if (ate === 'envio') return { ...s, cessaoId, hashLaudo };
+    if (ate === 'envio') return { ...s, cessaoId, hashLaudo } as Percurso;
     st.statusEnvelope = 'concluido';
     const sy = await tela('sincronizar-cessoes', { cessaoId }); expect(sy.status, sy.texto).toBe(200);
-    if (ate === 'assinatura') return { ...s, cessaoId, hashLaudo };
+    if (ate === 'assinatura') return { ...s, cessaoId, hashLaudo } as Percurso;
     const t = await tela('confirmar-titular-laudo', { cessaoId, situacao: 'TITULAR_UNICO', atestado: true }); expect(t.status, t.texto).toBe(200);
-    if (ate === 'titular') return { ...s, cessaoId, hashLaudo };
+    if (ate === 'titular') return { ...s, cessaoId, hashLaudo } as Percurso;
     const a = await tela('registrar-anuencia', { hashValidacao: hashLaudo, status: 'DECLARADA_PENDENTE' }); expect(a.status, a.texto).toBe(200);
-    if (ate === 'anuencia') return { ...s, cessaoId, hashLaudo };
+    if (ate === 'anuencia') return { ...s, cessaoId, hashLaudo } as Percurso;
     const p = await tela('pagar-cedente', { cessaoId }); expect(p.status, p.texto).toBe(200); expect(p.json.status).toBe('COMPROVADA');
-    if (ate === 'pix') return { ...s, cessaoId, hashLaudo };
+    if (ate === 'pix') return { ...s, cessaoId, hashLaudo } as Percurso;
     const i = await tela('incorporar-cota', { cessaoId }); expect(i.status, i.texto).toBe(200);
-    return { ...s, cessaoId, hashLaudo, cotaId: i.json.cotaId as string, txEmissao: i.json.txHash as string };
+    return { ...s, cessaoId, hashLaudo, cotaId: i.json.cotaId as string, txEmissao: i.json.txHash as string } as Percurso;
   }
 
   it('CAMINHO FELIZ: a cota de prova inteira na ordem da tela; no fim o evidencia:cota confere os 5 passos (CADEIA_COMPLETA) e nada vaza PII', async () => {
