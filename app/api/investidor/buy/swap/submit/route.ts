@@ -362,6 +362,11 @@ export const POST = withAuth(async (req, { user }) => {
         if (err instanceof TrustlineNaoAutorizadaError) {
           throw new ApiError(err.code, 409, err.message);
         }
+        // Falha da LEITURA da guarda (Horizon fora): nada foi à rede, a reserva já foi liberada acima → 503 tipado, nunca 500.
+        if (!chegouAoEnvio) {
+          logStellarError('[swap/submit] leitura da trustline falhou', err);
+          throw new ApiError('LEDGER_UNAVAILABLE', 503, 'A rede está indisponível agora. Nada foi enviado. Tente novamente em instantes.');
+        }
         throw err;
       }
     }

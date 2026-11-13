@@ -589,13 +589,30 @@ describe('POST /api/investidor/buy/swap/submit', () => {
       },
     );
 
-    it('1º envio, a leitura da conta (Horizon) falha: nada foi enviado → libera a reserva e o erro propaga como antes (500)', async () => {
+    it('1º envio, a leitura da conta (Horizon) falha: nada foi enviado → libera a reserva e responde 503 LEDGER_UNAVAILABLE (não 500), sem vazar a causa', async () => {
       quoteFindUnique.mockResolvedValueOnce(baseQuote());
-      exigirTrustline.mockRejectedValue(new Error('horizon fora'));
+      exigirTrustline.mockRejectedValue(new Error('horizon fora SEGREDO'));
       const r = await POST(req(FULL_BODY));
-      expect(r.status).toBe(500);
+      expect(r.status).toBe(503);
+      const corpo = await r.json();
+      expect(corpo).toMatchObject({ code: 'LEDGER_UNAVAILABLE' });
+      expect(JSON.stringify(corpo)).not.toContain('SEGREDO');
       expect(submitWithPrivySignature).not.toHaveBeenCalled();
       expect(liberou()).toBe(true);
+    });
+
+    it('REENVIO de órfã com a leitura da guarda falhando: 503, e a reserva FICA (a tx pode já ter entrado)', async () => {
+      const { xdr, hash } = txComPrazo(agoraSec() + 100);
+      quoteFindUnique
+        .mockResolvedValueOnce(baseQuote({ submitXdrHash: hash }))
+        .mockResolvedValueOnce({ submitXdrHash: hash, consumedTxHash: null, consumedAt: null });
+      quoteUpdateMany.mockResolvedValueOnce({ count: 0 });
+      fetchTransactionByHash.mockResolvedValueOnce(null);
+      exigirTrustline.mockRejectedValue(new Error('horizon fora'));
+      const r = await POST(req({ quoteId: 'q_1', signedXdr: xdr }));
+      expect(r.status).toBe(503);
+      expect(submitWithPrivySignature).not.toHaveBeenCalled();
+      expect(liberou()).toBe(false);
     });
 
     it('a guarda DENTRO do submitWithPrivySignature recusa (revogada entre a checagem e o envio): 409 e libera', async () => {
