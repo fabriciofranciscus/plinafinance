@@ -167,7 +167,15 @@ describe('E1-P sobre a main 4f337e8 (D5 do Atlas)', () => {
     montarEvidencia('c1', f, () => new Date('2026-11-14T12:00:00Z'), { pendentesNestaBase: pend });
 
   it('liquidação mostra o endToEndId do PSP junto do SHA-256 do comprovante', async () => {
-    const f = mundo({ pagamento: async () => ({ status: 'COMPROVADA', onChainTxHash: TX('c'), hashComprovante: sha256Hex(COMP), e2eId: 'E1234567820261113120000ABCDEF12' }) });
+    // Comprovante canônico do E1-2 (JSON com "valor" = aporte), como na TransferenciaPix real.
+    const comp = Buffer.from(JSON.stringify({ tipo: 'COMPROVANTE_PIX', valor: '100.00', cessaoId: 'cessao1' }));
+    const f = mundo(
+      {
+        pagamento: async () => ({ status: 'COMPROVADA', onChainTxHash: TX('c'), hashComprovante: sha256Hex(comp), e2eId: 'E1234567820261113120000ABCDEF12' }),
+        comprovante: async () => comp,
+      },
+      { [TX('c')]: sha256Hex(comp) },
+    );
     const p = passo(await run(f), 'LIQUIDACAO');
     expect(p.confere).toBe(true);
     expect(p.documento).toContain('endToEndId E1234567820261113120000ABCDEF12');
@@ -215,7 +223,7 @@ describe('E1-p: registro no formato do evento COTA_INCORPORADA (a5c1258)', () =>
   const novo = (over: Record<string, unknown> = {}) => {
     const r = {
       tipo: 'COTA_INCORPORADA', versao: 1, cotaId: 'c1', cessaoId: 'cessao1', hashLaudo: H_LAUDO,
-      sha256PdfCessao: null, comprovantePixSha256: null, comprovantePixAncoraTxHash: null,
+      sha256PdfCessao: sha256Hex(PDF), comprovantePixSha256: sha256Hex(COMP), comprovantePixAncoraTxHash: TX('c'),
       valorIncorporadoBrl: '100.00', tokensEmitir: '10.0000000', navPorTokenUsado: '1.00000000', issuer: ISSUER, asset: 'PLINARF',
       ...over,
     };
@@ -232,5 +240,58 @@ describe('E1-p: registro no formato do evento COTA_INCORPORADA (a5c1258)', () =>
   it('tokensEmitir ≠ tokens emitidos reprova', async () => {
     const e = await run(mundo({ registroIncorporacao: async () => novo({ tokensEmitir: '11.0000000' }) }));
     expect(passo(e, 'INCORPORACAO').motivo).toMatch(/quantidade/);
+  });
+});
+
+describe('decisão F-EP-2 (Consuelo/Atlas): elos obrigatórios na cota do funil; LEGADA sem cessão; valor do Pix', () => {
+  const reg = (over: Record<string, unknown> = {}) => {
+    const r = {
+      tipo: 'COTA_INCORPORADA', versao: 1, cotaId: 'c1', cessaoId: 'cessao1', hashLaudo: H_LAUDO,
+      sha256PdfCessao: sha256Hex(PDF), comprovantePixSha256: sha256Hex(COMP), comprovantePixAncoraTxHash: TX('c'),
+      valorIncorporadoBrl: '100.00', tokensEmitir: '10.0000000', navPorTokenUsado: '1.00000000', issuer: ISSUER, asset: 'PLINARF', ...over,
+    };
+    return regBytes(Buffer.from(JSON.stringify(r)));
+  };
+  it.each([
+    ['sha256PdfCessao', null, /REGISTRO_INCOMPLETO/],
+    ['comprovantePixSha256', null, /REGISTRO_INCOMPLETO/],
+    ['comprovantePixAncoraTxHash', null, /REGISTRO_INCOMPLETO/],
+    ['sha256PdfCessao', 'f'.repeat(64), /REGISTRO_DIVERGE: sha256PdfCessao/],
+    ['comprovantePixSha256', 'f'.repeat(64), /REGISTRO_DIVERGE: comprovantePixSha256/],
+    ['comprovantePixAncoraTxHash', TX('x'), /REGISTRO_DIVERGE: comprovantePixAncoraTxHash/],
+  ])('cota do funil: registro.%s = %s → não confere', async (campo, valor, re) => {
+    const e = await run(mundo({ registroIncorporacao: async () => reg({ [campo]: valor }) }));
+    expect(passo(e, 'INCORPORACAO').confere).toBe(false);
+    expect(passo(e, 'INCORPORACAO').motivo).toMatch(re);
+  });
+
+  it('cota sem cessão: classificação LEGADA (nunca cadeia completa) e o markdown diz isso', async () => {
+    const e = await run(mundo({ cota: async () => ({ id: 'c1', cessaoId: null, hashValidacao: H_LAUDO, validacaoTxHash: TX('a'), emissaoTxHash: TX('d'), tokensEmitidos: '10' }) }));
+    expect(e.classificacao).toBe('LEGADA');
+    expect(paraMarkdown(e)).toMatch(/LEGADA — sem cadeia de cessão e liquidação/);
+  });
+
+  it('cota íntegra do funil: classificação CADEIA_COMPLETA', async () => {
+    const e = await run(mundo({ registroIncorporacao: async () => reg() }));
+    expect(e.todosConferem).toBe(true);
+    expect(e.classificacao).toBe('CADEIA_COMPLETA');
+  });
+
+  describe('liquidação comprovada (TransferenciaPix): valor do comprovante = aporte', () => {
+    const compJson = (valor: string) => Buffer.from(JSON.stringify({ tipo: 'COMPROVANTE_PIX', valor, cessaoId: 'cessao1' }));
+    const comPix = (bytes: Buffer) => mundo({
+      pagamento: async () => ({ status: 'COMPROVADA', onChainTxHash: TX('c'), hashComprovante: sha256Hex(bytes), e2eId: 'E1' }),
+      comprovante: async () => bytes,
+    }, { [TX('c')]: sha256Hex(bytes) });
+    it('valor igual (2 casas) → confere', async () => {
+      expect(passo(await run(comPix(compJson('100.00'))), 'LIQUIDACAO').confere).toBe(true);
+      expect(passo(await run(comPix(compJson('100'))), 'LIQUIDACAO').confere).toBe(true);
+    });
+    it('valor diferente → LIQUIDACAO_VALOR_DIVERGE', async () => {
+      expect(passo(await run(comPix(compJson('99.99'))), 'LIQUIDACAO').motivo).toMatch(/LIQUIDACAO_VALOR_DIVERGE/);
+    });
+    it('comprovante que não é JSON com valor → COMPROVANTE_ILEGIVEL', async () => {
+      expect(passo(await run(comPix(Buffer.from('%PDF qualquer'))), 'LIQUIDACAO').motivo).toMatch(/COMPROVANTE_ILEGIVEL/);
+    });
   });
 });

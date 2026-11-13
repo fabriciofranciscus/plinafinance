@@ -103,6 +103,11 @@ export interface EvidenciaCota {
   network: 'TESTNET';
   passos: PassoEvidencia[];
   todosConferem: boolean;
+  /**
+   * CADEIA_COMPLETA = cota do funil com todos os passos conferindo; LEGADA = cota sem cessão (seed/legada: sem
+   * cadeia de cessão e liquidação, nunca "completa"); INCOMPLETA = o resto (decisão F-EP-2, Consuelo/Atlas).
+   */
+  classificacao: 'CADEIA_COMPLETA' | 'LEGADA' | 'INCOMPLETA';
   /** Todos os passos conferem, salvo os PENDENTES (funcionalidade ainda fora desta base). */
   conferemExcetoPendentes: boolean;
 }
@@ -169,6 +174,8 @@ async function validarRegistro(
   emissaoTx: string | null,
   ancoraTx: string,
   f: Fontes,
+  /** Hashes dos passos 2 (PDF da cessão) e 3 (comprovante do Pix e a tx da âncora dele). */
+  elos: { pdf: string | null; comprovante: string | null; comprovanteTx: string | null },
 ): Promise<string | null> {
   let j: Record<string, unknown>;
   try { j = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>; } catch { return 'REGISTRO_NAO_E_JSON'; }
@@ -177,6 +184,20 @@ async function validarRegistro(
   if (j.tipo === 'COTA_INCORPORADA') {
     j = { ...j, valor: j.valorIncorporadoBrl, quantidade: j.tokensEmitir, navPorToken: j.navPorTokenUsado };
     if (j.hashLaudo !== cota.hashValidacao) return 'REGISTRO_DIVERGE: hashLaudo ≠ laudo da cota';
+    // F-EP-2 (Consuelo/Atlas): na cota do funil os elos são obrigatórios e iguais aos passos 2 e 3.
+    if (cota.cessaoId) {
+      const exigidos: [string, unknown, string | null, string][] = [
+        ['sha256PdfCessao', j.sha256PdfCessao, elos.pdf, 'passo 2 (PDF da cessão)'],
+        ['comprovantePixSha256', j.comprovantePixSha256, elos.comprovante, 'passo 3 (comprovante do Pix)'],
+        ['comprovantePixAncoraTxHash', j.comprovantePixAncoraTxHash, elos.comprovanteTx, 'passo 3 (tx da âncora do Pix)'],
+      ];
+      for (const [campo, valor] of exigidos) {
+        if (valor === null || valor === undefined || valor === '') return `REGISTRO_INCOMPLETO: ${campo} ausente (cota do funil)`;
+      }
+      for (const [campo, valor, esperado, onde] of exigidos) {
+        if (valor !== esperado) return `REGISTRO_DIVERGE: ${campo} ≠ ${onde}`;
+      }
+    }
   }
   const faltam = ['cotaId', 'cessaoId', 'valor', 'navPorToken', 'quantidade', 'issuer'].filter((k) => !(k in j));
   if (faltam.length) return `REGISTRO_INCOMPLETO: faltam ${faltam.join(', ')}`;
@@ -267,6 +288,20 @@ export async function montarEvidencia(
       r.confere = false;
       r.motivo = `LIQUIDACAO_NAO_COMPROVADA: status=${pg.status}`;
     }
+    // Consuelo (2): preço pago = V = APORTE_COTA. O comprovante canônico do E1-2 (JSON) traz "valor".
+    if (r.confere && pg?.status === 'COMPROVADA') {
+      let valor: string | null = null;
+      try {
+        const j = JSON.parse(comp!.toString('utf8')) as { valor?: unknown };
+        valor = typeof j?.valor === 'string' ? dec(j.valor) : null;
+      } catch { valor = null; }
+      const aporte = await f.aporte(cotaId);
+      if (valor === null) { r.confere = false; r.motivo = 'COMPROVANTE_ILEGIVEL: o comprovante canônico não traz "valor"'; }
+      else if (!aporte || valor !== dec(aporte.valorBrl)) {
+        r.confere = false;
+        r.motivo = 'LIQUIDACAO_VALOR_DIVERGE: valor do comprovante ≠ valor incorporado (APORTE_COTA)';
+      }
+    }
     if (pg?.e2eId) r.documento = `${r.documento ?? 'comprovante do PSP'} · endToEndId ${pg.e2eId}`;
     passos.push(r);
   }
@@ -285,7 +320,13 @@ export async function montarEvidencia(
       const r = await conferir(p, f, { doc: sha256Hex(reg.bytes), reg: reg.hashRegistrado, tx: reg.txHash });
       if (r.confere) {
         r.confere = false;
-        const motivo = await validarRegistro(reg.bytes, cota, a, f.ativo().issuer, cota.emissaoTxHash, reg.txHash!, f);
+        const p2 = passos.find((x) => x.passo === 'CESSAO');
+        const p3 = passos.find((x) => x.passo === 'LIQUIDACAO');
+        const motivo = await validarRegistro(reg.bytes, cota, a, f.ativo().issuer, cota.emissaoTxHash, reg.txHash!, f, {
+          pdf: p2?.sha256Documento ?? null,
+          comprovante: p3?.sha256Documento ?? null,
+          comprovanteTx: p3?.txHash ?? null,
+        });
         if (motivo) r.motivo = motivo; else r.confere = true;
       }
       passos.push(r);
@@ -320,6 +361,7 @@ export async function montarEvidencia(
     network: 'TESTNET',
     passos,
     todosConferem: passos.every((x) => x.confere),
+    classificacao: !cota.cessaoId ? 'LEGADA' : passos.every((x) => x.confere) ? 'CADEIA_COMPLETA' : 'INCOMPLETA',
     conferemExcetoPendentes: passos.every((x) => x.confere || x.pendente),
   };
 }
@@ -329,6 +371,8 @@ export function paraMarkdown(e: EvidenciaCota): string {
     `# Evidência da cota ${e.cotaId}`,
     '',
     `Rede: ${e.network} · gerada em ${e.geradaEm} · resultado: **${e.todosConferem ? 'TODOS CONFEREM' : e.conferemExcetoPendentes ? 'CONFEREM, COM PASSO PENDENTE' : 'HÁ PASSO SEM PROVA'}**`,
+    '',
+    `Classificação: **${e.classificacao === 'LEGADA' ? 'LEGADA — sem cadeia de cessão e liquidação' : e.classificacao === 'CADEIA_COMPLETA' ? 'CADEIA COMPLETA' : 'INCOMPLETA'}**`,
     '',
     '| # | Passo | Tx (explorer) | SHA-256 do documento | Memo on-chain | Confere |',
     '|---|---|---|---|---|---|',
