@@ -13,6 +13,8 @@ const st = vi.hoisted(() => ({
   script: [] as Array<'OK' | 'INCERTO_CRIADO' | 'INCERTO_NAO_CRIADO' | 'REJEITADO'>,
   memo: vi.fn(),
   notify: vi.fn(),
+  rede: 'TESTNET' as string,
+  laudo: 'b'.repeat(64) as string | null,
 }));
 
 vi.mock('@/lib/stellar/audit', () => ({
@@ -20,7 +22,11 @@ vi.mock('@/lib/stellar/audit', () => ({
   registerOnChainHash: st.memo,
 }));
 vi.mock('@/lib/email/notify-cedente', () => ({ notifyCedente: st.notify }));
-vi.mock('@/lib/stellar/config', async (i) => ({ ...(await i<typeof import('@/lib/stellar/config')>()) }));
+vi.mock('@/lib/stellar/config', async (i) => {
+  const mod = { ...(await i<typeof import('@/lib/stellar/config')>()) } as Record<string, unknown>;
+  Object.defineProperty(mod, 'STELLAR_NETWORK', { get: () => st.rede, enumerable: true });
+  return mod;
+});
 
 vi.mock('@/lib/integrations/docusign', async () => {
   const { DocusignError } = await import('@/lib/integrations/docusign/errors');
@@ -81,7 +87,7 @@ vi.mock('@/lib/db', () => {
   };
   const eventoAudit = {
     create: async ({ data }: { data: Row }) => { st.audits.push(data); return data; },
-    findFirst: async () => ({ payloadHash: 'b'.repeat(64) }), // laudo registrado (COTA_VALIDADA)
+    findFirst: async () => (st.laudo ? { payloadHash: st.laudo } : null), // laudo registrado (COTA_VALIDADA)
   };
   return {
     db: {
@@ -104,7 +110,7 @@ import { DocusignError } from '@/lib/integrations/docusign/errors';
 
 beforeEach(() => {
   st.cessoes = new Map(); st.audits = []; st.envelopes = new Map(); st.criar = []; st.busca = []; st.script = [];
-  st.memo.mockReset(); st.notify.mockReset();
+  st.memo.mockReset(); st.notify.mockReset(); st.rede = 'TESTNET'; st.laudo = 'b'.repeat(64);
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   st.oferta = {
     id: 'of_1', status: 'ACEITA', leadVendedorId: 'lead_1', administradora: 'Porto Seguro', tipoBem: 'VEICULO',
@@ -222,5 +228,31 @@ describe('DS2 — resposta incerta e envio que morreu', () => {
     const r = await enviarCessaoParaAssinatura({ cessaoId: c.id, operador: 'adm' });
     expect(r.envelopeId).toBe(envId);
     expect(st.criar).toHaveLength(0);
+  });
+});
+
+describe('DS2 — laudo e mainnet (Vera F-DS2-1)', () => {
+  it('PUBLIC sem laudo: recusa ANTES do claim e do DocuSign (nada criado, nenhum envelope)', async () => {
+    st.rede = 'PUBLIC';
+    st.laudo = null;
+    await expect(registrarCessao(input)).rejects.toMatchObject({ code: 'LAUDO_AUSENTE' });
+    expect(st.criar).toHaveLength(0);
+    expect(st.busca).toHaveLength(0);
+    const c = [...st.cessoes.values()][0];
+    expect(c?.docusignEnvioIniciadoEm ?? null).toBeNull(); // sem claim
+    expect(c?.status ?? 'PENDENTE').toBe('PENDENTE');
+  });
+
+  it('PUBLIC com laudo registrado: envia normalmente', async () => {
+    st.rede = 'PUBLIC';
+    const r = await registrarCessao(input);
+    expect(r.status).toBe('ENVIADA_DOCUSIGN');
+    expect(st.criar).toHaveLength(1);
+  });
+
+  it('testnet sem laudo: segue (o PDF de demonstração diz que o laudo não foi registrado)', async () => {
+    st.laudo = null;
+    const r = await registrarCessao(input);
+    expect(r.status).toBe('ENVIADA_DOCUSIGN');
   });
 });

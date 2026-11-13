@@ -29,6 +29,15 @@ export const DOCUSIGN_ENVIO_JANELA_MS = 120_000;
 
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
+/** Mainnet: o instrumento afirma a cota quitada "conforme o laudo"; sem COTA_VALIDADA registrado o envio é recusado (F-DS2-1). */
+export class EnvioDocusignLaudoAusenteError extends Error {
+  readonly code = 'LAUDO_AUSENTE' as const;
+  constructor() {
+    super('Não há laudo de validação registrado para esta cessão: o envio para assinatura na mainnet exige o laudo.');
+    this.name = 'EnvioDocusignLaudoAusenteError';
+  }
+}
+
 export class EnvioDocusignEmAndamentoError extends Error {
   readonly code = 'ENVIO_DOCUSIGN_EM_ANDAMENTO' as const;
   constructor() {
@@ -68,6 +77,11 @@ export async function enviarCessaoParaAssinatura(input: {
   }
   const lead = cessao.oferta.leadVendedor;
   if (!lead?.email || !lead.nome) throw new Error('Cedente sem nome ou e-mail para assinatura');
+
+  // Laudo (último COTA_VALIDADA da cessão): o PDF o cita. Na mainnet o envio sem laudo é recusado ANTES do claim, para não
+  // publicar "quitada … conforme o laudo (ainda não registrado)"; em testnet segue e o PDF diz que não foi registrado.
+  const hashLaudo = await hashDoLaudo(db, cessao.id);
+  if (STELLAR_NETWORK === 'PUBLIC' && !hashLaudo) throw new EnvioDocusignLaudoAusenteError();
 
   // Claim no banco: só um chamador por vez chama o DocuSign.
   const limite = new Date(agora - DOCUSIGN_ENVIO_JANELA_MS);
@@ -118,7 +132,7 @@ export async function enviarCessaoParaAssinatura(input: {
         valorLiquido: BRL.format(Number(o.valorLiquidoVendedor)),
         desagioPct: `${(Number(o.desagioAquisicao) * 100).toFixed(2)}%`,
         demonstracao: STELLAR_NETWORK !== 'PUBLIC',
-        hashLaudo: await hashDoLaudo(db, cessao.id),
+        hashLaudo,
       });
       try {
         envelopeId = (

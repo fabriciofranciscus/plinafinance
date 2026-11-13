@@ -32,6 +32,7 @@ import { registrarTesourariaLegada } from '@/lib/services/tesouraria-legada';
 import { sincronizarCessoesDocusign } from '@/lib/services/cessao-assinatura';
 import { pagarCedenteDaCessao, PagamentoCedenteError, reabrirPagamentoCedente } from '@/lib/services/pagamento-cedente';
 import { LiquidacaoCedenteError } from '@/lib/services/liquidacao-cedente';
+import { EnvioDocusignLaudoAusenteError } from '@/lib/services/cessao-docusign';
 import { confirmarTitularDoLaudo, SITUACOES_TITULAR, TitularLaudoError } from '@/lib/services/titular-laudo';
 import { STELLAR_NETWORK } from '@/lib/stellar/config';
 import { TipoBem } from '@prisma/client';
@@ -51,8 +52,11 @@ const NumericString = z.string().regex(/^\d+(\.\d+)?$/, 'valor numérico inváli
  */
 const OPERADOR_ADMIN = 'admin-panel';
 
-/** Erros de domínio do E1-2: mensagem fixa em PT (sem causa nem dado do cedente) + código. */
+/** Erros de domínio do E1-2/DS2: mensagem fixa em PT (sem causa nem dado do cedente) + código. */
 function respostaDeErroDoPagamento(err: unknown): NextResponse | null {
+  if (err instanceof EnvioDocusignLaudoAusenteError) {
+    return NextResponse.json({ error: err.message, code: err.code }, { status: 409 });
+  }
   if (err instanceof TitularLaudoError || err instanceof PagamentoCedenteError || err instanceof LiquidacaoCedenteError) {
     const code = err.code;
     const status =

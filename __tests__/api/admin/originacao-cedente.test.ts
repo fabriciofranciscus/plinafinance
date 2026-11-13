@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextResponse } from 'next/server';
 
 const m = vi.hoisted(() => ({
-  rede: 'TESTNET', pixLegado: vi.fn(), isAdmin: vi.fn(), csrf: vi.fn(), confirmar: vi.fn(), pagar: vi.fn(), reabrir: vi.fn(),
+  rede: 'TESTNET', pixLegado: vi.fn(), cessao: vi.fn(), isAdmin: vi.fn(), csrf: vi.fn(), confirmar: vi.fn(), pagar: vi.fn(), reabrir: vi.fn(),
 }));
 vi.mock('@/lib/auth/admin', () => ({ isAdminAuthenticated: m.isAdmin }));
 vi.mock('@/lib/auth/admin-csrf', () => ({ requireAdminCsrf: m.csrf }));
@@ -14,7 +14,7 @@ vi.mock('@/lib/stellar/config', async (orig) => {
 });
 vi.mock('@/lib/services/originacao', () => ({
   executarPixSimulado: m.pixLegado, gerarOferta: vi.fn(), incorporarCotaDoFunil: vi.fn(),
-  registrarAnuencia: vi.fn(), registrarLaudoDaCessao: vi.fn(), registrarCessao: vi.fn(),
+  registrarAnuencia: vi.fn(), registrarLaudoDaCessao: vi.fn(), registrarCessao: m.cessao,
 }));
 vi.mock('@/lib/services/tesouraria-legada', () => ({ registrarTesourariaLegada: vi.fn() }));
 vi.mock('@/lib/services/titular-laudo', async (orig) => ({
@@ -28,6 +28,7 @@ vi.mock('@/lib/services/pagamento-cedente', async (orig) => ({
 }));
 
 import { POST } from '@/app/api/admin/originacao/route';
+import { EnvioDocusignLaudoAusenteError } from '@/lib/services/cessao-docusign';
 import { PagamentoCedenteError } from '@/lib/services/pagamento-cedente';
 import { LiquidacaoCedenteError } from '@/lib/services/liquidacao-cedente';
 import { TitularLaudoError } from '@/lib/services/titular-laudo';
@@ -43,6 +44,7 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   m.rede = 'TESTNET';
   m.pixLegado.mockReset().mockResolvedValue({ ok: true });
+  m.cessao.mockReset().mockResolvedValue({ status: 'ENVIADA_DOCUSIGN' });
   m.isAdmin.mockReset().mockResolvedValue(true);
   m.csrf.mockReset().mockReturnValue(null);
   m.confirmar.mockReset().mockResolvedValue({ situacao: 'TITULAR_UNICO', pagamentoAutomatico: true });
@@ -161,5 +163,15 @@ describe('executar-pix-simulado (legado) na mainnet', () => {
     const r = await POST(req(legado));
     expect(r.status).toBe(200);
     expect(m.pixLegado).toHaveBeenCalledWith({ cessaoId: 'ces_1', operador: 'admin-panel' });
+  });
+});
+
+describe('registrar-cessao — mainnet sem laudo (F-DS2-1)', () => {
+  it('EnvioDocusignLaudoAusenteError → 409 LAUDO_AUSENTE com mensagem fixa', async () => {
+    const erro = new EnvioDocusignLaudoAusenteError();
+    m.cessao.mockRejectedValue(erro);
+    const r = await POST(req({ action: 'registrar-cessao', ofertaId: 'of_1' }));
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({ error: erro.message, code: 'LAUDO_AUSENTE' });
   });
 });
