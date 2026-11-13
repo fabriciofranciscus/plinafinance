@@ -109,7 +109,7 @@ describe('VendedorPipeline: fluxo da cota de prova', () => {
 
   it('titular único confirmado: paga o cedente (pagar-cedente); nunca o Pix simulado avulso', async () => {
     render(<VendedorPipeline leads={leads({ status: 'ASSINADA', laudoRegistrado: true, titularSituacao: 'TITULAR_UNICO' })} />);
-    expect(screen.queryByText(/Pix simulado/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Executar Pix simulado/i })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Pagar cedente/ }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(corpo()).toMatchObject({ action: 'pagar-cedente', cessaoId: 'c1' });
@@ -194,5 +194,45 @@ describe('VendedorPipeline: fluxo da cota de prova', () => {
     expect(lista.textContent).toContain('Assinatura: aguardando assinatura');
     expect(lista.textContent).toContain('Laudo: registrado');
     expect(lista.textContent).toContain('Anuência da administradora: não registrada');
+  });
+
+  it('textos da Consuelo: item 7 do laudo, atestado, dica da anuência, rótulo e Pix simulado na testnet', () => {
+    const { unmount } = render(<VendedorPipeline leads={leads({ laudoRegistrado: false })} />);
+    expect(screen.getByText(/item 7 \(quitação\): saldo devedor R\$ 0,00/)).toBeTruthy();
+    unmount();
+    const u2 = render(<VendedorPipeline leads={leads({ status: 'ASSINADA', laudoRegistrado: true, titularSituacao: null })} />);
+    expect(screen.getByText(/titular indicado no laudo é o titular do CPF do cadastro do cedente \(na testnet/)).toBeTruthy();
+    u2.unmount();
+    const u3 = render(
+      <VendedorPipeline
+        leads={leads({ status: 'ASSINADA', laudoRegistrado: true, laudoHash: 'c'.repeat(64), anuenciaStatus: 'DECLARADA_PENDENTE', titularSituacao: 'TITULAR_UNICO' })}
+      />,
+    );
+    expect(screen.getByRole('list', { name: 'Estado da cessão' }).textContent).toContain('declarada, pendente (simulada)');
+    expect(screen.getByRole('button', { name: 'Pagar cedente (Pix simulado, rede de testes)' })).toBeTruthy();
+    u3.unmount();
+    render(
+      <VendedorPipeline
+        leads={leads({ status: 'ASSINADA', laudoRegistrado: true, laudoHash: 'c'.repeat(64), titularSituacao: 'TITULAR_UNICO' })}
+      />,
+    );
+    expect(screen.getByText(/Na demonstração, usar “Declarada, pendente”/)).toBeTruthy();
+  });
+
+  it('anuência Confirmada exige a referência; na rede PUBLIC não oferece "Declarada, pendente" nem Pix simulado', async () => {
+    const c = { status: 'ASSINADA', laudoRegistrado: true, laudoHash: 'd'.repeat(64), titularSituacao: 'TITULAR_UNICO' };
+    const u = render(<VendedorPipeline leads={leads(c)} />);
+    fireEvent.change(screen.getByRole('combobox', { name: /Anuência da administradora/ }), { target: { value: 'CONFIRMADA' } });
+    const botao = screen.getByRole('button', { name: 'Registrar anuência' }) as HTMLButtonElement;
+    expect(botao.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(/Referência do documento da administradora/), { target: { value: 'PROTOCOLO-TESTE' } });
+    expect(botao.disabled).toBe(false);
+    fireEvent.click(botao);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(corpo()).toMatchObject({ action: 'registrar-anuencia', status: 'CONFIRMADA', referencia: 'PROTOCOLO-TESTE' });
+    u.unmount();
+    render(<VendedorPipeline redePublica leads={leads(c)} />);
+    expect(screen.queryByRole('option', { name: /Declarada, pendente/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Pagar cedente (Pix)' })).toBeTruthy();
   });
 });

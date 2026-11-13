@@ -249,6 +249,7 @@ export default async function AdminPage() {
           transita conforme operador avança o pipeline.
         </p>
         <VendedorPipeline
+          redePublica={process.env.STELLAR_NETWORK === 'PUBLIC'}
           leads={leadsVendedor.map((l) => ({
             id: l.id,
             nome: l.nome,

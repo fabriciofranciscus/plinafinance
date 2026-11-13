@@ -68,6 +68,11 @@ const STATUS_LABEL: Record<string, string> = {
   PERDIDO: 'Perdido',
 };
 
+const ROTULO_ANUENCIA: Record<string, string> = {
+  DECLARADA_PENDENTE: 'declarada, pendente (simulada)',
+  CONFIRMADA: 'confirmada pela administradora',
+};
+
 const BTN =
   'min-h-[44px] bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-primary-deep transition-colors disabled:opacity-50';
 
@@ -75,7 +80,8 @@ function explorerTx(hash: string) {
   return `https://stellar.expert/explorer/testnet/tx/${hash}`;
 }
 
-export function VendedorPipeline({ leads }: { leads: PipelineLead[] }) {
+/** `redePublica`: a rede é a PUBLIC (mainnet). Sem ela, a tela trata tudo como rede de testes (simulado). */
+export function VendedorPipeline({ leads, redePublica = false }: { leads: PipelineLead[]; redePublica?: boolean }) {
   if (leads.length === 0) {
     return (
       <p className="font-text text-sm text-base/60">
@@ -89,13 +95,13 @@ export function VendedorPipeline({ leads }: { leads: PipelineLead[] }) {
   return (
     <div className="space-y-3">
       {leads.map((l) => (
-        <LeadCard key={l.id} lead={l} />
+        <LeadCard key={l.id} lead={l} redePublica={redePublica} />
       ))}
     </div>
   );
 }
 
-function LeadCard({ lead }: { lead: PipelineLead }) {
+function LeadCard({ lead, redePublica }: { lead: PipelineLead; redePublica: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -107,7 +113,7 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
   const [laudoUrl, setLaudoUrl] = useState('');
   const [situacao, setSituacao] = useState('TITULAR_UNICO');
   const [atestado, setAtestado] = useState(false);
-  const [anuenciaTipo, setAnuenciaTipo] = useState('DECLARADA_PENDENTE');
+  const [anuenciaTipo, setAnuenciaTipo] = useState(redePublica ? 'CONFIRMADA' : 'DECLARADA_PENDENTE');
   const [anuenciaRef, setAnuenciaRef] = useState('');
 
   async function call(action: string, payload: Record<string, unknown>) {
@@ -235,7 +241,7 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
                     : 'não enviada'}
               </li>
               <li>Titular do laudo: {cessao.titularSituacao ?? 'não confirmado'}</li>
-              <li>Anuência da administradora: {cessao.anuenciaStatus ?? 'não registrada'}</li>
+              <li>Anuência da administradora: {ROTULO_ANUENCIA[cessao.anuenciaStatus ?? ''] ?? 'não registrada'}</li>
               <li>Pix ao cedente: {cessao.pixStatus ?? 'não iniciado'}</li>
               <li>Cota: {cota ? 'incorporada' : 'não incorporada'}</li>
             </ul>
@@ -253,6 +259,10 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
                     placeholder="https://…/laudo.pdf#sha256=…"
                     className="mt-1 w-full min-h-[44px] bg-white border border-base/55 px-3 py-2 font-mono text-xs"
                   />
+                  <span className="mt-1 block font-text text-xs text-base/70">
+                    O laudo precisa ter o item 7 (quitação): saldo devedor R$ 0,00, conforme documento da administradora (na
+                    testnet, o documento de teste rotulado). Sem dado pessoal.
+                  </span>
                 </label>
                 <button
                   onClick={() => call('registrar-laudo', { cessaoId: cessao.id, laudoUrl: laudoUrl.trim() })}
@@ -306,7 +316,7 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
                     onChange={(e) => setAtestado(e.target.checked)}
                     className="mt-0.5 w-5 h-5 accent-primary-deep"
                   />
-                  Atesto que o titular confirmado no laudo é o CPF do cadastro do cedente.
+                  Atesto que o titular indicado no laudo é o titular do CPF do cadastro do cedente (na testnet, o cedente fictício do documento de teste).
                 </label>
                 <button
                   onClick={() => call('confirmar-titular-laudo', { cessaoId: cessao.id, situacao, atestado })}
@@ -335,13 +345,17 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
                     onChange={(e) => setAnuenciaTipo(e.target.value)}
                     className="mt-1 w-full min-h-[44px] bg-white border border-base/55 px-3 py-2 font-text text-sm"
                   >
-                    <option value="DECLARADA_PENDENTE">Declarada, pendente (anuência simulada na testnet)</option>
+                    {!redePublica && <option value="DECLARADA_PENDENTE">Declarada, pendente (anuência simulada na testnet)</option>}
                     <option value="CONFIRMADA">Confirmada pela administradora</option>
                   </select>
+                  <span className="mt-1 block font-text text-xs text-base/70">
+                    Na demonstração, usar “Declarada, pendente”. “Confirmada pela administradora” só com documento dela, e exige
+                    a referência.
+                  </span>
                 </label>
                 <label className="block">
                   <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
-                    Referência (opcional)
+                    {anuenciaTipo === 'CONFIRMADA' ? 'Referência do documento da administradora' : 'Referência (opcional)'}
                   </span>
                   <input
                     type="text"
@@ -359,7 +373,7 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
                       ...(anuenciaRef.trim() ? { referencia: anuenciaRef.trim() } : {}),
                     })
                   }
-                  disabled={busy}
+                  disabled={busy || (anuenciaTipo === 'CONFIRMADA' && !anuenciaRef.trim())}
                   className={BTN}
                 >
                   Registrar anuência
@@ -397,7 +411,7 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
                         disabled={busy}
                         className={BTN}
                       >
-                        {cessao.pixStatus ? 'Reconsultar pagamento' : 'Pagar cedente (Pix)'}
+                        {cessao.pixStatus ? 'Reconsultar pagamento' : redePublica ? 'Pagar cedente (Pix)' : 'Pagar cedente (Pix simulado, rede de testes)'}
                       </button>
                     </>
                   )}
