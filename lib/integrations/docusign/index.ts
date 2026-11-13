@@ -9,6 +9,7 @@ export { criarClienteDocusign, normalizarStatusEnvelope } from './client';
 export type { ClienteDocusign, CriarEnvelopeInput, StatusEnvelope } from './client';
 export { transactionIdDeterministico } from './transaction-id';
 export { verificarHmacConnect } from './connect-hmac';
+export { extrairEnvelopeIdConnect } from './connect-payload';
 export { DocusignConsentRequiredError, DocusignError } from './errors';
 export type { CodigoErroDocusign } from './errors';
 

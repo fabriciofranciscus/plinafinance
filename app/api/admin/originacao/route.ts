@@ -8,6 +8,9 @@
  *   - registrar-cessao        → DocuSign sandbox stub + hash on-chain
  *   - executar-pix-simulado   → marca Pix executado + audit
  *   - incorporar-cota         → wrapper de tokenizacao.incorporarCota
+ *   - confirmar-titular-laudo → o operador ATESTA titular do laudo = CPF do cadastro (E1-2)
+ *   - pagar-cedente           → Pix ao titular da cessão ASSINADA (E1-2; destino/valor vêm do servidor)
+ *   - reabrir-pagamento-cedente → reabre só um pagamento FALHOU confirmado pelo PSP (E1-2)
  *
  * Body: { action, ...payload }
  */
@@ -26,6 +29,12 @@ import {
   registrarCessao,
 } from '@/lib/services/originacao';
 import { registrarTesourariaLegada } from '@/lib/services/tesouraria-legada';
+import { sincronizarCessoesDocusign } from '@/lib/services/cessao-assinatura';
+import { pagarCedenteDaCessao, PagamentoCedenteError, reabrirPagamentoCedente } from '@/lib/services/pagamento-cedente';
+import { LiquidacaoCedenteError } from '@/lib/services/liquidacao-cedente';
+import { EnvioDocusignLaudoAusenteError } from '@/lib/services/cessao-docusign';
+import { confirmarTitularDoLaudo, SITUACOES_TITULAR, TitularLaudoError } from '@/lib/services/titular-laudo';
+import { STELLAR_NETWORK } from '@/lib/stellar/config';
 import { TipoBem } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
@@ -35,6 +44,30 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 150;
 
 const NumericString = z.string().regex(/^\d+(\.\d+)?$/, 'valor numérico inválido');
+
+/**
+ * Operador das ações do E1-2 (auditoria): a sessão admin é um cookie único, sem identidade por usuário, então o operador é
+ * a constante do servidor — NUNCA um campo do body. Pela mesma razão o body NÃO aceita provedor, chave Pix, valor nem
+ * nenhum `opts`: o provedor vem só da configuração do servidor e o destino/valor da cessão (Consuelo/Atlas, 13/11).
+ */
+const OPERADOR_ADMIN = 'admin-panel';
+
+/** Erros de domínio do E1-2/DS2: mensagem fixa em PT (sem causa nem dado do cedente) + código. */
+function respostaDeErroDoPagamento(err: unknown): NextResponse | null {
+  if (err instanceof EnvioDocusignLaudoAusenteError) {
+    return NextResponse.json({ error: err.message, code: err.code }, { status: 409 });
+  }
+  if (err instanceof TitularLaudoError || err instanceof PagamentoCedenteError || err instanceof LiquidacaoCedenteError) {
+    const code = err.code;
+    const status =
+      code === 'ENTRADA_INVALIDA' ? 400
+      : code === 'CESSAO_NAO_ENCONTRADA' || code === 'TRANSFERENCIA_NAO_ENCONTRADA' ? 404
+      : code === 'SEGREDO_NAO_CONFIGURADO' || code === 'TETO_NAO_CONFIGURADO' ? 503
+      : 409;
+    return NextResponse.json({ error: err.message, code }, { status });
+  }
+  return null;
+}
 
 const Schema = z.discriminatedUnion('action', [
   z
@@ -79,6 +112,23 @@ const Schema = z.discriminatedUnion('action', [
     .strict(),
   z
     .object({
+      action: z.literal('sincronizar-cessoes'),
+      cessaoId: z.string().min(1).max(60).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('confirmar-titular-laudo'),
+      cessaoId: z.string().min(1).max(60),
+      situacao: z.enum(SITUACOES_TITULAR),
+      // O operador atesta; ninguém digita o CPF (o sistema lê o da Pessoa com KYC e grava só o HMAC).
+      atestado: z.literal(true),
+    })
+    .strict(),
+  z.object({ action: z.literal('pagar-cedente'), cessaoId: z.string().min(1).max(60) }).strict(),
+  z.object({ action: z.literal('reabrir-pagamento-cedente'), cessaoId: z.string().min(1).max(60) }).strict(),
+  z
+    .object({
       action: z.literal('incorporar-cota'),
       cessaoId: z.string().min(1).max(60),
       localizacaoAprox: z.string().max(200).optional(),
@@ -119,6 +169,14 @@ export async function POST(req: Request) {
         return NextResponse.json(result);
       }
       case 'executar-pix-simulado': {
+        // Caminho LEGADO: só exige cessão ASSINADA e contorna laudo, titular, PSP, comprovante e âncora do E1-2, mas
+        // habilita a incorporação. Na mainnet o pagamento é só o `pagar-cedente` (fail-closed).
+        if (STELLAR_NETWORK === 'PUBLIC') {
+          return NextResponse.json(
+            { error: 'Pix simulado não é permitido na mainnet: use pagar-cedente.', code: 'PIX_SIMULADO_EM_MAINNET' },
+            { status: 409 },
+          );
+        }
         const result = await executarPixSimulado({
           cessaoId: body.cessaoId,
           operador: 'admin-panel',
@@ -146,6 +204,28 @@ export async function POST(req: Request) {
         });
         return NextResponse.json(result);
       }
+      case 'sincronizar-cessoes': {
+        // Polling de fallback do DS3: reconcilia cessões ENVIADA_DOCUSIGN sem webhook.
+        const result = await sincronizarCessoesDocusign({ cessaoId: body.cessaoId, operador: 'admin-panel' });
+        return NextResponse.json(result);
+      }
+      case 'confirmar-titular-laudo': {
+        const result = await confirmarTitularDoLaudo({
+          cessaoId: body.cessaoId,
+          situacao: body.situacao,
+          atestado: body.atestado,
+          operador: OPERADOR_ADMIN,
+        });
+        return NextResponse.json(result);
+      }
+      case 'pagar-cedente': {
+        const result = await pagarCedenteDaCessao({ cessaoId: body.cessaoId, operador: OPERADOR_ADMIN });
+        return NextResponse.json(result);
+      }
+      case 'reabrir-pagamento-cedente': {
+        const result = await reabrirPagamentoCedente({ cessaoId: body.cessaoId, operador: OPERADOR_ADMIN });
+        return NextResponse.json(result);
+      }
       case 'incorporar-cota': {
         const result = await incorporarCotaDoFunil({
           cessaoId: body.cessaoId,
@@ -157,6 +237,8 @@ export async function POST(req: Request) {
       }
     }
   } catch (err) {
+    const dominio = respostaDeErroDoPagamento(err);
+    if (dominio) return dominio;
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'unknown' },
       { status: 500 },

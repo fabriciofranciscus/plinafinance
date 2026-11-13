@@ -19,10 +19,10 @@ import { db } from '../db';
 import {
   buildAuditPayload,
   registerOnChainHash,
-  sha256OfPayload,
 } from '../stellar/audit';
 import { STELLAR_NETWORK } from '../stellar/config';
 import { incorporarCota } from './tokenizacao';
+import { enviarCessaoParaAssinatura } from './cessao-docusign';
 import { tokensParaEmitir } from './pool';
 import { taxaAnuenciaBpsFor } from '../config/administradoras';
 import { taxaPrazoBpsFor } from '../config/curva-yield';
@@ -339,13 +339,19 @@ export async function aceitarOferta(ofertaId: string, pessoaId: string) {
   return { txHash: onChain.txHash, payloadHash: onChain.payloadHash };
 }
 
-// ─── 4. Cessão (DocuSign sandbox stub) ──────────────────────────────────────
+// ─── 4. Cessão (DocuSign, remote signing — DS2) ─────────────────────────────
 
+/**
+ * Registra a cessão e a ENVIA para assinatura no DocuSign. Estado resultante:
+ * `ENVIADA_DOCUSIGN`, sem hash on-chain (a âncora é o SHA-256 do PDF assinado
+ * guardado, no DS3, quando o envelope chegar a "completed").
+ *
+ * Idempotente: repetir a chamada (ou chamar em paralelo) NUNCA cria um 2º
+ * envelope — `Cessao.ofertaId` é único, o envio é serializado no banco e o
+ * `transactionId` é determinístico (ver `cessao-docusign.ts`).
+ */
 export async function registrarCessao(input: {
   ofertaId: string;
-  /// PDF base64 ou URL — no MVP testnet usamos placeholder.
-  /// Em produção, DocuSign envelope id ja confirmaria assinatura.
-  documentoBase64?: string;
   operador: string;
   /// F-M1-4: caminho da cessão (default fallback). Define se a taxa de
   /// anuência é gravada na Cessao.
@@ -353,77 +359,32 @@ export async function registrarCessao(input: {
 }) {
   const oferta = await db.oferta.findUnique({
     where: { id: input.ofertaId },
-    include: { cessao: true, leadVendedor: { select: { email: true, nome: true } } },
+    include: { cessao: true },
   });
   if (!oferta) throw new Error('Oferta não encontrada');
   if (oferta.status !== OfertaStatus.ACEITA) {
     throw new Error('Oferta precisa estar ACEITA antes de cessão');
   }
-  if (oferta.cessao) throw new Error('Cessão já registrada');
 
-  // Hash do documento (placeholder no MVP — PDF real no Fase 1).
-  const documentoBytes =
-    input.documentoBase64 ??
-    `cessao-mvp:${oferta.id}:${oferta.leadVendedorId}:${oferta.valorLiquidoVendedor.toString()}`;
-  const hashDocumento = sha256OfPayload({ bytes: documentoBytes });
+  let cessao = oferta.cessao;
+  if (!cessao) {
+    // F-M1-4: taxa de anuência gravada na Cessao quando caminho = fallback.
+    const caminho = input.caminhoCessao ?? CaminhoCessao.CARTORIO_DIGITAL;
+    const taxaAnuenciaBps =
+      caminho === CaminhoCessao.CARTORIO_DIGITAL ? taxaAnuenciaBpsFor(oferta.administradora) : null;
+    try {
+      cessao = await db.cessao.create({
+        data: { ofertaId: oferta.id, status: CessaoStatus.PENDENTE, caminhoCessao: caminho, taxaAnuenciaBps },
+      });
+    } catch (err) {
+      // `ofertaId` é único: chamada concorrente que perdeu a corrida reaproveita a linha.
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== 'P2002') throw err;
+      cessao = await db.cessao.findUniqueOrThrow({ where: { ofertaId: oferta.id } });
+    }
+  }
 
-  // Prova on-chain.
-  const payload = buildAuditPayload('cessao', oferta.id, {
-    leadVendedorId: oferta.leadVendedorId,
-    ofertaId: oferta.id,
-    hashDocumento,
-    valorLiquido: oferta.valorLiquidoVendedor.toString(),
-  });
-  const onChain = await registerOnChainHash(payload);
-
-  // F-M1-4: taxa de anuência gravada na Cessao quando caminho = fallback.
-  const caminho = input.caminhoCessao ?? CaminhoCessao.CARTORIO_DIGITAL;
-  const taxaAnuenciaBps =
-    caminho === CaminhoCessao.CARTORIO_DIGITAL
-      ? taxaAnuenciaBpsFor(oferta.administradora)
-      : null;
-
-  const cessao = await db.$transaction(async (tx) => {
-    const created = await tx.cessao.create({
-      data: {
-        ofertaId: oferta.id,
-        docusignEnvelopeId: `mvp-stub:${oferta.id.slice(0, 12)}`,
-        hashDocumento,
-        onChainTxHash: onChain.txHash,
-        assinadaEm: new Date(),
-        status: CessaoStatus.ASSINADA,
-        caminhoCessao: caminho,
-        taxaAnuenciaBps,
-      },
-    });
-    await tx.leadVendedor.update({
-      where: { id: oferta.leadVendedorId },
-      data: { status: LeadVendedorStatus.CESSAO_ASSINADA },
-    });
-    await tx.eventoAudit.create({
-      data: {
-        acao: 'CESSAO_ASSINADA',
-        operador: input.operador,
-        leadVendedorId: oferta.leadVendedorId,
-        ofertaId: oferta.id,
-        cessaoId: created.id,
-        payloadJson: payload as unknown as Prisma.InputJsonValue,
-        payloadHash: onChain.payloadHash,
-        stellarTxHash: onChain.txHash,
-      },
-    });
-    return created;
-  });
-
-  // F-M1-7: email transacional (best-effort).
-  await notifyCedente(oferta.leadVendedor?.email, 'cessao', {
-    leadId: oferta.leadVendedorId,
-    nome: oferta.leadVendedor?.nome,
-    valorLiquido: BRL.format(Number(oferta.valorLiquidoVendedor)),
-    onChainTxHash: onChain.txHash,
-  });
-
-  return { cessaoId: cessao.id, hashDocumento, ...onChain };
+  const envio = await enviarCessaoParaAssinatura({ cessaoId: cessao.id, operador: input.operador });
+  return { cessaoId: envio.cessaoId, status: envio.status, envelopeId: envio.envelopeId, jaEnviada: envio.jaEnviada };
 }
 
 // ─── 5. Pix simulado ────────────────────────────────────────────────────────
