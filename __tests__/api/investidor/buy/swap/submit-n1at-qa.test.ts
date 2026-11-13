@@ -189,104 +189,153 @@ beforeEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// QA Vera — N1-at no submit: a guarda de trustline (em submitWithPrivySignature) recusa SEM rede,
-// depois que a rota já reservou o quote. Aqui `submitWithPrivySignature` é o mock que lança o erro
-// tipado real da guarda.
+// QA Vera — retest F-N1AT-1 (fix/n1-at-trustline-409 @ 0f41c51): a guarda de trustline roda na ROTA antes do envio;
+// recusa na 1ª reserva ⇒ reserva liberada + 409 com code. A guarda real lê o Horizon (spy em loadAccount); o envio é o mock.
 // ---------------------------------------------------------------------------
+import { vi as vitest } from 'vitest';
+import { horizon } from '@/lib/stellar/account';
 import { TrustlineNaoAutorizadaError } from '@/lib/stellar/trustline';
 
-const recusa = (code: 'TRUSTLINE_AUSENTE' | 'TRUSTLINE_NAO_AUTORIZADA' = 'TRUSTLINE_NAO_AUTORIZADA') =>
-  new TrustlineNaoAutorizadaError(code, USER_PK, `PLINARF:${ISSUER.publicKey()}`);
+const PLINARF = new Asset('PLINARF', ISSUER.publicKey());
+/** Envelope com a perna de EMISSÃO (source = issuer → investidor) + a perna ponte, assinado pelo investidor, com maxTime vigente. */
+function txComEmissao() {
+  const t = new TransactionBuilder(new Account(USER_PK, '1'), { fee: '100', networkPassphrase })
+    .addOperation(Operation.payment({ source: USER_PK, destination: DIST_PK, asset: Asset.native(), amount: '1' }))
+    .addOperation(Operation.payment({ source: ISSUER.publicKey(), destination: USER_PK, asset: PLINARF, amount: '1' }))
+    .setTimeout(300)
+    .build();
+  t.sign(USER);
+  return t;
+}
+const TXI = txComEmissao();
+const BODY_I = { quoteId: 'q_1', signedXdr: TXI.toXDR() };
+const HASH_I = createHash('sha256').update(TXI.hash()).digest('hex');
 
-describe('QA N1-at — POST swap/submit com a trustline revogada entre o build e o submit', () => {
-  it('caracterização: a guarda recusa (nada é escriturado nem emitido), mas a resposta é 500 genérico', async () => {
+const conta = (balances: unknown[]) => Object.assign(new Account(USER_PK, '1'), { balances }) as never;
+const linha = (autorizada: boolean | undefined) => ({
+  asset_type: 'credit_alphanum12', asset_code: 'PLINARF', asset_issuer: ISSUER.publicKey(), balance: '0', is_authorized: autorizada,
+});
+const liberou = () =>
+  quoteUpdateMany.mock.calls.some((c) => c[0]?.where?.submitXdrHash === HASH_I && c[0]?.data?.submitXdrHash === null);
+
+beforeEach(() => {
+  vitest.restoreAllMocks();
+  vitest.spyOn(horizon, 'loadAccount').mockResolvedValue(conta([linha(true)]));
+});
+
+describe('QA N1-at — swap/submit com a trustline recusada pela guarda (fix 0f41c51)', () => {
+  it('trustline revogada, 1º envio: 409 TRUSTLINE_NAO_AUTORIZADA, reserva LIBERADA, nada enviado nem escriturado', async () => {
+    vitest.spyOn(horizon, 'loadAccount').mockResolvedValue(conta([linha(false)]));
     quoteFindUnique.mockResolvedValueOnce(baseQuote());
-    submitWithPrivySignature.mockRejectedValueOnce(recusa());
-    const r = await POST(req(FULL_BODY));
-    expect(r.status).toBe(500);
-    const j = await r.json();
-    expect(j.error).toBe('erro interno');
-    expect(j.code).toBeUndefined();
+    const r = await POST(req(BODY_I));
+    expect(r.status).toBe(409);
+    expect((await r.json()).code).toBe('TRUSTLINE_NAO_AUTORIZADA');
+    expect(liberou()).toBe(true);
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
     expect(investidorUpdate).not.toHaveBeenCalled();
     expect(eventoAuditCreate).not.toHaveBeenCalled();
     expect(movimentoCreateMany).not.toHaveBeenCalled();
   });
 
-  it('F-N1AT-1 (caracterização): a reserva do quote (submitXdrHash) fica ABERTA — ninguém chama liberarReservaDoSwap', async () => {
+  it('sem trustline: 409 TRUSTLINE_AUSENTE + reserva liberada', async () => {
+    vitest.spyOn(horizon, 'loadAccount').mockResolvedValue(conta([]));
     quoteFindUnique.mockResolvedValueOnce(baseQuote());
-    submitWithPrivySignature.mockRejectedValueOnce(recusa());
-    await POST(req(FULL_BODY));
-    // só a reserva (where submitXdrHash:null); nenhuma chamada de liberação (where submitXdrHash:<hash>, data.submitXdrHash:null)
-    expect(quoteUpdateMany).toHaveBeenCalledTimes(1);
-    expect(quoteUpdateMany.mock.calls[0][0].where.submitXdrHash).toBeNull();
-    const liberou = quoteUpdateMany.mock.calls.some((c) => c[0]?.data?.submitXdrHash === null);
-    expect(liberou).toBe(false);
-  });
-
-  it.fails('F-N1AT-1 (esperado): recusa tipada 409 TRUSTLINE_NAO_AUTORIZADA e reserva LIBERADA (o gate SWAP_EM_VOO não fica fechado)', async () => {
-    quoteFindUnique.mockResolvedValueOnce(baseQuote());
-    submitWithPrivySignature.mockRejectedValueOnce(recusa());
-    const r = await POST(req(FULL_BODY));
+    const r = await POST(req(BODY_I));
     expect(r.status).toBe(409);
-    expect((await r.json()).code).toBe('TRUSTLINE_NAO_AUTORIZADA');
-    const liberou = quoteUpdateMany.mock.calls.some(
-      (c) => c[0]?.where?.submitXdrHash === XDR_HASH && c[0]?.data?.submitXdrHash === null,
-    );
-    expect(liberou).toBe(true);
+    expect((await r.json()).code).toBe('TRUSTLINE_AUSENTE');
+    expect(liberou()).toBe(true);
   });
 
-  it('TRUSTLINE_AUSENTE tem o mesmo comportamento (500 e reserva aberta)', async () => {
+  it('a liberação é escopada à PRÓPRIA reserva (só a XDR desta tx; só se não consumida) e o 409 não vaza endereço', async () => {
+    vitest.spyOn(horizon, 'loadAccount').mockResolvedValue(conta([linha(false)]));
     quoteFindUnique.mockResolvedValueOnce(baseQuote());
-    submitWithPrivySignature.mockRejectedValueOnce(recusa('TRUSTLINE_AUSENTE'));
-    const r = await POST(req(FULL_BODY));
-    expect(r.status).toBe(500);
-    expect(quoteUpdateMany).toHaveBeenCalledTimes(1);
-  });
-
-  it('o 500 não vaza endereço de carteira, issuer nem mensagem da guarda', async () => {
-    quoteFindUnique.mockResolvedValueOnce(baseQuote());
-    submitWithPrivySignature.mockRejectedValueOnce(recusa());
-    const r = await POST(req(FULL_BODY));
+    const r = await POST(req(BODY_I));
     const txt = JSON.stringify(await r.json());
     expect(txt).not.toContain(USER_PK);
     expect(txt).not.toContain(ISSUER.publicKey());
-    expect(txt).not.toContain('trustline');
+    const lib = quoteUpdateMany.mock.calls.find((c) => c[0]?.data?.submitXdrHash === null)![0];
+    expect(lib.where).toMatchObject({ id: 'q_1', submitXdrHash: HASH_I, consumedAt: null });
   });
 
-  it('retry do investidor com a MESMA xdr após a recusa: cai em reserva órfã, consulta a chain e (tx fora, envelope vigente) tenta de novo; sem duplicar escrituração', async () => {
-    // envelope com maxTime vigente (a rota recusa re-assinar sem maxTime, 410)
-    const tx = new TransactionBuilder(new Account(USER_PK, '1'), { fee: '100', networkPassphrase })
-      .addOperation(Operation.payment({ source: USER_PK, destination: DIST_PK, asset: Asset.native(), amount: '1' }))
-      .setTimeout(300)
-      .build();
-    tx.sign(USER);
-    const body = { quoteId: 'q_1', signedXdr: tx.toXDR() };
-    const hash = createHash('sha256').update(tx.hash()).digest('hex');
-
-    // 1ª tentativa: recusa (500; reserva aberta)
+  it('a recusa que vem de DENTRO do submitWithPrivySignature (revogou entre as duas leituras) também vira 409 + reserva liberada', async () => {
     quoteFindUnique.mockResolvedValueOnce(baseQuote());
-    submitWithPrivySignature.mockRejectedValueOnce(recusa());
-    expect((await POST(req(body))).status).toBe(500);
+    submitWithPrivySignature.mockRejectedValueOnce(new TrustlineNaoAutorizadaError('TRUSTLINE_NAO_AUTORIZADA', USER_PK, 'PLINARF:X'));
+    const r = await POST(req(BODY_I));
+    expect(r.status).toBe(409);
+    expect((await r.json()).code).toBe('TRUSTLINE_NAO_AUTORIZADA');
+    expect(liberou()).toBe(true);
+  });
 
-    // 2ª: a trustline foi autorizada nesse meio-tempo → emite
+  it('falha de LEITURA do Horizon na guarda da rota (nada enviado): 500 sem vazar e reserva liberada', async () => {
+    vitest.spyOn(horizon, 'loadAccount').mockRejectedValue(new Error('horizon 503 https://h.test/accounts/G...'));
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    const r = await POST(req(BODY_I));
+    expect(r.status).toBe(500);
+    expect(JSON.stringify(await r.json())).not.toContain('horizon 503');
+    expect(liberou()).toBe(true);
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+  });
+
+  it('REENVIO de órfã (mesma XDR, tx fora da chain) com a guarda recusando: 409, mas a reserva FICA (a tx pode já ter entrado)', async () => {
+    vitest.spyOn(horizon, 'loadAccount').mockResolvedValue(conta([linha(false)]));
     quoteFindUnique
-      .mockResolvedValueOnce(baseQuote({ submitXdrHash: hash }))
-      .mockResolvedValueOnce({ submitXdrHash: hash, consumedTxHash: null, consumedAt: null });
-    quoteUpdateMany.mockResolvedValueOnce({ count: 0 }); // a reserva já existe
-    quoteUpdateMany.mockResolvedValue({ count: 1 });
+      .mockResolvedValueOnce(baseQuote({ submitXdrHash: HASH_I }))
+      .mockResolvedValueOnce({ submitXdrHash: HASH_I, consumedTxHash: null, consumedAt: null });
+    quoteUpdateMany.mockResolvedValueOnce({ count: 0 }); // reserva já existe
     fetchTransactionByHash.mockResolvedValueOnce(null);
-    const r = await POST(req(body));
+    const r = await POST(req(BODY_I));
+    expect(r.status).toBe(409);
+    expect((await r.json()).code).toBe('TRUSTLINE_NAO_AUTORIZADA');
+    expect(liberou()).toBe(false);
+    expect(submitWithPrivySignature).not.toHaveBeenCalled();
+  });
+
+  it('erro do ENVIO à rede (guarda ok): 500 e a reserva FICA (pode ter entrado) — comportamento anterior preservado', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    submitWithPrivySignature.mockRejectedValueOnce(new Error('timeout no submit'));
+    const r = await POST(req(BODY_I));
+    expect(r.status).toBe(500);
+    expect(liberou()).toBe(false);
+  });
+
+  it('retry com a MESMA xdr depois da recusa e da autorização do issuer: reserva nova (count 1), emite uma vez, escritura uma vez', async () => {
+    vitest.spyOn(horizon, 'loadAccount').mockResolvedValueOnce(conta([linha(false)]));
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    expect((await POST(req(BODY_I))).status).toBe(409);
+    expect(liberou()).toBe(true);
+    // o issuer autoriza; o mesmo envelope assinado segue
+    vitest.spyOn(horizon, 'loadAccount').mockResolvedValue(conta([linha(true)]));
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    const r = await POST(req(BODY_I));
     expect(r.status).toBe(200);
-    expect(submitWithPrivySignature).toHaveBeenCalledTimes(2);
+    expect(submitWithPrivySignature).toHaveBeenCalledTimes(1);
     expect(investidorUpdate).toHaveBeenCalledOnce();
     expect(movimentoCreateMany).toHaveBeenCalledOnce();
   });
 
-  it('erro de rede no Horizon dentro da guarda (loadAccount) também deixa a reserva aberta (mesma classe do F-N1AT-1)', async () => {
+  it('LACUNA residual (INFO, caracterização): se a leitura de DENTRO do submitWithPrivySignature falha com erro comum, a rota não sabe que nada foi à rede — reserva fica aberta (o varredor decide)', async () => {
     quoteFindUnique.mockResolvedValueOnce(baseQuote());
-    submitWithPrivySignature.mockRejectedValueOnce(new Error('Horizon 503'));
-    const r = await POST(req(FULL_BODY));
+    submitWithPrivySignature.mockRejectedValueOnce(new Error('horizon 503 na 2ª leitura'));
+    const r = await POST(req(BODY_I));
     expect(r.status).toBe(500);
-    expect(quoteUpdateMany).toHaveBeenCalledTimes(1);
+    expect(liberou()).toBe(false);
+  });
+
+  it('INFO: se a PRÓPRIA liberação falha (banco), o erro da liberação mascara o 409 (500) e a reserva fica — o varredor cobre', async () => {
+    vitest.spyOn(horizon, 'loadAccount').mockResolvedValue(conta([linha(false)]));
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    quoteUpdateMany.mockResolvedValueOnce({ count: 1 }); // a reserva
+    quoteUpdateMany.mockRejectedValueOnce(new Error('db caiu')); // a liberação
+    const r = await POST(req(BODY_I));
+    expect(r.status).toBe(500);
+    expect(JSON.stringify(await r.json())).not.toContain('db caiu');
+  });
+
+  it('XDR sem perna de emissão (só ponte): a guarda não consulta o Horizon e o fluxo normal segue', async () => {
+    const spy = vitest.spyOn(horizon, 'loadAccount');
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    const r = await POST(req(FULL_BODY));
+    expect(r.status).toBe(200);
+    expect(spy).not.toHaveBeenCalled();
   });
 });

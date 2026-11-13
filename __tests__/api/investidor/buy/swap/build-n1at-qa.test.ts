@@ -179,24 +179,24 @@ describe('QA N1-at — POST swap/build com trustline PLINARF ausente/não autori
     });
   }
 
-  it('F-N1AT-2 (caracterização): o investidor recebe 500 opaco, sem código, e sem dizer que a autorização do emissor é o que falta', async () => {
-    preparaCaminhoReal();
-    buildSwapBridgeForPlinarfXdr.mockRejectedValueOnce(
-      new TrustlineNaoAutorizadaError('TRUSTLINE_NAO_AUTORIZADA', USER_PK, 'PLINARF:GISSUER'),
-    );
-    const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
-    expect(r.status).toBe(500);
-    const j = await r.json();
-    expect(JSON.stringify(j)).not.toContain('TRUSTLINE');
+  it('F-N1AT-2 (retest 0f41c51): 409 com code e mensagem fixa (o front distingue "sem trustline" de "aguardando autorização"); sem endereço no corpo', async () => {
+    for (const code of ['TRUSTLINE_AUSENTE', 'TRUSTLINE_NAO_AUTORIZADA'] as const) {
+      preparaCaminhoReal();
+      buildSwapBridgeForPlinarfXdr.mockRejectedValueOnce(new TrustlineNaoAutorizadaError(code, USER_PK, 'PLINARF:GISSUER'));
+      const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
+      expect(r.status).toBe(409);
+      const j = await r.json();
+      expect(j.error.code).toBe(code); // withApi: { error: { code, message } } (o submit, via withAuth, responde { error, code })
+      expect(JSON.stringify(j)).not.toContain(USER_PK);
+      expect(JSON.stringify(j)).not.toContain('GISSUER');
+    }
   });
 
-  it.fails('F-N1AT-2 (esperado): 409 com code TRUSTLINE_NAO_AUTORIZADA / TRUSTLINE_AUSENTE (o front precisa distinguir para orientar o investidor)', async () => {
+  it('outro erro do build continua 500 genérico (o mapeamento é só para a recusa tipada)', async () => {
     preparaCaminhoReal();
-    buildSwapBridgeForPlinarfXdr.mockRejectedValueOnce(
-      new TrustlineNaoAutorizadaError('TRUSTLINE_NAO_AUTORIZADA', USER_PK, 'PLINARF:GISSUER'),
-    );
+    buildSwapBridgeForPlinarfXdr.mockRejectedValueOnce(new Error('horizon 503'));
     const r = await POST(req({ quoteId: 'q_1', investorPubkey: USER_PK }));
-    expect(r.status).toBe(409);
-    expect((await r.json()).code).toBe('TRUSTLINE_NAO_AUTORIZADA');
+    expect(r.status).toBe(500);
+    expect(JSON.stringify(await r.json())).not.toContain('horizon 503');
   });
 });

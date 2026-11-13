@@ -102,7 +102,7 @@ describe.skipIf(!PG)('QA Vera — retest F-REAL-1 (escrita condicional, 255392e)
   });
 
   it('as duas ordens FORÇADAS de commit (atraso por _type) também fecham coerentes, e o perdedor erra', async () => {
-    for (const atrasos of [{ reserva_cancelada: 150 }, { caminho_a: 150 }]) {
+    for (const atrasos of [{ reserva_cancelada: 150 }, { caminho_a: 150 }] as Array<Record<string, number>>) {
       st.atrasos = atrasos; st.memos = [];
       const { c, r } = await reservada();
       novaBarreira(2);

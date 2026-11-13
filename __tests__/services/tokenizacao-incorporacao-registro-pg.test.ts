@@ -109,7 +109,7 @@ async function evento() {
   return db.eventoAudit.findFirstOrThrow({ where: { acao: 'COTA_INCORPORADA' } });
 }
 async function semearCessao(opts: { cessao: 'ASSINADA' | 'PENDENTE'; pix?: 'COMPROVADA' | 'FALHOU' | null; id: string }) {
-  const lead = await db.leadVendedor.create({ data: { nome: PII.nome, email: PII.email, cpf: PII.cpf } });
+  const lead = await db.leadVendedor.create({ data: { nome: PII.nome, email: `${opts.id}.${PII.email}`, cpf: PII.cpf } });
   const oferta = await db.oferta.create({
     data: { leadVendedorId: lead.id, tipoBem: 'IMOVEL', valorCarta: '500.00', administradora: 'Adm Teste', desagioAquisicao: '0.2000', valorLiquidoVendedor: '400.00', validade: new Date(Date.now() + 86_400_000), status: 'ACEITA' },
   });
@@ -270,5 +270,77 @@ describe.skipIf(!PG)('E1-P — registro canônico da incorporação ancorado ant
     expect(st.ancoras).toHaveLength(1);
     expect(st.built).toHaveLength(1);
     expect(await db.eventoAudit.count({ where: { acao: 'COTA_INCORPORADA' } })).toBe(1);
+  });
+
+  describe('runbook incorporar-cota-timeout (Farol): a emissão saiu, o banco falhou, o operador chama DE NOVO o mesmo incorporar-cota', () => {
+    const quebrarGravacao = async () => {
+      await db.$executeRawUnsafe(`CREATE OR REPLACE FUNCTION vera_quebra_incorp() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'vera: queda simulada na gravação'; END; $$ LANGUAGE plpgsql`);
+      await db.$executeRawUnsafe('DROP TRIGGER IF EXISTS vera_quebra_incorp ON "EventoAudit"');
+      await db.$executeRawUnsafe(`CREATE TRIGGER vera_quebra_incorp BEFORE INSERT ON "EventoAudit" FOR EACH ROW WHEN (NEW.acao = 'COTA_INCORPORADA') EXECUTE FUNCTION vera_quebra_incorp()`);
+    };
+    const consertar = () => db.$executeRawUnsafe('DROP TRIGGER IF EXISTS vera_quebra_incorp ON "EventoAudit"');
+
+    it('1ª chamada: tx entra na rede mas a gravação do banco cai ⇒ erro (500), nada de domínio, NAV indisponível; 2ª chamada (mesma cessão): NÃO emite de novo, recupera, cria a Cota/aporte/evento uma vez, reusa a âncora e o NAV volta', async () => {
+      await semearCessao({ cessao: 'ASSINADA', pix: 'COMPROVADA', id: 'cessao_rb' });
+      const entrada = { ...base, cessaoId: 'cessao_rb', pixValorBrl: '400.00' };
+      await quebrarGravacao();
+      try {
+        await expect(incorporarCota(entrada)).rejects.toThrow();
+      } finally { await consertar(); }
+      expect(st.built).toHaveLength(1);
+      expect(st.chain.get('hash1')?.successful).toBe(true); // a emissão JÁ saiu
+      expect(await db.cota.count()).toBe(0);
+      expect(await db.movimentoFundo.count({ where: { tipo: 'APORTE_COTA' } })).toBe(0);
+      expect(await db.eventoAudit.count({ where: { acao: 'COTA_INCORPORADA' } })).toBe(0);
+      const t1 = await db.tentativaEmissao.findFirstOrThrow();
+      expect(t1.aplicadaEm).toBeNull();
+      // enquanto isso o NAV fica indisponível (é o 503 do /api/pool/summary que o runbook descreve)
+      resetNavSupplyCache();
+      const { lerSupplyDoNav } = await import('@/lib/services/nav-supply');
+      await expect(lerSupplyDoNav({ fresh: true })).rejects.toMatchObject({ motivo: 'EMISSAO_PENDENTE' });
+      const hashAntes = st.ancoras[0].sha256Hex;
+
+      const r = await incorporarCota(entrada); // "chame de novo o MESMO incorporar-cota da MESMA cessão"
+      expect(r.txHash).toBe('hash1');
+      expect(st.built).toHaveLength(1);        // nenhuma 2ª emissão
+      expect(await db.cota.count()).toBe(1);
+      expect(await db.movimentoFundo.count({ where: { tipo: 'APORTE_COTA' } })).toBe(1);
+      expect(await db.eventoAudit.count({ where: { acao: 'COTA_INCORPORADA' } })).toBe(1);
+      expect((await evento()).payloadHash).toBe(hashAntes);
+      expect(st.ancoraMapa.size).toBe(1);      // nenhuma 2ª âncora
+      expect((await db.tentativaEmissao.findFirstOrThrow()).aplicadaEm).toBeInstanceOf(Date);
+      resetNavSupplyCache();
+      await expect(lerSupplyDoNav({ fresh: true })).resolves.toBeDefined(); // o NAV volta
+    });
+
+    it('chamar uma 3ª vez depois de recuperada é inofensivo (devolve a Cota existente, sem nova emissão/âncora)', async () => {
+      await semearCessao({ cessao: 'ASSINADA', pix: 'COMPROVADA', id: 'cessao_rb2' });
+      const entrada = { ...base, cessaoId: 'cessao_rb2', pixValorBrl: '400.00' };
+      await quebrarGravacao();
+      try { await incorporarCota(entrada).catch(() => undefined); } finally { await consertar(); }
+      const a = await incorporarCota(entrada);
+      const b = await incorporarCota(entrada);
+      expect(b.cotaId).toBe(a.cotaId);
+      expect(st.built).toHaveLength(1);
+      expect(st.ancoraMapa.size).toBe(1);
+      expect(await db.eventoAudit.count({ where: { acao: 'COTA_INCORPORADA' } })).toBe(1);
+    });
+
+    it('o caminho que o runbook proíbe (recriar a cessão = outra chave de incorporação) NÃO duplica a emissão enquanto a tentativa anterior está pendente: o gate do NAV (EMISSAO_PENDENTE) trava a 2ª emissão — nada é emitido e o NAV segue indisponível até recuperar a ORIGINAL', async () => {
+      await semearCessao({ cessao: 'ASSINADA', pix: 'COMPROVADA', id: 'cessao_orig' });
+      await quebrarGravacao();
+      try { await incorporarCota({ ...base, cessaoId: 'cessao_orig', pixValorBrl: '400.00' }).catch(() => undefined); } finally { await consertar(); }
+      expect(st.built).toHaveLength(1);
+      await semearCessao({ cessao: 'ASSINADA', pix: 'COMPROVADA', id: 'cessao_nova' });
+      const e = await incorporarCota({ ...base, cessaoId: 'cessao_nova', pixValorBrl: '400.00' }).then(() => null, (x: unknown) => x as Error & { motivo?: string });
+      expect(e).not.toBeNull();
+      expect(e!.motivo ?? e!.message).toMatch(/EMISSAO_PENDENTE|NAV indispon/);
+      expect(st.built).toHaveLength(1); // nenhuma 2ª emissão
+      expect(await db.cota.count()).toBe(0);
+      // a recuperação pela cessão ORIGINAL continua funcionando
+      const r = await incorporarCota({ ...base, cessaoId: 'cessao_orig', pixValorBrl: '400.00' });
+      expect(r.txHash).toBe('hash1');
+      expect(await db.cota.count()).toBe(1);
+    });
   });
 });
