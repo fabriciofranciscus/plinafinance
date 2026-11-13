@@ -5,8 +5,8 @@
  * cookie `plina_admin`. Cada action é um estágio do pipeline:
  *
  *   - gerar-oferta            → cria Oferta firme + envia
- *   - registrar-cessao        → DocuSign sandbox stub + hash on-chain
- *   - executar-pix-simulado   → marca Pix executado + audit
+ *   - registrar-cessao        → cria a cessão (PENDENTE), SEM enviar ao DocuSign
+ *   - enviar-cessao           → envia ao DocuSign, só com o laudo registrado (qualquer rede)
  *   - incorporar-cota         → wrapper de tokenizacao.incorporarCota
  *   - confirmar-titular-laudo → o operador ATESTA titular do laudo = CPF do cadastro (E1-2)
  *   - pagar-cedente           → Pix ao titular da cessão ASSINADA (E1-2; destino/valor vêm do servidor)
@@ -21,20 +21,19 @@ import { isAdminAuthenticated } from '@/lib/auth/admin';
 import { requireAdminCsrf } from '@/lib/auth/admin-csrf';
 import { parseBody } from '@/lib/http/parse-body';
 import {
-  executarPixSimulado,
   gerarOferta,
   incorporarCotaDoFunil,
   registrarAnuencia,
   registrarLaudoDaCessao,
   registrarCessao,
+  IncorporacaoFunilBloqueadaError,
 } from '@/lib/services/originacao';
 import { registrarTesourariaLegada } from '@/lib/services/tesouraria-legada';
 import { sincronizarCessoesDocusign } from '@/lib/services/cessao-assinatura';
 import { pagarCedenteDaCessao, PagamentoCedenteError, reabrirPagamentoCedente } from '@/lib/services/pagamento-cedente';
 import { LiquidacaoCedenteError } from '@/lib/services/liquidacao-cedente';
-import { EnvioDocusignLaudoAusenteError } from '@/lib/services/cessao-docusign';
+import { EnvioDocusignLaudoAusenteError, enviarCessaoParaAssinatura } from '@/lib/services/cessao-docusign';
 import { confirmarTitularDoLaudo, SITUACOES_TITULAR, TitularLaudoError } from '@/lib/services/titular-laudo';
-import { STELLAR_NETWORK } from '@/lib/stellar/config';
 import { TipoBem } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
@@ -54,7 +53,7 @@ const OPERADOR_ADMIN = 'admin-panel';
 
 /** Erros de domínio do E1-2/DS2: mensagem fixa em PT (sem causa nem dado do cedente) + código. */
 function respostaDeErroDoPagamento(err: unknown): NextResponse | null {
-  if (err instanceof EnvioDocusignLaudoAusenteError) {
+  if (err instanceof EnvioDocusignLaudoAusenteError || err instanceof IncorporacaoFunilBloqueadaError) {
     return NextResponse.json({ error: err.message, code: err.code }, { status: 409 });
   }
   if (err instanceof TitularLaudoError || err instanceof PagamentoCedenteError || err instanceof LiquidacaoCedenteError) {
@@ -88,12 +87,7 @@ const Schema = z.discriminatedUnion('action', [
       ofertaId: z.string().min(1).max(60),
     })
     .strict(),
-  z
-    .object({
-      action: z.literal('executar-pix-simulado'),
-      cessaoId: z.string().min(1).max(60),
-    })
-    .strict(),
+  z.object({ action: z.literal('enviar-cessao'), cessaoId: z.string().min(1).max(60) }).strict(),
   z.object({ action: z.literal('registrar-tesouraria-legada') }).strict(),
   z
     .object({
@@ -162,25 +156,16 @@ export async function POST(req: Request) {
         return NextResponse.json({ ofertaId: result.id });
       }
       case 'registrar-cessao': {
+        // Só cria a cessão: o envio ao DocuSign é o passo `enviar-cessao`, DEPOIS do laudo (o PDF cita o hash dele).
         const result = await registrarCessao({
           ofertaId: body.ofertaId,
-          operador: 'admin-panel',
+          operador: OPERADOR_ADMIN,
+          enviar: false,
         });
         return NextResponse.json(result);
       }
-      case 'executar-pix-simulado': {
-        // Caminho LEGADO: só exige cessão ASSINADA e contorna laudo, titular, PSP, comprovante e âncora do E1-2, mas
-        // habilita a incorporação. Na mainnet o pagamento é só o `pagar-cedente` (fail-closed).
-        if (STELLAR_NETWORK === 'PUBLIC') {
-          return NextResponse.json(
-            { error: 'Pix simulado não é permitido na mainnet: use pagar-cedente.', code: 'PIX_SIMULADO_EM_MAINNET' },
-            { status: 409 },
-          );
-        }
-        const result = await executarPixSimulado({
-          cessaoId: body.cessaoId,
-          operador: 'admin-panel',
-        });
+      case 'enviar-cessao': {
+        const result = await enviarCessaoParaAssinatura({ cessaoId: body.cessaoId, operador: OPERADOR_ADMIN });
         return NextResponse.json(result);
       }
       case 'registrar-tesouraria-legada': {

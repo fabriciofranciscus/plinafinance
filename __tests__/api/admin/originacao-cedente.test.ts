@@ -1,20 +1,20 @@
-/** Rota admin/originacao — cases do E1-2 (D3): confirmar-titular-laudo, pagar-cedente, reabrir-pagamento-cedente. */
+/** Rota admin/originacao — cases do E1-2 (D3) e do fluxo da cota de prova: titular, pagar, reabrir, registrar/enviar cessão. */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextResponse } from 'next/server';
 
 const m = vi.hoisted(() => ({
-  rede: 'TESTNET', pixLegado: vi.fn(), cessao: vi.fn(), isAdmin: vi.fn(), csrf: vi.fn(), confirmar: vi.fn(), pagar: vi.fn(), reabrir: vi.fn(),
+  cessao: vi.fn(), enviar: vi.fn(), incorporar: vi.fn(), isAdmin: vi.fn(), csrf: vi.fn(), confirmar: vi.fn(), pagar: vi.fn(), reabrir: vi.fn(),
 }));
 vi.mock('@/lib/auth/admin', () => ({ isAdminAuthenticated: m.isAdmin }));
 vi.mock('@/lib/auth/admin-csrf', () => ({ requireAdminCsrf: m.csrf }));
-vi.mock('@/lib/stellar/config', async (orig) => {
-  const mod = { ...(await orig<typeof import('@/lib/stellar/config')>()) } as Record<string, unknown>;
-  Object.defineProperty(mod, 'STELLAR_NETWORK', { get: () => m.rede, enumerable: true });
-  return mod;
-});
-vi.mock('@/lib/services/originacao', () => ({
-  executarPixSimulado: m.pixLegado, gerarOferta: vi.fn(), incorporarCotaDoFunil: vi.fn(),
-  registrarAnuencia: vi.fn(), registrarLaudoDaCessao: vi.fn(), registrarCessao: m.cessao,
+vi.mock('@/lib/services/originacao', async (orig) => ({
+  ...(await orig<typeof import('@/lib/services/originacao')>()),
+  gerarOferta: vi.fn(), registrarAnuencia: vi.fn(), registrarLaudoDaCessao: vi.fn(),
+  incorporarCotaDoFunil: m.incorporar, registrarCessao: m.cessao,
+}));
+vi.mock('@/lib/services/cessao-docusign', async (orig) => ({
+  ...(await orig<typeof import('@/lib/services/cessao-docusign')>()),
+  enviarCessaoParaAssinatura: m.enviar,
 }));
 vi.mock('@/lib/services/tesouraria-legada', () => ({ registrarTesourariaLegada: vi.fn() }));
 vi.mock('@/lib/services/titular-laudo', async (orig) => ({
@@ -29,6 +29,7 @@ vi.mock('@/lib/services/pagamento-cedente', async (orig) => ({
 
 import { POST } from '@/app/api/admin/originacao/route';
 import { EnvioDocusignLaudoAusenteError } from '@/lib/services/cessao-docusign';
+import { IncorporacaoFunilBloqueadaError } from '@/lib/services/originacao';
 import { PagamentoCedenteError } from '@/lib/services/pagamento-cedente';
 import { LiquidacaoCedenteError } from '@/lib/services/liquidacao-cedente';
 import { TitularLaudoError } from '@/lib/services/titular-laudo';
@@ -42,9 +43,9 @@ const req = (body: unknown) =>
 
 beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
-  m.rede = 'TESTNET';
-  m.pixLegado.mockReset().mockResolvedValue({ ok: true });
-  m.cessao.mockReset().mockResolvedValue({ status: 'ENVIADA_DOCUSIGN' });
+  m.cessao.mockReset().mockResolvedValue({ status: 'PENDENTE' });
+  m.enviar.mockReset().mockResolvedValue({ status: 'ENVIADA_DOCUSIGN', envelopeId: 'env_1' });
+  m.incorporar.mockReset().mockResolvedValue({ cotaId: 'cota_1' });
   m.isAdmin.mockReset().mockResolvedValue(true);
   m.csrf.mockReset().mockReturnValue(null);
   m.confirmar.mockReset().mockResolvedValue({ situacao: 'TITULAR_UNICO', pagamentoAutomatico: true });
@@ -150,28 +151,62 @@ describe('erros de domínio do E1-2 → mensagem fixa + código, sem vazar causa
   });
 });
 
-describe('executar-pix-simulado (legado) na mainnet', () => {
-  const legado = { action: 'executar-pix-simulado', cessaoId: 'ces_1' };
-  it('STELLAR_NETWORK=PUBLIC → 409 PIX_SIMULADO_EM_MAINNET, sem executar', async () => {
-    m.rede = 'PUBLIC';
-    const r = await POST(req(legado));
-    expect(r.status).toBe(409);
-    expect((await r.json()).code).toBe('PIX_SIMULADO_EM_MAINNET');
-    expect(m.pixLegado).not.toHaveBeenCalled();
-  });
-  it('testnet: segue funcionando como antes', async () => {
-    const r = await POST(req(legado));
-    expect(r.status).toBe(200);
-    expect(m.pixLegado).toHaveBeenCalledWith({ cessaoId: 'ces_1', operador: 'admin-panel' });
+describe('executar-pix-simulado SAIU da rota (Atlas 13/11): o único pagamento é o pagar-cedente', () => {
+  it('a action não existe mais: 400, e nenhum serviço de Pix é chamado', async () => {
+    const r = await POST(req({ action: 'executar-pix-simulado', cessaoId: 'ces_1' }));
+    expect(r.status).toBe(400);
   });
 });
 
-describe('registrar-cessao — mainnet sem laudo (F-DS2-1)', () => {
-  it('EnvioDocusignLaudoAusenteError → 409 LAUDO_AUSENTE com mensagem fixa', async () => {
-    const erro = new EnvioDocusignLaudoAusenteError();
-    m.cessao.mockRejectedValue(erro);
+describe('registrar-cessao / enviar-cessao (laudo antes do envelope)', () => {
+  it('registrar-cessao só CRIA a cessão (enviar:false), com o operador do servidor', async () => {
     const r = await POST(req({ action: 'registrar-cessao', ofertaId: 'of_1' }));
+    expect(r.status).toBe(200);
+    expect(m.cessao).toHaveBeenCalledWith({ ofertaId: 'of_1', operador: 'admin-panel', enviar: false });
+  });
+
+  it('registrar-cessao: o corpo NÃO pode forçar o envio (enviar no body = 400)', async () => {
+    for (const extra of [{ enviar: true }, { enviar: false }, { operador: 'x' }]) {
+      expect((await POST(req({ action: 'registrar-cessao', ofertaId: 'of_1', ...extra }))).status).toBe(400);
+    }
+    expect(m.cessao).not.toHaveBeenCalled();
+  });
+
+  it('enviar-cessao: chama o serviço só com { cessaoId, operador do servidor }', async () => {
+    const r = await POST(req({ action: 'enviar-cessao', cessaoId: 'ces_1' }));
+    expect(r.status).toBe(200);
+    expect(m.enviar).toHaveBeenCalledWith({ cessaoId: 'ces_1', operador: 'admin-panel' });
+  });
+
+  it.each([{ operador: 'x' }, { enviar: true }, { provedor: 'SIMULADO' }, { laudo: 'a' }])('enviar-cessao: corpo estrito (%o) → 400, sem envio', async (extra) => {
+    expect((await POST(req({ action: 'enviar-cessao', cessaoId: 'ces_1', ...extra }))).status).toBe(400);
+    expect(m.enviar).not.toHaveBeenCalled();
+  });
+
+  it('enviar-cessao sem sessão admin → 401; sem CSRF → o guard', async () => {
+    m.isAdmin.mockResolvedValue(false);
+    expect((await POST(req({ action: 'enviar-cessao', cessaoId: 'ces_1' }))).status).toBe(401);
+    m.isAdmin.mockResolvedValue(true);
+    m.csrf.mockReturnValue(NextResponse.json({ error: 'csrf' }, { status: 403 }));
+    expect((await POST(req({ action: 'enviar-cessao', cessaoId: 'ces_1' }))).status).toBe(403);
+    expect(m.enviar).not.toHaveBeenCalled();
+  });
+
+  it('enviar-cessao sem laudo registrado → 409 LAUDO_AUSENTE com mensagem fixa (qualquer rede)', async () => {
+    const erro = new EnvioDocusignLaudoAusenteError();
+    m.enviar.mockRejectedValue(erro);
+    const r = await POST(req({ action: 'enviar-cessao', cessaoId: 'ces_1' }));
     expect(r.status).toBe(409);
     expect(await r.json()).toEqual({ error: erro.message, code: 'LAUDO_AUSENTE' });
+  });
+});
+
+describe('incorporar-cota — provas do funil (IncorporacaoFunilBloqueadaError → 409)', () => {
+  it.each(['CESSAO_NAO_ASSINADA', 'PIX_NAO_COMPROVADO'] as const)('%s → 409 com o código e mensagem fixa', async (code) => {
+    const erro = new IncorporacaoFunilBloqueadaError(code);
+    m.incorporar.mockRejectedValue(erro);
+    const r = await POST(req({ action: 'incorporar-cota', cessaoId: 'ces_1' }));
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({ error: erro.message, code });
   });
 });

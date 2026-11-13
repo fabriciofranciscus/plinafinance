@@ -29,7 +29,7 @@ export const DOCUSIGN_ENVIO_JANELA_MS = 120_000;
 
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
-/** Mainnet: o instrumento afirma a cota quitada "conforme o laudo"; sem COTA_VALIDADA registrado o envio é recusado (F-DS2-1). */
+/** O instrumento afirma a cota quitada "conforme o laudo": sem COTA_VALIDADA registrado o envio é recusado em QUALQUER rede (F-DS2-1; Atlas 13/11). */
 export class EnvioDocusignLaudoAusenteError extends Error {
   readonly code = 'LAUDO_AUSENTE' as const;
   constructor() {
@@ -78,10 +78,10 @@ export async function enviarCessaoParaAssinatura(input: {
   const lead = cessao.oferta.leadVendedor;
   if (!lead?.email || !lead.nome) throw new Error('Cedente sem nome ou e-mail para assinatura');
 
-  // Laudo (último COTA_VALIDADA da cessão): o PDF o cita. Na mainnet o envio sem laudo é recusado ANTES do claim, para não
-  // publicar "quitada … conforme o laudo (ainda não registrado)"; em testnet segue e o PDF diz que não foi registrado.
+  // Laudo (último COTA_VALIDADA da cessão): o PDF o cita. O envio sem laudo é recusado ANTES do claim, em qualquer rede, para
+  // nunca emitir "quitada … conforme o laudo (ainda não registrado)".
   const hashLaudo = await hashDoLaudo(db, cessao.id);
-  if (STELLAR_NETWORK === 'PUBLIC' && !hashLaudo) throw new EnvioDocusignLaudoAusenteError();
+  if (!hashLaudo) throw new EnvioDocusignLaudoAusenteError();
 
   // Claim no banco: só um chamador por vez chama o DocuSign.
   const limite = new Date(agora - DOCUSIGN_ENVIO_JANELA_MS);

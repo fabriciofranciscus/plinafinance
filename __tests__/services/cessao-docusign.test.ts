@@ -231,9 +231,9 @@ describe('DS2 — resposta incerta e envio que morreu', () => {
   });
 });
 
-describe('DS2 — laudo e mainnet (Vera F-DS2-1)', () => {
-  it('PUBLIC sem laudo: recusa ANTES do claim e do DocuSign (nada criado, nenhum envelope)', async () => {
-    st.rede = 'PUBLIC';
+describe('DS2 — laudo antes do envelope, em QUALQUER rede (Vera F-DS2-1; Atlas 13/11)', () => {
+  it.each(['PUBLIC', 'TESTNET'])('%s sem laudo: recusa ANTES do claim e do DocuSign (nada criado, nenhum envelope)', async (rede) => {
+    st.rede = rede;
     st.laudo = null;
     await expect(registrarCessao(input)).rejects.toMatchObject({ code: 'LAUDO_AUSENTE' });
     expect(st.criar).toHaveLength(0);
@@ -243,16 +243,30 @@ describe('DS2 — laudo e mainnet (Vera F-DS2-1)', () => {
     expect(c?.status ?? 'PENDENTE').toBe('PENDENTE');
   });
 
-  it('PUBLIC com laudo registrado: envia normalmente', async () => {
-    st.rede = 'PUBLIC';
+  it.each(['PUBLIC', 'TESTNET'])('%s com laudo registrado: envia normalmente', async (rede) => {
+    st.rede = rede;
     const r = await registrarCessao(input);
     expect(r.status).toBe('ENVIADA_DOCUSIGN');
     expect(st.criar).toHaveLength(1);
   });
 
-  it('testnet sem laudo: segue (o PDF de demonstração diz que o laudo não foi registrado)', async () => {
+  it('registrarCessao({ enviar: false }) só cria a cessão PENDENTE: nenhum DocuSign, nem sem laudo', async () => {
     st.laudo = null;
-    const r = await registrarCessao(input);
+    const r = await registrarCessao({ ...input, enviar: false });
+    expect(r).toMatchObject({ status: 'PENDENTE', envelopeId: null, jaEnviada: false });
+    expect(st.criar).toHaveLength(0);
+    expect(st.busca).toHaveLength(0);
+    expect([...st.cessoes.values()]).toHaveLength(1);
+  });
+
+  it('depois do laudo, enviarCessaoParaAssinatura envia a cessão criada com enviar:false (sem 2ª cessão)', async () => {
+    st.laudo = null;
+    const criada = await registrarCessao({ ...input, enviar: false });
+    await expect(enviarCessaoParaAssinatura({ cessaoId: criada.cessaoId, operador: 'adm' })).rejects.toMatchObject({ code: 'LAUDO_AUSENTE' });
+    st.laudo = 'b'.repeat(64); // laudo registrado
+    const r = await enviarCessaoParaAssinatura({ cessaoId: criada.cessaoId, operador: 'adm' });
     expect(r.status).toBe('ENVIADA_DOCUSIGN');
+    expect([...st.cessoes.values()]).toHaveLength(1);
+    expect(st.criar).toHaveLength(1);
   });
 });

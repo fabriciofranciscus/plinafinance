@@ -356,6 +356,9 @@ export async function registrarCessao(input: {
   /// F-M1-4: caminho da cessão (default fallback). Define se a taxa de
   /// anuência é gravada na Cessao.
   caminhoCessao?: CaminhoCessao;
+  /// `false`: só cria a cessão (PENDENTE) e NÃO envia ao DocuSign. O envio é um passo à parte (`enviar-cessao`), DEPOIS do
+  /// laudo registrado, para o PDF citar o hash do laudo (Consuelo/Atlas, 13/11). Default `true` (comportamento do DS2).
+  enviar?: boolean;
 }) {
   const oferta = await db.oferta.findUnique({
     where: { id: input.ofertaId },
@@ -383,6 +386,9 @@ export async function registrarCessao(input: {
     }
   }
 
+  if (input.enviar === false) {
+    return { cessaoId: cessao.id, status: cessao.status, envelopeId: cessao.docusignEnvelopeId ?? null, jaEnviada: !!cessao.docusignEnvelopeId };
+  }
   const envio = await enviarCessaoParaAssinatura({ cessaoId: cessao.id, operador: input.operador });
   return { cessaoId: envio.cessaoId, status: envio.status, envelopeId: envio.envelopeId, jaEnviada: envio.jaEnviada };
 }
@@ -492,6 +498,18 @@ export async function executarPixSimulado(input: {
 
 // ─── 6. Incorporação ao pool (wrapper de tokenizacao.incorporarCota) ────────
 
+/** Incorporação do funil recusada por falta de prova (cessão não assinada, Pix não comprovado): nada foi emitido. */
+export class IncorporacaoFunilBloqueadaError extends Error {
+  constructor(readonly code: 'CESSAO_NAO_ASSINADA' | 'PIX_NAO_COMPROVADO') {
+    super(
+      code === 'CESSAO_NAO_ASSINADA'
+        ? 'Incorporação recusada: a cessão precisa estar ASSINADA.'
+        : 'Incorporação recusada: o Pix ao cedente precisa estar COMPROVADO (pagar-cedente).',
+    );
+    this.name = 'IncorporacaoFunilBloqueadaError';
+  }
+}
+
 export async function incorporarCotaDoFunil(input: {
   cessaoId: string;
   localizacaoAprox?: string;
@@ -511,6 +529,15 @@ export async function incorporarCotaDoFunil(input: {
     throw new Error('Pix precisa estar EXECUTADO antes de incorporar');
   }
   if (cessao.cota) throw new Error('Cota já incorporada pra esta cessão');
+  // Atlas/Consuelo (13/11), em QUALQUER rede: só se emite depois das provas. Cessão ASSINADA e Pix COMPROVADO (a
+  // TransferenciaPix do `pagar-cedente`, com comprovante e âncora); `Pagamento` EXECUTADO sozinho não basta (o Pix
+  // legado também o produz, sem comprovante). Sem isso o registro ancorado nasce com elos nulos, sem conserto.
+  if (cessao.status !== CessaoStatus.ASSINADA) throw new IncorporacaoFunilBloqueadaError('CESSAO_NAO_ASSINADA');
+  const transferencia = await db.transferenciaPix.findUnique({
+    where: { cessaoId: cessao.id },
+    select: { status: true },
+  });
+  if (transferencia?.status !== 'COMPROVADA') throw new IncorporacaoFunilBloqueadaError('PIX_NAO_COMPROVADO');
 
   // E1-4: o laudo é registrado ANTES da emissão (por cessão). Sem ele — ou sem
   // anuência — `incorporarCota` recusa.
@@ -538,10 +565,6 @@ export async function incorporarCotaDoFunil(input: {
   });
 
   await db.$transaction(async (tx) => {
-    await tx.cessao.update({
-      where: { id: cessao.id },
-      data: { status: CessaoStatus.ASSINADA }, // ja ta, mas re-assert
-    });
     await tx.leadVendedor.update({
       where: { id: cessao.oferta.leadVendedorId },
       data: { status: LeadVendedorStatus.COTA_INCORPORADA },
