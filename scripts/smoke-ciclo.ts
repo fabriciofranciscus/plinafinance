@@ -4,7 +4,7 @@
  *
  * Roda o código de produção (serviços e `lib/stellar/*`) na ordem do produto e imprime o link do Stellar Expert de cada
  * passo on-chain: ORIGINAR (lead → oferta → cessão → laudo → anuência → titular → Pix ao cedente) → EMITIR (cota) → INVESTIR
- * (swap atômico TESOURO → PLINARF) → RESGATAR (investidor devolve PLINARF) → REALIZAR (comprador, Caminho A). Cada perna roda
+ * (swap atômico TESOURO → PLINARF) → RESGATAR (queima ao NAV, 1 tx em 2 pernas) → REALIZAR (comprador, Caminho A). Cada perna roda
  * DE NOVO e tem de devolver a mesma tx, sem duplicar emissão, pagamento nem âncora; a emissão também prova a RECUPERAÇÃO
  * (queda depois da chain, antes do banco). Sem PII na saída: só ids, hashes e links.
  *
@@ -12,7 +12,7 @@
  * local vazio) e de rede para o friendbot/Horizon da testnet. Ver ops/runbooks/smoke-ciclo.md.
  */
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { instalarBlobEmMemoria, instalarTesouroDescartavel } from './smoke-ciclo/blob-stub';
+import { instalarBlobEmMemoria, instalarDocusignSimulado, instalarTesouroDescartavel } from './smoke-ciclo/blob-stub';
 import { subirBanco, type BancoDescartavel } from './smoke-ciclo/pg';
 
 const OPERADOR = 'smoke-ciclo';
@@ -58,6 +58,7 @@ async function main() {
     BLOB_READ_WRITE_TOKEN: 'token-ficticio-do-smoke', // o código exige um token; o `put` real é trocado pela memória local (blob-stub)
   });
   const blob = instalarBlobEmMemoria();
+  const docusign = instalarDocusignSimulado();
   // Dois avisos de log do código real são esperados aqui e só confundem quem lê: a janela NAV→submit da testnet (rede lenta) e
   // o "retry pós sucesso" do swap (é justamente a idempotência que o smoke testa). Qualquer outro erro continua aparecendo.
   const logErroOriginal = console.error.bind(console);
@@ -80,7 +81,18 @@ async function main() {
   // ── 1. Contas novas da testnet (nenhuma chave do projeto) ─────────────────────────────────────────────────────────
   const { createFundedAccount } = await import('../lib/stellar/account');
   const { txExplorerUrl, accountExplorerUrl } = await import('../lib/stellar/config');
-  const [issuer, distributor, posicao, investidor, tesouroIssuer, comprador] = await Promise.all(Array.from({ length: 6 }, () => createFundedAccount()));
+  // O friendbot da testnet oscila (DNS, 429, fetch failed): tenta de novo com espera antes de desistir.
+  const contaNova = async () => {
+    for (let t = 1; ; t++) {
+      try {
+        return await createFundedAccount();
+      } catch (e) {
+        if (t >= 5) throw new Falha(`friendbot indisponível depois de 5 tentativas (${e instanceof Error ? e.message : 'erro'})`);
+        await new Promise((r) => setTimeout(r, 2000 * t));
+      }
+    }
+  };
+  const [issuer, distributor, posicao, investidor, tesouroIssuer, comprador] = await Promise.all(Array.from({ length: 6 }, () => contaNova()));
   Object.assign(process.env, {
     STELLAR_ISSUER_SECRET: issuer!.secret(),
     STELLAR_ISSUER_PUBLIC: issuer!.publicKey(),
@@ -103,7 +115,9 @@ async function main() {
   const real = await import('../lib/services/realizacao');
   const { confirmarTitularDoLaudo } = await import('../lib/services/titular-laudo');
   const { pagarCedenteDaCessao } = await import('../lib/services/pagamento-cedente');
-  const { buildLiquidarPlinarfXdr, submitLiquidacao } = await import('../lib/services/liquidacao');
+  const { cotarResgate, submeterResgate } = await import('../lib/services/resgate');
+  const { enviarCessaoParaAssinatura } = await import('../lib/services/cessao-docusign');
+  const { processarEnvelopeDocusign } = await import('../lib/services/cessao-assinatura');
   const { fetchSupplyDasClasses } = await import('../lib/stellar/supply');
   const { Asset, Keypair, Operation, TransactionBuilder, Transaction, BASE_FEE } = await import('@stellar/stellar-sdk');
   const { NextRequest } = await import('next/server');
@@ -152,12 +166,21 @@ async function main() {
     if (verbose) ok(`lead — ${link(lead.txHash)}`);
     const oferta = await o.gerarOferta({ leadVendedorId: lead.leadId, tipoBem: 'IMOVEL', valorCarta: '100000', administradora: 'Administradora de Teste', desagioAquisicao: '0.20', prazoRestanteMeses: 12, operador: OPERADOR });
     await o.aceitarOferta(oferta.id, cedente.id);
-    const cessao = await o.registrarCessao({ ofertaId: oferta.id, operador: OPERADOR });
-    if (verbose) ok(`cessão assinada — ${link(cessao.txHash)}`);
+    // DS2: a cessão nasce PENDENTE e só é ENVIADA depois do laudo (o PDF cita o hash do laudo).
+    const cessao = await o.registrarCessao({ ofertaId: oferta.id, operador: OPERADOR, enviar: false });
     const laudo = await o.registrarLaudoDaCessao({ cessaoId: cessao.cessaoId, laudoUrl: `https://example.org/smoke-ciclo/laudo-${rotulo}-${sufixo}.pdf`, operador: OPERADOR });
     if (verbose) ok(`laudo da cessão ancorado — ${link(laudo.txHash)}`);
     await o.registrarAnuencia({ hashValidacao: laudo.hashValidacao, status: 'DECLARADA_PENDENTE', operador: OPERADOR });
     if (verbose) ok('anuência registrada como DECLARADA_PENDENTE (só testnet; não finge ser a real)');
+    const envio = await enviarCessaoParaAssinatura({ cessaoId: cessao.cessaoId, operador: OPERADOR });
+    const envioDeNovo = await enviarCessaoParaAssinatura({ cessaoId: cessao.cessaoId, operador: OPERADOR });
+    exigir(envio.jaEnviada === false && envioDeNovo.jaEnviada === true && envioDeNovo.envelopeId === envio.envelopeId, 'reenviar a cessão criou outro envelope');
+    const assinada = await processarEnvelopeDocusign(envio.envelopeId);
+    exigir(assinada.resultado === 'ASSINADA' && assinada.txHash && assinada.hashDocumento, `cessão não concluída (${assinada.resultado})`);
+    if (verbose) ok(`cessão enviada ao DocuSign (simulado), assinada e o PDF ancorado: SHA-256 ${assinada.hashDocumento} — ${link(assinada.txHash!)}`);
+    const assinadaDeNovo = await processarEnvelopeDocusign(envio.envelopeId);
+    exigir(assinadaDeNovo.resultado === 'JA_ASSINADA' && assinadaDeNovo.txHash === assinada.txHash && (await contarAncoras(assinada.hashDocumento!)) === 1 && docusign.envelopes.size === (rotulo === 'a' ? 1 : 2), 're-executar a cessão duplicou envelope ou âncora');
+    if (verbose) ok('re-executar o envio e a conclusão: mesmo envelope, mesma tx, 1 âncora do PDF na rede (nada duplicado)');
     await confirmarTitularDoLaudo({ cessaoId: cessao.cessaoId, situacao: 'TITULAR_UNICO', atestado: true, operador: OPERADOR });
     if (verbose) ok('titular do laudo atestado (HMAC do CPF, nunca o CPF)');
     const pago = await pagarCedenteDaCessao({ cessaoId: cessao.cessaoId, operador: OPERADOR });
@@ -166,7 +189,7 @@ async function main() {
     return { cessaoId: cessao.cessaoId, pagoTx: pago.txHash!, pagoSha: pago.sha256! };
   }
 
-  titulo(1, TOTAL, 'ORIGINAR — cedente (KYC aprovado, CPF sintético) → lead → oferta → cessão → laudo → anuência → titular → Pix SIMULADO');
+  titulo(1, TOTAL, 'ORIGINAR — cedente (KYC aprovado, CPF sintético) → lead → oferta → cessão → laudo → anuência → envio e assinatura (DocuSign simulado) → titular → Pix SIMULADO');
   const A = await originar('a', true);
   const ancorasPix = await contarAncoras(A.pagoSha);
   exigir(ancorasPix === 1, `esperava 1 âncora do comprovante, achei ${ancorasPix}`);
@@ -229,9 +252,6 @@ async function main() {
   await authorizeTrustline(issuerSigner(), inv.publicKey());
   await createTrustline(invSigner, tesouroIssuer!.publicKey(), 'TESOURO');
   const pagTesouro = await pagarAtivo(tesouroIssuer!, inv.publicKey(), 'TESOURO', '1000.0000000');
-  const distSigner = new KeypairSigner(distributor!.secret());
-  await createTrustline(distSigner, issuer!.publicKey()); // o distributor recebe PLINARF no resgate
-  await authorizeTrustline(issuerSigner(), distributor!.publicKey());
   ok(`investidor com trustline PLINARF autorizada e 1000 TESOURO (ativo-ponte descartável) — ${link(pagTesouro.hash)}`);
   const investidorRow = await db.investidor.create({
     data: { nome: 'Investidor de Teste', email: 'investidor@example.invalid', publicKey: inv.publicKey(), privyId: `did:privy:e2e-${inv.publicKey()}`, kycAprovado: true, status: 'AUTORIZADO', isSyntheticCpf: true },
@@ -269,18 +289,26 @@ async function main() {
   ok('re-executar o swap: mesma tx (idempotent), supply igual, 1 escrituração de SUBSCRICAO');
 
   // ── 6. RESGATAR ───────────────────────────────────────────────────────────────────────────────────────────────
-  titulo(5, TOTAL, 'RESGATAR — o investidor devolve PLINARF ao distributor (BRL simulado no MVP testnet)');
+  titulo(5, TOTAL, 'RESGATAR — cotação persistida; 1 tx, 2 pernas: o investidor queima PLINARF no issuer e recebe TESOURO do distributor (E2-6)');
+  const supplyAntesResgate = await supplyTotal();
   const quantia = new Prisma.Decimal(plinarfComprado).div(2).toFixed(7);
-  const liq = await buildLiquidarPlinarfXdr({ investorPubkey: inv.publicKey(), amount: quantia });
-  const txLiq = new Transaction(liq.xdr, networkPassphrase);
-  const assinatura = `0x${inv.sign(txLiq.hash()).toString('hex')}`;
-  const entrada = { xdr: liq.xdr, investorPubkey: inv.publicKey(), signatureHex: assinatura, investidorId: investidorRow.id, privyId: investidorRow.privyId! };
-  const r1 = await submitLiquidacao(entrada);
-  ok(`resgate de ${quantia} PLINARF (≈ R$ ${r1.brlEquivalente}) — ${link(r1.liquidationTxHash)}; auditoria ancorada — ${link(r1.auditTxHash)}`);
-  const r2 = await submitLiquidacao(entrada);
-  exigir(r2.liquidationTxHash === r1.liquidationTxHash, 'reenviar o resgate gerou outra tx');
-  exigir((await db.eventoAudit.count({ where: { acao: 'PLINARF_LIQUIDADO' } })) === 1, 'reenviar o resgate duplicou a auditoria');
-  ok('re-executar o resgate: mesma tx, 1 auditoria PLINARF_LIQUIDADO (nada duplicado)');
+  const tesAntes = await getAssetBalance(inv.publicKey(), 'TESOURO', tesouroIssuer!.publicKey());
+  // O preço do TESOURO vem do swap acima (R$ 1000 por 1000 TESOURO), que é também a referência independente da guarda de ±2%.
+  const cot = await cotarResgate({ investidorId: investidorRow.id, investorPubkey: inv.publicKey(), amountPlinarf: quantia, precoTesouroBrl: '1', bridgeAsset: { code: 'TESOURO', issuer: tesouroIssuer!.publicKey() } });
+  const txRes = new Transaction(cot.xdr, networkPassphrase);
+  txRes.sign(inv);
+  const entradaResgate = { investidor: { id: investidorRow.id, publicKey: inv.publicKey(), privyId: investidorRow.privyId! }, quoteId: cot.quoteId, signedXdr: txRes.toXDR(), obterPrecoTesouroBrl: async () => '1' };
+  const r1 = await submeterResgate(entradaResgate);
+  ok(`resgate de ${quantia} PLINARF (≈ R$ ${cot.brlEquivalente}, NAV ${cot.navPorTokenNaCotacao}): queima + pagamento em TESOURO — ${link(r1.txHash)}`);
+  const supplyDepoisResgate = await supplyTotal();
+  exigir(supplyAntesResgate.minus(supplyDepoisResgate).eq(new Prisma.Decimal(quantia)), 'o supply na rede não caiu exatamente a quantia queimada');
+  const tesDepois = await getAssetBalance(inv.publicKey(), 'TESOURO', tesouroIssuer!.publicKey());
+  exigir(new Prisma.Decimal(tesDepois).gt(new Prisma.Decimal(tesAntes)), 'o investidor não recebeu TESOURO');
+  ok(`supply na rede ${supplyAntesResgate.toFixed(7)} → ${supplyDepoisResgate.toFixed(7)} (queimou ${quantia}); investidor recebeu ${new Prisma.Decimal(tesDepois).minus(tesAntes).toFixed(7)} TESOURO`);
+  const r2 = await submeterResgate(entradaResgate);
+  exigir(r2.txHash === r1.txHash && (await supplyTotal()).eq(supplyDepoisResgate), 'reenviar o resgate gerou outra tx ou queimou de novo');
+  exigir((await db.resgateCotacao.count({ where: { consumedAt: { not: null } } })) === 1 && (await db.movimentoFundo.count({ where: { tipo: 'RESGATE_PAGO' } })) === 1, 'reenviar o resgate duplicou a escrituração');
+  ok('re-executar o resgate: mesma tx, supply igual, 1 cotação consumida, 1 movimento RESGATE_PAGO (nada duplicado)');
 
   // ── 7. REALIZAR ───────────────────────────────────────────────────────────────────────────────────────────────
   titulo(6, TOTAL, 'REALIZAR — comprador reserva a cota A e a realização (Caminho A) entra no razão');
@@ -303,10 +331,10 @@ async function main() {
   // ── 8. RECONCILIAÇÃO ──────────────────────────────────────────────────────────────────────────────────────────
   titulo(7, TOTAL, 'RECONCILIAR — o que o banco diz = o que a rede diz');
   const cotas = await db.cota.findMany({ select: { tokensEmitidos: true } });
-  const esperado = cotas.reduce((s, c) => s.plus(c.tokensEmitidos), new Prisma.Decimal(0)).plus(plinarfComprado);
+  const esperado = cotas.reduce((s, c) => s.plus(c.tokensEmitidos), new Prisma.Decimal(0)).plus(plinarfComprado).minus(quantia);
   const supplyFinal = await supplyTotal();
   exigir(supplyFinal.eq(esperado), `supply na rede ${supplyFinal.toFixed(7)} ≠ cotas + subscrição ${esperado.toFixed(7)}`);
-  ok(`supply PLINARF na rede ${supplyFinal.toFixed(7)} = tokens das 2 cotas + subscrição (nenhuma emissão duplicada ou perdida)`);
+  ok(`supply PLINARF na rede ${supplyFinal.toFixed(7)} = tokens das 2 cotas + subscrição − resgate queimado (nenhuma emissão duplicada ou perdida)`);
   const holding = await db.holdingPLINARF.findFirst({ where: { investidorId: investidorRow.id } });
   const saldoRede = await getAssetBalance(inv.publicKey(), 'PLINARF', issuer!.publicKey());
   exigir(holding && new Prisma.Decimal(holding.saldo).eq(new Prisma.Decimal(saldoRede)), 'a posição do investidor no banco ≠ saldo na rede');
