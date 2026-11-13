@@ -106,8 +106,14 @@ export function ConfirmacaoScreen({
         <div className="mx-auto mt-8 grid max-w-xl grid-cols-3 gap-px bg-base/10 border border-light-hairline text-left">
           <Stat k="Carta de crédito" v={BRL.format(cota.valorCarta)} />
           <Stat k="Pago" v={BRL.format(paga)} />
-          <Stat k="Economia" v={BRL.format(economia)} accent />
+          <Stat k="Diferença para o valor de face" v={BRL.format(economia)} accent />
         </div>
+      )}
+
+      {cota && (
+        <p className="mx-auto mt-3 max-w-xl font-text text-xs text-base/70 text-left leading-relaxed">
+          Nesta fase, só são aceitas cotas quitadas (sem parcelas restantes).
+        </p>
       )}
 
       <div className="mx-auto mt-8 max-w-xl border border-light-hairline p-4 text-left">
