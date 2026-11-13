@@ -173,6 +173,11 @@ async function validarRegistro(
   let j: Record<string, unknown>;
   try { j = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>; } catch { return 'REGISTRO_NAO_E_JSON'; }
   if (!j || typeof j !== 'object' || Array.isArray(j)) return 'REGISTRO_NAO_E_JSON';
+  // Formato do evento COTA_INCORPORADA (E1-p): mesmos dados, nomes do contrato 2026-11-13-e1-p-incorporacao-ancorada.
+  if (j.tipo === 'COTA_INCORPORADA') {
+    j = { ...j, valor: j.valorIncorporadoBrl, quantidade: j.tokensEmitir, navPorToken: j.navPorTokenUsado };
+    if (j.hashLaudo !== cota.hashValidacao) return 'REGISTRO_DIVERGE: hashLaudo ≠ laudo da cota';
+  }
   const faltam = ['cotaId', 'cessaoId', 'valor', 'navPorToken', 'quantidade', 'issuer'].filter((k) => !(k in j));
   if (faltam.length) return `REGISTRO_INCOMPLETO: faltam ${faltam.join(', ')}`;
   if (j.cotaId !== cota.id) return 'REGISTRO_DE_OUTRA_COTA: cotaId ≠ cota';

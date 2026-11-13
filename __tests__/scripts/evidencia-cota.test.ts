@@ -210,3 +210,27 @@ describe('E1-P sobre a main 4f337e8 (D5 do Atlas)', () => {
     expect(e.conferemExcetoPendentes).toBe(false);
   });
 });
+
+describe('E1-p: registro no formato do evento COTA_INCORPORADA (a5c1258)', () => {
+  const novo = (over: Record<string, unknown> = {}) => {
+    const r = {
+      tipo: 'COTA_INCORPORADA', versao: 1, cotaId: 'c1', cessaoId: 'cessao1', hashLaudo: H_LAUDO,
+      sha256PdfCessao: null, comprovantePixSha256: null, comprovantePixAncoraTxHash: null,
+      valorIncorporadoBrl: '100.00', tokensEmitir: '10.0000000', navPorTokenUsado: '1.00000000', issuer: ISSUER, asset: 'PLINARF',
+      ...over,
+    };
+    return regBytes(Buffer.from(JSON.stringify(r)));
+  };
+  it('confere com os nomes novos (valorIncorporadoBrl, tokensEmitir, navPorTokenUsado)', async () => {
+    const e = await run(mundo({ registroIncorporacao: async () => novo() }));
+    expect(passo(e, 'INCORPORACAO')).toMatchObject({ confere: true });
+  });
+  it('hashLaudo do registro ≠ laudo da cota reprova', async () => {
+    const e = await run(mundo({ registroIncorporacao: async () => novo({ hashLaudo: 'f'.repeat(64) }) }));
+    expect(passo(e, 'INCORPORACAO').motivo).toMatch(/hashLaudo/);
+  });
+  it('tokensEmitir ≠ tokens emitidos reprova', async () => {
+    const e = await run(mundo({ registroIncorporacao: async () => novo({ tokensEmitir: '11.0000000' }) }));
+    expect(passo(e, 'INCORPORACAO').motivo).toMatch(/quantidade/);
+  });
+});

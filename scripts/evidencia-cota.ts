@@ -7,11 +7,11 @@
  * passo PENDENTE (funcionalidade fora desta base, sem nenhum artefato); 1 algum passo não fecha.
  * Saída: exports/evidencia-cota-<id>.{md,json} (gitignored) + tabela no terminal.
  *
- * Pathnames do Blob (sobrescreva com env se o dono mudar): EVIDENCIA_BLOB_CESSAO_PATH (use {cessaoId}) e
- * EVIDENCIA_BLOB_INCORPORACAO_PATH (use {cotaId}). Padrões: DS3 `cessoes/{cessaoId}/assinada.pdf`; E1-2: o comprovante
- * vem do banco (TransferenciaPix.comprovante + comprovanteSha256 + ancoraTxHash + e2eId), não do Blob; incorporação `cotas/{cotaId}/incorporacao.json` (Bento, ainda não publicado).
- * Incorporação: a tx da âncora é achada no histórico do distributor por Memo.hash = sha256(bytes) (sem confiar no banco);
- * o hash REGISTRADO no banco fica null até o Bento publicar o campo (fail-closed: reprova SEM_HASH_REGISTRADO).
+ * Pathname do Blob (sobrescreva com env se o dono mudar): EVIDENCIA_BLOB_CESSAO_PATH (use {cessaoId}); padrão
+ * DS3 `cessoes/{cessaoId}/assinada.pdf`. E1-2: o comprovante
+ * vem do banco (TransferenciaPix.comprovante + comprovanteSha256 + ancoraTxHash + e2eId), não do Blob.
+ * Incorporação (E1-p): registro canônico no EventoAudit COTA_INCORPORADA (payloadJson.registroCanonico, payloadHash,
+ * payloadJson.ancoraTxHash); o núcleo recalcula o SHA-256 dos bytes e confere com o memo da âncora e a ordem antes da emissão.
  */
 import { config as loadEnv } from 'dotenv';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -42,31 +42,25 @@ async function main() {
   if (STELLAR_NETWORK !== 'TESTNET') throw new Error('Recusado: evidência só roda contra TESTNET.');
   const { db } = await import('../lib/db');
   const { sha256OfPayload } = await import('../lib/stellar/audit');
-  const { issuerSigner, distributorSigner } = await import('../lib/stellar/signer');
+  const { issuerSigner } = await import('../lib/stellar/signer');
   const { assetCode } = await import('../lib/stellar/config');
-  const { sha256Hex } = await import('./evidencia-cota/core');
+  const { bytesCanonicos } = await import('../lib/services/json-canonico');
 
   const caminho = (env: string | undefined, padrao: string, id: string) => (env ?? padrao).replace('{cessaoId}', id);
 
   const fontes: Fontes = {
     hashPayload: sha256OfPayload,
     ativo: () => ({ code: assetCode, issuer: issuerSigner().publicKey() }),
+    // E1-p (a5c1258): o registro canônico da incorporação fica no EventoAudit COTA_INCORPORADA da cota:
+    // bytes = RFC 8785 de payloadJson.registroCanonico; hash registrado = payloadHash; tx = payloadJson.ancoraTxHash.
     async registroIncorporacao(cotaId) {
-      const bytes = await lerBlob(caminho(process.env.EVIDENCIA_BLOB_INCORPORACAO_PATH, 'cotas/{cotaId}/incorporacao.json', cotaId).replace('{cotaId}', cotaId));
-      if (!bytes) return null;
-      // Âncora própria: payment do distributor com Memo.hash = sha256(bytes) (só leitura do histórico).
-      const alvo = Buffer.from(sha256Hex(bytes), 'hex').toString('base64');
-      const dist = distributorSigner().publicKey();
-      let url: string | null = `${horizonUrl}/accounts/${dist}/transactions?order=desc&limit=200`;
-      for (let pag = 0; url && pag < 5; pag++) {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`Horizon ${res.status} ao ler o histórico do distributor`);
-        const j = (await res.json()) as { _embedded: { records: { hash: string; memo_type?: string; memo?: string }[] }; _links: { next: { href: string } } };
-        const achou = j._embedded.records.find((r) => r.memo_type === 'hash' && r.memo === alvo);
-        if (achou) return { bytes, hashRegistrado: null, txHash: achou.hash };
-        url = j._embedded.records.length === 200 ? j._links.next.href : null;
-      }
-      return { bytes, hashRegistrado: null, txHash: null };
+      const ev = await db.eventoAudit.findFirst({
+        where: { cotaId, acao: 'COTA_INCORPORADA' },
+        select: { payloadJson: true, payloadHash: true },
+      });
+      const p = ev?.payloadJson as { registroCanonico?: unknown; ancoraTxHash?: string } | null | undefined;
+      if (!p?.registroCanonico) return null;
+      return { bytes: bytesCanonicos(p.registroCanonico), hashRegistrado: ev?.payloadHash ?? null, txHash: p.ancoraTxHash ?? null };
     },
     async cota(id) {
       const c = await db.cota.findUnique({ where: { id } });
