@@ -42,6 +42,11 @@ interface PipelineLead {
   }>;
 }
 
+const CESSAO_STATUS_LABEL: Record<string, string> = {
+  ENVIADA_DOCUSIGN: 'Aguardando assinatura',
+  ASSINADA: 'Assinada',
+};
+
 const STATUS_LABEL: Record<string, string> = {
   NOVO: 'Novo',
   CONTATADO: 'Contatado',
@@ -179,8 +184,18 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
         {cessao && (
           <div className="border-l-2 border-primary pl-4 py-2">
             <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
-              Cessão · {cessao.status}
+              Cessão · {CESSAO_STATUS_LABEL[cessao.status] ?? cessao.status}
             </p>
+            {cessao.status === 'ENVIADA_DOCUSIGN' && (
+              <p
+                role="status"
+                data-testid="cessao-aguardando-assinatura"
+                className="mt-1 font-text text-xs text-base/70"
+              >
+                Termo enviado por DocuSign. O Pix só pode ser executado depois da
+                assinatura.
+              </p>
+            )}
             {cessao.onChainTxHash && (
               <a
                 href={explorerTx(cessao.onChainTxHash)}
@@ -198,7 +213,8 @@ function LeadCard({ lead }: { lead: PipelineLead }) {
               Ver comprovante
             </a>
 
-            {!pagamento || pagamento.status !== 'EXECUTADO' ? (
+            {cessao.status !== 'ENVIADA_DOCUSIGN' &&
+            (!pagamento || pagamento.status !== 'EXECUTADO') ? (
               <div className="mt-2">
                 <button
                   onClick={() => call('executar-pix-simulado', { cessaoId: cessao.id })}

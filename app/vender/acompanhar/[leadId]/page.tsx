@@ -103,6 +103,7 @@ export default async function AcompanharPage({ params }: PageProps) {
     cessaoTx: txLink(cessao?.onChainTxHash),
     pixTx: txLink(pagamento?.onChainTxHash),
     temCota: !!cessao?.cota,
+    aguardandoAssinatura: cessao?.status === 'ENVIADA_DOCUSIGN',
   };
 
   const encerrado = isEncerrado(lead.status);

@@ -42,6 +42,8 @@ export interface AcompanharData {
   cessaoTx: TxLink | null;
   pixTx: TxLink | null;
   temCota: boolean;
+  /** DS5: o termo foi enviado por DocuSign (cessão `ENVIADA_DOCUSIGN`) e falta a assinatura do cedente. */
+  aguardandoAssinatura?: boolean;
 }
 
 const BRL = new Intl.NumberFormat('pt-BR', {
@@ -71,6 +73,9 @@ export default function AcompanharView({ data }: { data: AcompanharData }) {
   const [erro, setErro] = useState<string | null>(null);
 
   const ehAtual = view === data.etapaAtual;
+  // DS5: entre o aceite e a assinatura a etapa 4 mostra o estado real, em vez
+  // do texto genérico de cessão.
+  const aguardando = !!data.aguardandoAssinatura && view === 4 && ehAtual;
   const descricao = ehAtual
     ? data.contextoDescricao
     : DESCRICAO_ETAPA[view] ?? '';
@@ -110,7 +115,7 @@ export default function AcompanharView({ data }: { data: AcompanharData }) {
           {ETAPAS_VENDER[view]}
         </h2>
         <p className="font-text text-sm text-base/70 mt-2 leading-relaxed">
-          {descricao}
+          {aguardando ? TEXTO_AGUARDANDO_ASSINATURA : descricao}
         </p>
 
         {view === 2 && <PainelValidacao consentTx={data.consentTx} />}
@@ -128,6 +133,7 @@ export default function AcompanharView({ data }: { data: AcompanharData }) {
             cedenteNome={data.cedenteNome}
             cessaoId={data.cessaoId}
             cessaoTx={data.cessaoTx}
+            aguardandoAssinatura={aguardando}
           />
         )}
         {view === 5 && (
@@ -355,14 +361,19 @@ function OfertaLinha({
 
 // ─── Painel: Cessão digital ──────────────────────────────────────────────────
 
+const TEXTO_AGUARDANDO_ASSINATURA =
+  'O termo de cessão foi enviado para a sua assinatura. Assim que você assinar, o status avança.';
+
 function PainelCessao({
   cedenteNome,
   cessaoId,
   cessaoTx,
+  aguardandoAssinatura = false,
 }: {
   cedenteNome: string | null;
   cessaoId: string | null;
   cessaoTx: TxLink | null;
+  aguardandoAssinatura?: boolean;
 }) {
   return (
     <div className="mt-6 border-t border-light-hairline pt-6">
@@ -384,16 +395,29 @@ function PainelCessao({
         </div>
       </div>
 
-      <div className="mt-4">
-        <button
-          type="button"
-          disabled
-          className="bg-base/40 text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 cursor-not-allowed"
+      {aguardandoAssinatura ? (
+        <p
+          role="status"
+          data-testid="aguardando-assinatura"
+          className="mt-4 border-l-4 border-l-base border border-light-hairline p-4 font-text text-sm text-base/80"
         >
-          Assinar com e-CPF via DocuSign
-        </button>
-        <span className="ml-3 font-mono text-[11px] text-base/50">em breve</span>
-      </div>
+          <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 block mb-1">
+            Aguardando assinatura
+          </span>
+          Enviado por DocuSign. Nenhum pagamento é feito antes da sua assinatura.
+        </p>
+      ) : (
+        <div className="mt-4">
+          <button
+            type="button"
+            disabled
+            className="bg-base/40 text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 cursor-not-allowed"
+          >
+            Assinar com e-CPF via DocuSign
+          </button>
+          <span className="ml-3 font-mono text-[11px] text-base/50">em breve</span>
+        </div>
+      )}
 
       {(cessaoTx || cessaoId) && (
         <div className="mt-4 space-y-2">
