@@ -140,7 +140,7 @@ It checks that the file is canonical JSON (RFC 8785), that the anchor transactio
 (source = the distributor you passed), that the distributor is listed in `ACCOUNTS` of the public `stellar.toml`, that the NAV
 is recomputed from the file, and that circulating supply and trustline totals match Horizon.
 
-Exit codes: `0` CONFERIDO · `1` REPROVADO (a check failed) · `2` NÃO CONFERIDO (nothing failed, but something could not be checked, e.g. balances that changed after the snapshot).
+Exit codes: `0` CONFERIDO · `1` REPROVADO (a check failed) · `2` NÃO CONFERIDO (nothing failed, but something could not be checked, e.g. balances that changed after the snapshot) · `64` usage error (missing or invalid arguments; nothing was checked).
 
 Output on 2026-11-14 (abridged; real run, exit `0`):
 
@@ -163,10 +163,10 @@ includes the proof quota is verified the same way; its quota is reported separat
 
 Lists validation → cession → settlement → incorporation (canonical record, anchored before the issuance) → issuance, with the
 document and SHA-256 of each step, and checks `sha256(stored document) == hash in the database == Memo.hash on-chain`.
-Read-only, testnet only (it refuses `PUBLIC`). Exit: `0` every step checks out · `2` checks out but a step is pending · `1` a step is not proven.
+Read-only, testnet only (it refuses `PUBLIC`). Exit: `0` every step checks out · `1` a step is not proven (a missing artifact counts as a failure, not as pending).
 
 **This one cannot be run from the outside:** it reads Plina's database and private Blob (it needs the project's `DATABASE_URL`,
-`BLOB_READ_WRITE_TOKEN` and the issuer configuration). The operators run it and publish the output (`exports/evidencia-cota-<cotaId>.md` and `.json`,
+`BLOB_READ_WRITE_TOKEN` and `STELLAR_ISSUER_PUBLIC`, a public key; no signing secret). The operators run it and publish the output (`exports/evidencia-cota-<cotaId>.md` and `.json`,
 no personal data). What a reviewer can do **without** access is re-check each row of that published table against the chain:
 
 ```bash
