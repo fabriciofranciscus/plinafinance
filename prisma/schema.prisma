@@ -187,6 +187,8 @@ enum AcaoAudit {
   CESSAO_RECUSADA_DOCUSIGN
   // TES-3 — queima do excesso de PLINARF da posição da Plina (resíduo de testes); evento do mesmo registro do memo
   TESOURARIA_EXCESSO_QUEIMADA
+  // TES-2 — tokens da tesouraria legada do distributor movidos para a conta de posição da Plina (evento do registro do memo)
+  TESOURARIA_LEGADA_MOVIDA
 }
 
 // Funil vendedor
