@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
 import { setLocale } from '@/app/actions/set-locale';
 import type { LandingV2, Locale } from '@/lib/i18n/types';
 import { Icon } from './icons';
@@ -13,7 +12,6 @@ type Props = { dict: LandingV2; locale: Locale };
  * spec: o Atlas pediu para mantê-lo; fica na navegação, no mesmo estilo dos links.
  */
 export function TopBar({ dict, locale }: Props) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [, startTransition] = useTransition();
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -39,7 +37,9 @@ export function TopBar({ dict, locale }: Props) {
     if (next === locale) return;
     startTransition(async () => {
       await setLocale(next);
-      router.refresh();
+      // Recarrega em vez de router.refresh(): o React não atualiza o conteúdo de <noscript> no cliente,
+      // e a nota sem JavaScript ficaria no idioma anterior (Íris LV7).
+      window.location.reload();
     });
   }
 

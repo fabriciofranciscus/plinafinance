@@ -26,7 +26,8 @@
 
   background: var(--color-sheet-white);
   color: var(--ink);
-  font-family: var(--font-text);
+  /* Texto-base da referência (Íris LV7 #1): Satoshi 300, 17 px, entrelinha 1,65. */
+  font: 300 17px/1.65 var(--font-text);
   -webkit-font-smoothing: antialiased;
 }
 .ld .dark {
@@ -90,6 +91,10 @@ body:has(.ld) > .skip-link {
   display: none;
 }
 .ld .skip {
+  /* Alvo de toque de 44 px (Íris LV7 #3). */
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   position: absolute;
   top: -100px;
   left: 16px;
@@ -131,6 +136,10 @@ body:has(.ld) > .skip-link {
   height: 92px;
 }
 .ld .brand {
+  /* Alvo de toque de 44 px sem mudar o tamanho do logotipo (Íris LV7 #3). */
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   font: 600 34px/1 var(--font-title);
   letter-spacing: -0.035em;
 }
@@ -1357,6 +1366,8 @@ body:has(.ld) > .skip-link {
   .ld .status-intro > p,
   .ld .paths-intro > p {
     max-width: none;
+    /* Referência no celular: 24 px (Íris LV7 #2). */
+    margin-top: 24px;
   }
   .ld .contact-intro {
     padding-top: 0;
@@ -1368,6 +1379,8 @@ body:has(.ld) > .skip-link {
   .ld .asset-document {
     min-height: 330px;
     padding: 28px;
+    /* A referência não tem espaço entre os blocos do cartão; com 32 px ele passava de 330 para 350 px (Íris LV7 #2). */
+    gap: 0;
   }
   .ld .asset-document > p {
     font-size: 16px;
