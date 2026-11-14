@@ -17,6 +17,7 @@ const toml = createRequire(require.resolve('@stellar/stellar-sdk'))('toml') as {
 };
 
 const ISSUER = 'GDE7SOUNDSCNAFYX7XX7KIHRD4QBLORDNNBSGKM3JTQ7GP26NTQRI5UP';
+const DISTRIBUTOR = 'GA5NGV3RWPN7VLI7TG7BF6IBPWVMDNAO7HIRJWD3FKFOTAAKPJYCKMXB';
 
 async function servir() {
   const res = await GET();
@@ -33,6 +34,7 @@ function moeda(doc: Record<string, unknown>) {
 beforeEach(() => {
   vi.unstubAllEnvs();
   vi.stubEnv('STELLAR_ISSUER_PUBLIC', ISSUER);
+  vi.stubEnv('STELLAR_DISTRIBUTOR_PUBLIC', DISTRIBUTOR);
   findUnique.mockReset().mockResolvedValue({ issuerPubkey: ISSUER });
 });
 
@@ -138,5 +140,23 @@ describe('supply (SEP-1: exatamente um entre is_unlimited, fixed_number, max_num
     expect(c.is_unlimited).toBe(true);
     expect(c).not.toHaveProperty('fixed_number');
     expect(c).not.toHaveProperty('max_number');
+  });
+});
+
+describe('ACCOUNTS (S4 do Argus; SEP-1: contas controladas pelo domínio)', () => {
+  it('lista exatamente o issuer e o distributor, ambos do env do deploy', async () => {
+    const { doc } = await servir();
+    expect(doc.ACCOUNTS).toEqual([ISSUER, DISTRIBUTOR]);
+  });
+
+  it.each([
+    ['ausente', undefined],
+    ['vazio', ''],
+    ['inválido', 'GDIST'],
+  ])('distributor %s → 500 sem toml', async (_n, valor) => {
+    vi.stubEnv('STELLAR_DISTRIBUTOR_PUBLIC', valor as unknown as string);
+    const res = await GET();
+    expect(res.status).toBe(500);
+    expect(await res.text()).not.toMatch(/ACCOUNTS|CURRENCIES/);
   });
 });

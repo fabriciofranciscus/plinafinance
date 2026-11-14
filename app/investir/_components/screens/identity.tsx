@@ -29,6 +29,8 @@ export function IdentityScreen({
   onTrackChange,
   institutionalProfile,
   onInstitutionalChange,
+  kycPending = false,
+  kycTimedOut = false,
 }: {
   onboard: OnboardData | null;
   onboarding: boolean;
@@ -44,6 +46,9 @@ export function IdentityScreen({
   onTrackChange: (t: InvestorTrack) => void;
   institutionalProfile: InstitutionalProfile | null;
   onInstitutionalChange: (p: InstitutionalProfile) => void;
+  /** E2-3: verificação por organização ainda pendente (chega por webhook). */
+  kycPending?: boolean;
+  kycTimedOut?: boolean;
 }) {
   return (
     <div>
@@ -167,6 +172,22 @@ export function IdentityScreen({
                   </span>
                 }
               />
+              {onboard.kycStatus !== 'approved' && (
+                <DataRow
+                  k="Verificação"
+                  v={
+                    <span
+                      role="status"
+                      data-testid="kyc-pending"
+                      className="font-text text-xs text-base/75"
+                    >
+                      {kycTimedOut
+                        ? 'A verificação ainda não foi confirmada pela anchor. Recarregue a página mais tarde.'
+                        : 'Aguardando a confirmação da anchor (webhook assinado). Esta tela atualiza sozinha.'}
+                    </span>
+                  }
+                />
+              )}
               {onboard.fundedNow && (
                 <DataRow
                   k="Funding"
@@ -185,9 +206,10 @@ export function IdentityScreen({
               </p>
               <p className="font-text text-sm text-base/80 leading-relaxed">
                 Pra operar o swap atômico (whitepaper §6.6), sua wallet precisa
-                de duas trustlines: <Term>TESOURO</Term> (bridge da anchor) e
-                PLINA-RF. Você assina os dois <Term>trustline</Term> hashes via
-                Privy uma única vez.
+                de uma <Term>trustline</Term> PLINA-RF por classe (Sênior e
+                Subordinada). Você assina os dois hashes via Privy uma única
+                vez. A trustline do <Term>TESOURO</Term> (bridge da anchor)
+                abre no resgate, com a reserva patrocinada pela anchor.
               </p>
               {trustlinesReady ? (
                 <p className="mt-4 font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">
@@ -212,7 +234,11 @@ export function IdentityScreen({
             <div className="mt-12">
               <button
                 onClick={onContinue}
-                disabled={!trustlinesReady || !isEntidadeValida(track, institutionalProfile)}
+                disabled={
+                  !trustlinesReady ||
+                  kycPending ||
+                  !isEntidadeValida(track, institutionalProfile)
+                }
                 className="bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-8 py-4 rounded-full hover:bg-primary-deep transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Continuar para cotação

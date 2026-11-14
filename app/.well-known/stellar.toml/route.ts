@@ -16,7 +16,7 @@ import { StrKey } from '@stellar/stellar-sdk';
 
 export const dynamic = 'force-dynamic';
 
-const TOML_TEMPLATE = (issuer: string) => `# Plina Finance — Stellar TOML (SEP-0001)
+const TOML_TEMPLATE = (issuer: string, distributor: string) => `# Plina Finance — Stellar TOML (SEP-0001)
 #
 # Asset: PLINARF — token de demonstração, sem valor financeiro real
 # Network: TESTNET (POC — mainnet exigirá multisig do issuer e smart account
@@ -28,6 +28,8 @@ const TOML_TEMPLATE = (issuer: string) => `# Plina Finance — Stellar TOML (SEP
 
 VERSION = "0.1.0"
 NETWORK_PASSPHRASE = "Test SDF Network ; September 2015"
+# SEP-1: contas controladas por este domínio (issuer e distributor, do env do deploy).
+ACCOUNTS = ["${issuer}", "${distributor}"]
 
 [DOCUMENTATION]
 ORG_NAME = "Plina Finance"
@@ -68,15 +70,16 @@ regulated = false
 `;
 
 export async function GET() {
-  const issuer = process.env.STELLAR_ISSUER_PUBLIC ?? '';
-  if (!StrKey.isValidEd25519PublicKey(issuer)) {
-    return new Response('stellar.toml indisponível: issuer não configurado.', {
+  const issuer = process.env.STELLAR_ISSUER_PUBLIC?.trim() ?? '';
+  const distributor = process.env.STELLAR_DISTRIBUTOR_PUBLIC?.trim() ?? '';
+  if (!StrKey.isValidEd25519PublicKey(issuer) || !StrKey.isValidEd25519PublicKey(distributor)) {
+    return new Response('stellar.toml indisponível: contas não configuradas.', {
       status: 500,
       headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
     });
   }
 
-  return new Response(TOML_TEMPLATE(issuer), {
+  return new Response(TOML_TEMPLATE(issuer, distributor), {
     status: 200,
     headers: {
       // SEP-0001 exige CORS aberto pro anchor toml.

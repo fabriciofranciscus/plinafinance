@@ -19,10 +19,10 @@ import { db } from '../db';
 import {
   buildAuditPayload,
   registerOnChainHash,
-  sha256OfPayload,
 } from '../stellar/audit';
 import { STELLAR_NETWORK } from '../stellar/config';
 import { incorporarCota } from './tokenizacao';
+import { enviarCessaoParaAssinatura } from './cessao-docusign';
 import { tokensParaEmitir } from './pool';
 import { taxaAnuenciaBpsFor } from '../config/administradoras';
 import { taxaPrazoBpsFor } from '../config/curva-yield';
@@ -339,91 +339,58 @@ export async function aceitarOferta(ofertaId: string, pessoaId: string) {
   return { txHash: onChain.txHash, payloadHash: onChain.payloadHash };
 }
 
-// ─── 4. Cessão (DocuSign sandbox stub) ──────────────────────────────────────
+// ─── 4. Cessão (DocuSign, remote signing — DS2) ─────────────────────────────
 
+/**
+ * Registra a cessão e a ENVIA para assinatura no DocuSign. Estado resultante:
+ * `ENVIADA_DOCUSIGN`, sem hash on-chain (a âncora é o SHA-256 do PDF assinado
+ * guardado, no DS3, quando o envelope chegar a "completed").
+ *
+ * Idempotente: repetir a chamada (ou chamar em paralelo) NUNCA cria um 2º
+ * envelope — `Cessao.ofertaId` é único, o envio é serializado no banco e o
+ * `transactionId` é determinístico (ver `cessao-docusign.ts`).
+ */
 export async function registrarCessao(input: {
   ofertaId: string;
-  /// PDF base64 ou URL — no MVP testnet usamos placeholder.
-  /// Em produção, DocuSign envelope id ja confirmaria assinatura.
-  documentoBase64?: string;
   operador: string;
   /// F-M1-4: caminho da cessão (default fallback). Define se a taxa de
   /// anuência é gravada na Cessao.
   caminhoCessao?: CaminhoCessao;
+  /// `false`: só cria a cessão (PENDENTE) e NÃO envia ao DocuSign. O envio é um passo à parte (`enviar-cessao`), DEPOIS do
+  /// laudo registrado, para o PDF citar o hash do laudo (Consuelo/Atlas, 13/11). Default `true` (comportamento do DS2).
+  enviar?: boolean;
 }) {
   const oferta = await db.oferta.findUnique({
     where: { id: input.ofertaId },
-    include: { cessao: true, leadVendedor: { select: { email: true, nome: true } } },
+    include: { cessao: true },
   });
   if (!oferta) throw new Error('Oferta não encontrada');
   if (oferta.status !== OfertaStatus.ACEITA) {
     throw new Error('Oferta precisa estar ACEITA antes de cessão');
   }
-  if (oferta.cessao) throw new Error('Cessão já registrada');
 
-  // Hash do documento (placeholder no MVP — PDF real no Fase 1).
-  const documentoBytes =
-    input.documentoBase64 ??
-    `cessao-mvp:${oferta.id}:${oferta.leadVendedorId}:${oferta.valorLiquidoVendedor.toString()}`;
-  const hashDocumento = sha256OfPayload({ bytes: documentoBytes });
+  let cessao = oferta.cessao;
+  if (!cessao) {
+    // F-M1-4: taxa de anuência gravada na Cessao quando caminho = fallback.
+    const caminho = input.caminhoCessao ?? CaminhoCessao.CARTORIO_DIGITAL;
+    const taxaAnuenciaBps =
+      caminho === CaminhoCessao.CARTORIO_DIGITAL ? taxaAnuenciaBpsFor(oferta.administradora) : null;
+    try {
+      cessao = await db.cessao.create({
+        data: { ofertaId: oferta.id, status: CessaoStatus.PENDENTE, caminhoCessao: caminho, taxaAnuenciaBps },
+      });
+    } catch (err) {
+      // `ofertaId` é único: chamada concorrente que perdeu a corrida reaproveita a linha.
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== 'P2002') throw err;
+      cessao = await db.cessao.findUniqueOrThrow({ where: { ofertaId: oferta.id } });
+    }
+  }
 
-  // Prova on-chain.
-  const payload = buildAuditPayload('cessao', oferta.id, {
-    leadVendedorId: oferta.leadVendedorId,
-    ofertaId: oferta.id,
-    hashDocumento,
-    valorLiquido: oferta.valorLiquidoVendedor.toString(),
-  });
-  const onChain = await registerOnChainHash(payload);
-
-  // F-M1-4: taxa de anuência gravada na Cessao quando caminho = fallback.
-  const caminho = input.caminhoCessao ?? CaminhoCessao.CARTORIO_DIGITAL;
-  const taxaAnuenciaBps =
-    caminho === CaminhoCessao.CARTORIO_DIGITAL
-      ? taxaAnuenciaBpsFor(oferta.administradora)
-      : null;
-
-  const cessao = await db.$transaction(async (tx) => {
-    const created = await tx.cessao.create({
-      data: {
-        ofertaId: oferta.id,
-        docusignEnvelopeId: `mvp-stub:${oferta.id.slice(0, 12)}`,
-        hashDocumento,
-        onChainTxHash: onChain.txHash,
-        assinadaEm: new Date(),
-        status: CessaoStatus.ASSINADA,
-        caminhoCessao: caminho,
-        taxaAnuenciaBps,
-      },
-    });
-    await tx.leadVendedor.update({
-      where: { id: oferta.leadVendedorId },
-      data: { status: LeadVendedorStatus.CESSAO_ASSINADA },
-    });
-    await tx.eventoAudit.create({
-      data: {
-        acao: 'CESSAO_ASSINADA',
-        operador: input.operador,
-        leadVendedorId: oferta.leadVendedorId,
-        ofertaId: oferta.id,
-        cessaoId: created.id,
-        payloadJson: payload as unknown as Prisma.InputJsonValue,
-        payloadHash: onChain.payloadHash,
-        stellarTxHash: onChain.txHash,
-      },
-    });
-    return created;
-  });
-
-  // F-M1-7: email transacional (best-effort).
-  await notifyCedente(oferta.leadVendedor?.email, 'cessao', {
-    leadId: oferta.leadVendedorId,
-    nome: oferta.leadVendedor?.nome,
-    valorLiquido: BRL.format(Number(oferta.valorLiquidoVendedor)),
-    onChainTxHash: onChain.txHash,
-  });
-
-  return { cessaoId: cessao.id, hashDocumento, ...onChain };
+  if (input.enviar === false) {
+    return { cessaoId: cessao.id, status: cessao.status, envelopeId: cessao.docusignEnvelopeId ?? null, jaEnviada: !!cessao.docusignEnvelopeId };
+  }
+  const envio = await enviarCessaoParaAssinatura({ cessaoId: cessao.id, operador: input.operador });
+  return { cessaoId: envio.cessaoId, status: envio.status, envelopeId: envio.envelopeId, jaEnviada: envio.jaEnviada };
 }
 
 // ─── 5. Pix simulado ────────────────────────────────────────────────────────
@@ -531,6 +498,21 @@ export async function executarPixSimulado(input: {
 
 // ─── 6. Incorporação ao pool (wrapper de tokenizacao.incorporarCota) ────────
 
+const MENSAGENS_FUNIL = {
+  CESSAO_NAO_ASSINADA: 'Incorporação recusada: a cessão precisa estar ASSINADA.',
+  PIX_NAO_COMPROVADO: 'Incorporação recusada: o Pix ao cedente precisa estar COMPROVADO (pagar-cedente).',
+  PAGAMENTO_NAO_EXECUTADO: 'Incorporação recusada: o pagamento ao cedente precisa estar EXECUTADO.',
+  COTA_JA_INCORPORADA: 'Esta cessão já teve a cota incorporada.',
+} as const;
+
+/** Incorporação do funil recusada por falta de prova (cessão não assinada, Pix não comprovado): nada foi emitido. */
+export class IncorporacaoFunilBloqueadaError extends Error {
+  constructor(readonly code: 'CESSAO_NAO_ASSINADA' | 'PIX_NAO_COMPROVADO' | 'PAGAMENTO_NAO_EXECUTADO' | 'COTA_JA_INCORPORADA') {
+    super(MENSAGENS_FUNIL[code]);
+    this.name = 'IncorporacaoFunilBloqueadaError';
+  }
+}
+
 export async function incorporarCotaDoFunil(input: {
   cessaoId: string;
   localizacaoAprox?: string;
@@ -540,16 +522,29 @@ export async function incorporarCotaDoFunil(input: {
   const cessao = await db.cessao.findUnique({
     where: { id: input.cessaoId },
     include: {
-      oferta: { include: { leadVendedor: { select: { email: true, nome: true } } } },
+      oferta: { include: { leadVendedor: { select: { email: true, nome: true, status: true } } } },
       pagamento: true,
       cota: true,
     },
   });
   if (!cessao) throw new Error('Cessão não encontrada');
   if (cessao.pagamento?.status !== PagamentoStatus.EXECUTADO) {
-    throw new Error('Pix precisa estar EXECUTADO antes de incorporar');
+    throw new IncorporacaoFunilBloqueadaError('PAGAMENTO_NAO_EXECUTADO');
   }
-  if (cessao.cota) throw new Error('Cota já incorporada pra esta cessão');
+  // Retomada (runbook: "timeout ou 500 → chamar de novo"): a Cota já existe, mas os passos finais do funil podem não ter
+  // completado (queda entre o commit da Cota e o vínculo ao lead). Se o lead já está COTA_INCORPORADA, está tudo feito.
+  if (cessao.cota && cessao.oferta.leadVendedor?.status === LeadVendedorStatus.COTA_INCORPORADA) {
+    throw new IncorporacaoFunilBloqueadaError('COTA_JA_INCORPORADA');
+  }
+  // Atlas/Consuelo (13/11), em QUALQUER rede: só se emite depois das provas. Cessão ASSINADA e Pix COMPROVADO (a
+  // TransferenciaPix do `pagar-cedente`, com comprovante e âncora); `Pagamento` EXECUTADO sozinho não basta (o Pix
+  // legado também o produz, sem comprovante). Sem isso o registro ancorado nasce com elos nulos, sem conserto.
+  if (cessao.status !== CessaoStatus.ASSINADA) throw new IncorporacaoFunilBloqueadaError('CESSAO_NAO_ASSINADA');
+  const transferencia = await db.transferenciaPix.findUnique({
+    where: { cessaoId: cessao.id },
+    select: { status: true },
+  });
+  if (transferencia?.status !== 'COMPROVADA') throw new IncorporacaoFunilBloqueadaError('PIX_NAO_COMPROVADO');
 
   // E1-4: o laudo é registrado ANTES da emissão (por cessão). Sem ele — ou sem
   // anuência — `incorporarCota` recusa.
@@ -559,8 +554,15 @@ export async function incorporarCotaDoFunil(input: {
     select: { payloadHash: true },
   });
 
-  // Re-usa tokenizacao.incorporarCota (já emite on-chain + audit COTA_INCORPORADA).
-  const result = await incorporarCota({
+  // Re-usa tokenizacao.incorporarCota (já emite on-chain + audit COTA_INCORPORADA). Retomada: a Cota já existe (os passos
+  // finais abaixo é que não completaram) → não emite nada, só completa o vínculo ao lead.
+  const result = cessao.cota
+    ? {
+        cotaId: cessao.cota.id,
+        txHash: cessao.cota.emissaoTxHash ?? '',
+        tokensEmitidos: new Prisma.Decimal(cessao.cota.tokensEmitidos).toNumber(),
+      }
+    : await incorporarCota({
     tipoBem: cessao.oferta.tipoBem,
     administradora: cessao.oferta.administradora,
     valorCarta: cessao.oferta.valorCarta.toString(),
@@ -577,10 +579,6 @@ export async function incorporarCotaDoFunil(input: {
   });
 
   await db.$transaction(async (tx) => {
-    await tx.cessao.update({
-      where: { id: cessao.id },
-      data: { status: CessaoStatus.ASSINADA }, // ja ta, mas re-assert
-    });
     await tx.leadVendedor.update({
       where: { id: cessao.oferta.leadVendedorId },
       data: { status: LeadVendedorStatus.COTA_INCORPORADA },

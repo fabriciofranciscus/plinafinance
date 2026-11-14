@@ -10,6 +10,17 @@ import type {
 } from '../../_types';
 import { useSwap } from '../use-swap';
 
+// N1: o envelope assinado é montado por `attachInvestorSignature` (testado à
+// parte, com chaves reais em `signed-xdr.test.ts`). Aqui os XDRs são strings
+// de fixture, então o helper é substituído por um stub que registra a chamada.
+const signedXdrCalls = vi.hoisted(() => [] as unknown[][]);
+vi.mock('../../_lib/signed-xdr', () => ({
+  attachInvestorSignature: (...args: unknown[]) => {
+    signedXdrCalls.push(args);
+    return 'signed-xdr-1';
+  },
+}));
+
 const onboard: OnboardData = {
   investidorId: 'inv-1',
   publicKey: 'GA'.padEnd(56, 'A'),
@@ -123,8 +134,9 @@ describe('useSwap — goToConfirm: onRampReady gate', () => {
       jsonResponse({
         xdr: 'xdr-1',
         hashHex: '0xabc',
-        distributorSigBase64: 'sig',
-        distributorPubkey: 'GD',
+        quoteId: 'q-1',
+        plinarfAmount: '100.0000000',
+        navPorTokenNaCotacao: '1.00000000',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -171,8 +183,9 @@ describe('useSwap — goToConfirm: mock branch', () => {
       jsonResponse({
         xdr: 'xdr-1',
         hashHex: '0xabc',
-        distributorSigBase64: 'sig',
-        distributorPubkey: 'GD',
+        quoteId: 'q-1',
+        plinarfAmount: '100.0000000',
+        navPorTokenNaCotacao: '1.00000000',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -214,8 +227,9 @@ describe('useSwap — goToConfirm: claiming detour', () => {
       jsonResponse({
         xdr: 'xdr-1',
         hashHex: '0xabc',
-        distributorSigBase64: 'sig',
-        distributorPubkey: 'GD',
+        quoteId: 'q-1',
+        plinarfAmount: '100.0000000',
+        navPorTokenNaCotacao: '1.00000000',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -247,8 +261,9 @@ describe('useSwap — buy', () => {
       jsonResponse({
         xdr: 'xdr-1',
         hashHex: '0xdeadbeef',
-        distributorSigBase64: 'dsig',
-        distributorPubkey: 'GD',
+        quoteId: 'q-1',
+        plinarfAmount: '100.0000000',
+        navPorTokenNaCotacao: '1.00000000',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -306,8 +321,9 @@ describe('useSwap — buy', () => {
       jsonResponse({
         xdr: 'xdr-1',
         hashHex: '0xabc',
-        distributorSigBase64: 'sig',
-        distributorPubkey: 'GD',
+        quoteId: 'q-1',
+        plinarfAmount: '100.0000000',
+        navPorTokenNaCotacao: '1.00000000',
         mock: false,
       } satisfies SwapEnvelope),
     );
@@ -324,6 +340,147 @@ describe('useSwap — buy', () => {
 
     expect(onError).toHaveBeenCalled();
     expect(result.current.buyResult).toBeNull();
+  });
+});
+
+describe('useSwap — buy: corpo do submit (N1)', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    signedXdrCalls.length = 0;
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const envelope = {
+    xdr: 'xdr-1',
+    hashHex: '0xdeadbeef',
+    quoteId: 'q-1',
+    plinarfAmount: '100.0000000',
+    navPorTokenNaCotacao: '1.00000000',
+    mock: false,
+  } satisfies SwapEnvelope;
+
+  it('envia só { quoteId, signedXdr }, sem assinatura nem chave da Plina', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(envelope));
+    const { result } = setup({ signature: '0xfeed' });
+    await act(async () => {
+      await result.current.goToConfirm();
+    });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ swapTxHash: 'real-tx' }));
+    await act(async () => {
+      await result.current.buy();
+    });
+    await flushAsync();
+
+    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url).toBe('/api/investidor/buy/swap/submit');
+    expect(JSON.parse(String(init.body))).toEqual({
+      quoteId: 'q-1',
+      signedXdr: 'signed-xdr-1',
+    });
+    // A assinatura do investidor foi anexada ao XDR do build.
+    expect(signedXdrCalls).toEqual([['xdr-1', onboard.publicKey, '0xfeed']]);
+  });
+
+  it('409 NAV_MUDOU: mensagem fixa, sem incidente, e recotar refaz o build', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(envelope));
+    const { result, onError, onNextScreen } = setup();
+    await act(async () => {
+      await result.current.goToConfirm();
+    });
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ error: 'NAV mudou', code: 'NAV_MUDOU' }, 409),
+    );
+    await act(async () => {
+      await result.current.buy();
+    });
+    await flushAsync();
+
+    expect(result.current.navMudou).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
+    expect(result.current.buyResult).toBeNull();
+
+    // Recotar: novo build (sem novo on-ramp) e o aviso some.
+    fetchMock.mockResolvedValueOnce(jsonResponse(envelope));
+    await act(async () => {
+      await result.current.requote();
+    });
+    await flushAsync();
+    expect(fetchMock.mock.calls[2]![0]).toBe('/api/investidor/buy/swap/build');
+    expect(result.current.navMudou).toBe(false);
+    expect(onNextScreen).toHaveBeenLastCalledWith('confirm');
+  });
+
+  it('submete com o quoteId que o build devolveu (novo quando o quote expirou)', async () => {
+    // recotar: o quote do build expirou e o servidor emitiu outro (q-2)
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ...envelope, quoteId: 'q-2' }));
+    const { result } = setup();
+    await act(async () => {
+      await result.current.goToConfirm();
+    });
+    expect(result.current.swapBuild).toMatchObject({ quoteId: 'q-2' });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ swapTxHash: 'real-tx' }));
+    await act(async () => {
+      await result.current.buy();
+    });
+    await flushAsync();
+    const [, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).quoteId).toBe('q-2');
+  });
+
+  it('410 (quote expirou depois do build): aviso próprio, sem incidente; recotar refaz o build e usa o quoteId novo', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(envelope));
+    const { result, onError, onNextScreen } = setup();
+    await act(async () => {
+      await result.current.goToConfirm();
+    });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: 'quote expirado' }, 410));
+    await act(async () => {
+      await result.current.buy();
+    });
+    await flushAsync();
+    expect(result.current.cotacaoExpirada).toBe(true);
+    expect(result.current.navMudou).toBe(false);
+    expect(onError).not.toHaveBeenCalled();
+    expect(result.current.buyResult).toBeNull();
+
+    // recotar: novo build devolve outro quote; o aviso some
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ...envelope, quoteId: 'q-3', plinarfAmount: '9990.0000000' }),
+    );
+    await act(async () => {
+      await result.current.requote();
+    });
+    await flushAsync();
+    expect(fetchMock.mock.calls[2]![0]).toBe('/api/investidor/buy/swap/build');
+    expect(result.current.cotacaoExpirada).toBe(false);
+    // a confirmação deriva o valor do build novo, não do /quote inicial
+    expect(result.current.swapBuild).toMatchObject({ quoteId: 'q-3', plinarfAmount: '9990.0000000' });
+    expect(onNextScreen).toHaveBeenLastCalledWith('confirm');
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ swapTxHash: 'real-tx' }));
+    await act(async () => {
+      await result.current.buy();
+    });
+    await flushAsync();
+    const [, init] = fetchMock.mock.calls[3] as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).quoteId).toBe('q-3');
+  });
+
+  it('409 de outro motivo segue o caminho de erro normal', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(envelope));
+    const { result, onError } = setup();
+    await act(async () => {
+      await result.current.goToConfirm();
+    });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: 'quote já consumido' }, 409));
+    await act(async () => {
+      await result.current.buy();
+    });
+    await flushAsync();
+    expect(result.current.navMudou).toBe(false);
+    expect(onError).toHaveBeenCalled();
   });
 });
 

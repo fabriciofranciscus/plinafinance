@@ -43,16 +43,16 @@ beforeEach(() => {
     payloadHash: 'hash',
   });
   realizacaoCreate.mockReset().mockResolvedValue({ id: 'real_1' });
-  cotaUpdate.mockReset().mockResolvedValue({});
-  reservaUpdate.mockReset().mockResolvedValue({});
+  cotaUpdate.mockReset().mockResolvedValue({ count: 1 });
+  reservaUpdate.mockReset().mockResolvedValue({ count: 1 });
   leadUpdate.mockReset().mockResolvedValue({});
   eventoAuditCreate.mockReset().mockResolvedValue({});
   txRunner.mockReset().mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       realizacaoCaminho: { create: realizacaoCreate },
       movimentoFundo: { createMany: async () => ({ count: 1 }) },
-      cota: { update: cotaUpdate },
-      reserva: { update: reservaUpdate },
+      cota: { updateMany: cotaUpdate },
+      reserva: { updateMany: reservaUpdate },
       leadComprador: { update: leadUpdate },
       eventoAudit: { create: eventoAuditCreate },
     }),
@@ -111,5 +111,49 @@ describe('executarCaminhoA — F-25 precisão Decimal', () => {
         operador: 'op',
       }),
     ).rejects.toThrow(/valorRealizado/);
+  });
+
+  describe('F-REAL-1 — escrita condicional ao estado lido', () => {
+    const RESERVA = () => ({
+      id: 'r_1', cotaId: 'c_1', leadCompradorId: 'l_1', status: 'ATIVA',
+      cota: { id: 'c_1', status: 'RESERVADA', valorCarta: new Prisma.Decimal('100'), desagioAquisicao: new Prisma.Decimal('0.1') },
+      leadComprador: { id: 'l_1' },
+    });
+    const entrada = { reservaId: 'r_1', valorRealizado: '95.00', operador: 'op' };
+    const nadaGravado = () => {
+      expect(realizacaoCreate).not.toHaveBeenCalled();
+      expect(leadUpdate).not.toHaveBeenCalled();
+      expect(eventoAuditCreate).not.toHaveBeenCalled();
+    };
+
+    it('os dois flips são condicionais: reserva ATIVA→CONFIRMADA e cota RESERVADA→REALIZADA', async () => {
+      reservaFindUnique.mockResolvedValueOnce(RESERVA());
+      await executarCaminhoA(entrada);
+      expect(reservaUpdate).toHaveBeenCalledWith({ where: { id: 'r_1', status: 'ATIVA' }, data: { status: 'CONFIRMADA' } });
+      expect(cotaUpdate).toHaveBeenCalledWith({ where: { id: 'c_1', status: 'RESERVADA' }, data: { status: 'REALIZADA' } });
+    });
+
+    it('reserva já não está ATIVA na escrita (um cancelamento venceu): erro de estado, nenhuma realização, caixa nem audit', async () => {
+      reservaFindUnique.mockResolvedValueOnce(RESERVA());
+      reservaUpdate.mockResolvedValueOnce({ count: 0 });
+      await expect(executarCaminhoA(entrada)).rejects.toThrow(/alterada concorrentemente/);
+      nadaGravado();
+    });
+
+    it('cota já não está RESERVADA na escrita: erro de estado, nada gravado', async () => {
+      reservaFindUnique.mockResolvedValueOnce(RESERVA());
+      cotaUpdate.mockResolvedValueOnce({ count: 0 });
+      await expect(executarCaminhoA(entrada)).rejects.toThrow(/alterada concorrentemente/);
+      nadaGravado();
+    });
+
+    it('P2002 em RealizacaoCaminho.cotaId (outra realização da cota commitou antes) vira o erro de corrida; outros erros sobem como estão', async () => {
+      reservaFindUnique.mockResolvedValueOnce(RESERVA());
+      txRunner.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }));
+      await expect(executarCaminhoA(entrada)).rejects.toThrow(/reservada concorrentemente/);
+      reservaFindUnique.mockResolvedValueOnce(RESERVA());
+      txRunner.mockRejectedValueOnce(new Error('queda'));
+      await expect(executarCaminhoA(entrada)).rejects.toThrow('queda');
+    });
   });
 });

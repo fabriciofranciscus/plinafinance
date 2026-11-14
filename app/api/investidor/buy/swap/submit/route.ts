@@ -28,6 +28,7 @@ import {
   txHashFromXdr,
   fetchTransactionByHash,
 } from '@/lib/stellar/transactions';
+import { TrustlineNaoAutorizadaError, exigirEmissoesParaTrustlineAutorizada } from '@/lib/stellar/trustline';
 import { issuerSigner } from '@/lib/stellar/signer';
 import { getDynamicFee } from '@/lib/stellar/fee';
 import { NavMudouError, revalidarNavDaCotacao } from '@/lib/services/emissao';
@@ -337,15 +338,37 @@ export const POST = withAuth(async (req, { user }) => {
       }
       const unsigned = new Transaction(signedXdr, networkPassphrase);
       unsigned.signatures.length = 0;
-      const submitRes = await submitWithPrivySignature({
-        xdr: unsigned.toXDR(),
-        investorPubkey,
-        investorSignatureHex: `0x${investorSig.toString('hex')}`,
-        extraSignatures: [
-          { pubkey: issuerSig.pubkey, sigBase64: issuerSig.sigBase64 },
-        ],
-      });
-      finalHash = submitRes.hash;
+      // N1-at (Vera F-N1AT-1): a guarda de trustline é só LEITURA e roda ANTES de qualquer envio. Se ela recusa (trustline
+      // revogada entre o build e o submit) ou a leitura falha, NADA foi à rede: no 1º envio da reserva ela é liberada na
+      // hora (o gate do NAV SWAP_EM_VOO não fecha). No REENVIO de uma órfã a tx pode já ter entrado: a reserva fica e o
+      // varredor decide pela prova.
+      let chegouAoEnvio = false;
+      try {
+        await exigirEmissoesParaTrustlineAutorizada(unsigned);
+        chegouAoEnvio = true;
+        const submitRes = await submitWithPrivySignature({
+          xdr: unsigned.toXDR(),
+          investorPubkey,
+          investorSignatureHex: `0x${investorSig.toString('hex')}`,
+          extraSignatures: [
+            { pubkey: issuerSig.pubkey, sigBase64: issuerSig.sigBase64 },
+          ],
+        });
+        finalHash = submitRes.hash;
+      } catch (err) {
+        // A guarda dentro de submitWithPrivySignature também roda antes da rede: uma recusa dela também é "nada enviado".
+        const naoEnviou = !chegouAoEnvio || err instanceof TrustlineNaoAutorizadaError;
+        if (naoEnviou && reserved.count === 1) await liberarReserva();
+        if (err instanceof TrustlineNaoAutorizadaError) {
+          throw new ApiError(err.code, 409, err.message);
+        }
+        // Falha da LEITURA da guarda (Horizon fora): nada foi à rede, a reserva já foi liberada acima → 503 tipado, nunca 500.
+        if (!chegouAoEnvio) {
+          logStellarError('[swap/submit] leitura da trustline falhou', err);
+          throw new ApiError('LEDGER_UNAVAILABLE', 503, 'A rede está indisponível agora. Nada foi enviado. Tente novamente em instantes.');
+        }
+        throw err;
+      }
     }
 
     await escriturarSwap({

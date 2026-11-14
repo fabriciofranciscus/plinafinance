@@ -17,9 +17,9 @@ import {
   navPorToken,
   navTotalDoPool,
   spreadRealizadoAcumulado,
-  tokensEmitidosVivos,
 } from '@/lib/services/pool';
-import { fetchSupplyOnChainFromEnv } from '@/lib/stellar/supply';
+import { NavIndisponivelError, lerSupplyDoNav } from '@/lib/services/nav-supply';
+import { caixaParaNav } from '@/lib/services/razao-fundo';
 import { accountExplorerUrl, assetExplorerUrl } from '@/lib/stellar/config';
 
 // SSR sempre — dados de pool mudam quando admin incorpora cota.
@@ -33,10 +33,11 @@ const TIPO_BEM_LABEL: Record<string, string> = {
 };
 
 const STATUS_ESTOQUE_LABEL: Record<string, string> = {
-  VERDE: 'Ativa',
-  AMARELO: 'Em revisão',
-  VERMELHO: 'Em liquidação',
-  BAIXA: 'Baixada',
+  // P7 (Consuelo): o enum é a idade do estoque (schema), não o estado da cota.
+  VERDE: '0–45 dias em estoque',
+  AMARELO: '46–75 dias',
+  VERMELHO: '76–90 dias',
+  BAIXA: 'Mais de 90 dias',
 };
 
 function brl(value: number): string {
@@ -44,6 +45,19 @@ function brl(value: number): string {
     style: 'currency',
     currency: 'BRL',
     maximumFractionDigits: 0,
+  }).format(value);
+}
+
+/**
+ * Valor POR TOKEN: precisa de casas decimais. O `brl` acima arredonda para inteiro, e um valor
+ * de 0,1524 aparecia como "R$ 0" (bug de exibição em produção, 13/11). 4 casas, sem truncar.
+ */
+function brlPorToken(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4,
   }).format(value);
 }
 
@@ -56,7 +70,7 @@ function pct(value: number): string {
 }
 
 export default async function PoolPage() {
-  const [parametros, cotas, realizacoes] = await Promise.all([
+  const [parametros, cotas, realizacoes, caixaNav] = await Promise.all([
     db.parametrosPool.findUnique({ where: { id: 'singleton' } }),
     db.cota.findMany({
       where: { status: { in: ['DISPONIVEL', 'RESERVADA'] } },
@@ -65,6 +79,8 @@ export default async function PoolPage() {
     db.realizacaoCaminho.findMany({
       select: { valorRealizado: true, spread: true },
     }),
+    // E2-5: o caixa do NAV vem do razão do fundo, como na API /api/pool/summary.
+    caixaParaNav(),
   ]);
 
   if (!parametros) {
@@ -77,21 +93,28 @@ export default async function PoolPage() {
     );
   }
 
-  const navTotal = navTotalDoPool(cotas, realizacoes);
-  const tokensVivos = tokensEmitidosVivos(cotas);
-  const caixa = caixaRealizado(realizacoes);
+  const navTotal = navTotalDoPool(cotas, caixaNav);
+  const caixa = caixaRealizado(caixaNav);
 
-  // O denominador do NAV vem do ledger. Se o Horizon não responde a página
-  // pública não quebra — mostra o NAV como indisponível, porque publicar um
-  // número derivado do estado da aplicação é o bug que a leitura substituiu.
-  const supply = await fetchSupplyOnChainFromEnv(parametros.assetCode).catch(
-    () => null,
-  );
-  const navUnit = supply ? navPorToken(cotas, realizacoes, supply) : null;
-  const navUnitLabel = navUnit === null ? '—' : brl(navUnit);
-  const circulanteLabel = supply
-    ? `${tokenFmt(Number(supply.circulante))} em circulação no ledger`
-    : 'supply do ledger indisponível';
+  // O denominador do NAV vem do ledger, pela MESMA leitura da API /api/pool/summary
+  // (`lerSupplyDoNav`: cache, trava D3 e gates de emissão/swap/resgate em voo). Com
+  // algo em voo ou o Horizon fora, a página pública não mostra um NAV distorcido:
+  // mostra "—" e "Valor por token em conferência" (Consuelo, M1).
+  let supply: Awaited<ReturnType<typeof lerSupplyDoNav>>['senior'] | null = null;
+  try {
+    supply = (await lerSupplyDoNav()).senior;
+  } catch (err) {
+    if (!(err instanceof NavIndisponivelError)) console.error('[pool] leitura do supply falhou');
+  }
+  // O cartão "emitido" usa o MESMO supply do ledger que divide o NAV (Consuelo): os tokens das
+  // cotas no banco divergem do ledger e, lado a lado, os dois números se contradiziam.
+  const tokensNoLedger = supply ? Number(supply.circulante) + Number(supply.tesouraria) : null;
+  const navUnit = supply ? navPorToken(cotas, caixaNav, supply) : null;
+  const navUnitLabel = navUnit === null ? '—' : brlPorToken(navUnit);
+  // M2: o NAV divide por circulante + tesouraria; o rótulo diz o mesmo número.
+  const denominadorLabel = supply
+    ? `${tokenFmt(Number(supply.circulante) + Number(supply.tesouraria))} tokens emitidos no ledger`
+    : 'Valor por token em conferência';
   const spreadAcumulado = spreadRealizadoAcumulado(realizacoes);
 
   return (
@@ -105,16 +128,22 @@ export default async function PoolPage() {
         </h1>
         <div className="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <p className="font-text max-w-3xl text-lg text-base/80 leading-relaxed">
-            Direito creditório de cotas de consórcio contempladas adquiridas
-            com capital próprio. Cada token PLINA-RF representa R$ 1,00 de NAV
-            ajustado pela curva de realização. Auditável em tempo real via
-            Stellar Expert.
+            Cotas contempladas de consórcio de demonstração, registradas em
+            rede de testes; nenhuma é uma aquisição real. O valor de cada token
+            é o valor do pool dividido pelos tokens emitidos. As emissões podem
+            ser conferidas no Stellar Expert; o valor do pool é calculado pela
+            Plina.
+          </p>
+          <p className="font-text max-w-3xl text-sm text-base/70 leading-relaxed mt-3">
+            Esta página mostra dados da rede de testes e os registros da Plina; não é
+            oferta nem solicitação de investimento, nem promessa de
+            retorno ou de liquidez.
           </p>
           <a
             href="/investir"
             className="self-start whitespace-nowrap bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors"
           >
-            Acesso institucional →
+            Ver simulação em testnet →
           </a>
         </div>
       </header>
@@ -129,7 +158,7 @@ export default async function PoolPage() {
         />
         <Metric
           label={`${parametros.assetCode} emitido`}
-          value={tokenFmt(tokensVivos)}
+          value={tokensNoLedger === null ? '—' : tokenFmt(tokensNoLedger)}
           sublabel={`NAV por token · ${navUnitLabel}`}
         />
         <Metric
@@ -154,17 +183,17 @@ export default async function PoolPage() {
             <Metric
               label="Caixa realizado"
               value={brl(caixa)}
-              sublabel="BRL retornado ao fundo via realização de cotas (Caminho A/B/C)"
+              sublabel="Valor recebido pelo pool na revenda ou no recebimento do crédito das cotas"
             />
             <Metric
-              label="Yield realizado acumulado"
+              label="Diferença realizada acumulada"
               value={brl(spreadAcumulado)}
-              sublabel="Spread capturado em realizações já executadas"
+              sublabel="Diferença entre o valor recebido e o custo de aquisição das cotas já realizadas (dados de teste)"
             />
             <Metric
               label="NAV por token"
               value={navUnitLabel}
-              sublabel={`Ativo atribuível ÷ ${circulanteLabel}`}
+              sublabel={navUnit === null ? denominadorLabel : `Valor do pool ÷ ${denominadorLabel}`}
             />
           </div>
         </section>
@@ -181,10 +210,10 @@ export default async function PoolPage() {
                 <Th>Tipo de bem</Th>
                 <Th>Valor da carta</Th>
                 <Th>Deságio aquisição</Th>
-                <Th>NAV</Th>
+                <Th>Custo de aquisição</Th>
                 <Th>PLINA-RF emitido</Th>
                 <Th>Local aprox.</Th>
-                <Th>Prazo</Th>
+                <Th>Prazo restante (meses)</Th>
                 <Th>Status</Th>
               </tr>
             </thead>
@@ -230,9 +259,9 @@ export default async function PoolPage() {
 
         <p className="font-text text-xs text-base/60 mt-4">
           Administradoras e identificadores específicos das cotas ficam
-          off-chain, sob custódia do gestor do FIDC. On-chain expomos apenas
-          NAV, hash de emissão e endereços públicos. Política de privacidade
-          off-chain conforme LGPD.
+          fora da rede, sob guarda da Plina. Na rede expomos apenas o valor por
+          token, o hash de emissão e endereços públicos. Política de
+          privacidade conforme LGPD.
         </p>
       </section>
 
@@ -273,8 +302,8 @@ export default async function PoolPage() {
             {parametros.distributorPubkey}
           </a>
           <p className="text-xs text-base/60 mt-2">
-            Conta operacional da Plina. Recebe emissões do issuer e distribui
-            para investidores qualificados após onboarding institucional.
+            Conta operacional da Plina. Recebe as emissões do issuer e as
+            entrega aos participantes autorizados, hoje só em rede de testes.
           </p>
         </div>
       </section>

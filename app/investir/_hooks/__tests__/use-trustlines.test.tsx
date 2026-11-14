@@ -162,3 +162,44 @@ describe('useTrustlines — sequência PLINARF (Sênior) → PLINARFB (Subordina
     expect(onError).not.toHaveBeenCalled();
   });
 });
+
+describe('useTrustlines — E2-3: skipTesouroTrustline', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('só PLINARF e PLINARFB; nunca chama trust-tesouro (o claim abre a trustline)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ xdr: 'x1', hashHex: '0xh1' }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(jsonResponse({ xdr: 'x2', hashHex: '0xh2' }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+    const onError = vi.fn();
+    const signRawHash = vi.fn().mockResolvedValue({ signature: '0xsig' });
+    const { result } = renderHook(() =>
+      useTrustlines({
+        onboard,
+        signRawHash,
+        getAccessToken: vi.fn().mockResolvedValue('tkn'),
+        onError,
+        clearError: vi.fn(),
+        skipTesouroTrustline: true,
+      }),
+    );
+    await act(async () => {
+      await result.current.setupTrustlines();
+    });
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([
+      '/api/investidor/buy/trust-plinarf/build',
+      '/api/investidor/buy/trust-plinarf/submit',
+      '/api/investidor/buy/trust-plinarf/build',
+      '/api/investidor/buy/trust-plinarf/submit',
+    ]);
+    expect(signRawHash).toHaveBeenCalledTimes(2);
+    expect(result.current.trustlinesReady).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
+  });
+});

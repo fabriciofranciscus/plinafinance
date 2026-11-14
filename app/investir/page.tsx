@@ -21,6 +21,7 @@ import { IdentityScreen } from './_components/screens/identity';
 import { BankingScreen } from './_components/screens/banking';
 import { ClasseScreen } from './_components/screens/classe';
 import { QuoteScreen } from './_components/screens/quote';
+import { quoteComBuild } from './_lib/quote-tokens';
 import { OnRampScreen } from './_components/screens/onramp';
 import { SettlingScreen } from './_components/screens/settling';
 import { ClaimingScreen } from './_components/screens/claiming';
@@ -50,6 +51,8 @@ export default function InvestirPage() {
   const quote = flow.quote.quote;
   const onRamp = flow.onRamp.onRamp;
   const swapBuild = flow.swap.swapBuild;
+  // Confirmação e recibo mostram o preço renovado pelo build (N1), não o do /quote.
+  const quoteVigente = quote ? quoteComBuild(quote, swapBuild) : null;
   const buyResult = flow.swap.buyResult;
 
   const { phase, index: phaseIdx } = phaseForScreen(screen);
@@ -115,6 +118,8 @@ export default function InvestirPage() {
                   onTrackChange={flow.setTrack}
                   institutionalProfile={flow.institutionalProfile}
                   onInstitutionalChange={flow.setInstitutionalProfile}
+                  kycPending={flow.onboard.kycPending}
+                  kycTimedOut={flow.onboard.kycTimedOut}
                 />
               )}
               {screen === 'banking' && onboard && (
@@ -175,6 +180,7 @@ export default function InvestirPage() {
                   onRamp={onRamp}
                   claimResult={flow.claim.claimResult}
                   claiming={flow.claim.claiming}
+                  regenerated={flow.claim.claimRegenerated}
                   swapLoading={flow.swap.swapLoading}
                   onClaim={flow.claim.doClaim}
                   onContinue={flow.swap.goToConfirm}
@@ -187,12 +193,16 @@ export default function InvestirPage() {
                 !swapBuild.mock && (
                   <ConfirmScreen
                     onboard={onboard}
-                    quote={quote}
+                    quote={quoteVigente ?? quote}
                     swap={swapBuild}
                     signConfirmed={flow.swap.signConfirmed}
                     setSignConfirmed={flow.swap.setSignConfirmed}
                     buying={flow.swap.buying}
                     onConfirm={flow.swap.buy}
+                    navMudou={flow.swap.navMudou}
+                    cotacaoExpirada={flow.swap.cotacaoExpirada}
+                    onRequote={flow.swap.requote}
+                    requoting={flow.swap.swapLoading}
                     custodyProvider={flow.custodyProvider}
                     onCustodyChange={flow.setCustodyProvider}
                     institutionalProfile={flow.institutionalProfile}
@@ -202,7 +212,7 @@ export default function InvestirPage() {
               {screen === 'receipt' && onboard && quote && buyResult && (
                 <ReceiptScreen
                   onboard={onboard}
-                  quote={quote}
+                  quote={quoteVigente ?? quote}
                   buyResult={buyResult}
                   onBuyMore={flow.onBuyMore}
                 />

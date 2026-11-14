@@ -4,7 +4,7 @@ import { Prisma, StatusCota } from '@prisma/client';
 const m = vi.hoisted(() => ({ fetchSupplyDasClasses: vi.fn(), cotas: vi.fn(), realizacoes: vi.fn() }));
 vi.mock('@/lib/stellar/supply', () => ({ fetchSupplyDasClasses: m.fetchSupplyDasClasses }));
 vi.mock('@/lib/db', () => ({
-  db: { tentativaEmissao: { findFirst: async () => null }, quote: { findFirst: async () => null }, cota: { findMany: m.cotas }, realizacaoCaminho: { findMany: m.realizacoes },
+  db: { tentativaEmissao: { findFirst: async () => null }, quote: { findFirst: async () => null }, resgateCotacao: { findFirst: async () => null }, cota: { findMany: m.cotas }, realizacaoCaminho: { findMany: m.realizacoes },
     movimentoFundo: { aggregate: async () => ({ _sum: { deltaCaixa: null } }), createMany: async () => ({ count: 1 }) } },
 }));
 

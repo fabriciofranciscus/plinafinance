@@ -27,6 +27,10 @@ import {
 } from './config';
 import { getDynamicFee } from './fee';
 import { privySignatureToBase64 } from '../wallet/privy';
+import {
+  exigirEmissoesParaTrustlineAutorizada,
+  exigirTrustlineAutorizada,
+} from './trustline';
 import { withSpan } from '../observability/tracer';
 
 type SubmitResult = Horizon.HorizonApi.SubmitTransactionResponse;
@@ -76,7 +80,15 @@ export async function buildSwapBridgeForPlinarfXdr(input: {
   memo?: string;
 }): Promise<{ xdr: string; hashHex: string }> {
   const account = await horizon.loadAccount(input.investorPubkey);
-  const plinarf = buildAsset(input.issuerPubkey, input.plinarfCode ?? assetCode);
+  const plinarfCode = input.plinarfCode ?? assetCode;
+  const plinarf = buildAsset(input.issuerPubkey, plinarfCode);
+  // N1-at: a perna de emissão só sai para trustline já autorizada pelo issuer.
+  exigirTrustlineAutorizada(
+    (account as unknown as { balances?: [] }).balances,
+    plinarfCode,
+    input.issuerPubkey,
+    input.investorPubkey,
+  );
 
   const builder = new TransactionBuilder(account, {
     fee: await getDynamicFee(),
@@ -188,6 +200,9 @@ export async function submitWithPrivySignature(input: {
   extraSignatures?: Array<{ pubkey: string; sigBase64: string }>;
 }): Promise<SubmitResult> {
   const tx = new Transaction(input.xdr, networkPassphrase);
+  // N1-at: toda perna de emissão exige trustline autorizada no destino,
+  // conferida AGORA (pode ter sido revogada depois do build). Recusa sem ir à rede.
+  await exigirEmissoesParaTrustlineAutorizada(tx);
   tx.addSignature(
     input.investorPubkey,
     privySignatureToBase64(input.investorSignatureHex),

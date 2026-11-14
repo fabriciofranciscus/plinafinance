@@ -12,6 +12,12 @@ export interface UseTrustlinesArgs {
   getAccessToken: () => Promise<string | null>;
   onError: (e: FlowError) => void;
   clearError: () => void;
+  /**
+   * E2-3: não cria a trustline do TESOURO aqui. O claim do claimable balance
+   * a abre (changeTrust + claim num envelope, reserva patrocinada pelo anchor),
+   * como na execução de referência. Padrão `false`: o comportamento anterior.
+   */
+  skipTesouroTrustline?: boolean;
 }
 
 export function useTrustlines({
@@ -20,6 +26,7 @@ export function useTrustlines({
   getAccessToken,
   onError,
   clearError,
+  skipTesouroTrustline = false,
 }: UseTrustlinesArgs) {
   const [trustlinesReady, setTrustlinesReady] = useState(false);
   const [trustlineLoading, setTrustlineLoading] = useState(false);
@@ -78,26 +85,28 @@ export function useTrustlines({
       // PLINARFB (Subordinada).
       await setupClasseTrustline('PLINARFB');
 
-      // TESOURO trustline (bridge da Etherfuse).
-      const tesouroBuildData = await postJson<{ xdr: string; hashHex: string }>(
-        '/api/investidor/buy/trust-tesouro/build',
-        { pubkey: onboard.publicKey },
-        getAccessToken,
-      );
-      const tesouroSig = await signRawHash({
-        address: onboard.publicKey,
-        chainType: 'stellar',
-        hash: tesouroBuildData.hashHex as `0x${string}`,
-      });
-      await postJson(
-        '/api/investidor/buy/trust-tesouro/submit',
-        {
-          xdr: tesouroBuildData.xdr,
-          investorPubkey: onboard.publicKey,
-          signatureHex: tesouroSig.signature,
-        },
-        getAccessToken,
-      );
+      // TESOURO trustline (bridge da Etherfuse) — salvo `skipTesouroTrustline`.
+      if (!skipTesouroTrustline) {
+        const tesouroBuildData = await postJson<{ xdr: string; hashHex: string }>(
+          '/api/investidor/buy/trust-tesouro/build',
+          { pubkey: onboard.publicKey },
+          getAccessToken,
+        );
+        const tesouroSig = await signRawHash({
+          address: onboard.publicKey,
+          chainType: 'stellar',
+          hash: tesouroBuildData.hashHex as `0x${string}`,
+        });
+        await postJson(
+          '/api/investidor/buy/trust-tesouro/submit',
+          {
+            xdr: tesouroBuildData.xdr,
+            investorPubkey: onboard.publicKey,
+            signatureHex: tesouroSig.signature,
+          },
+          getAccessToken,
+        );
+      }
 
       setTrustlinesReady(true);
     } catch (err) {
@@ -105,7 +114,7 @@ export function useTrustlines({
     } finally {
       setTrustlineLoading(false);
     }
-  }, [onboard, signRawHash, trustlinesReady, trustlineLoading, getAccessToken, onError, clearError]);
+  }, [onboard, signRawHash, trustlinesReady, trustlineLoading, getAccessToken, onError, clearError, skipTesouroTrustline]);
 
   return { trustlinesReady, trustlineLoading, setupTrustlines };
 }

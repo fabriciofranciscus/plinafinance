@@ -572,12 +572,9 @@ function LoginPanel() {
 
 // ─── Passo 0b — KYC + conta Pix ──────────────────────────────────────────────
 
-const PIX_TIPOS = [
-  { v: 'cpf', label: 'CPF' },
-  { v: 'email', label: 'E-mail' },
-  { v: 'phone', label: 'Telefone' },
-  { v: 'random', label: 'Aleatória' },
-] as const;
+/** Decisão do Atlas (E1-2): nesta fase o pagamento é por Pix na chave CPF do cedente. */
+const PIX_TIPO = 'cpf' as const;
+const PIX_AVISO_SO_CPF = 'Nesta fase, o pagamento é feito por Pix na chave CPF, igual ao seu cadastro.';
 
 function KycPanel({
   emailPadrao,
@@ -617,27 +614,15 @@ function KycPanel({
   const [processandoImagem, setProcessandoImagem] = useState<
     'idFront' | 'idBack' | 'selfie' | null
   >(null);
-  const [pixKeyType, setPixKeyType] = useState<'cpf' | 'email' | 'phone' | 'random'>('cpf');
-  // Chave Pix real (padrão BACEN): telefone é E.164 (+55...), máscara só de
-  // exibição — `pixKeyDigits` guarda os dígitos crus pro tipo `phone`;
-  // `pixKey` é texto livre pra email/EVP. CPF NÃO tem estado próprio: uma
-  // chave Pix tipo CPF só pode pertencer ao dono da conta, então é sempre
-  // `cpfDigits` (a mesma da seção Identidade) — nunca um valor independente.
-  const [pixKeyDigits, setPixKeyDigits] = useState('');
-  const [pixKey, setPixKey] = useState('');
+  // Chave Pix: SEMPRE o CPF do cedente (mesma da seção Identidade; uma chave CPF só pode
+  // pertencer ao dono da conta). Sem seletor de tipo e sem estado próprio.
+  const pixKeyType = PIX_TIPO;
 
   function pixKeyValor(): string {
-    if (pixKeyType === 'cpf') return cpfDigits;
-    if (pixKeyType === 'phone') return pixKeyDigits ? `+55${pixKeyDigits}` : '';
-    return pixKey.trim();
+    return cpfDigits;
   }
   function pixKeyResumo(): string | undefined {
-    if (pixKeyType === 'cpf' && cpfDigits) return `CPF · ${maskCpf(cpfDigits)} (mesmo da Identidade)`;
-    if (pixKeyType === 'phone' && pixKeyDigits) return `Telefone · ${maskTelefoneBR(pixKeyDigits)}`;
-    if (pixKey.trim()) {
-      return `${PIX_TIPOS.find((t) => t.v === pixKeyType)?.label} · ${pixKey.trim()}`;
-    }
-    return undefined;
+    return cpfDigits ? `CPF · ${maskCpf(cpfDigits)} (mesmo da Identidade)` : undefined;
   }
   const [consentimento, setConsentimento] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -725,12 +710,7 @@ function KycPanel({
     cepStatus !== 'buscando'
   );
   const documentoCompleto = !KYC_IS_PRODUCTION || documentosCompletos;
-  const pixCompleto =
-    pixKeyType === 'cpf'
-      ? !!parseCpf(cpfDigits)
-      : pixKeyType === 'phone'
-        ? pixKeyDigits.length >= 10
-        : !!pixKey.trim();
+  const pixCompleto = !!parseCpf(cpfDigits);
 
   const [abertas, setAbertas] = useState<Record<SecaoId, boolean>>({
     identidade: true,
@@ -1086,73 +1066,20 @@ function KycPanel({
           aberta={abertas.pix}
           onToggle={() => toggleSecao('pix')}
         >
-          <div className="grid grid-cols-1 md:grid-cols-[160px_1fr] gap-4">
-            <Field label="Tipo de chave">
-              <select
-                value={pixKeyType}
-                onChange={(e) => {
-                  // Troca de tipo invalida a chave anterior — evita enviar
-                  // dígitos de CPF como se fossem telefone (ou vice-versa).
-                  setPixKeyDigits('');
-                  setPixKey('');
-                  setPixKeyType(e.target.value as typeof pixKeyType);
-                }}
-                className={inputClass}
-              >
-                {PIX_TIPOS.map((t) => (
-                  <option key={t.v} value={t.v}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            {pixKeyType === 'cpf' ? (
-              <Field label="Chave Pix (CPF)">
-                <input
-                  type="text"
-                  readOnly
-                  disabled
-                  value={cpfDigits ? maskCpf(cpfDigits) : ''}
-                  placeholder="preencha o CPF na seção Identidade"
-                  className={inputClass + ' font-mono bg-document-grey/40 cursor-not-allowed'}
-                />
-                <p className="font-mono text-[10px] text-base/50 mt-1.5">
-                  Uma chave Pix CPF só pode ser do dono da conta — usamos o
-                  mesmo CPF da seção Identidade.
-                </p>
-              </Field>
-            ) : pixKeyType === 'phone' ? (
-              <Field label="Chave Pix (telefone)">
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  value={maskTelefoneBR(pixKeyDigits)}
-                  onChange={(e) => setPixKeyDigits(onlyDigits(e.target.value, 11))}
-                  placeholder="(11) 99999-9999"
-                  className={inputClass + ' font-mono'}
-                />
-              </Field>
-            ) : pixKeyType === 'email' ? (
-              <Field label="Chave Pix (e-mail)">
-                <input
-                  type="email"
-                  value={pixKey}
-                  onChange={(e) => setPixKey(e.target.value)}
-                  className={inputClass}
-                />
-              </Field>
-            ) : (
-              <Field label="Chave Pix (aleatória)">
-                <input
-                  type="text"
-                  value={pixKey}
-                  onChange={(e) => setPixKey(e.target.value)}
-                  placeholder="UUID gerado pelo seu banco"
-                  className={inputClass + ' font-mono'}
-                />
-              </Field>
-            )}
-          </div>
+          <Field label="Chave Pix (CPF)">
+            <input
+              type="text"
+              readOnly
+              disabled
+              value={cpfDigits ? maskCpf(cpfDigits) : ''}
+              placeholder="preencha o CPF na seção Identidade"
+              className={inputClass + ' font-mono bg-document-grey/40 cursor-not-allowed'}
+            />
+            <p className="font-mono text-[10px] text-base/50 mt-1.5">
+              Uma chave Pix CPF só pode ser do dono da conta — usamos o mesmo CPF da seção
+              Identidade. {PIX_AVISO_SO_CPF}
+            </p>
+          </Field>
         </Secao>
       </div>
 
@@ -1172,11 +1099,7 @@ function KycPanel({
           className="mt-1.5 w-4 h-4 accent-primary"
         />
         <span className="font-text text-sm text-base/75 leading-relaxed">
-          Concordo com o tratamento dos meus dados pessoais conforme a{' '}
-          <a href="/politica-clawback" className="underline">
-            política
-          </a>
-          . Entendo que o hash desse consentimento será registrado publicamente
+          Concordo com o tratamento dos meus dados pessoais. Entendo que o hash desse consentimento será registrado publicamente
           na Stellar como prova auditável.
         </span>
       </label>

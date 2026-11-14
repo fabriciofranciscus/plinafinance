@@ -8,6 +8,7 @@ import { TestnetBanner } from '../shell/testnet-banner';
 import { Term } from '../shared/term';
 import { QuoteCell } from '../shared/quote-cell';
 import { useExpiresIn } from '../shared/use-expires-in';
+import { tokensDaCotacao } from '../../_lib/quote-tokens';
 
 // BRL é a moeda funcional real (on-ramp Pix → TESOURO). As demais são da trilha
 // internacional (M4) — renderizam desabilitadas salvo NEXT_PUBLIC_INTL_INVESTOR_FLOW.
@@ -45,9 +46,9 @@ export function QuoteScreen({
         Quote ao vivo na anchor regulada.
       </h1>
       <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
-        Consulta real à Etherfuse. No POC, paridade 1:1 entre <Term>TESOURO</Term>{' '}
-        (bridge intermediário) e PLINA-RF. Em produção, o PIX é concluído
-        neste passo via iframe da anchor.
+        Consulta real à Etherfuse. Em rede de testes, a cotação usa o valor por
+        token do pool (<Term>TESOURO</Term> é o bridge intermediário). Em
+        produção, o PIX é concluído neste passo via iframe da anchor.
       </p>
 
       <div className="mt-12">
@@ -141,8 +142,8 @@ export function QuoteScreen({
             <dl className="grid grid-cols-2 gap-px bg-base/10 border-y border-light-hairline">
               <QuoteCell label="Você paga" value={BRL.format(Number(quote.fromAmount))} />
               <QuoteCell
-                label="PLINA-RF (paridade POC)"
-                value={NUMBER_BR.format(Number(quote.toAmount))}
+                label="PLINA-RF a receber"
+                value={NUMBER_BR.format(Number(tokensDaCotacao(quote)))}
                 accent
               />
               <QuoteCell
@@ -163,7 +164,7 @@ export function QuoteScreen({
 {`${depositCurrency} ${NUMBER_BR.format(Number(quote.fromAmount))}
 → FX SEP-38 quote: câmbio ${NUMBER_BR.format(Number(quote.exchangeRate))}
 → TESOURO (bridge regulado da anchor)
-→ PLINA-RF a receber: ${NUMBER_BR.format(Number(quote.toAmount))} tokens`}
+→ PLINA-RF a receber: ${NUMBER_BR.format(Number(tokensDaCotacao(quote)))} tokens`}
               </pre>
               <span className="mt-3 inline-flex items-center gap-1.5 border border-primary/30 bg-primary/5 px-3 py-1 font-mono text-[11px] text-base/70">
                 <span className="h-1 w-1 rounded-full bg-primary" />

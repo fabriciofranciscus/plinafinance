@@ -9,7 +9,7 @@ const m = vi.hoisted(() => ({
 
 vi.mock('@/lib/stellar/supply', () => ({ fetchSupplyDasClasses: m.fetchSupplyDasClasses }));
 vi.mock('@/lib/db', () => ({
-  db: { tentativaEmissao: { findFirst: async () => null }, quote: { findFirst: async () => null }, cota: { findMany: m.cotas }, realizacaoCaminho: { findMany: m.realizacoes },
+  db: { tentativaEmissao: { findFirst: async () => null }, quote: { findFirst: async () => null }, resgateCotacao: { findFirst: async () => null }, cota: { findMany: m.cotas }, realizacaoCaminho: { findMany: m.realizacoes },
     movimentoFundo: { aggregate: async () => ({ _sum: { deltaCaixa: null } }), createMany: async () => ({ count: 1 }) } },
 }));
 // liquidacao.ts importa módulos com efeitos de rede/assinatura; só calcularValorLiquidacao é exercitado.

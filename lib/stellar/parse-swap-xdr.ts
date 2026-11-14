@@ -66,7 +66,7 @@ const FOLGA_RELOGIO_MIN_SEC = 5;
  * 0 < maxTime ≤ agora + 120 s (build) + 60 s; minTime ≤ agora + 5 s. Tx já
  * expirada passa: quem barra é a rede. Relógio do servidor (não do Horizon).
  */
-function assertJanelaDeValidade(tx: Transaction, agoraSec: number): void {
+export function assertJanelaDeValidade(tx: Transaction, agoraSec: number): void {
   const tb = tx.timeBounds;
   if (!tb) throw new Error('xdr sem timeBounds: a janela de validade é obrigatória');
   const maxTime = Number(tb.maxTime);
@@ -87,7 +87,7 @@ function assertJanelaDeValidade(tx: Transaction, agoraSec: number): void {
  * Precondições v2 (N1-S1): a nossa tx não usa nenhuma. minAccountSequence foi o
  * vetor do HIGH (tx_bad_seq → reserva órfã → reenvio dias depois com NAV velho).
  */
-function assertSemPrecondicoesV2(tx: Transaction): void {
+export function assertSemPrecondicoesV2(tx: Transaction): void {
   const lb = tx.ledgerBounds;
   if (lb && (Number(lb.minLedger) !== 0 || Number(lb.maxLedger) !== 0)) {
     throw new Error('xdr com precondição ledgerBounds: não permitida');
@@ -107,7 +107,7 @@ function assertSemPrecondicoesV2(tx: Transaction): void {
 }
 
 /** maxTime do envelope não pode passar do prazo do quote + 120 s (N1-S1). */
-function assertDentroDoQuote(tx: Transaction, quoteExpiresAt: Date): void {
+export function assertDentroDoQuote(tx: Transaction, quoteExpiresAt: Date): void {
   const expira = quoteExpiresAt instanceof Date ? quoteExpiresAt.getTime() : NaN;
   if (!Number.isFinite(expira)) throw new Error('expectativa quoteExpiresAt inválida');
   const limite = Math.floor(expira / 1000) + STELLAR_TX_TIMEOUT_SEC;

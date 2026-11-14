@@ -192,6 +192,22 @@ export const ptBR: Dictionary = {
       linkTestnet: 'Ver registros na rede de testes',
       aviso:
         'Esta página apresenta a tese e o modelo em desenvolvimento da Plina. Não constitui oferta de valores mobiliários, promessa de rentabilidade ou garantia de liquidez. Uma estrutura institucional é planejada para fase futura, sujeita à sua constituição e à documentação aplicável.',
+      privacidade: 'Privacidade',
     },
+  },
+  privacidade: {
+    title: 'Privacidade deste site',
+    metaDescription: 'Como este site trata dados pessoais: medição anônima de visitas, cookie de idioma e formulário de contato por e-mail.',
+    versao: 'Versão base · 13 de novembro de 2026',
+    estagio: 'Este site apresenta um projeto em desenvolvimento, em rede de testes. Não há oferta de produto financeiro.',
+    quem: { titulo: 'Quem trata seus dados', texto: 'A Plina Finance (projeto em fase de testes, empresa em constituição) é a controladora dos dados descritos aqui. Para qualquer assunto de privacidade, escreva para contato@plina.finance.' },
+    medicao: { titulo: 'Medição de audiência e desempenho', texto: 'Usamos o Vercel Web Analytics e o Vercel Speed Insights. Eles registram, a cada visita, a página visitada, a origem da visita, a cidade e o país aproximados, o tipo de aparelho e o navegador, e métricas de desempenho. Não usam cookies de terceiros e não identificam você por nome ou e-mail; a sessão de visita é descartada em 24 horas. Removemos da URL qualquer parâmetro de busca e fragmento antes do envio. A Vercel atua como operadora desses dados.', base: 'Base legal: legítimo interesse, para entender o uso e o desempenho do site.' },
+    idioma: { titulo: 'Cookie de idioma', texto: 'Guardamos um cookie funcional com o idioma que você escolheu (português ou inglês). Ele só guarda essa escolha.' },
+    contato: { titulo: 'Contato por e-mail', texto: 'O formulário deste site não envia nem guarda o que você digita: ele prepara uma mensagem que você envia pelo seu próprio aplicativo de e-mail para contato@plina.finance. Ao enviar, o e-mail chega à Plina; usamos os dados só para responder ao seu contato e os guardamos pelo tempo necessário para isso.' },
+    app: { titulo: 'Aplicativo de testes', texto: 'O aplicativo da Plina (páginas de entrada, venda, compra e simulação de entrada no pool) funciona numa rede de testes, sem valor financeiro real. Pedimos que use apenas dados fictícios ou de teste. Se você informar dados pessoais, eles são usados só para operar a demonstração (login, cadastro e verificação de identidade de teste) e ficam em provedores de hospedagem, banco de dados, login, verificação de identidade e assinatura eletrônica contratados pela Plina, em ambiente de testes. Dados pessoais não vão para a rede blockchain: apenas hashes, endereços e carimbos de tempo. Não usamos esses dados para outra finalidade.' },
+    naoUsamos: 'Não usamos cookies de publicidade nem rastreamento entre sites.',
+    internacional: { titulo: 'Transferência internacional', texto: 'Provedores como a Vercel podem tratar dados fora do Brasil. Adotamos as salvaguardas previstas na LGPD para essa transferência.' },
+    direitos: { titulo: 'Seus direitos', texto: 'A LGPD (art. 18) garante, entre outros, o direito de pedir confirmação do tratamento, acesso, correção, eliminação de dados desnecessários, informação sobre o compartilhamento e revogação do consentimento. Para exercer, escreva para contato@plina.finance. Você também pode reclamar à Autoridade Nacional de Proteção de Dados (ANPD).' },
+    mudancas: 'Esta política será atualizada quando a empresa estiver constituída e o encarregado for designado. Quando esta página mudar, publicaremos aqui a nova versão e a data.',
   },
 };

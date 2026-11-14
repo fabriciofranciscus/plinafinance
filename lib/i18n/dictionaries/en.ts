@@ -191,6 +191,22 @@ export const en: Dictionary = {
       linkTestnet: 'View records on the test network',
       aviso:
         "This page presents Plina's thesis and the model under development. It is not an offer of securities, a promise of returns or a guarantee of liquidity. An institutional structure is planned for a future phase, subject to its formation and applicable documentation.",
+      privacidade: 'Privacy',
     },
+  },
+  privacidade: {
+    title: 'Privacy of this site',
+    metaDescription: 'How this site handles personal data: anonymous visit measurement, a language cookie and an e-mail contact form.',
+    versao: 'Base version · 13 November 2026',
+    estagio: 'This site presents a project under development, on a test network. There is no offer of any financial product.',
+    quem: { titulo: 'Who handles your data', texto: 'Plina Finance (a project in its testing phase, company being incorporated) is the controller of the data described here. For any privacy matter, write to contato@plina.finance.' },
+    medicao: { titulo: 'Audience and performance measurement', texto: 'We use Vercel Web Analytics and Vercel Speed Insights. On each visit they record the page visited, where the visit came from, approximate city and country, device type and browser, and performance metrics. They do not use third-party cookies and do not identify you by name or e-mail; the visit session is discarded within 24 hours. We strip any query string and fragment from the URL before sending. Vercel acts as processor of this data.', base: 'Legal basis: legitimate interest, to understand how the site is used and how it performs.' },
+    idioma: { titulo: 'Language cookie', texto: 'We store a functional cookie with the language you chose (Portuguese or English). It stores only that choice.' },
+    contato: { titulo: 'Contact by e-mail', texto: 'The form on this site does not send or store what you type: it prepares a message that you send from your own e-mail app to contato@plina.finance. When you send it, the e-mail reaches Plina; we use the data only to reply to you and keep it for as long as needed for that.' },
+    app: { titulo: 'Test application', texto: 'The Plina application (sign-in, sell, buy and pool-entry simulation pages) runs on a test network, with no real financial value. We ask that you use only fictitious or test data. If you enter personal data, it is used only to run the demonstration (sign-in, test registration and test identity verification) and is held by hosting, database, sign-in, identity-verification and e-signature providers engaged by Plina, in a test environment. Personal data does not go onto the blockchain: only hashes, addresses and timestamps. We do not use this data for any other purpose.' },
+    naoUsamos: 'We do not use advertising cookies or cross-site tracking.',
+    internacional: { titulo: 'International transfer', texto: 'Providers such as Vercel may process data outside Brazil. We apply the safeguards provided for by Brazilian data protection law for this transfer.' },
+    direitos: { titulo: 'Your rights', texto: 'Brazilian data protection law (LGPD, art. 18) gives you, among other rights, the right to ask for confirmation of processing, access, correction, deletion of unnecessary data, information about sharing and withdrawal of consent. To exercise them, write to contato@plina.finance. You may also complain to the Brazilian data protection authority (ANPD).' },
+    mudancas: 'This policy will be updated when the company is incorporated and the data protection officer is appointed. When this page changes, we will publish the new version and date here.',
   },
 };

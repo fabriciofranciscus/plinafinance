@@ -18,6 +18,7 @@ vi.mock('@/lib/db', () => {
       cota: { findMany: m.cotas },
       movimentoFundo: { aggregate: async () => ({ _sum: { deltaCaixa: null } }) },
       quote: { updateMany: m.quoteUpdateMany, findFirst: async () => null }, // findFirst: nenhum swap em voo
+      resgateCotacao: { findFirst: async () => null },
       $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
     },
   };

@@ -181,6 +181,14 @@ enum AcaoAudit {
   TESOURARIA_LEGADA_REGISTRADA
   // Webhook assinado do anchor atualizou o KYC (E2-2)
   KYC_ATUALIZADO_WEBHOOK
+  // Envelope DocuSign da cessão criado (DS2); sem memo on-chain neste passo
+  CESSAO_ENVIADA_DOCUSIGN
+  // Envelope recusado/anulado no DocuSign (DS3)
+  CESSAO_RECUSADA_DOCUSIGN
+  // TES-3 — queima do excesso de PLINARF da posição da Plina (resíduo de testes); evento do mesmo registro do memo
+  TESOURARIA_EXCESSO_QUEIMADA
+  // TES-2 — tokens da tesouraria legada do distributor movidos para a conta de posição da Plina (evento do registro do memo)
+  TESOURARIA_LEGADA_MOVIDA
 }
 
 // Funil vendedor
@@ -422,6 +430,7 @@ model Investidor {
   @@index([status])
   @@index([tipo])
   @@index([jurisdicao])
+  resgateCotacoes        ResgateCotacao[]
 }
 
 /// Quote BRL → TESOURO retornado pela Etherfuse, persistido pra binding
@@ -619,6 +628,13 @@ model Cessao {
   hashDocumento       String? // SHA-256 do PDF assinado
   onChainTxHash       String? // tx Stellar com memo hash
   assinadaEm          DateTime?
+  /// DS2: marca de "envio ao DocuSign em curso" (claim no banco). Serializa o envio:
+  /// só quem a grava (updateMany condicionado) chama a API; marca velha = envio
+  /// anterior morreu ou ficou incerto → quem assume consulta o transactionId antes.
+  docusignEnvioIniciadoEm DateTime?
+  /// DS3: claim da conclusão (baixar PDF → guardar → hash → âncora → ASSINADA). Mesmo
+  /// padrão do envio: marca velha = quem assume retoma os passos (todos idempotentes).
+  docusignConclusaoIniciadaEm DateTime?
   status              CessaoStatus  @default(PENDENTE)
   /// PRD v1.0 §M1 — caminho preferencial (API administradora) vs fallback
   /// (cartório digital). Default CARTORIO_DIGITAL pra cessões pré-M1.
@@ -716,6 +732,45 @@ model LeadEoi {
 
   @@index([status])
   @@index([criadoEm])
+}
+
+/// Cotação do resgate com queima (E2-6, contrato 2026-11-11-e2-4-resgate-api). Persistida no build; o submit confere o
+/// XDR contra ela, reserva (`submitXdrHash` único) e só então a Plina (distributor) assina. Sem relação declarada com
+/// Investidor (só `investidorId` indexado) para não tocar o model dele.
+model ResgateCotacao {
+  id                   String        @id @default(cuid())
+  investidorId         String
+  investidor           Investidor    @relation(fields: [investidorId], references: [id])
+  classe               ClassePLINARF @default(SENIOR)
+  /// PLINARF a QUEIMAR (perna 1).
+  plinarfAmount        Decimal       @db.Decimal(20, 7)
+  /// plinarfAmount × NAV, informativo e valor que sai do caixa do fundo (RESGATE_PAGO).
+  brlEquivalente       Decimal       @db.Decimal(20, 2)
+  /// TESOURO a pagar (perna 2) = brlEquivalente × taxaBridge (7 casas, para baixo).
+  bridgeAmount         Decimal       @db.Decimal(20, 7)
+  taxaBridge           String
+  bridgeCode           String
+  bridgeIssuer         String
+  navPorTokenNaCotacao Decimal       @db.Decimal(20, 8)
+  expiresAt            DateTime
+  submitXdrHash        String?       @unique
+  submitTxHash         String?
+  submitMaxTime        DateTime?
+  submitXdr            String?       @db.Text
+  consumedAt           DateTime?
+  consumedTxHash       String?
+  /// Mesmas regras do N1 para a reserva órfã (ver Quote): 1ª varredura que viu a sequence livre depois do prazo
+  /// (a liberação por tempo exige uma 2ª, ≥ 5 min depois); hash liberado por tempo vai para a vigia de 24 h.
+  livreExpiradaVistaEm DateTime?
+  liberadaTxHash       String?
+  liberadaPorTempoEm   DateTime?
+  vigiaConsultadaEm    DateTime?
+  /// Dedupe do alerta de conflito da vigia (1 e-mail por cotação).
+  conflitoAlertadoEm   DateTime?
+  criadoEm             DateTime      @default(now())
+
+  @@index([investidorId])
+  @@index([expiresAt])
 }
 
 /// Reserva de cota pelo comprador-usuário. 72h por default (PRD_MVP §6.8).

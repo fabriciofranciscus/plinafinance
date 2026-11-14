@@ -9,23 +9,35 @@ import { ApiError } from '../api/errors';
 
 export async function assertSemSwapEmConferencia(
   investidorId: string,
-  opts: { ignorarQuoteId?: string } = {},
+  opts: { ignorarQuoteId?: string; ignorarResgateId?: string } = {},
 ): Promise<void> {
-  const aberta = await db.quote.findFirst({
-    where: {
-      investidorId,
-      submitXdrHash: { not: null },
-      consumedAt: null,
-      plinarfAmount: { not: null },
-      ...(opts.ignorarQuoteId ? { id: { not: opts.ignorarQuoteId } } : {}),
-    },
-    select: { id: true },
-  });
-  if (aberta) {
+  // Swap de subscrição OU resgate com queima do investidor em conferência (reserva órfã).
+  const [aberta, resgateAberto] = await Promise.all([
+    db.quote.findFirst({
+      where: {
+        investidorId,
+        submitXdrHash: { not: null },
+        consumedAt: null,
+        plinarfAmount: { not: null },
+        ...(opts.ignorarQuoteId ? { id: { not: opts.ignorarQuoteId } } : {}),
+      },
+      select: { id: true },
+    }),
+    db.resgateCotacao.findFirst({
+      where: {
+        investidorId,
+        submitXdrHash: { not: null },
+        consumedAt: null,
+        ...(opts.ignorarResgateId ? { id: { not: opts.ignorarResgateId } } : {}),
+      },
+      select: { id: true },
+    }),
+  ]);
+  if (aberta || resgateAberto) {
     throw new ApiError(
       'SWAP_EM_CONFERENCIA',
       409,
-      'Você tem um swap em conferência. Aguarde a conclusão antes de iniciar outro.',
+      'Você tem uma operação (swap ou resgate) em conferência. Aguarde a conclusão antes de iniciar outra.',
     );
   }
 }

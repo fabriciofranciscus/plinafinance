@@ -21,6 +21,7 @@ import { valorLiquidoDaCotacao } from './regras-swap';
 import { assetCodeForClasse, classeOrDefault } from '../stellar/classes';
 import { fetchTransactionByHash } from '../stellar/transactions';
 import { situacaoEnvelopeSwap } from '../stellar/orfa-swap';
+import { escriturarResgate, liberarReservaDoResgate } from './resgate-escrituracao';
 
 /**
  * A liberação por TEMPO exige duas varreduras seguidas vendo a sequence livre depois do prazo, com este
@@ -30,6 +31,9 @@ export const INTERVALO_MIN_ENTRE_VARREDURAS_MS = 5 * 60_000;
 
 /** Quantos hashes liberados por tempo a vigia consulta por execução (~0,45 s cada; a rota tem 60 s). */
 export const VIGIA_LOTE = 50;
+
+/** Resgates são raros: lote próprio e pequeno da vigia (soma ao VIGIA_LOTE dentro dos 60 s da rota). */
+export const VIGIA_LOTE_RESGATE = 10;
 
 /** Janela da vigia dos hashes liberados por tempo. */
 export const VIGIA_LIBERADAS_MS = 24 * 3600_000;
@@ -134,10 +138,21 @@ export interface ResultadoReconciliacao {
   vigiaEscrituradas: number;
   /** Vigia: tx liberada por tempo entrou, mas o quote já foi consumido por OUTRA tx (emissão dupla). */
   vigiaConflitos: number;
+  /** Resgates com queima (E2-6) escriturados / liberados com prova / aguardando / sem prova (operador). */
+  resgatesEscriturados: number;
+  resgatesLiberados: number;
+  resgatesAguardando: number;
+  resgatesSemProva: number;
+  /** Vigia de 24 h dos resgates liberados por tempo: entrou depois (escriturado + alerta) / conflito (cotação já consumida por outra tx). */
+  resgatesVigiaEscrituradas: number;
+  resgatesVigiaConflitos: number;
+  resgatesVigiaRestantes: number;
   /** Hashes liberados por tempo ainda na janela de 24 h que ficaram para a próxima execução (só contagem). */
   vigiaRestantes: number;
   /** Ids (internos) dos quotes com conflito NOVO (ainda sem alerta): para o e-mail; a rota não os devolve. */
   conflitoQuoteIds: string[];
+  /** Idem para as cotações de resgate com conflito novo (e-mail; a rota não os devolve). */
+  conflitoResgateIds: string[];
   erros: number;
 }
 
@@ -180,6 +195,15 @@ export async function marcarConflitosAlertados(quoteIds: string[], agora: number
   });
 }
 
+/** Idem `marcarConflitosAlertados`, para as cotações de resgate. */
+export async function marcarConflitosResgateAlertados(ids: string[], agora: number = Date.now()): Promise<void> {
+  if (ids.length === 0) return;
+  await db.resgateCotacao.updateMany({
+    where: { id: { in: ids }, conflitoAlertadoEm: null },
+    data: { conflitoAlertadoEm: new Date(agora) },
+  });
+}
+
 export async function reconciliarSwapsOrfaos(
   opts: { agora?: number } = {},
 ): Promise<ResultadoReconciliacao> {
@@ -187,7 +211,9 @@ export async function reconciliarSwapsOrfaos(
   const agoraSec = Math.floor(agora / 1000);
   const r: ResultadoReconciliacao = {
     escriturados: 0, liberados: 0, aguardando: 0, vencidasSemProva: 0, semHash: 0,
-    vigiaEscrituradas: 0, vigiaConflitos: 0, vigiaRestantes: 0, conflitoQuoteIds: [], erros: 0,
+    resgatesEscriturados: 0, resgatesLiberados: 0, resgatesAguardando: 0, resgatesSemProva: 0,
+    resgatesVigiaEscrituradas: 0, resgatesVigiaConflitos: 0, resgatesVigiaRestantes: 0,
+    vigiaEscrituradas: 0, vigiaConflitos: 0, vigiaRestantes: 0, conflitoQuoteIds: [], conflitoResgateIds: [], erros: 0,
   };
 
   const orfas = (await db.quote.findMany({
@@ -265,7 +291,110 @@ export async function reconciliarSwapsOrfaos(
     }
   }
 
-  // Vigia de 24 h: hashes liberados por TEMPO. Sucesso on-chain depois → escritura + alerta.
+  // Resgates com queima (E2-6) reservados e não escriturados: a queima já tirou token do supply sem baixar o caixa
+  // (o NAV subiria), então fecham o gate do NAV como o swap — e têm as MESMAS regras de órfã do N1 (Atlas):
+  // prova pela conta do investidor (`situacaoEnvelopeSwap`); ENTROU com sucesso → escritura; ENTROU com falha ou S
+  // consumida por outra tx → libera; S livre depois do prazo → libera POR TEMPO só na 2ª varredura (≥ 5 min depois
+  // da 1ª) e o hash vai para a vigia de 24 h; AGUARDANDO → depois; INDETERMINADO / sem XDR → operador.
+  const resgates = await db.resgateCotacao.findMany({
+    where: { submitXdrHash: { not: null }, consumedAt: null },
+    select: {
+      id: true, investidorId: true, classe: true, plinarfAmount: true, brlEquivalente: true, bridgeAmount: true,
+      navPorTokenNaCotacao: true, submitXdrHash: true, submitTxHash: true, submitXdr: true, livreExpiradaVistaEm: true,
+    },
+  });
+  for (const c of resgates) {
+    if (!c.submitXdrHash || !c.submitXdr) {
+      r.resgatesSemProva++;
+      continue;
+    }
+    try {
+      const sit = await situacaoEnvelopeSwap(c.submitXdr);
+      if (sit.status === 'ENTROU' && sit.successful) {
+        await escriturarResgate({ cotacao: c, finalHash: sit.hash, operador: 'reconciliador-resgate' });
+        r.resgatesEscriturados++;
+      } else if (sit.status === 'ENTROU' || sit.status === 'OUTRA_TX') {
+        await liberarReservaDoResgate(c.id, c.submitXdrHash);
+        r.resgatesLiberados++;
+      } else if (sit.status === 'LIVRE_EXPIRADA') {
+        const vista = c.livreExpiradaVistaEm;
+        if (!vista) {
+          await db.resgateCotacao.updateMany({
+            where: { id: c.id, submitXdrHash: c.submitXdrHash, consumedAt: null },
+            data: { livreExpiradaVistaEm: new Date(agora) },
+          });
+          r.resgatesAguardando++;
+        } else if (agora - vista.getTime() >= INTERVALO_MIN_ENTRE_VARREDURAS_MS) {
+          await liberarReservaDoResgate(c.id, c.submitXdrHash, { porTempo: { txHash: c.submitTxHash ?? '' } });
+          r.resgatesLiberados++;
+        } else {
+          r.resgatesAguardando++; // 2ª varredura cedo demais: não conta
+        }
+      } else if (sit.status === 'AGUARDANDO') {
+        r.resgatesAguardando++;
+      } else {
+        r.resgatesSemProva++; // INDETERMINADO: sem prova de não-entrada → operador
+      }
+      // A marca da 1ª varredura só vale enquanto o estado seguir LIVRE_EXPIRADA.
+      if (sit.status !== 'LIVRE_EXPIRADA' && c.livreExpiradaVistaEm && sit.status !== 'ENTROU' && sit.status !== 'OUTRA_TX') {
+        await db.resgateCotacao.updateMany({
+          where: { id: c.id, submitXdrHash: c.submitXdrHash, consumedAt: null },
+          data: { livreExpiradaVistaEm: null },
+        });
+      }
+    } catch (err) {
+      console.error('[swap-reconciliacao] resgate', c.id, (err as { name?: string })?.name ?? 'erro');
+      r.erros++;
+    }
+  }
+
+  // Vigia de 24 h dos resgates liberados por tempo (rodízio em lote próprio): sucesso on-chain depois → escritura +
+  // alerta; cotação já consumida por OUTRA tx e a liberada entrou → conflito (alerta por e-mail, sem escriturar).
+  const doVigiaResgate = {
+    liberadaTxHash: { not: null },
+    liberadaPorTempoEm: { gte: new Date(agora - VIGIA_LIBERADAS_MS) },
+  };
+  const totalVigiaResgate = await db.resgateCotacao.count({ where: doVigiaResgate });
+  const vigiadosResgate = await db.resgateCotacao.findMany({
+    where: doVigiaResgate,
+    orderBy: [{ vigiaConsultadaEm: { sort: 'asc', nulls: 'first' } }, { liberadaPorTempoEm: 'asc' }],
+    take: VIGIA_LOTE_RESGATE,
+    select: {
+      id: true, investidorId: true, classe: true, plinarfAmount: true, brlEquivalente: true, bridgeAmount: true,
+      navPorTokenNaCotacao: true, liberadaTxHash: true, consumedAt: true, consumedTxHash: true, conflitoAlertadoEm: true,
+    },
+  });
+  for (const v of vigiadosResgate) {
+    if (!v.liberadaTxHash) continue;
+    if (v.consumedTxHash === v.liberadaTxHash) continue; // já escriturado
+    try {
+      const onchain = await fetchTransactionByHash(v.liberadaTxHash);
+      if (!onchain?.successful) continue;
+      if (v.consumedAt) {
+        if (!v.conflitoAlertadoEm) {
+          console.error('[swap-reconciliacao] ALERTA vigia: resgate liberado por tempo entrou e a cotação já tem outra tx', v.id);
+          r.resgatesVigiaConflitos++;
+          r.conflitoResgateIds.push(v.id);
+        }
+        continue;
+      }
+      await escriturarResgate({ cotacao: v, finalHash: onchain.hash, operador: 'reconciliador-resgate-vigia' });
+      console.error('[swap-reconciliacao] ALERTA vigia: resgate liberado por tempo entrou on-chain e foi escriturado', v.id);
+      r.resgatesVigiaEscrituradas++;
+    } catch (err) {
+      console.error('[swap-reconciliacao] vigia resgate', v.id, (err as { name?: string })?.name ?? 'erro');
+      r.erros++;
+    }
+  }
+  r.resgatesVigiaRestantes = Math.max(0, totalVigiaResgate - vigiadosResgate.length);
+  if (vigiadosResgate.length > 0) {
+    await db.resgateCotacao.updateMany({
+      where: { id: { in: vigiadosResgate.map((v) => v.id) } },
+      data: { vigiaConsultadaEm: new Date(agora) },
+    });
+  }
+
+  // Vigia de 24 h: hashes de swap liberados por TEMPO. Sucesso on-chain depois → escritura + alerta.
   const doVigia = {
     liberadaTxHash: { not: null },
     liberadaPorTempoEm: { gte: new Date(agora - VIGIA_LIBERADAS_MS) },

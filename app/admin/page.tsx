@@ -61,6 +61,13 @@ const STATUS_COTA_LABEL: Record<string, string> = {
   REVERTIDA: 'Revertida',
 };
 
+/** Anuência da administradora: o evento mais recente (eventos vêm do mais novo ao mais antigo) com status válido. */
+function anuenciaDe(eventos: Array<{ acao: string; payloadJson: unknown }>): string | null {
+  const e = eventos.find((x) => x.acao === 'ANUENCIA_REGISTRADA');
+  const st = (e?.payloadJson as { status?: string } | null | undefined)?.status;
+  return st === 'CONFIRMADA' || st === 'DECLARADA_PENDENTE' ? st : null;
+}
+
 export default async function AdminPage() {
   if (!(await isAdminAuthenticated())) {
     return <LoginForm />;
@@ -84,7 +91,20 @@ export default async function AdminPage() {
         ofertas: {
           orderBy: { versao: 'desc' },
           take: 1,
-          include: { cessao: { include: { pagamento: true, cota: true } } },
+          include: {
+            cessao: {
+              include: {
+                pagamento: true,
+                cota: true,
+                // etapas do pipeline: laudo = COTA_VALIDADA; anuência = ANUENCIA_REGISTRADA (o último vence)
+                eventos: {
+                  where: { acao: { in: ['COTA_VALIDADA', 'ANUENCIA_REGISTRADA'] } },
+                  select: { acao: true, payloadHash: true, payloadJson: true },
+                  orderBy: { criadoEm: 'desc' },
+                },
+              },
+            },
+          },
         },
       },
     }),
@@ -106,6 +126,15 @@ export default async function AdminPage() {
       select: { valorRealizado: true, spread: true },
     }),
   ]);
+
+  // Situação do Pix de cada cessão do funil (a tabela não tem relação direta na Cessao).
+  const cessaoIds = leadsVendedor.flatMap((l) => l.ofertas.map((o) => o.cessao?.id).filter((x): x is string => !!x));
+  const pixPorCessao = new Map(
+    (cessaoIds.length
+      ? await db.transferenciaPix.findMany({ where: { cessaoId: { in: cessaoIds } }, select: { cessaoId: true, status: true } })
+      : []
+    ).map((t) => [t.cessaoId, t.status as string]),
+  );
 
   const navTotal = navTotalDoPool(cotas, realizacoes);
   const tokensVivos = tokensEmitidosVivos(cotas);
@@ -220,6 +249,7 @@ export default async function AdminPage() {
           transita conforme operador avança o pipeline.
         </p>
         <VendedorPipeline
+          redePublica={process.env.STELLAR_NETWORK === 'PUBLIC'}
           leads={leadsVendedor.map((l) => ({
             id: l.id,
             nome: l.nome,
@@ -249,6 +279,11 @@ export default async function AdminPage() {
                         }
                       : null,
                     cota: o.cessao.cota ? { id: o.cessao.cota.id } : null,
+                    laudoRegistrado: o.cessao.eventos.some((e) => e.acao === 'COTA_VALIDADA'),
+                    laudoHash: o.cessao.eventos.find((e) => e.acao === 'COTA_VALIDADA')?.payloadHash ?? null,
+                    anuenciaStatus: anuenciaDe(o.cessao.eventos),
+                    titularSituacao: o.cessao.titularSituacao,
+                    pixStatus: pixPorCessao.get(o.cessao.id) ?? null,
                   }
                 : null,
             })),

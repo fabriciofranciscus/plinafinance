@@ -122,10 +122,19 @@ async function exigirSemEmissaoEmVoo(): Promise<void> {
 async function exigirSemSwapEmVoo(): Promise<void> {
   let emVooRow: { id: string } | null;
   try {
-    emVooRow = await db.quote.findFirst({
-      where: { submitXdrHash: { not: null }, consumedAt: null, plinarfAmount: { not: null } },
-      select: { id: true },
-    });
+    // Swap de subscrição reservado e não escriturado (supply com +q sem o caixa) OU resgate com queima reservado
+    // e não escriturado (supply com −q sem a baixa do caixa: o NAV subiria): qualquer um fecha o NAV (E2-6).
+    const [swap, resgate] = await Promise.all([
+      db.quote.findFirst({
+        where: { submitXdrHash: { not: null }, consumedAt: null, plinarfAmount: { not: null } },
+        select: { id: true },
+      }),
+      db.resgateCotacao.findFirst({
+        where: { submitXdrHash: { not: null }, consumedAt: null },
+        select: { id: true },
+      }),
+    ]);
+    emVooRow = swap ?? resgate;
   } catch (err) {
     console.error('[nav-supply] leitura dos swaps em voo falhou', extractSafeError(err));
     throw new NavIndisponivelError('LEDGER_LEITURA_FALHOU', { cause: err });
