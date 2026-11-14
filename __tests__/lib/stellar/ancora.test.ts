@@ -249,3 +249,15 @@ describe('desde obrigatório no ancorarSha256 (decisão do Atlas)', () => {
     expect(submitEnvelope).not.toHaveBeenCalled();
   });
 });
+
+describe('semEspera (I1 do Argus: a âncora da incorporação roda dentro de uma transação)', () => {
+  it('ambíguo com semEspera → ANCORA_NAO_CONFIRMADA na hora, sem dormir nem reenviar', async () => {
+    submitEnvelope.mockResolvedValue({ status: 'AMBIGUOUS', hash: 'h', reason: 'timeout' });
+    const dorme = vi.fn(async (ms: number) => { agora += ms; });
+    _setRelogioAncoraForTests({ agora: () => agora, dormir: dorme });
+    const err = await ancorarSha256({ sha256Hex: SHA, contexto: 'COTA_INCORPORADA', desde: new Date('2026-11-11T14:00:00Z'), semEspera: true }).catch((e: unknown) => e);
+    expect((err as AncoraError).code).toBe('ANCORA_NAO_CONFIRMADA');
+    expect(dorme).not.toHaveBeenCalled();
+    expect(submitEnvelope).toHaveBeenCalledTimes(1);
+  });
+});
