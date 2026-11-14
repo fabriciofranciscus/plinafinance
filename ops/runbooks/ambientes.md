@@ -43,14 +43,14 @@ O ponto (d) traz 5 migrations novas (3 do E2-6: `resgate_cotacao`, `resgate_orfa
 
 Baseline antes do preview (leitura em 2026-11-13; produção por correspondência com o dev, ver nota): `_prisma_migrations`
 com **47 linhas** = as **44** pastas de `prisma/migrations` da `main` (`4f337e8`) + **3** aplicadas à mão no banco
-compartilhado antes da separação: `20261111020000_audit_tesouraria_legada_movida` (TES-2; a pasta existe só na
-branch `feat/tes-2-registro-evento`, não na `main` nem no d-point) e as 2 do DS (`cessao_docusign_envio`,
+compartilhado antes da separação: `20261111020000_audit_tesouraria_legada_movida` (TES-2; a pasta não está na `main`,
+mas entra no d-point com o valor no enum, byte a byte igual ao checksum já gravado) e as 2 do DS (`cessao_docusign_envio`,
 `cessao_docusign_conclusao`). A última por nome é `20261112080000_acao_audit_reabertura_por_provedor`. Sem
 `ResgateCotacao`. Linha sem pasta local não quebra o `migrate deploy`.
 
-Alvo depois de o `migrate deploy` aplicar o d-point (50 pastas = 44 + 6 novas: 3 do E2-6, 2 do DS, 1 do TES-3):
-**51 linhas** (as 47 + as 3 do E2-6 + a do TES-3; as 2 do DS já tinham linha e são puladas, a da TES-2
-continua sem pasta), última por nome `20261113100000_audit_tesouraria_excesso_queimada`, `ResgateCotacao` presente.
+Alvo depois de o `migrate deploy` aplicar o d-point (**51 pastas** = 44 + 7 novas: 3 do E2-6, 2 do DS, 1 do TES-3,
+1 do TES-2): **51 linhas** (as 47 + as 3 do E2-6 + a do TES-3; as 2 do DS e a da TES-2 já tinham linha com o
+mesmo checksum e são puladas), última por nome `20261113100000_audit_tesouraria_excesso_queimada`, `ResgateCotacao` presente.
 
 Depois do 1º preview verde do d-point:
 
@@ -65,7 +65,7 @@ Depois do 1º preview verde do d-point:
    continua **47** e sem `ResgateCotacao`, até o deploy da `main`. Sem acesso de leitura à produção, a
    evidência é o log do passo 1 (host de dev) mais a contagem inalterada no console do Neon.
 4. Registre no mural: SHA do preview, host visto no log, contagens antes/depois.
-5. Depois do deploy da `main` (Thais): a produção chega a **50 pastas / 51 linhas**, última
+5. Depois do deploy da `main` (Thais): a produção chega a **51 pastas / 51 linhas**, última
    `20261113100000_audit_tesouraria_excesso_queimada` com
    `checksum = 2078529094a573c26660d087d8a5a20a372c7711c7b9c6e4eef113d1baffffef` e `finished_at` preenchido.
 
