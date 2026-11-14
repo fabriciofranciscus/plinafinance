@@ -26,9 +26,12 @@ const st = vi.hoisted(() => ({
   chain: new Map<string, { successful: boolean }>(),
   built: [] as Array<{ hash: string; xdr: string; amount: string }>,
   submitScript: [] as Array<'SUCCESS' | 'AMBIGUOUS' | 'FAILED'>,
+  ancoraArgs: [] as Array<{ semEspera?: boolean; sha256Hex: string }>,
   ancoras: [] as Array<{ sha256Hex: string; contexto: string; desde: Date; reutilizada: boolean; txHash: string }>,
   ancoraMapa: new Map<string, string>(),
   ancoraFalha: null as Error | null,
+  /** I1 (962854d): âncora com desfecho AMBÍGUO (semEspera) — 'entra' = a tx entra no ledger mesmo assim; 'nao' = não entra. */
+  ancoraAmbigua: null as null | 'entra' | 'nao',
   porMemo: null as null | { txHash: string; amount: string },
   fetchSupplyDasClasses: vi.fn(),
 }));
@@ -71,9 +74,14 @@ vi.mock('@/lib/stellar/issuer', () => ({
   }),
 }));
 vi.mock('@/lib/stellar/ancora', () => ({
-  ancorarSha256: vi.fn(async (i: { sha256Hex: string; contexto: string; desde: Date }) => {
+  ancorarSha256: vi.fn(async (i: { sha256Hex: string; contexto: string; desde: Date; semEspera?: boolean }) => {
     st.calls.push('ancora');
+    st.ancoraArgs.push(i);
     if (st.ancoraFalha) throw st.ancoraFalha;
+    if (st.ancoraAmbigua) {
+      if (st.ancoraAmbigua === 'entra' && !st.ancoraMapa.has(i.sha256Hex)) st.ancoraMapa.set(i.sha256Hex, `ancoratx${st.ancoraMapa.size + 1}`);
+      throw Object.assign(new Error('âncora ambígua'), { code: 'ANCORA_NAO_CONFIRMADA' });
+    }
     const ja = st.ancoraMapa.get(i.sha256Hex);
     const txHash = ja ?? `ancoratx${st.ancoraMapa.size + 1}`;
     st.ancoraMapa.set(i.sha256Hex, txHash);
@@ -136,7 +144,7 @@ describe.skipIf(!PG)('E1-P — registro canônico da incorporação ancorado ant
   beforeEach(async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     st.calls = []; st.chain = new Map(); st.built = []; st.submitScript = []; st.ancoras = []; st.ancoraMapa = new Map();
-    st.ancoraFalha = null; st.porMemo = null;
+    st.ancoraFalha = null; st.ancoraAmbigua = null; st.ancoraArgs = []; st.porMemo = null;
     st.fetchSupplyDasClasses.mockReset().mockResolvedValue({ senior: supply('0'), subordinada: supply('0') });
     resetNavSupplyCache();
     await db.$executeRawUnsafe(
@@ -341,6 +349,71 @@ describe.skipIf(!PG)('E1-P — registro canônico da incorporação ancorado ant
       const r = await incorporarCota({ ...base, cessaoId: 'cessao_orig', pixValorBrl: '400.00' });
       expect(r.txHash).toBe('hash1');
       expect(await db.cota.count()).toBe(1);
+    });
+  });
+
+  describe('I1 (962854d): a âncora da incorporação NÃO espera dentro da $transaction', () => {
+    it('toda chamada da âncora feita por incorporarCota passa semEspera:true', async () => {
+      await incorporarCota(base);
+      expect(st.ancoraArgs.length).toBeGreaterThan(0);
+      expect(st.ancoraArgs.every((a) => a.semEspera === true)).toBe(true);
+    });
+
+    it('âncora AMBÍGUA: EMISSAO_EM_ANDAMENTO na hora; nada é construído/enviado nem gravado (sem tentativa ⇒ o NAV NÃO fica travado); mensagem sem a causa', async () => {
+      st.ancoraAmbigua = 'nao';
+      const t0 = Date.now();
+      const e = (await incorporarCota(base).catch((x: unknown) => x)) as Error & { code?: string };
+      expect(Date.now() - t0).toBeLessThan(5000); // não espera ~130 s
+      expect(e.code).toBe('EMISSAO_EM_ANDAMENTO');
+      expect(e.message).not.toContain('ambígua');
+      expect(st.calls).toEqual(['ancora']);
+      expect(await db.cota.count()).toBe(0);
+      expect(await db.tentativaEmissao.count()).toBe(0);
+      expect(await db.eventoAudit.count({ where: { acao: 'COTA_INCORPORADA' } })).toBe(0);
+      expect(await db.movimentoFundo.count()).toBe(0);
+      resetNavSupplyCache();
+      const { lerSupplyDoNav } = await import('@/lib/services/nav-supply');
+      await expect(lerSupplyDoNav({ fresh: true })).resolves.toBeDefined();
+    });
+
+    it('a âncora ambígua ENTROU no ledger: a próxima chamada a reencontra pelo hash (reutilizada, 1 só âncora), emite UMA vez e o evento aponta essa âncora', async () => {
+      st.ancoraAmbigua = 'entra';
+      await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+      const hash = [...st.ancoraMapa.keys()][0];
+      st.ancoraAmbigua = null;
+      const r = await incorporarCota(base);
+      expect(r.txHash).toBe('hash1');
+      expect(st.ancoraMapa.size).toBe(1);
+      expect(st.ancoras[st.ancoras.length - 1]).toMatchObject({ sha256Hex: hash, reutilizada: true });
+      expect(st.built).toHaveLength(1);
+      const ev = await evento();
+      expect(ev.payloadHash).toBe(hash);
+      expect(sha(bytesCanonicos((ev.payloadJson as any).registroCanonico))).toBe(hash);
+    });
+
+    it('a âncora ambígua NÃO entrou: a próxima chamada ancora de novo e emite UMA vez; nunca 2 emissões', async () => {
+      st.ancoraAmbigua = 'nao';
+      await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'EMISSAO_EM_ANDAMENTO' });
+      expect(st.ancoraMapa.size).toBe(0);
+      st.ancoraAmbigua = null;
+      await incorporarCota(base);
+      expect(st.built).toHaveLength(1);
+      expect(st.ancoraMapa.size).toBe(1);
+      expect(await db.cota.count()).toBe(1);
+    });
+
+    it('falha DEFINITIVA da âncora (não ambígua) continua ANCORA_INCORPORACAO_FALHOU (não vira "em andamento")', async () => {
+      st.ancoraFalha = Object.assign(new Error('recusada'), { code: 'ANCORA_FALHOU' });
+      await expect(incorporarCota(base)).rejects.toMatchObject({ code: 'ANCORA_INCORPORACAO_FALHOU' });
+      expect(st.calls).toEqual(['ancora']);
+    });
+
+    it('3 chamadas simultâneas com a âncora ambígua: nenhuma emite, nenhuma grava, todas EMISSAO_EM_ANDAMENTO (o lock serializa, sem travar)', async () => {
+      st.ancoraAmbigua = 'nao';
+      const rs = await Promise.all([1, 2, 3].map(() => incorporarCota(base).catch((x: unknown) => x as { code?: string })));
+      expect(rs.every((e) => (e as { code?: string }).code === 'EMISSAO_EM_ANDAMENTO')).toBe(true);
+      expect(st.built).toHaveLength(0);
+      expect(await db.cota.count()).toBe(0);
     });
   });
 });

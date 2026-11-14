@@ -43,9 +43,12 @@ export interface EntradaRegistroIncorporacao {
 
 export class RegistroIncorporacaoError extends Error {
   readonly code = 'ANCORA_INCORPORACAO_FALHOU' as const;
-  constructor(options?: { cause?: unknown }) {
+  /** A âncora foi enviada e o desfecho é ambíguo (pode entrar): tentar de novo depois, sem emitir agora. */
+  readonly ambigua: boolean;
+  constructor(options?: { cause?: unknown; ambigua?: boolean }) {
     super('Incorporação recusada: o registro canônico não foi ancorado. Nada foi emitido.', options);
     this.name = 'RegistroIncorporacaoError';
+    this.ambigua = options?.ambigua ?? false;
   }
 }
 
@@ -100,9 +103,11 @@ export async function ancorarRegistroIncorporacao(
   if (!entrada.issuer) throw new RegistroIncorporacaoError(); // registro sem emissor não prova nada
   const m = await montarRegistroIncorporacao(entrada);
   try {
-    const a = await ancorarSha256({ sha256Hex: m.sha256Hex, contexto: 'COTA_INCORPORADA', desde });
+    // semEspera: a incorporação chama de dentro da sua $transaction (I1 do Argus); ambíguo não espera ~130 s.
+    const a = await ancorarSha256({ sha256Hex: m.sha256Hex, contexto: 'COTA_INCORPORADA', desde, semEspera: true });
     return { registro: m.registro, sha256Hex: m.sha256Hex, ancoraTxHash: a.txHash };
   } catch (err) {
-    throw new RegistroIncorporacaoError({ cause: err });
+    const ambigua = (err as { code?: string } | null)?.code === 'ANCORA_NAO_CONFIRMADA';
+    throw new RegistroIncorporacaoError({ cause: err, ambigua });
   }
 }

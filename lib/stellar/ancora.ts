@@ -141,6 +141,8 @@ export async function buscarAncora(
 export async function ancorarSha256(input: {
   sha256Hex: string;
   contexto: AncoraContexto;
+  /** Não espera o desfecho de um envio ambíguo (chamador dentro de transação): lança ANCORA_NAO_CONFIRMADA na hora. */
+  semEspera?: boolean;
   /** Criação do claim (S3): limita a busca de âncora existente. OBRIGATÓRIO (decisão do Atlas). */
   desde: Date;
 }): Promise<{ txHash: string; reutilizada: boolean; ledgerCloseTime: string }> {
@@ -177,6 +179,8 @@ export async function ancorarSha256(input: {
   if (primeiro.status === 'FAILED') {
     throw new AncoraError('ANCORA_FALHOU', { txHash: hash, resultCodes: primeiro.resultCodes });
   }
+  // Ambíguo e o chamador não pode esperar: a tx pode entrar; a próxima chamada a reencontra pelo hash (buscarAncora).
+  if (input.semEspera) throw new AncoraError('ANCORA_NAO_CONFIRMADA', { txHash: hash });
   while (relogio.agora() < (maxTime + FOLGA_SEC) * 1000) {
     await relogio.dormir(INTERVALO_MS);
     let ok: Awaited<ReturnType<typeof confirmada>> = null;

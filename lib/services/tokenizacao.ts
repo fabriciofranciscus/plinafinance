@@ -624,6 +624,8 @@ export async function incorporarCota(
         } catch (err) {
           if (err instanceof RegistroIncorporacaoError) {
             logStellarError('[incorporarCota] âncora do registro da incorporação falhou', err);
+            // Ambígua (I1 do Argus): não espera dentro da transação; nada emitido, chamar de novo depois.
+            if (err.ambigua) throw new IncorporacaoEmissaoError('EMISSAO_EM_ANDAMENTO');
             throw new IncorporacaoBloqueadaError('ANCORA_INCORPORACAO_FALHOU');
           }
           throw err;
@@ -726,14 +728,9 @@ export async function incorporarCota(
 
       return { cotaId, txHash, tokensEmitidos: quantidade.toNumber() };
     },
-    // ATENÇÃO (E1-p, I1 do Argus / I-EP-3 da Vera): a âncora do registro (ancorarSha256) roda AQUI DENTRO e, num erro
-    // ambíguo, pode esperar até ~130 s. `obterEmissaoOnChain` é chamado SEM `tx`: ele grava a TentativaEmissao e submete
-    // a emissão pelo `db` global e pelo Horizon, FORA desta transação. Logo, se o timeout (120 s) estourar durante a espera
-    // da âncora, a emissão AINDA é submetida depois; só as escritas de domínio desta transação (Cota, MovimentoFundo,
-    // EventoAudit) falham e desfazem. Resultado: emissão na rede SEM Cota, com o NAV fechado (TentativaEmissao PENDENTE),
-    // até a próxima chamada recuperar pelo memo/hash. Sem perda nem duplicação de dinheiro. Procedimento: timeout ou
-    // 500 na incorporação → CHAMAR DE NOVO a mesma incorporação (nunca recriar a cessão/laudo). A correção estrutural
-    // (âncora fora da transação) é a dívida M3, depois do D30. Timeout mantido (não aumentado).
+    // O trabalho dentro da transação é limitado (leituras + no máx. um envio e um reenvio da emissão, e um envio
+    // da âncora do registro): NÃO há espera de 120 s aqui — o erro ambíguo da emissão E o da âncora (semEspera, I1 do
+    // Argus) saem como EMISSAO_EM_ANDAMENTO e o reenvio é de uma nova chamada. Timeout mantido (não aumentado).
     { timeout: 120_000, maxWait: 15_000 },
   );
 }
