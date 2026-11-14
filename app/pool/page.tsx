@@ -21,6 +21,7 @@ import {
 import { NavIndisponivelError, lerSupplyDoNav } from '@/lib/services/nav-supply';
 import { caixaParaNav } from '@/lib/services/razao-fundo';
 import { accountExplorerUrl, assetExplorerUrl } from '@/lib/stellar/config';
+import { ScrollRegion } from '@/components/ui/ScrollRegion';
 
 // SSR sempre — dados de pool mudam quando admin incorpora cota.
 export const dynamic = 'force-dynamic';
@@ -203,8 +204,11 @@ export default async function PoolPage() {
         <h2 className="font-title text-2xl font-semibold mb-6 tracking-tight">
           Cotas no pool
         </h2>
-        <div className="border border-light-hairline">
-          <table className="w-full font-text text-sm">
+        <ScrollRegion label="Cotas no pool (role para ver todas as colunas)">
+          <table className="w-full min-w-[44rem] font-text text-sm">
+            <caption className="sr-only">
+              Cotas incorporadas ao pool de demonstração, com valor, deságio, custo de aquisição, tokens emitidos, local, prazo e status
+            </caption>
             <thead className="bg-base text-lightBg">
               <tr>
                 <Th>Tipo de bem</Th>
@@ -255,7 +259,7 @@ export default async function PoolPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
 
         <p className="font-text text-xs text-base/60 mt-4">
           Administradoras e identificadores específicos das cotas ficam
@@ -337,7 +341,7 @@ function Metric({
 
 function Th({ children }: { children: React.ReactNode }) {
   return (
-    <th className="px-4 py-3 text-left font-details text-[10px] tracking-[0.15em] uppercase font-semibold">
+    <th scope="col" className="px-4 py-3 text-left font-details text-[10px] tracking-[0.15em] uppercase font-semibold">
       {children}
     </th>
   );

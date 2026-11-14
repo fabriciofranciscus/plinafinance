@@ -17,7 +17,8 @@ export function AppFooter({ issuerPubkey }: AppFooterProps) {
     <footer className="bg-base text-lightBg mt-16">
       <div className="mx-auto max-w-6xl px-6 py-10 grid grid-cols-1 md:grid-cols-3 gap-8 text-sm font-text">
         <div>
-          <p className="font-title text-base font-semibold tracking-tight">
+          {/* `text-base` é a COR de fundo do rodapé (--color-base) e também tamanho: a marca ficava invisível. */}
+          <p className="font-title text-lg font-semibold tracking-tight text-lightBg">
             Plina<span className="text-primary">.</span>
           </p>
           <p className="mt-3 text-lightBg/70 leading-relaxed">
