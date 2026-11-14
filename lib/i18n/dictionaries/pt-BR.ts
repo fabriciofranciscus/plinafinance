@@ -127,7 +127,7 @@ export const ptBR: Dictionary = {
       titular: {
         titulo: 'Titulares de cotas',
         texto:
-          'Tem uma cota contemplada e não quer usar o crédito? No modelo, a cessão prevê pagamento com deságio e, aprovada a transferência pela administradora, as parcelas restantes deixam de ser suas. Ainda não compramos cotas: hoje conversamos e analisamos. Não prometemos preço nem prazo.',
+          'Tem uma cota contemplada, já quitada (sem saldo devedor), e não quer usar o crédito? Nesta fase, só aceitamos cotas quitadas, sem parcelas restantes. No modelo, a cessão prevê pagamento com deságio e, aprovada a transferência pela administradora, o titular recebe o valor combinado na proposta aceita. Ainda não compramos cotas: hoje conversamos e analisamos. Não prometemos preço nem prazo.',
       },
       compradores: {
         titulo: 'Compradores e parceiros',

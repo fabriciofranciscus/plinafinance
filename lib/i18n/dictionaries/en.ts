@@ -126,7 +126,7 @@ export const en: Dictionary = {
       titular: {
         titulo: 'Quota holders',
         texto:
-          'Do you hold an awarded quota and do not want to use the credit? In the model, the assignment provides for payment at a discount to the credit amount and, once the administrator approves the transfer, the remaining installments are no longer your obligation. We do not buy quotas yet: today we talk and review. No price or timeline is promised.',
+          'Do you hold an awarded quota, already paid off (no outstanding balance), and do not want to use the credit? At this stage we accept only paid-off quotas, with no remaining installments. In the model, the assignment provides for payment at a discount and, once the administrator approves the transfer, the holder receives the amount agreed in the accepted proposal. We do not buy quotas yet: today we talk and review. No price or timeline is promised.',
       },
       compradores: {
         titulo: 'Buyers and partners',
