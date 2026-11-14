@@ -9,6 +9,7 @@ import { isAdminAuthenticated } from "@/lib/auth/admin";
 import { db } from "@/lib/db";
 import { getDictionary } from "@/lib/i18n/get-locale";
 import { ItfFontFaces } from "@/components/ItfFontFaces";
+import { botIdProtegidos } from "@/lib/http/botid-rotas";
 
 // Geist e Geist Mono (OFL): arquivos no repo, self-host (sem pedido externo).
 // Chillax/Satoshi (ITF) ficam fora do Git: ver components/ItfFontFaces.tsx.
@@ -81,13 +82,11 @@ export default async function RootLayout({
             sempre (descoberto 2026-07-01, travamento eterno em "Enviando…"
             no /vender). checkBotId() já tem esse bypass server-side; aqui
             replicamos pro client. */}
+        {/* Hotfix 14/11 (Atlas; B1 do Argus): o path /api/vender/lead fica atrás de NEXT_PUBLIC_BOTID_ENFORCE (padrão LIGADO;
+            só 'false' exato o tira). /api/comprar/lead é anônima e fica SEMPRE protegida. A variável é lida no BUILD:
+            definir/remover em Production exige REDEPLOY. Mesma regra do instrumentation-client.ts. */}
         {process.env.NODE_ENV === "production" && (
-          <BotIdClient
-            protect={[
-              { path: "/api/vender/lead", method: "POST" },
-              { path: "/api/comprar/lead", method: "POST" },
-            ]}
-          />
+          <BotIdClient protect={botIdProtegidos(process.env.NEXT_PUBLIC_BOTID_ENFORCE)} />
         )}
         <a href="#main" className="skip-link">Pular para conteúdo</a>
         <AppProviders>

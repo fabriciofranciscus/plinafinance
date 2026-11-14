@@ -12,7 +12,7 @@
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { checkBotId } from 'botid/server';
+import { requisicaoEhBot } from '@/lib/http/botid';
 import { capturarLead } from '@/lib/services/originacao';
 import { parseBody } from '@/lib/http/parse-body';
 import { leadLimiter, clientIp } from '@/lib/rate-limit/config';
@@ -35,13 +35,8 @@ export const POST = withPessoaAuth(async (req, { user }) => {
   // F-M0-5: bloqueia bots antes de qualquer trabalho. No-op em dev/local.
   // extraAllowedHosts cobre o alias www (2026-07-01 — ver BotIdClient em
   // app/layout.tsx, sem ele o servidor nunca recebia prova de humano).
-  if (
-    (
-      await checkBotId({
-        advancedOptions: { extraAllowedHosts: ['www.plina.finance'] },
-      })
-    ).isBot
-  ) {
+  // Hotfix 14/11: atrás de BOTID_ENFORCE (padrão LIGADO; só 'false' exato desliga) — ver lib/http/botid.ts.
+  if (await requisicaoEhBot()) {
     return NextResponse.json({ error: 'acesso negado' }, { status: 403 });
   }
   if (!(await leadLimiter.consume(clientIp(req)))) {
