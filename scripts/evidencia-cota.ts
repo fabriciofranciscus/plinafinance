@@ -106,9 +106,8 @@ async function main() {
     },
   };
 
-  // Nesta base (fabricio/main 4f337e8) o DS3 e o registro canônico da incorporação (E1-p) ainda não existem:
-  // esses passos saem como PENDENTE se não houver nenhum artefato deles. Tire da lista quando entrarem.
-  const ev = await montarEvidencia(cotaId, fontes, undefined, { pendentesNestaBase: ['CESSAO', 'INCORPORACAO'] });
+  // DS3 e E1-p já estão na main (2f01001): nenhum passo fica "pendente"; artefato ausente é falha.
+  const ev = await montarEvidencia(cotaId, fontes, undefined, { pendentesNestaBase: [] });
   mkdirSync('exports', { recursive: true });
   writeFileSync(`exports/evidencia-cota-${cotaId}.json`, JSON.stringify(ev, null, 2));
   writeFileSync(`exports/evidencia-cota-${cotaId}.md`, paraMarkdown(ev));
