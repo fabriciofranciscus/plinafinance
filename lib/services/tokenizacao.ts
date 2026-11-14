@@ -624,6 +624,8 @@ export async function incorporarCota(
         } catch (err) {
           if (err instanceof RegistroIncorporacaoError) {
             logStellarError('[incorporarCota] âncora do registro da incorporação falhou', err);
+            // Ambígua (I1 do Argus): não espera dentro da transação; nada emitido, chamar de novo depois.
+            if (err.ambigua) throw new IncorporacaoEmissaoError('EMISSAO_EM_ANDAMENTO');
             throw new IncorporacaoBloqueadaError('ANCORA_INCORPORACAO_FALHOU');
           }
           throw err;
@@ -726,11 +728,9 @@ export async function incorporarCota(
 
       return { cotaId, txHash, tokensEmitidos: quantidade.toNumber() };
     },
-    // O trabalho dentro da transação é limitado (leituras + no máx. um envio e um reenvio da emissão; o erro
-    // ambíguo da emissão sai como EMISSAO_EM_ANDAMENTO). ATENÇÃO (E1-p, I-EP-3 da Vera): a âncora do registro
-    // (ancorarSha256) roda aqui dentro e, num erro ambíguo, pode esperar até ~130 s. Se o timeout estourar, a
-    // transação desfaz: antes da emissão, nada sai; depois dela, a TentativaEmissao (fora da transação) fica
-    // PENDENTE e a próxima chamada recupera pelo hash. Timeout mantido (não aumentado).
+    // O trabalho dentro da transação é limitado (leituras + no máx. um envio e um reenvio da emissão, e um envio
+    // da âncora do registro): NÃO há espera de 120 s aqui — o erro ambíguo da emissão E o da âncora (semEspera, I1 do
+    // Argus) saem como EMISSAO_EM_ANDAMENTO e o reenvio é de uma nova chamada. Timeout mantido (não aumentado).
     { timeout: 120_000, maxWait: 15_000 },
   );
 }
