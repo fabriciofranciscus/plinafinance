@@ -34,3 +34,30 @@ describe('layout: BotIdClient usa a lista com a flag', () => {
     expect(layout).not.toMatch(/path: "\/api\/vender\/lead"/);
   });
 });
+
+describe('instrumentation-client: initBotId usa a MESMA lista do layout', () => {
+  const inst = readFileSync(join(process.cwd(), 'instrumentation-client.ts'), 'utf8');
+
+  it('protect = botIdProtegidos(NEXT_PUBLIC_BOTID_ENFORCE), sem paths fixos', () => {
+    expect(inst).toMatch(/initBotId\(\{ protect: botIdProtegidos\(process\.env\.NEXT_PUBLIC_BOTID_ENFORCE\) \}\)/);
+    expect(inst).not.toMatch(/path: '\/api\/(vender|comprar)\/lead'/);
+    expect(inst).toMatch(/from '@\/lib\/http\/botid-rotas'/);
+  });
+
+  it('com a flag "false" o registro do cliente chama initBotId só com /comprar/lead; sem flag, com as duas', async () => {
+    const { vi } = await import('vitest');
+    const chamadas: unknown[] = [];
+    vi.resetModules();
+    vi.doMock('botid/client/core', () => ({ initBotId: (o: unknown) => chamadas.push(o) }));
+    process.env.NEXT_PUBLIC_BOTID_ENFORCE = 'false';
+    await import('../../../instrumentation-client');
+    vi.resetModules();
+    delete process.env.NEXT_PUBLIC_BOTID_ENFORCE;
+    await import('../../../instrumentation-client');
+    vi.doUnmock('botid/client/core');
+    expect(chamadas).toEqual([
+      { protect: [{ path: '/api/comprar/lead', method: 'POST' }] },
+      { protect: [{ path: '/api/vender/lead', method: 'POST' }, { path: '/api/comprar/lead', method: 'POST' }] },
+    ]);
+  });
+});
