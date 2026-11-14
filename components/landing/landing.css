@@ -361,6 +361,12 @@ body:has(.ld) > .skip-link {
   text-underline-offset: 4px;
 }
 
+/* LM-2: cópias que só existem no celular (o desktop mantém o lugar de sempre). */
+.ld .stage-mobile,
+.ld .stage-legal {
+  display: none;
+}
+
 /* ─── Seções ─────────────────────────────────────────────────────── */
 .ld .story-section {
   padding: 100px 0;
@@ -1225,18 +1231,79 @@ body:has(.ld) > .skip-link {
 }
 
 /* ─── <= 760 (celular) ───────────────────────────────────────────── */
+/*
+ * LM-2 (spec LM-1 da Íris, exports/design/landing-mobile/SPEC.md). Só aqui: o desktop
+ * (> 760) não muda. Duas famílias visíveis: Chillax (títulos, corpo, rótulos, controles)
+ * e Geist Mono (dados técnicos e números). Os tamanhos abaixo são exceções locais do
+ * LM-1 ao design system; nenhum token global muda. Nada de texto some: o que muda é
+ * posição, tamanho e quebra.
+ */
 @media (max-width: 760px) {
+  .ld {
+    /* Gutter de 16: largura útil de 358 a 390 px (spec LM-1). */
+    --m: 16px;
+    /* Uma família de texto: Satoshi e Geist saem; Mono segue só em dados e números. */
+    --font-text: var(--font-title);
+    --font-details: var(--font-title);
+    /* Texto principal com a tinta cheia (opacidade 1). */
+    --ink-muted: var(--ink);
+    --on-dark-muted: var(--on-dark);
+    font: 500 15px/22.5px var(--font-title);
+  }
+
+  /* Sem revelação, sem entrada animada, sem máscara de linha: todo texto visível no primeiro paint. */
+  /* Duração zero em vez de `animation: none`: a animação não reinicia se a consulta de mídia oscilar. */
+  .ld *,
+  .ld *::before,
+  .ld *::after {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+  .ld [data-r] {
+    opacity: 1 !important;
+    transform: none !important;
+    clip-path: none !important;
+  }
+  .ld [data-r] > *,
+  .ld [data-r='lines'] .ln > span {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .ld [data-r='rule']::before,
+  .ld [data-r='line']::after {
+    transform: scaleX(1) !important;
+  }
+  .ld .ln {
+    overflow: visible;
+    padding-bottom: 0;
+    margin-bottom: 0;
+  }
+
+  /* Rótulo único: 12/18, peso 600. */
+  .ld .label,
+  .ld .contact-mark,
+  .ld .context-label {
+    font: 600 12px/18px var(--font-title);
+    letter-spacing: 0.04em;
+  }
+
+  /* Cabeçalho */
   .ld .topbar {
-    height: 76px;
+    height: auto;
+    min-height: 64px;
     border-bottom: 1px solid var(--hair);
+  }
+  .ld .brand {
+    font-size: 28px;
   }
   .ld .menu-toggle {
     display: inline-flex;
+    font: 500 14px/20px var(--font-title);
   }
   .ld .topbar-nav {
     display: none;
     position: absolute;
-    top: 76px;
+    top: 64px;
     left: calc(-1 * var(--m));
     right: calc(-1 * var(--m));
     z-index: 30;
@@ -1250,9 +1317,12 @@ body:has(.ld) > .skip-link {
   .ld .topbar-nav.open {
     display: flex;
   }
+  .ld .topbar-nav a,
+  .ld .lang button {
+    font: 600 12px/18px var(--font-title);
+    letter-spacing: 0.04em;
+  }
   .ld .topbar-nav a {
-    font-size: 11px;
-    letter-spacing: 0.08em;
     min-height: 48px;
     border-bottom: 1px solid color-mix(in srgb, var(--color-document-grey) 20%, transparent);
     color: var(--on-dark);
@@ -1276,150 +1346,213 @@ body:has(.ld) > .skip-link {
   .ld .lang button[aria-current='true'] {
     color: var(--on-dark);
   }
+
+  /* Hero: texto, ações e fita em faixa própria de 160 px, sem sobrepor a cópia. */
   .ld .hero-stage {
     grid-template-columns: 1fr;
     gap: 0;
     min-height: 0;
-    padding: 42px 0 58px;
+    padding: 24px 0;
   }
   .ld .hero-kicker {
-    font-size: 9px;
-    letter-spacing: 0.13em;
-    margin-bottom: 22px;
+    font: 600 12px/18px var(--font-title);
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
   }
   .ld h1 {
-    font-size: clamp(28px, 8.6vw, 54px);
-    line-height: 1.1;
+    font: 600 32px/35.2px var(--font-title);
+    letter-spacing: -0.02em;
   }
   .ld .hero-description {
-    font-size: 17px;
-    margin-top: 22px;
+    font: 500 15px/22.5px var(--font-title);
+    max-width: none;
+    margin-top: 16px;
   }
   .ld .hero-actions {
-    margin-top: 24px;
+    gap: 8px 24px;
+    margin-top: 16px;
   }
   .ld .btn {
-    min-height: 52px;
-    padding: 15px 20px;
+    min-height: 44px;
+    padding: 10px 20px;
     gap: 20px;
-    font-size: 10px;
+    font: 600 12px/18px var(--font-title);
+    letter-spacing: 0.04em;
   }
   .ld .sub-action {
-    font-size: 12px;
+    font: 500 14px/20px var(--font-title);
   }
   .ld .ribbon-scene {
-    height: 290px;
-    margin-top: 6px;
+    height: 160px;
+    margin-top: 16px;
   }
+  /* "Plina Finance / Brasil" e "Pausar movimento" não se aplicam: a fita é estática. */
   .ld .hero-baseline {
-    min-height: 56px;
-    gap: 12px;
+    /* visibility (não display): display:none reiniciaria a animação de entrada se a consulta de mídia oscilar. */
+    visibility: hidden;
+    pointer-events: none;
   }
-  .ld .hero-baseline .label {
-    font-size: 9px;
-    letter-spacing: 0.04em;
-    white-space: nowrap;
+
+  /* Bloco "Estágio do projeto": sai do hero, entra em 03 (cópia abaixo). */
+  .ld .stage-desktop {
+    position: absolute;
+    width: 1px;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    pointer-events: none;
   }
-  .ld .landing-context {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0;
-    padding: 22px 0 8px;
+  .ld .stage-mobile {
+    display: block;
+    margin-top: 16px;
   }
-  .ld .landing-context p {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
+  .ld .stage-mobile p {
+    font: 500 14px/20px var(--font-title);
   }
-  .ld h2 {
-    font-size: clamp(26px, 7.2vw, 38px);
-    line-height: 1.14;
+  .ld .stage-mobile .context-label {
+    display: block;
   }
+  .ld .stage-mobile a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    font: 500 14px/20px var(--font-title);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  /* Seções */
   .ld .story-section,
   .ld .contact {
-    padding: 64px 0;
-  }
-  .ld .asset-section {
-    padding-top: 42px;
+    padding: 32px 0;
   }
   .ld .story-chrome {
-    margin-bottom: 32px;
+    padding-top: 12px;
+    margin-bottom: 16px;
     gap: 16px;
   }
-  .ld .story-chrome .label {
-    font-size: 9px;
-    letter-spacing: 0.12em;
-  }
+  /* Um rótulo só: o marcador decorativo da direita sai (já é aria-hidden). */
   .ld .chapter-marker {
-    font-size: 9px;
-    max-width: 16ch;
-    text-align: right;
+    display: none;
+  }
+  .ld h2 {
+    font: 600 26px/29.9px var(--font-title);
+    letter-spacing: -0.02em;
   }
   .ld .section-copy p,
   .ld .intro-copy,
   .ld .paths-intro > p,
   .ld .contact-intro .intro-copy {
-    font-size: 17px;
+    font: 500 15px/22.5px var(--font-title);
   }
   .ld .asset-copy p,
   .ld .process-intro > p,
   .ld .status-intro > p,
   .ld .paths-intro > p {
     max-width: none;
-    /* Referência no celular: 24 px (Íris LV7 #2). */
-    margin-top: 24px;
+    margin-top: 16px;
   }
-  .ld .contact-intro {
-    padding-top: 0;
+  .ld .sent {
+    display: block;
   }
+  .ld .sent + .sent {
+    margin-top: 8px;
+  }
+  .ld .section-link {
+    min-height: 44px;
+    margin-top: 16px;
+    gap: 24px;
+    font: 600 14px/20px var(--font-title);
+  }
+
+  /* 01 O ativo */
   .ld .asset-layout {
     grid-template-columns: 1fr;
-    gap: 32px;
+    gap: 16px;
   }
   .ld .asset-document {
-    min-height: 330px;
-    padding: 28px;
-    /* A referência não tem espaço entre os blocos do cartão; com 32 px ele passava de 330 para 350 px (Íris LV7 #2). */
+    min-height: 0;
+    padding: 16px;
     gap: 0;
   }
-  .ld .asset-document > p {
-    font-size: 16px;
-    max-width: 28ch;
+  .ld .asset-document::after {
+    content: none;
+    display: none;
   }
+  .ld .document-top,
+  .ld .document-bottom {
+    font: 400 12px/18px var(--font-mono);
+  }
+  .ld .doc-title {
+    font: 600 26px/29.9px var(--font-title);
+    margin: 16px 0;
+  }
+  .ld .asset-document > p {
+    font: 500 14px/20px var(--font-title);
+    max-width: none;
+  }
+  .ld .document-bottom {
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 12px;
+  }
+  .ld .document-bottom span:last-child {
+    text-align: left;
+    max-width: none;
+  }
+
+  /* 02 O percurso */
   .ld .process-intro {
     grid-template-columns: 1fr;
-    gap: 32px;
-    margin-bottom: 32px;
+    gap: 16px;
+    margin-bottom: 16px;
   }
   .ld .process-note {
-    font-size: 10px;
-    margin-bottom: 14px;
+    font: 500 14px/20px var(--font-title);
+    margin-bottom: 16px;
+  }
+  .ld .process-list::before,
+  .ld .process-list::after {
+    display: none;
   }
   .ld .process-list li {
-    grid-template-columns: 26px 1fr;
-    gap: 8px 14px;
-    padding: 24px 0 24px 16px;
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+    padding: 16px 0;
   }
   .ld .process-list li > :nth-child(3) {
-    grid-column: 2;
+    grid-column: 1 / -1;
+  }
+  .ld .process-index {
+    font: 400 12px/18px var(--font-mono);
   }
   .ld .process-list h3 {
-    font-size: 25px;
+    font: 600 20px/24px var(--font-title);
+    letter-spacing: -0.02em;
   }
   .ld .process-list li p {
-    font-size: 16px;
+    font: 500 15px/22.5px var(--font-title);
+    max-width: none;
   }
+  .ld .process-caveat {
+    font: 500 14px/20px var(--font-title);
+    margin-top: 16px;
+  }
+
+  /* 03 Estágio */
   .ld .status-intro {
     grid-template-columns: 1fr;
-    gap: 32px;
+    gap: 0;
   }
   .ld .status-grid {
     grid-template-columns: 1fr;
-    margin-top: 32px;
+    margin-top: 16px;
   }
   .ld .status-item,
   .ld .status-item + .status-item {
-    padding: 26px 0 30px;
+    padding: 16px 0;
     border-left: 0;
     border-bottom: 1px solid var(--hair);
   }
@@ -1427,76 +1560,197 @@ body:has(.ld) > .skip-link {
     border-bottom: 0;
   }
   .ld .status-number {
-    font-size: 10px;
+    font: 600 12px/18px var(--font-title);
+    letter-spacing: 0.04em;
   }
   .ld .status-item h3 {
-    font-size: 25px;
-    margin: 18px 0 10px;
+    font: 600 20px/24px var(--font-title);
+    letter-spacing: -0.02em;
+    margin: 8px 0;
   }
   .ld .status-item p {
-    max-width: 48ch;
+    font: 500 15px/22.5px var(--font-title);
+    max-width: none;
   }
+  .ld .status-footnote {
+    font: 500 14px/20px var(--font-title);
+    margin-top: 16px;
+  }
+  /* Avisos do rodapé reunidos em 03, em fluxo único. */
+  .ld .stage-legal {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--hair);
+    font: 500 14px/20px var(--font-title);
+  }
+  .ld .stage-legal a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  /* 04 Para quem */
   .ld .paths-intro {
     flex-direction: column;
     align-items: flex-start;
-    gap: 22px;
-    margin-bottom: 32px;
+    gap: 0;
+    margin-bottom: 16px;
   }
   .ld .path-row {
-    grid-template-columns: 24px 1fr 20px;
-    gap: 12px;
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+    align-items: baseline;
+    min-height: 44px;
+    padding: 16px 0;
   }
+  /* Número inline com o título: os dois filhos de .path-main entram na grade da linha. */
   .ld .path-main {
-    grid-template-columns: 1fr;
-    gap: 10px;
+    display: contents;
   }
   .ld .path-main strong {
-    font-size: 24px;
+    font: 600 20px/24px var(--font-title);
+    letter-spacing: -0.02em;
+    text-decoration: underline;
+    text-underline-offset: 4px;
   }
   .ld .path-main span {
-    font-size: 16px;
+    font: 500 15px/22.5px var(--font-title);
+    max-width: none;
+  }
+  .ld .path-main > span {
+    grid-column: 1 / -1;
   }
   .ld .path-arrow {
-    font-size: 20px;
+    display: none;
   }
+
+  /* 05 Contato */
   .ld .contact-grid {
     grid-template-columns: 1fr;
-    gap: 40px;
+    gap: 24px;
+  }
+  .ld .contact-intro {
+    padding-top: 0;
   }
   .ld .contact-mark {
-    margin-bottom: 24px;
+    margin-bottom: 16px;
   }
   .ld .contact-intro .intro-copy {
-    margin-top: 24px;
+    margin-top: 16px;
+    max-width: none;
+  }
+  .ld .email-link {
+    min-height: 44px;
+    margin-top: 16px;
+    font: 400 14px/20px var(--font-mono);
+    overflow-wrap: anywhere;
+  }
+  .ld .contact-note {
+    margin-top: 16px;
+    max-width: none;
+    font: 500 14px/20px var(--font-title);
   }
   .ld .contact-form {
     grid-template-columns: 1fr;
+    gap: 12px;
+    padding-top: 16px;
+  }
+  .ld .field label {
+    margin: 0 0 4px 16px;
+    font: 600 12px/18px var(--font-title);
+    letter-spacing: 0.04em;
+  }
+  .ld .field input,
+  .ld .field select,
+  .ld .field textarea {
+    min-height: 44px;
+    padding: 10px 20px;
+    font: 500 16px/24px var(--font-title);
+  }
+  .ld .field textarea {
+    min-height: 80px;
+  }
+  .ld .form-bottom > p {
+    margin-top: 12px;
+    font: 500 14px/20px var(--font-title);
   }
   .ld .btn-form {
     width: 100%;
+    min-height: 44px;
+    padding: 10px 24px;
+    font: 600 14px/20px var(--font-title);
+  }
+  .ld .draft {
+    padding: 16px;
+  }
+  .ld .draft h3 {
+    font: 600 20px/24px var(--font-title);
+  }
+  .ld .draft > p,
+  .ld .draft pre,
+  .ld .noscript-note {
+    font: 500 14px/20px var(--font-title);
+  }
+  .ld .draft .status {
+    font: 500 12px/18px var(--font-title);
+  }
+
+  /* Rodapé: logo, links em duas colunas e direitos; os avisos moveram para 03. */
+  .ld .footer {
+    padding: 24px 0;
   }
   .ld .footer-top {
     flex-direction: column;
-    gap: 35px;
+    gap: 16px;
   }
   .ld .footer-logo {
-    font-size: 58px;
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    font: 500 28px/1 var(--font-title);
+  }
+  .ld .tagline {
+    margin-top: 8px;
+    max-width: none;
+    font: 500 14px/20px var(--font-title);
+  }
+  .ld .footer-links {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .ld .footer-links .label {
+    margin-bottom: 0;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+  }
+  .ld .footer-links a {
+    font: 500 14px/20px var(--font-title);
+    overflow-wrap: anywhere;
   }
   .ld .footer-bottom {
     grid-template-columns: 1fr;
-    gap: 20px;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 16px;
+    font: 500 12px/18px var(--font-title);
+  }
+  .ld .footer-moved {
+    display: none !important;
   }
 }
 
 /* ─── <= 360 ─────────────────────────────────────────────────────── */
 @media (max-width: 360px) {
   .ld h1 {
-    font-size: clamp(27px, 8.6vw, 31px);
-  }
-  .ld .ribbon-scene {
-    height: 250px;
-  }
-  .ld .path-main strong {
-    font-size: 22px;
+    font-size: 28px;
+    line-height: 31px;
   }
 }

@@ -40,7 +40,7 @@ export function Hero({ dict }: { dict: LandingV2 }) {
           <MotionToggle pauseLabel={dict.a11y.pausarMovimento} playLabel={dict.a11y.ativarMovimento} />
         </div>
       </section>
-      <div className="landing-context">
+      <div className="landing-context stage-desktop">
         <p>
           <span className="context-label">{h.estagioRotulo}</span>
           {h.estagioValor}

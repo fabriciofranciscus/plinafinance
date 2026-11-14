@@ -36,7 +36,7 @@ export default async function Home() {
         <Hero dict={t} />
         <AssetSection dict={t} />
         <ProcessSection dict={t} />
-        <StageSection dict={t} />
+        <StageSection dict={t} ledgerUrl={ledgerUrl} />
         <AudienceSection dict={t} />
         <ContactSection dict={t} />
       </main>

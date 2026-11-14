@@ -1,6 +1,7 @@
 import type { InteresseId, LandingV2 } from '@/lib/i18n/types';
 import { Icon } from './icons';
 import { Lines } from './Lines';
+import { Sentences } from './Sentences';
 
 function Chrome({ numero, rotulo }: { numero: string; rotulo: string }) {
   return (
@@ -25,7 +26,9 @@ export function AssetSection({ dict }: { dict: LandingV2 }) {
             <h2 id="market-title" data-r="lines">
               <Lines lines={a.titulo} />
             </h2>
-            <p data-r="rise">{a.texto}</p>
+            <p data-r="rise">
+              <Sentences text={a.texto} groups={[1, 1]} />
+            </p>
             <a className="section-link" href="#operacao" data-r="rise">
               {a.link} <Icon name="arrow-up-right" />
             </a>
@@ -93,8 +96,10 @@ export function ProcessSection({ dict }: { dict: LandingV2 }) {
 }
 
 /** 03 Estágio */
-export function StageSection({ dict }: { dict: LandingV2 }) {
+export function StageSection({ dict, ledgerUrl }: { dict: LandingV2; ledgerUrl: string | null }) {
   const s = dict.estagio;
+  const h = dict.hero;
+  const f = dict.footer;
   const itens = [s.demonstrado, s.desenvolvimento, s.futuro];
   return (
     <section className="story-section status-section chapter grey" id="transparencia" aria-labelledby="trust-title">
@@ -104,6 +109,15 @@ export function StageSection({ dict }: { dict: LandingV2 }) {
           <h2 id="trust-title" data-r="lines">
             <Lines lines={s.titulo} />
           </h2>
+          {/* Celular (LM-2): o bloco "Estágio do projeto" do hero mora aqui; no desktop esta cópia fica oculta. */}
+          <div className="stage-mobile">
+            <p>
+              <span className="context-label">{h.estagioRotulo}</span> {h.estagioValor}
+            </p>
+            <a href="#transparencia">
+              {h.estagioLink} <Icon name="arrow-up-right" />
+            </a>
+          </div>
           <p data-r="rise">{s.intro}</p>
         </div>
         <div className="status-grid" data-r="line">
@@ -118,6 +132,20 @@ export function StageSection({ dict }: { dict: LandingV2 }) {
         <p className="status-footnote" data-r="rise">
           {s.nota}
         </p>
+        {/* Celular (LM-2): avisos do rodapé reunidos aqui; no desktop ficam no rodapé e esta cópia fica oculta. */}
+        <div className="stage-legal">
+          <p>{f.aviso}</p>
+          <p>
+            {f.copyright.slice(1).map((linha) => (
+              <span key={linha}>{linha} </span>
+            ))}
+          </p>
+          {ledgerUrl ? (
+            <a href={ledgerUrl} target="_blank" rel="noopener">
+              {f.linkTestnet} <Icon name="arrow-up-right" />
+            </a>
+          ) : null}
+        </div>
       </div>
     </section>
   );
@@ -147,7 +175,9 @@ export function AudienceSection({ dict }: { dict: LandingV2 }) {
               <span className="path-number">{String(i + 1).padStart(2, '0')}</span>
               <span className="path-main">
                 <strong>{item.titulo}</strong>
-                <span>{item.texto}</span>
+                <span>
+                  {interesse === 'cota' ? <Sentences text={item.texto} groups={[2, 2]} /> : item.texto}
+                </span>
               </span>
               <Icon name="arrow-up-right" className="path-arrow" />
             </a>

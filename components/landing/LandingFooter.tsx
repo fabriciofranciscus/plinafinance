@@ -36,16 +36,18 @@ export function LandingFooter({ dict, ledgerUrl }: { dict: LandingV2; ledgerUrl:
         </div>
         <div className="footer-bottom">
           <span>
-            {f.copyright.map((linha) => (
-              <span key={linha}>{linha}</span>
+            {f.copyright.map((linha, i) => (
+              <span key={linha} className={i > 0 ? 'footer-moved' : undefined}>
+                {linha}
+              </span>
             ))}
             {ledgerUrl ? (
-              <a className="ledger-link" href={ledgerUrl} target="_blank" rel="noopener">
+              <a className="ledger-link footer-moved" href={ledgerUrl} target="_blank" rel="noopener">
                 {f.linkTestnet} <Icon name="arrow-up-right" />
               </a>
             ) : null}
           </span>
-          <p>{f.aviso}</p>
+          <p className="footer-moved">{f.aviso}</p>
         </div>
       </div>
     </footer>
