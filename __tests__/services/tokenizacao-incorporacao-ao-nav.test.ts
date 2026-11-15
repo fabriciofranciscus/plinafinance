@@ -45,12 +45,15 @@ const st = vi.hoisted(() => ({
   ancoraFalha: null as Error | null,
 }));
 vi.mock('@/lib/services/registro-incorporacao', () => {
-  class RegistroIncorporacaoError extends Error { readonly code = 'ANCORA_INCORPORACAO_FALHOU'; }
+  class RegistroIncorporacaoError extends Error {
+    readonly code = 'ANCORA_INCORPORACAO_FALHOU';
+    constructor(msg: string, readonly ambigua = false) { super(msg); }
+  }
   return {
     RegistroIncorporacaoError,
     ancorarRegistroIncorporacao: vi.fn(async (e: { tokensEmitir: { toFixed: (n: number) => string }; navPorTokenUsado: { toFixed: (n: number) => string }; desde: Date; cotaId: string }) => {
       st.calls.push('ancora');
-      if (st.ancoraFalha) throw new RegistroIncorporacaoError('forçada');
+      if (st.ancoraFalha) throw new RegistroIncorporacaoError('forçada', st.ancoraFalha.message === 'ambigua');
       const q = e.tokensEmitir.toFixed(7);
       const nav = e.navPorTokenUsado.toFixed(8);
       st.ancoras.push({ tokensEmitir: q, navPorTokenUsado: nav, desde: e.desde });
@@ -1048,5 +1051,20 @@ describe('E1-p — registro da incorporação ancorado ANTES da emissão', () =>
     const ev = st.audits.find((a) => a.acao === 'COTA_INCORPORADA')!;
     expect(ev.payloadJson.registroCanonico).toBeUndefined();
     expect(ev.payloadJson.recuperadaPorMemo).toBe(true);
+  });
+});
+
+describe('E1-p — âncora ambígua não espera dentro da transação (I1 do Argus)', () => {
+  it('âncora ambígua → EMISSAO_EM_ANDAMENTO: nada construído, enviado ou gravado; a próxima chamada segue', async () => {
+    st.ancoraFalha = new Error('ambigua');
+    const err = await incorporarCota(base).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(IncorporacaoEmissaoError);
+    expect((err as IncorporacaoEmissaoError).code).toBe('EMISSAO_EM_ANDAMENTO');
+    expect(st.built).toHaveLength(0);
+    expect(st.submits).toHaveLength(0);
+    expect(st.cotas.size).toBe(0);
+    st.ancoraFalha = null;
+    const r = await incorporarCota(base);
+    expect(r.tokensEmitidos).toBe(400);
   });
 });

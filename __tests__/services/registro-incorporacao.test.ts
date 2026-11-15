@@ -78,12 +78,21 @@ describe('ancorarRegistroIncorporacao', () => {
   it('ancora pelo distributor com contexto COTA_INCORPORADA e desde, e devolve a tx', async () => {
     const desde = new Date('2026-11-13T12:00:00Z');
     const r = await ancorarRegistroIncorporacao({ ...entrada, desde });
-    expect(st.ancorar).toHaveBeenCalledWith({ sha256Hex: r.sha256Hex, contexto: 'COTA_INCORPORADA', desde });
+    expect(st.ancorar).toHaveBeenCalledWith({ sha256Hex: r.sha256Hex, contexto: 'COTA_INCORPORADA', desde, semEspera: true });
     expect(r.ancoraTxHash).toBe('e'.repeat(64));
   });
 
   it('falha da âncora → RegistroIncorporacaoError (fail-closed), sem engolir', async () => {
     st.ancorar.mockRejectedValue(new Error('horizon fora'));
     await expect(ancorarRegistroIncorporacao({ ...entrada, desde: new Date() })).rejects.toBeInstanceOf(RegistroIncorporacaoError);
+  });
+});
+
+describe('âncora sem espera (I1)', () => {
+  it('pede semEspera e marca ambígua quando a âncora não confirmou', async () => {
+    st.ancorar.mockRejectedValue(Object.assign(new Error('nc'), { code: 'ANCORA_NAO_CONFIRMADA' }));
+    const err = await ancorarRegistroIncorporacao({ ...entrada, desde: new Date() }).catch((e: unknown) => e);
+    expect(st.ancorar).toHaveBeenCalledWith(expect.objectContaining({ semEspera: true }));
+    expect((err as RegistroIncorporacaoError).ambigua).toBe(true);
   });
 });
