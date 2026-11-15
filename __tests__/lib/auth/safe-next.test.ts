@@ -25,6 +25,11 @@ describe('safeNext (U1: open redirect no /entrar)', () => {
     ['/\nevil.com'],
     ['/%0Aevil.com'],
     ['/%'],
+    ['/.//evil.com'],
+    ['/a/..//evil.com'],
+    ['/%2E//evil.com'],
+    ['/%2e%2e//evil.com'],
+    ['/./\\evil.com'],
     ['/%2f%2fevil.com/'.replace('%2f%2f', '%5C')],
     [''],
     [null],
@@ -47,6 +52,18 @@ describe('safeNext (U1: open redirect no /entrar)', () => {
 
   it('devolve pathname + search + hash resolvidos, nunca a string crua (ex.: ponto-ponto)', () => {
     expect(safeNext('/a/../pool?y=2', O)).toBe('/pool?y=2');
+  });
+
+  it('o destino devolvido nunca começa com // (protocol-relative) nem tem barra invertida', () => {
+    for (const raw of ['/.//evil.com', '/a/..//evil.com', '/%2E//evil.com', '/%2e%2e//evil.com', '/pool', '/pool?u=//x#//y']) {
+      const r = safeNext(raw, O);
+      if (r !== null) {
+        expect(r.startsWith('//')).toBe(false);
+        expect(r.includes('\\')).toBe(false);
+      }
+    }
+    // "//" na query ou no hash é inofensivo e continua aceito
+    expect(safeNext('/pool?u=//x#//y', O)).toBe('/pool?u=//x#//y');
   });
 
   it('o resultado nunca sai da origem', () => {
