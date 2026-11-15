@@ -123,7 +123,9 @@ describe('/historico (spec de UX §3)', () => {
     cleanup();
     montar(estado({ itens: [{ ...cessao, simulado: false }] }));
     expect(screen.getAllByText('Cessão assinada').length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^Concluído$/).length).toBeGreaterThan(0);
+    // evento real: "Concluído" sem o qualificador de rede de testes
+    expect(document.body.textContent).toMatch(/Concluído · /);
+    expect(document.body.textContent).not.toContain('simulação na rede de testes');
     expect(document.body.textContent).not.toMatch(/Pix enviado|jurídica/i);
   });
 });
