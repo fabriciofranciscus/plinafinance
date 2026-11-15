@@ -3,6 +3,15 @@ import { withBotId } from "botid/next/config";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  serverExternalPackages: ["pdfkit"],
+  outputFileTracingIncludes: {
+    "/api/admin/originacao": [
+      "./node_modules/.pnpm/pdfkit@*/node_modules/pdfkit/js/data/**",
+    ],
+    "/api/comprovante/*": [
+      "./node_modules/.pnpm/pdfkit@*/node_modules/pdfkit/js/data/**",
+    ],
+  },
 };
 
 // F-M0-5: BotID (Vercel) — instala os rewrites de challenge/proxy. A verificação
