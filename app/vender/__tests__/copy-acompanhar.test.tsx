@@ -75,3 +75,22 @@ describe('estados do acompanhamento do cedente (achados A-14, A-15, A-16 da Vera
     expect(render({ etapaAtual: 4 })).toContain('data-testid="assinatura-por-email"');
   });
 });
+
+describe('vocabulário dos estados (Consuelo, item 11)', () => {
+  const titulos = Object.values(LeadVendedorStatus).map((st) => contextoDoStatus(st).titulo);
+  it('títulos novos: análise da cota, proposta, pagamento simulado e concluído com qualificador', () => {
+    expect(contextoDoStatus('CONTATADO').titulo).toBe('Análise da cota em andamento');
+    expect(contextoDoStatus('OFERTA_ENVIADA').titulo).toBe('Proposta enviada');
+    expect(contextoDoStatus('OFERTA_ACEITA').titulo).toBe('Proposta aceita');
+    expect(contextoDoStatus('CESSAO_ASSINADA').titulo).toBe('Cessão assinada (demonstração)');
+    expect(contextoDoStatus('PIX_EXECUTADO').titulo).toBe('Pagamento simulado enviado');
+    expect(contextoDoStatus('COTA_INCORPORADA').titulo).toBe('Concluído (simulação na rede de testes)');
+  });
+  it('nenhum título com "firme", "jurídica" nem "Pix enviado"', () => {
+    expect(titulos.join(' | ')).not.toMatch(/firme|jurídica|Pix enviado|Oferta/i);
+  });
+  it('descrições de oferta usam "proposta"', () => {
+    expect(contextoDoStatus('OFERTA_ENVIADA').descricao).toContain('Sua proposta está disponível');
+    expect(contextoDoStatus('OFERTA_ACEITA').descricao).toContain('Tudo certo com a proposta.');
+  });
+});
