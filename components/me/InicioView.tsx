@@ -33,7 +33,7 @@ export default function InicioView({ estado, exemplo = false }: { estado: Estado
     <main className="mx-auto max-w-6xl px-6 py-10 md:py-14">
       {exemplo && (
         <p role="note" className="mb-6 border border-base/40 bg-document-grey/60 px-4 py-3 font-mono text-xs text-base">
-          Dados de exemplo (fictícios). Esta tela ainda não está ligada à sua conta.
+          Dados de exemplo (fictícios), só para pré-visualização.
         </p>
       )}
       <Cabecalho nome={estado.tipo === 'ok' ? estado.resumo.nome : null} />
