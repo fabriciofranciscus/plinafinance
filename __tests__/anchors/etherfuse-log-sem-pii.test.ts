@@ -2,6 +2,7 @@
  * O cliente Etherfuse não pode logar dado pessoal (Argus, MEDIUM): só método, rota genérica, status e id de correlação.
  * Captura TODA saída de console do cliente (log/error/warn/info/debug) com requisições e respostas cheias de PII.
  */
+import { inspect } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EtherfuseClient } from '@/lib/anchors/etherfuse';
 import { rotaGenerica } from '@/lib/anchors/etherfuse/log';
@@ -19,7 +20,7 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
 beforeEach(() => {
   saida = [];
   for (const n of ['log', 'error', 'warn', 'info', 'debug'] as const) {
-    vi.spyOn(console, n).mockImplementation((...a: unknown[]) => { saida.push(a.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' ')); });
+    vi.spyOn(console, n).mockImplementation((...a: unknown[]) => { saida.push(a.map((x) => (typeof x === 'string' ? x : inspect(x, { depth: 6 }))).join(' ')); });
   }
 });
 afterEach(() => vi.restoreAllMocks());
@@ -58,6 +59,22 @@ describe('cliente Etherfuse: log sem PII', () => {
     await expect(cliente().getFiatAccounts(CUST)).rejects.toBeDefined();
     semPii();
     expect(tudo()).toContain('status=502 codigo=UNKNOWN_ERROR');
+  });
+
+  it('L1 (HIGH): KYC com nome, nascimento, endereço, documento e imagens base64 de documento e selfie — nada vai ao log, no sucesso e no erro', async () => {
+    const IMG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD_IMAGEM_SECRETA';
+    const NASC = '1990-05-17';
+    const END = 'Rua dos Segredos 123';
+    const DOC = '12345678909';
+    const ident = { pubkey: 'GABC', identity: { name: { givenName: 'Ana', familyName: NOME }, dateOfBirth: NASC, address: { street: END }, idNumbers: [{ value: DOC }] } };
+    vi.stubGlobal('fetch', vi.fn(async () => json(200, { status: 'ok', message: `recebido de ${EMAIL}` })));
+    await cliente().submitKycIdentity(CUST, ident as never);
+    await cliente().submitKycDocuments(CUST, { pubkey: 'GABC', documentType: 'selfie', images: [{ image: IMG, label: 'selfie' }] } as never);
+    vi.stubGlobal('fetch', vi.fn(async () => json(422, { error: { code: 'INVALID_DOC', message: `documento ${DOC} de ${NOME} inválido ${IMG}` } })));
+    await expect(cliente().submitKycIdentity(CUST, ident as never)).rejects.toBeDefined();
+    await expect(cliente().submitKycDocuments(CUST, { pubkey: 'GABC', documentType: 'document', images: [IMG] } as never)).rejects.toBeDefined();
+    for (const p of [IMG, 'data:image', 'base64', 'IMAGEM_SECRETA', NASC, END, DOC, NOME, EMAIL]) expect(tudo(), `vazou ${p}`).not.toContain(p);
+    expect(tudo()).toContain('/ramp/customer/:id/kyc/documents');
   });
 
   it('o id do cliente na rota some: /ramp/customer/<uuid>/bank-accounts → /ramp/customer/:id/bank-accounts', async () => {

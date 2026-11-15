@@ -5,6 +5,7 @@
  * não pode quebrar por causa de email.
  */
 
+import { causaSegura } from '../api/causa-segura';
 import { getTransporter } from './transporter';
 import {
   renderCedenteEmail,
@@ -32,6 +33,7 @@ export async function notifyCedente(
       html,
     });
   } catch (err) {
-    console.error(`[notifyCedente] falha no envio (${kind})`, err);
+    // Erro do SMTP pode citar o destinatário: só nome, code e responseCode.
+    console.error(`[notifyCedente] falha no envio (${kind})`, causaSegura(err));
   }
 }

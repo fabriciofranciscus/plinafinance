@@ -7,6 +7,7 @@
  * tracer no-op — custo ~zero, sem dependência de collector.
  */
 
+import { causaSegura } from '../api/causa-segura';
 import {
   SpanStatusCode,
   trace,
@@ -31,11 +32,10 @@ export async function withSpan<T>(
       span.setStatus({ code: SpanStatusCode.OK });
       return result;
     } catch (err) {
-      span.recordException(err as Error);
-      span.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: err instanceof Error ? err.message : String(err),
-      });
+      // Sem a mensagem do erro no span (anchor/Prisma ecoam dado pessoal): só nome e code.
+      const causa = causaSegura(err);
+      span.recordException({ name: causa.name, message: causa.code ?? causa.name });
+      span.setStatus({ code: SpanStatusCode.ERROR, message: causa.code ?? causa.name });
       throw err;
     } finally {
       span.end();

@@ -59,9 +59,11 @@ describe('logStellarError — F-20', () => {
     expect(out).not.toContain('SECRETO');
   });
 
-  it('aceita erro plain (string)', () => {
-    logStellarError('[issuer]', 'kaboom');
-    expect(logged()).toContain('kaboom');
+  it('aceita erro plain (string) sem logar o texto: string lançada pode carregar dado pessoal (Argus L5)', () => {
+    logStellarError('[issuer]', 'kaboom ana@exemplo.test');
+    expect(logged()).not.toContain('kaboom');
+    expect(logged()).not.toContain('exemplo.test');
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
   });
 
   it('aceita null/undefined sem crashar', () => {
