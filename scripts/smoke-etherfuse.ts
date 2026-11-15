@@ -29,7 +29,7 @@
  * Saída:  smoke-etherfuse-output.json (NÃO commitar — pode conter secret keys de teste).
  */
 
-import { config as loadEnv } from 'dotenv';
+import { carregarEnv } from './lib/carregar-env';
 import { writeFileSync } from 'node:fs';
 import { Asset, Transaction, TransactionBuilder, Operation } from '@stellar/stellar-sdk';
 import { EtherfuseClient } from '../lib/anchors/etherfuse';
@@ -38,8 +38,7 @@ import { accountExplorerUrl, networkPassphrase, STELLAR_TX_TIMEOUT_SEC } from '.
 import { getDynamicFee } from '../lib/stellar/fee';
 import { buildClaimClaimableBalanceXdr } from '../lib/stellar/transactions';
 
-loadEnv({ path: '.env' });
-loadEnv({ path: '.env.local', override: true });
+carregarEnv(); // linha de comando > .env.local > .env (A-13)
 
 const step = (n: number, total: number, label: string) =>
   console.log(`\n━━━ [${n}/${total}] ${label}`);

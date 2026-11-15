@@ -6,7 +6,7 @@
  * Centraliza o login (Google/email via Privy) que vivia duplicado dentro dos
  * fluxos. Lê `?next=` (path same-origin) e, depois do login, roteia:
  *   1. next válido → next
- *   2. senão → /painel (home pós-login; o painel é o seletor de caminho)
+ *   2. senão → /inicio (home pós-login: próxima ação, posição e o que está em andamento)
  *
  * O bridge de OAuth resolve globalmente no PrivyAppProvider, então esta página
  * não precisa hospedá-lo — um redirect do Google volta pra qualquer URL e ainda
@@ -43,7 +43,7 @@ function EntrarInner() {
 
     routed.current = true;
     if (next) router.replace(next);
-    else router.replace('/painel');
+    else router.replace('/inicio');
   }, [ready, pessoa.authenticated, pessoa.loading, next, router]);
 
   // Já autenticado (ou logando) → não pisca o formulário; mostra "verificando".

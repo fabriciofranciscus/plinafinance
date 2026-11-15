@@ -11,11 +11,10 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { config as loadEnv } from 'dotenv';
+import { carregarEnv } from './lib/carregar-env';
 import { registrarTes3Queimada, Tes3RegistroError } from '../lib/services/tesouraria-excesso';
 
-loadEnv({ path: '.env' });
-loadEnv({ path: '.env.local', override: true });
+carregarEnv(); // linha de comando > .env.local > .env (A-13)
 
 function arg(nome: string): string | undefined {
   const i = process.argv.indexOf(nome);

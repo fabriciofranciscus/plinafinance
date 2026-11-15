@@ -41,7 +41,7 @@
  *   SMOKE_RESUME_ORDER=<uuid> SMOKE_INVESTOR_SECRET=<secret> pnpm smoke:investidor
  */
 
-import { config as loadEnv } from 'dotenv';
+import { carregarEnv } from './lib/carregar-env';
 import { writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { Transaction, Keypair, TransactionBuilder, Operation, Asset } from '@stellar/stellar-sdk';
@@ -51,8 +51,7 @@ import { buildSwapBridgeForPlinarfXdr } from '../lib/stellar/transactions';
 import { createTrustline, authorizeTrustline } from '../lib/stellar/issuer';
 import { issuerSigner, distributorSigner, KeypairSigner } from '../lib/stellar/signer';
 
-loadEnv({ path: '.env' });
-loadEnv({ path: '.env.local', override: true });
+carregarEnv(); // linha de comando > .env.local > .env (A-13)
 
 const TOTAL = 15;
 const step = (n: number, label: string) => console.log(`\n━━━ [${n}/${TOTAL}] ${label}`);

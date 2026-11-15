@@ -10,7 +10,7 @@
  * Rodar: npm run smoke:audit
  */
 
-import { config as loadEnv } from 'dotenv';
+import { carregarEnv } from './lib/carregar-env';
 import {
   buildAuditPayload,
   registerOnChainHash,
@@ -19,8 +19,7 @@ import {
 } from '../lib/stellar/audit';
 import { txExplorerUrl } from '../lib/stellar/config';
 
-loadEnv({ path: '.env' });
-loadEnv({ path: '.env.local', override: true });
+carregarEnv(); // linha de comando > .env.local > .env (A-13)
 
 async function main() {
   console.log('Smoke audit on-chain — testnet');

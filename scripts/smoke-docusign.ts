@@ -9,7 +9,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { config as loadEnv } from 'dotenv';
+import { carregarEnv } from './lib/carregar-env';
 import {
   criarClienteDocusign,
   DocusignConsentRequiredError,
@@ -17,8 +17,7 @@ import {
   transactionIdDeterministico,
 } from '../lib/integrations/docusign';
 
-loadEnv({ path: '.env' });
-loadEnv({ path: '.env.local', override: true });
+carregarEnv(); // linha de comando > .env.local > .env (A-13)
 
 /** PDF mínimo de 1 página (Letter) com a marca de teste e um espaço para a assinatura. */
 function gerarPdfMinuta(): Buffer {

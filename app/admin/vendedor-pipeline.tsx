@@ -1,104 +1,67 @@
 'use client';
 
 /**
- * Pipeline kanban dos vendedores no /admin. Cada lead mostra estágio
- * atual + botão pra próxima ação. Fluxo da cota de prova (Atlas/Bento):
- * gerar oferta → registrar cessão (só cria, PENDENTE) → registrar laudo
- * (URL com #sha256) → enviar à assinatura (DocuSign) → sincronizar assinatura →
- * confirmar titular do laudo → pagar cedente → incorporar cota.
- * O Pix simulado avulso saiu da rota (400): o único pagamento é `pagar-cedente`.
+ * Solicitações de venda no /admin (spec de UX da Íris, item 14): lista (tabela no desktop, três linhas no celular) +
+ * detalhe com stepper vertical. SÓ a etapa "Agora" tem controles; as feitas mostram data e evidência; as futuras, só o
+ * rótulo e a pré-condição. As ACTIONS são as de POST /api/admin/originacao (a API não mudou); a regra do que mostrar
+ * está em lib/admin/etapas-operador.ts e a tradução dos erros em lib/admin/erro-acao.ts.
  *
- * Cada ação chama /api/admin/originacao (server-side) e revalida via
- * router.refresh.
+ * Fluxo da cota de prova (Atlas/Bento): gerar proposta → registrar cessão → registrar laudo (URL com #sha256) →
+ * enviar à assinatura → sincronizar assinatura → confirmar titular → registrar anuência → pagar cedente → incorporar.
+ * O Pix simulado avulso saiu da rota (400): o único pagamento é `pagar-cedente`.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { NOME_EM_ANDAMENTO, etapasDoLead, ordenarSolicitacoes, type AnaliseSolicitacao, type EtapaOperador } from '@/lib/admin/etapas-operador';
+import { avisoDeResposta, interpretarErroDeAcao, TEXTO_INCERTO, type ErroDeAcao } from '@/lib/admin/erro-acao';
+import type { LeadAdmin } from '@/lib/admin/tipos';
 
-interface PipelineLead {
-  id: string;
-  nome: string;
-  email: string;
-  status: string;
-  criadoEm: string | Date;
-  ofertas: Array<{
-    id: string;
-    versao: number;
-    tipoBem: string;
-    valorCarta: string | number | { toString(): string };
-    valorLiquidoVendedor: string | number | { toString(): string };
-    desagioAquisicao: string | number | { toString(): string };
-    administradora: string;
-    status: string;
-    validade: string | Date;
-    cessao: {
-      id: string;
-      status: string;
-      onChainTxHash: string | null;
-      pagamento: {
-        id: string;
-        status: string;
-        onChainTxHash: string | null;
-      } | null;
-      cota: { id: string } | null;
-      /** Existe o laudo registrado (evento COTA_VALIDADA da cessão). */
-      laudoRegistrado?: boolean;
-      /** Titular confirmado no laudo (E1-2): null = ainda não confirmado. */
-      titularSituacao?: string | null;
-      /** Situação da transferência Pix da cessão (StatusTransferenciaPix), se existir. */
-      pixStatus?: string | null;
-      /** Hash do laudo (payloadHash do COTA_VALIDADA): é o `hashValidacao` da anuência. */
-      laudoHash?: string | null;
-      /** Anuência da administradora registrada (CONFIRMADA | DECLARADA_PENDENTE), se houver. */
-      anuenciaStatus?: string | null;
-    } | null;
-  }>;
-}
-
-const CESSAO_STATUS_LABEL: Record<string, string> = {
-  ENVIADA_DOCUSIGN: 'Aguardando assinatura',
-  ASSINADA: 'Assinada',
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  NOVO: 'Novo',
-  CONTATADO: 'Contatado',
-  DOCS_SOLICITADOS: 'Docs solicitados',
-  DOCS_RECEBIDOS: 'Docs recebidos',
-  OFERTA_ENVIADA: 'Oferta enviada',
-  OFERTA_ACEITA: 'Oferta aceita',
-  CESSAO_ASSINADA: 'Cessão assinada',
-  PIX_EXECUTADO: 'Pix executado',
-  COTA_INCORPORADA: 'Cota incorporada',
-  PERDIDO: 'Perdido',
-};
+type PipelineLead = LeadAdmin;
 
 const ROTULO_ANUENCIA: Record<string, string> = {
   DECLARADA_PENDENTE: 'declarada, pendente (simulada)',
   CONFIRMADA: 'confirmada pela administradora',
 };
 
+const ROTULO_TITULAR: Record<string, string> = {
+  TITULAR_UNICO: 'titular único',
+  ESPOLIO: 'espólio',
+  COTITULARIDADE: 'cotitularidade',
+  PROCURADOR: 'procurador',
+};
+
+const ROTULO_TIPO_BEM: Record<string, string> = { IMOVEL: 'Imóvel', VEICULO: 'Veículo', EQUIPAMENTO: 'Equipamento', SERVICO: 'Serviço' };
+
 const BTN =
-  'min-h-[44px] bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-primary-deep transition-colors disabled:opacity-50';
+  'w-full lg:w-auto min-h-[44px] bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-primary-deep transition-colors disabled:opacity-50';
+const BTN_SECUNDARIO =
+  'w-full lg:w-auto min-h-[44px] border border-base text-base font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-document-grey/60 transition-colors disabled:opacity-50';
+const ROTULO = 'font-details text-[10px] tracking-[0.2em] uppercase text-base/70';
+
+/** Verbo no gerúndio enquanto a ação roda (checklist do item 14). */
+const GERUNDIO: Record<string, string> = {
+  'gerar-oferta': 'Gerando…',
+  'registrar-cessao': 'Registrando…',
+  'registrar-laudo': 'Registrando…',
+  'enviar-cessao': 'Enviando…',
+  'sincronizar-cessoes': 'Sincronizando…',
+  'confirmar-titular-laudo': 'Confirmando…',
+  'registrar-anuencia': 'Registrando…',
+  'pagar-cedente': 'Pagando…',
+  'reabrir-pagamento-cedente': 'Reabrindo…',
+  'incorporar-cota': 'Incorporando…',
+};
 
 function explorerTx(hash: string) {
   return `https://stellar.expert/explorer/testnet/tx/${hash}`;
 }
-
-/** `redePublica`: a rede é a PUBLIC (mainnet). Sem ela, a tela trata tudo como rede de testes (simulado). */
-export function VendedorPipeline({ leads, redePublica = false }: { leads: PipelineLead[]; redePublica?: boolean }) {
-  if (leads.length === 0) {
-    return (
-      <p className="font-text text-sm text-base/60">
-        Nenhum lead capturado ainda. Quando alguém preencher o wizard em{' '}
-        <code className="font-mono text-xs">/vender</code>, aparece aqui
-        pra qualificar e gerar oferta firme.
-      </p>
-    );
-  }
-
-  return <ListaDeLeads leads={leads} redePublica={redePublica} />;
-}
+const curto = (h: string) => (h.length > 12 ? `${h.slice(0, 4)}…${h.slice(-4)}` : h);
+const fmtData = (d: string | Date | null | undefined) => {
+  if (!d) return '';
+  const x = new Date(d);
+  return `${x.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${x.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+};
 
 /** Id curto para o operador citar um lead sem copiar o id inteiro (os 6 últimos caracteres do id). */
 export function idCurto(id: string): string {
@@ -109,437 +72,637 @@ const BRL_INTEIRO = new Intl.NumberFormat('pt-BR', { style: 'currency', currency
 
 function valorDoLead(lead: PipelineLead): string {
   const o = lead.ofertas[0];
-  if (!o) return 'sem oferta';
+  if (!o) return 'sem proposta';
   const n = Number(o.valorCarta.toString());
-  return Number.isFinite(n) ? BRL_INTEIRO.format(n) : 'sem oferta';
+  return Number.isFinite(n) ? BRL_INTEIRO.format(n) : 'sem proposta';
 }
 
-/** O lead selecionado fica destacado (borda, marca "Selecionado" em texto) e vem de um clique ou de `#lead-<id>` na URL. */
-function ListaDeLeads({ leads, redePublica }: { leads: PipelineLead[]; redePublica: boolean }) {
+/** Nome para a lista: e-mail ou marcador nunca ocupam o lugar do nome. */
+function nomeDoLead(lead: PipelineLead): string {
+  const n = lead.nome?.trim();
+  return !n || n.includes('@') || n === 'Nome não informado' ? 'Nome não informado' : n;
+}
+
+type Filtro = 'abertas' | 'concluidas' | 'encerradas';
+
+/** `redePublica`: a rede é a PUBLIC (mainnet). Sem ela, a tela trata tudo como rede de testes (simulado). */
+export function VendedorPipeline({ leads, redePublica = false }: { leads: PipelineLead[]; redePublica?: boolean }) {
+  const [filtro, setFiltro] = useState<Filtro>('abertas');
   const [selecionado, setSelecionado] = useState<string | null>(null);
+
+  // `#lead-<id>` na URL abre o detalhe daquele lead.
   useEffect(() => {
     const m = /^#lead-(.+)$/.exec(window.location.hash);
-    if (m && leads.some((l) => l.id === m[1])) setSelecionado(m[1]!);
-  }, [leads]);
+    if (m && leads.some((l) => l.id === m[1])) {
+      setSelecionado(m[1]!);
+      const l = leads.find((x) => x.id === m[1])!;
+      const est = etapasDoLead(l, { redePublica }).estado;
+      setFiltro(est === 'concluida' ? 'concluidas' : est === 'encerrada' ? 'encerradas' : 'abertas');
+    }
+  }, [leads, redePublica]);
+
+  const todas = ordenarSolicitacoes(leads, { redePublica }).map((l) => ({ lead: l, analise: etapasDoLead(l, { redePublica }) }));
+  const grupo = (f: Filtro) =>
+    todas.filter(({ analise }) => (f === 'abertas' ? analise.estado === 'aberta' || analise.estado === 'manual' : f === 'concluidas' ? analise.estado === 'concluida' : analise.estado === 'encerrada'));
+  const contagem = { abertas: grupo('abertas').length, concluidas: grupo('concluidas').length, encerradas: grupo('encerradas').length };
+  const visiveis = grupo(filtro);
+  const atual = todas.find((t) => t.lead.id === selecionado) ?? null;
+
+  if (leads.length === 0) {
+    return (
+      <p className="font-text text-sm text-base/70">
+        Nenhuma solicitação aberta. Quando alguém enviar uma cota em <code className="font-mono text-xs">/vender</code>, ela aparece aqui.
+      </p>
+    );
+  }
+
+  function selecionar(id: string) {
+    setSelecionado(id);
+    window.history.replaceState(null, '', `#lead-${id}`);
+  }
+
   return (
-    <div className="space-y-3">
-      {leads.map((l) => (
-        <LeadCard
-          key={l.id}
-          lead={l}
-          redePublica={redePublica}
-          selecionado={selecionado === l.id}
-          onSelecionar={() => {
-            setSelecionado(l.id);
-            window.history.replaceState(null, '', `#lead-${l.id}`);
-          }}
-        />
-      ))}
+    <div className="grid gap-8 lg:grid-cols-12">
+      <div className={`${atual ? 'hidden lg:block' : ''} min-w-0 lg:col-span-7`}>
+        <div role="group" aria-label="Filtrar solicitações" className="flex flex-wrap gap-2 mb-4">
+          {(['abertas', 'concluidas', 'encerradas'] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              aria-pressed={filtro === f}
+              onClick={() => setFiltro(f)}
+              className={`min-h-[44px] px-4 font-details text-[10px] tracking-[0.2em] uppercase border ${filtro === f ? 'bg-base text-lightBg border-base' : 'border-base/40 text-base'}`}
+            >
+              {f === 'abertas' ? 'Abertas' : f === 'concluidas' ? 'Concluídas' : 'Encerradas'} ({contagem[f]})
+            </button>
+          ))}
+        </div>
+
+        {visiveis.length === 0 ? (
+          <p className="font-text text-sm text-base/70">
+            {filtro === 'abertas' ? 'Nenhuma solicitação aberta.' : `Nenhuma solicitação ${filtro === 'concluidas' ? 'concluída' : 'encerrada'}.`}
+          </p>
+        ) : (
+          <>
+            {/* Desktop: tabela semântica */}
+            <table data-testid="lista-tabela" className="hidden lg:table w-full table-fixed font-text text-sm">
+              <caption className="sr-only">Solicitações de venda</caption>
+              <colgroup>
+                <col className="w-[14%]" />
+                <col className="w-[27%]" />
+                <col className="w-[17%]" />
+                <col className="w-[22%]" />
+                <col className="w-[20%]" />
+              </colgroup>
+              <thead>
+                <tr className="text-left">
+                  <th scope="col" className={`${ROTULO} py-2 pr-3 font-normal`}>ID</th>
+                  <th scope="col" className={`${ROTULO} py-2 pr-3 font-normal`}>Cedente</th>
+                  <th scope="col" className={`${ROTULO} py-2 pr-3 font-normal`}>Valor da carta</th>
+                  <th scope="col" className={`${ROTULO} py-2 pr-3 font-normal`}>Etapa</th>
+                  <th scope="col" className={`${ROTULO} py-2 font-normal`}>Próxima ação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-light-hairline">
+                {visiveis.map(({ lead, analise }) => (
+                  <tr key={lead.id} className={`align-top ${lead.id === selecionado ? 'bg-document-grey/60' : ''}`}>
+                    <td className="py-3 pr-3 font-mono text-xs">
+                      <a
+                        href={`#lead-${lead.id}`}
+                        aria-current={lead.id === selecionado ? 'true' : undefined}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          selecionar(lead.id);
+                        }}
+                        className="inline-flex min-h-[44px] items-center underline text-primary-deep"
+                      >
+                        {idCurto(lead.id)}
+                      </a>
+                      {lead.id === selecionado && <span className="ml-2 font-details text-[10px] uppercase">Selecionado</span>}
+                    </td>
+                    <td className="py-3 pr-3">
+                      {nomeDoLead(lead)}
+                      <div className="font-mono text-xs text-base/70 break-all">{lead.email}</div>
+                    </td>
+                    <td className="py-3 pr-3 font-mono text-xs whitespace-nowrap">{valorDoLead(lead)}</td>
+                    <td className="py-3 pr-3 text-xs">{rotuloEtapa(analise)}</td>
+                    <td className={`py-3 text-xs ${analise.dependeDe === 'operador' ? 'text-base font-medium' : 'text-base/60'}`}>
+                      {analise.proximaAcao}
+                      {analise.dependeDe === 'operador' && <span aria-hidden="true"> →</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Celular e tablet: três linhas por solicitação, alvo de 72 px */}
+            <ul data-testid="lista-mobile" className="lg:hidden divide-y divide-light-hairline border border-light-hairline bg-white">
+              {visiveis.map(({ lead, analise }) => (
+                <li key={lead.id}>
+                  <button type="button" onClick={() => selecionar(lead.id)} className="block w-full min-h-[72px] px-4 py-3 text-left">
+                    <span className="block font-text text-sm font-semibold">
+                      <span className="font-mono text-xs">{idCurto(lead.id)}</span> · {nomeDoLead(lead)}
+                    </span>
+                    <span className="block font-mono text-xs text-base/70 mt-1">
+                      {valorDoLead(lead)} · {rotuloEtapa(analise)}
+                    </span>
+                    <span className={`block font-text text-sm mt-1 ${analise.dependeDe === 'operador' ? 'text-base' : 'text-base/60'}`}>
+                      {analise.proximaAcao}
+                      {analise.dependeDe === 'operador' && <span aria-hidden="true"> →</span>}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+
+      <div className={`${atual ? '' : 'hidden lg:block'} min-w-0 lg:col-span-5`}>
+        {atual ? (
+          <DetalheSolicitacao key={atual.lead.id} lead={atual.lead} analise={atual.analise} redePublica={redePublica} onVoltar={() => setSelecionado(null)} />
+        ) : (
+          <p className="font-text text-sm text-base/70">Escolha uma solicitação na lista.</p>
+        )}
+      </div>
     </div>
   );
 }
 
-function LeadCard({
+function rotuloEtapa(a: AnaliseSolicitacao): string {
+  if (a.atual) return `${a.atual} · ${NOME_EM_ANDAMENTO[a.etapas[a.atual - 1]!.id]}`;
+  if (a.estado === 'concluida') return 'Concluída';
+  if (a.estado === 'encerrada') return 'Encerrada';
+  if (a.estado === 'manual') return 'Tratamento manual';
+  return '—';
+}
+
+// ─── Detalhe: stepper vertical ──────────────────────────────────────────────────────────────────
+
+function DetalheSolicitacao({
   lead,
+  analise,
   redePublica,
-  selecionado,
-  onSelecionar,
+  onVoltar,
 }: {
   lead: PipelineLead;
+  analise: AnaliseSolicitacao;
   redePublica: boolean;
-  selecionado: boolean;
-  onSelecionar: () => void;
+  onVoltar: () => void;
 }) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
+  const oferta = lead.ofertas[0] ?? null;
+  const cessao = oferta?.cessao ?? null;
+  const [executando, setExecutando] = useState<string | null>(null);
+  const [erro, setErro] = useState<ErroDeAcao | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [copiado, setCopiado] = useState('');
+  const [feitasAbertas, setFeitasAbertas] = useState(false);
+  const voltarRef = useRef<HTMLButtonElement>(null);
 
-  const ofertaCorrente = lead.ofertas[0] ?? null;
-  const cessao = ofertaCorrente?.cessao ?? null;
-  const pagamento = cessao?.pagamento ?? null;
-  const cota = cessao?.cota ?? null;
+  useEffect(() => {
+    // Celular recolhe as concluídas; desktop mostra (data e evidência preservadas).
+    if (typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1024px)').matches) setFeitasAbertas(true);
+  }, []);
+
+  async function executar(action: string, payload: Record<string, unknown>) {
+    setExecutando(action);
+    setErro(null);
+    setAviso(null);
+    try {
+      const res = await fetch('/api/admin/originacao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-plina-admin': '1' },
+        body: JSON.stringify({ action, ...payload }),
+      });
+      if (!res.ok) {
+        const corpo = await res.json().catch(() => ({}));
+        setErro(interpretarErroDeAcao(res.status, corpo, res.headers.get('retry-after')));
+        return;
+      }
+      // 200 nem sempre é o passo concluído (sincronizar, pagar): lê o corpo e avisa quando ainda não avançou.
+      const ok = await res.json().catch(() => null);
+      setAviso(avisoDeResposta(action, ok));
+      router.refresh();
+    } catch {
+      // Rede/timeout sem resposta: o resultado é incerto (a ação pode ter ocorrido).
+      setErro({ texto: TEXTO_INCERTO, codigo: null, incerto: true });
+    } finally {
+      setExecutando(null);
+    }
+  }
+
+  async function copiar(hash: string) {
+    try {
+      await navigator.clipboard.writeText(hash);
+      setCopiado(hash);
+      setTimeout(() => setCopiado(''), 2000);
+    } catch {
+      /* sem permissão de área de transferência: o hash continua selecionável */
+    }
+  }
+
+  const feitas = analise.etapas.filter((e) => e.situacao === 'feita');
+  const demais = analise.etapas.filter((e) => e.situacao !== 'feita');
+  const rotuloEstado = rotuloEtapa(analise);
+
+  return (
+    <section data-testid="detalhe" aria-label={`Solicitação ${idCurto(lead.id)}`} className="border border-light-hairline bg-white p-4 lg:sticky lg:top-24">
+      <button ref={voltarRef} type="button" onClick={onVoltar} className={`lg:hidden min-h-[44px] -ml-1 mb-2 ${ROTULO} underline underline-offset-4`}>
+        ← Solicitações
+      </button>
+      <p className={ROTULO}>Solicitação #{idCurto(lead.id)}</p>
+      <h3 className="font-title text-xl font-semibold mt-1">{rotuloEstado}</h3>
+      <p className="font-text text-sm mt-2">
+        {nomeDoLead(lead)} · <span className="font-mono text-xs">{lead.email}</span>
+      </p>
+      {oferta && (
+        <p className="font-mono text-xs text-base/70 mt-1">
+          {ROTULO_TIPO_BEM[oferta.tipoBem] ?? oferta.tipoBem} · carta {BRL_INTEIRO.format(Number(oferta.valorCarta.toString()))} · líquido{' '}
+          {BRL_INTEIRO.format(Number(oferta.valorLiquidoVendedor.toString()))} · {oferta.administradora}
+        </p>
+      )}
+      {analise.pausa && <p className="font-text text-sm text-base/80 mt-3">{analise.pausa}</p>}
+
+      <details open={feitasAbertas} onToggle={(e) => setFeitasAbertas((e.currentTarget as HTMLDetailsElement).open)} className="mt-4">
+        <summary className={`min-h-[44px] flex items-center cursor-pointer ${ROTULO}`}>Etapas concluídas ({feitas.length})</summary>
+        <ol className="divide-y divide-light-hairline">
+          {feitas.map((e) => (
+            <li key={e.id} className="py-3 font-text text-sm">
+              <p>
+                <span aria-hidden="true">✓ </span>
+                <span className="font-mono text-xs text-base/70">{e.n}</span> {e.rotulo}
+                {e.data && <span className="font-mono text-xs text-base/70"> · {fmtData(e.data)}</span>}
+                {!e.data && e.id === 'aceite' && <span className="font-text text-xs text-base/70"> · data do aceite não disponível</span>}
+              </p>
+              <Evidencia etapa={e} copiado={copiado} onCopiar={copiar} comprovanteDe={e.id === 'assinatura' ? cessao?.id : undefined} />
+            </li>
+          ))}
+        </ol>
+        <p role="status" aria-live="polite" className="sr-only">{copiado ? 'Copiado' : ''}</p>
+      </details>
+
+      <ol className="mt-2 divide-y divide-light-hairline">
+        {demais.map((e) =>
+          e.situacao === 'agora' ? (
+            <li key={e.id} data-testid="etapa-agora" aria-current="step" className="py-4">
+              <p className="font-text text-sm font-semibold">
+                <span className="font-mono text-xs">● {e.n}</span> {tituloAgora(e, analise, redePublica)}{' '}
+                <span className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">Agora</span>
+              </p>
+              <ControlesDaEtapa
+                etapa={e}
+                lead={lead}
+                analise={analise}
+                redePublica={redePublica}
+                executando={executando}
+                onExecutar={executar}
+              />
+              {aviso && (
+                <p role="status" data-testid="aviso-acao" className="mt-3 font-text text-sm text-base/80">
+                  {aviso}
+                </p>
+              )}
+              {erro && (
+                <div role="alert" className="mt-3">
+                  <p className="font-details text-[10px] tracking-[0.2em] uppercase text-red-700">{erro.incerto ? 'Sem confirmação' : 'Não concluído'}</p>
+                  <p className="font-text text-sm text-red-700 mt-1">{erro.texto}</p>
+                  {erro.codigo && <p className="font-mono text-[11px] text-base/70 mt-1">{erro.codigo}</p>}
+                  {erro.texto.startsWith('Sessão expirada') && (
+                    <p className="mt-1">
+                      <a href="/admin" className="underline text-primary-deep font-text text-sm">Entrar de novo</a>
+                    </p>
+                  )}
+                </div>
+              )}
+            </li>
+          ) : (
+            <li key={e.id} className="py-3 font-text text-sm text-base/70">
+              <span aria-hidden="true">○ </span>
+              <span className="font-mono text-xs">{e.n}</span> {e.rotulo}
+              {e.depoisDe && <span> — {e.depoisDe}</span>}
+            </li>
+          ),
+        )}
+      </ol>
+    </section>
+  );
+}
+
+function tituloAgora(e: EtapaOperador, a: AnaliseSolicitacao, redePublica: boolean): string {
+  if (e.id === 'pagamento') {
+    if (a.pagamento === 'reabrir') return 'Reabrir pagamento';
+    if (a.pagamento === 'reconsultar') return 'Pagamento em andamento';
+    return redePublica ? 'Pagar cedente' : 'Pagar cedente (Pix simulado, rede de testes)';
+  }
+  const titulo: Record<string, string> = {
+    proposta: 'Gerar proposta',
+    aceite: 'Aguardando o cedente',
+    cessao: 'Registrar cessão',
+    laudo: 'Registrar laudo',
+    envio: 'Enviar para assinatura',
+    assinatura: 'Aguardando a assinatura do cedente',
+    titular: 'Confirmar titular do laudo',
+    anuencia: 'Anuência da administradora',
+    incorporacao: 'Incorporar cota ao pool · emitir PLINA-RF',
+  };
+  return titulo[e.id] ?? e.rotulo;
+}
+
+function Evidencia({
+  etapa,
+  copiado,
+  onCopiar,
+  comprovanteDe,
+}: {
+  etapa: EtapaOperador;
+  copiado: string;
+  onCopiar: (h: string) => void;
+  comprovanteDe?: string;
+}) {
+  const ev = etapa.evidencia;
+  if (!ev) return null;
+  return (
+    <p className="mt-1 font-mono text-xs text-base/80 break-all">
+      {ev.tx && (
+        <>
+          tx{' '}
+          <a href={explorerTx(ev.tx)} target="_blank" rel="noopener noreferrer" aria-label={`Transação ${curto(ev.tx)} no explorer, abre em nova aba`} className="underline text-primary-deep">
+            {curto(ev.tx)} ↗
+          </a>{' '}
+          <button type="button" onClick={() => onCopiar(ev.tx!)} className="min-h-[44px] px-2 underline" aria-label={`Copiar a transação ${curto(ev.tx)}`}>
+            {copiado === ev.tx ? 'Copiado' : 'copiar'}
+          </button>
+        </>
+      )}
+      {ev.hash && (
+        <>
+          sha256 {curto(ev.hash)}{' '}
+          <button type="button" onClick={() => onCopiar(ev.hash!)} className="min-h-[44px] px-2 underline" aria-label={`Copiar o hash ${curto(ev.hash)}`}>
+            {copiado === ev.hash ? 'Copiado' : 'copiar'}
+          </button>
+        </>
+      )}
+      {ev.texto && <>{rotuloDeEvidencia(etapa.id, ev.texto)}</>}
+      {comprovanteDe && (
+        <>
+          {' '}
+          · <a href={`/cessao/${comprovanteDe}/comprovante`} className="underline text-primary-deep">Ver comprovante</a>
+        </>
+      )}
+    </p>
+  );
+}
+
+function rotuloDeEvidencia(id: string, texto: string): string {
+  if (id === 'titular') return ROTULO_TITULAR[texto] ?? texto;
+  if (id === 'anuencia') return ROTULO_ANUENCIA[texto] ?? texto;
+  return texto;
+}
+
+// ─── Controles de cada etapa "Agora" ───────────────────────────────────────────────────────────
+
+function ControlesDaEtapa({
+  etapa,
+  lead,
+  analise,
+  redePublica,
+  executando,
+  onExecutar,
+}: {
+  etapa: EtapaOperador;
+  lead: PipelineLead;
+  analise: AnaliseSolicitacao;
+  redePublica: boolean;
+  executando: string | null;
+  onExecutar: (action: string, payload: Record<string, unknown>) => void;
+}) {
+  const oferta = lead.ofertas[0] ?? null;
+  const cessao = oferta?.cessao ?? null;
   const [laudoUrl, setLaudoUrl] = useState('');
   const [situacao, setSituacao] = useState('TITULAR_UNICO');
   const [atestado, setAtestado] = useState(false);
   const [anuenciaTipo, setAnuenciaTipo] = useState(redePublica ? 'CONFIRMADA' : 'DECLARADA_PENDENTE');
   const [anuenciaRef, setAnuenciaRef] = useState('');
+  const ocupado = executando !== null;
+  const rotulo = (action: string, normal: string) => (executando === action ? GERUNDIO[action] : normal);
+  const processando = executando && (
+    <p role="status" className="mt-2 font-text text-xs text-base/70">
+      Processando. Aguarde a confirmação antes de repetir.
+    </p>
+  );
 
-  async function call(action: string, payload: Record<string, unknown>) {
-    setBusy(true);
-    setErro(null);
-    try {
-      const res = await fetch('/api/admin/originacao', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-plina-admin': '1',
-        },
-        body: JSON.stringify({ action, ...payload }),
-      });
-      if (!res.ok) {
-        // Só a mensagem fixa de domínio + o code; sem corpo cru (pode ter detalhe de validação).
-        const j = (await res.json().catch(() => ({}))) as { error?: unknown; code?: unknown };
-        throw new Error(
-          typeof j.code === 'string' && typeof j.error === 'string'
-            ? `${j.error} (${j.code})`
-            : `Falha ao executar a ação (HTTP ${res.status}).`,
+  switch (etapa.id) {
+    case 'proposta':
+      return <NovaOfertaForm leadId={lead.id} onSubmit={(a, p) => onExecutar(a, p)} busy={ocupado} />;
+
+    case 'aceite':
+      return (
+        <p className="mt-2 font-text text-sm text-base/70">
+          Aguardando o cedente{oferta?.validade ? ` · válida até ${fmtData(oferta.validade as string | Date)}` : ''}.
+        </p>
+      );
+
+    case 'cessao':
+      return (
+        <div className="mt-2">
+          <button type="button" disabled={ocupado} onClick={() => onExecutar('registrar-cessao', { ofertaId: oferta!.id })} className={BTN}>
+            {rotulo('registrar-cessao', 'Registrar cessão')}
+          </button>
+          {processando}
+        </div>
+      );
+
+    case 'laudo':
+      return (
+        <div className="mt-2 space-y-2">
+          <label className="block">
+            <span className={ROTULO}>URL do laudo (com #sha256 do documento)</span>
+            <input
+              type="url"
+              value={laudoUrl}
+              onChange={(e) => setLaudoUrl(e.target.value)}
+              placeholder="https://…/laudo.pdf#sha256=…"
+              className="mt-1 w-full min-h-[44px] bg-white border border-base/55 px-3 py-2 font-mono text-xs"
+            />
+            <span className="mt-1 block font-text text-xs text-base/70">
+              O laudo precisa ter o item 7 (quitação): saldo devedor R$ 0,00, conforme documento da administradora (na testnet, o documento de teste
+              rotulado). Sem dado pessoal.
+            </span>
+          </label>
+          <button
+            type="button"
+            disabled={ocupado || !/^https?:\/\//.test(laudoUrl.trim())}
+            aria-describedby="razao-laudo"
+            onClick={() => onExecutar('registrar-laudo', { cessaoId: cessao!.id, laudoUrl: laudoUrl.trim() })}
+            className={BTN}
+          >
+            {rotulo('registrar-laudo', 'Registrar laudo')}
+          </button>
+          {!/^https?:\/\//.test(laudoUrl.trim()) && (
+            <p id="razao-laudo" className="font-text text-xs text-base/70">Informe a URL do laudo (começando com http ou https).</p>
+          )}
+          {processando}
+        </div>
+      );
+
+    case 'envio':
+      return (
+        <div className="mt-2">
+          <p className="font-text text-xs text-base/70 mb-2">Laudo registrado. Falta enviar à assinatura.</p>
+          <button type="button" disabled={ocupado} onClick={() => onExecutar('enviar-cessao', { cessaoId: cessao!.id })} className={BTN}>
+            {rotulo('enviar-cessao', 'Enviar para assinatura (DocuSign)')}
+          </button>
+          {processando}
+        </div>
+      );
+
+    case 'assinatura':
+      return (
+        <div className="mt-2">
+          <p data-testid="cessao-aguardando-assinatura" className="font-text text-sm text-base/70 mb-2">
+            Aguardando assinatura do cedente.
+          </p>
+          <button type="button" disabled={ocupado} onClick={() => onExecutar('sincronizar-cessoes', { cessaoId: cessao!.id })} className={BTN_SECUNDARIO}>
+            {rotulo('sincronizar-cessoes', 'Sincronizar assinatura')}
+          </button>
+        </div>
+      );
+
+    case 'titular':
+      return (
+        <div className="mt-2 space-y-2">
+          <label className="block">
+            <span className={ROTULO}>Titular confirmado no laudo</span>
+            <select
+              value={situacao}
+              onChange={(e) => setSituacao(e.target.value)}
+              className="mt-1 w-full min-h-[44px] bg-white border border-base/55 px-3 py-2 font-text text-sm"
+            >
+              <option value="TITULAR_UNICO">Titular único</option>
+              <option value="ESPOLIO">Espólio</option>
+              <option value="COTITULARIDADE">Cotitularidade</option>
+              <option value="PROCURADOR">Procurador</option>
+            </select>
+          </label>
+          <label className="flex min-h-[44px] items-start gap-2 font-text text-xs text-base/80">
+            <input type="checkbox" checked={atestado} onChange={(e) => setAtestado(e.target.checked)} className="mt-0.5 w-5 h-5 accent-primary-deep" />
+            Atesto que o titular indicado no laudo é o titular do CPF do cadastro do cedente (na testnet, o cedente fictício do documento de teste).
+          </label>
+          <button
+            type="button"
+            disabled={ocupado || !atestado}
+            aria-describedby="razao-titular"
+            onClick={() => onExecutar('confirmar-titular-laudo', { cessaoId: cessao!.id, situacao, atestado })}
+            className={BTN}
+          >
+            {rotulo('confirmar-titular-laudo', 'Confirmar titular do laudo')}
+          </button>
+          {!atestado && (
+            <p id="razao-titular" className="font-text text-xs text-base/70">Marque o atesto para confirmar o titular.</p>
+          )}
+          {processando}
+        </div>
+      );
+
+    case 'anuencia':
+      return (
+        <div className="mt-2 space-y-2">
+          <label className="block">
+            <span className={ROTULO}>Anuência da administradora</span>
+            <select
+              value={anuenciaTipo}
+              onChange={(e) => setAnuenciaTipo(e.target.value)}
+              className="mt-1 w-full min-h-[44px] bg-white border border-base/55 px-3 py-2 font-text text-sm"
+            >
+              {!redePublica && <option value="DECLARADA_PENDENTE">Declarada, pendente (anuência simulada na testnet)</option>}
+              <option value="CONFIRMADA">Confirmada pela administradora</option>
+            </select>
+            <span className="mt-1 block font-text text-xs text-base/70">
+              Na demonstração, usar “Declarada, pendente”. “Confirmada pela administradora” só com documento dela, e exige a referência.
+            </span>
+          </label>
+          <label className="block">
+            <span className={ROTULO}>{anuenciaTipo === 'CONFIRMADA' ? 'Referência do documento da administradora' : 'Referência (opcional)'}</span>
+            <input
+              type="text"
+              maxLength={200}
+              value={anuenciaRef}
+              onChange={(e) => setAnuenciaRef(e.target.value)}
+              className="mt-1 w-full min-h-[44px] bg-white border border-base/55 px-3 py-2 font-text text-sm"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={ocupado || (anuenciaTipo === 'CONFIRMADA' && !anuenciaRef.trim()) || !cessao?.laudoHash}
+            aria-describedby="razao-anuencia"
+            onClick={() =>
+              onExecutar('registrar-anuencia', {
+                hashValidacao: cessao!.laudoHash,
+                status: anuenciaTipo,
+                ...(anuenciaRef.trim() ? { referencia: anuenciaRef.trim() } : {}),
+              })
+            }
+            className={BTN}
+          >
+            {rotulo('registrar-anuencia', 'Registrar anuência')}
+          </button>
+          {!cessao?.laudoHash ? (
+            <p id="razao-anuencia" className="font-text text-xs text-base/70">Falta o hash do laudo para registrar a anuência.</p>
+          ) : anuenciaTipo === 'CONFIRMADA' && !anuenciaRef.trim() ? (
+            <p id="razao-anuencia" className="font-text text-xs text-base/70">Informe a referência do documento da administradora.</p>
+          ) : null}
+          {processando}
+        </div>
+      );
+
+    case 'pagamento':
+      if (analise.pagamento === 'reabrir') {
+        return (
+          <div className="mt-2">
+            <p className="font-text text-xs text-base/70 mb-2">O Pix falhou e foi confirmado pelo PSP. Reabrir pagamento é uma ação auditada.</p>
+            <button type="button" disabled={ocupado} onClick={() => onExecutar('reabrir-pagamento-cedente', { cessaoId: cessao!.id })} className={BTN}>
+              {rotulo('reabrir-pagamento-cedente', 'Reabrir pagamento')}
+            </button>
+            {processando}
+          </div>
         );
       }
-      router.refresh();
-    } catch (err) {
-      setErro(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
+      return (
+        <div className="mt-2">
+          {analise.pagamento === 'reconsultar' && (
+            <p className="font-text text-xs text-base/70 mb-2">
+              Pix em andamento ({cessao?.pixStatus}). Reconsultar não paga de novo.
+            </p>
+          )}
+          <button type="button" disabled={ocupado} onClick={() => onExecutar('pagar-cedente', { cessaoId: cessao!.id })} className={BTN}>
+            {executando === 'pagar-cedente'
+              ? GERUNDIO['pagar-cedente']
+              : analise.pagamento === 'reconsultar'
+                ? 'Reconsultar pagamento'
+                : redePublica
+                  ? 'Pagar cedente (Pix)'
+                  : 'Pagar cedente (Pix simulado, rede de testes)'}
+          </button>
+          {processando}
+        </div>
+      );
 
-  return (
-    <div
-      id={`lead-${lead.id}`}
-      className={`scroll-mt-32 border ${selecionado ? 'border-primary-deep border-l-4' : 'border-light-hairline'}`}
-    >
-      <header className="px-4 py-3 border-b border-light-hairline flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-        <button
-          type="button"
-          onClick={onSelecionar}
-          aria-pressed={selecionado}
-          className="min-h-[44px] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-deep"
-        >
-          <span className="block font-text text-sm font-semibold">{lead.nome}</span>
-          <span className="block font-mono text-xs text-base/60">{lead.email}</span>
-          <span className="block font-mono text-xs text-base/70 mt-1" data-testid="lead-resumo">
-            #{idCurto(lead.id)} · {valorDoLead(lead)} · {new Date(lead.criadoEm).toLocaleDateString('pt-BR')}
-          </span>
-        </button>
-        <div className="flex items-center gap-3">
-          <span className="font-details text-[10px] tracking-[0.2em] uppercase bg-base text-lightBg px-2 py-1">
-            {STATUS_LABEL[lead.status] ?? lead.status}
-          </span>
-          {selecionado && (
-            <span className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">Selecionado</span>
+    case 'incorporacao':
+      return (
+        <div className="mt-2">
+          <button type="button" disabled={ocupado} onClick={() => onExecutar('incorporar-cota', { cessaoId: cessao!.id })} className={BTN}>
+            {rotulo('incorporar-cota', 'Incorporar cota ao pool · emitir PLINA-RF')}
+          </button>
+          {executando === 'incorporar-cota' && (
+            <p role="status" className="mt-2 font-text text-xs text-base/70">Processando. Aguarde a confirmação antes de repetir.</p>
           )}
         </div>
-      </header>
+      );
 
-      <div className="px-4 py-4 space-y-4">
-        {/* Stage 1: Sem oferta ainda */}
-        {!ofertaCorrente && (
-          <NovaOfertaForm leadId={lead.id} onSubmit={call} busy={busy} />
-        )}
-
-        {/* Stage 2: Tem oferta */}
-        {ofertaCorrente && (
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-center bg-document-grey/40 p-3 border border-light-hairline">
-            <div className="text-xs font-text">
-              <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 mb-1">
-                Oferta v{ofertaCorrente.versao} · {ofertaCorrente.status}
-              </p>
-              <p className="font-mono">
-                R$ {Number(ofertaCorrente.valorCarta.toString()).toLocaleString('pt-BR')}{' '}
-                @{' '}
-                {(Number(ofertaCorrente.desagioAquisicao.toString()) * 100).toFixed(0)}%{' '}
-                → R${' '}
-                {Number(ofertaCorrente.valorLiquidoVendedor.toString()).toLocaleString('pt-BR')}
-              </p>
-              <p className="text-base/60 mt-1">
-                {ofertaCorrente.tipoBem} · {ofertaCorrente.administradora} ·
-                validade{' '}
-                {new Date(ofertaCorrente.validade).toLocaleString('pt-BR', {
-                  hour12: false,
-                })}
-              </p>
-            </div>
-            {ofertaCorrente.status === 'ACEITA' && !cessao && (
-              <button
-                onClick={() => call('registrar-cessao', { ofertaId: ofertaCorrente.id })}
-                disabled={busy}
-                className="bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-primary-deep transition-colors disabled:opacity-50"
-              >
-                Registrar cessão
-              </button>
-            )}
-            {ofertaCorrente.status === 'ENVIADA' && (
-              <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/50">
-                Aguardando aceite do vendedor
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Stage 3: Tem cessão */}
-        {cessao && (
-          <div className="border-l-2 border-primary pl-4 py-2">
-            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
-              Cessão · {CESSAO_STATUS_LABEL[cessao.status] ?? cessao.status}
-            </p>
-            {cessao.status === 'ENVIADA_DOCUSIGN' && (
-              <p
-                role="status"
-                data-testid="cessao-aguardando-assinatura"
-                className="mt-1 font-text text-xs text-base/70"
-              >
-                Termo enviado por DocuSign. O Pix só pode ser executado depois da
-                assinatura.
-              </p>
-            )}
-            {cessao.onChainTxHash && (
-              <a
-                href={explorerTx(cessao.onChainTxHash)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-[10px] underline text-primary-deep hover:text-primary"
-              >
-                {cessao.onChainTxHash.slice(0, 16)}… ↗
-              </a>
-            )}
-            <a
-              href={`/cessao/${cessao.id}/comprovante`}
-              className="ml-3 font-details text-[10px] tracking-[0.2em] uppercase underline text-base/70 hover:text-primary-deep"
-            >
-              Ver comprovante
-            </a>
-
-            <ul className="mt-2 font-text text-xs text-base/80 space-y-0.5" aria-label="Estado da cessão">
-              <li>Laudo: {cessao.laudoRegistrado ? 'registrado' : 'pendente'}</li>
-              <li>
-                Assinatura:{' '}
-                {cessao.status === 'ASSINADA'
-                  ? 'assinada'
-                  : cessao.status === 'ENVIADA_DOCUSIGN'
-                    ? 'aguardando assinatura'
-                    : 'não enviada'}
-              </li>
-              <li>Titular do laudo: {cessao.titularSituacao ?? 'não confirmado'}</li>
-              <li>Anuência da administradora: {ROTULO_ANUENCIA[cessao.anuenciaStatus ?? ''] ?? 'não registrada'}</li>
-              <li>Pix ao cedente: {cessao.pixStatus ?? 'não iniciado'}</li>
-              <li>Cota: {cota ? 'incorporada' : 'não incorporada'}</li>
-            </ul>
-
-            {cessao.status === 'PENDENTE' && !cessao.laudoRegistrado && (
-              <div className="mt-2 space-y-2">
-                <label className="block">
-                  <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
-                    URL do laudo (com #sha256 do documento)
-                  </span>
-                  <input
-                    type="url"
-                    value={laudoUrl}
-                    onChange={(e) => setLaudoUrl(e.target.value)}
-                    placeholder="https://…/laudo.pdf#sha256=…"
-                    className="mt-1 w-full min-h-[44px] bg-white border border-base/55 px-3 py-2 font-mono text-xs"
-                  />
-                  <span className="mt-1 block font-text text-xs text-base/70">
-                    O laudo precisa ter o item 7 (quitação): saldo devedor R$ 0,00, conforme documento da administradora (na
-                    testnet, o documento de teste rotulado). Sem dado pessoal.
-                  </span>
-                </label>
-                <button
-                  onClick={() => call('registrar-laudo', { cessaoId: cessao.id, laudoUrl: laudoUrl.trim() })}
-                  disabled={busy || !/^https?:\/\//.test(laudoUrl.trim())}
-                  className={BTN}
-                >
-                  Registrar laudo
-                </button>
-              </div>
-            )}
-
-            {cessao.status === 'PENDENTE' && cessao.laudoRegistrado && (
-              <div className="mt-2">
-                <p className="font-text text-xs text-base/70 mb-2">Laudo registrado. Falta enviar à assinatura.</p>
-                <button onClick={() => call('enviar-cessao', { cessaoId: cessao.id })} disabled={busy} className={BTN}>
-                  Enviar para assinatura (DocuSign)
-                </button>
-              </div>
-            )}
-
-            {cessao.status === 'ENVIADA_DOCUSIGN' && (
-              <div className="mt-2">
-                <p data-testid="cessao-aguardando-assinatura" className="font-text text-xs text-base/70 mb-2">
-                  Aguardando assinatura do cedente.
-                </p>
-                <button onClick={() => call('sincronizar-cessoes', { cessaoId: cessao.id })} disabled={busy} className={BTN}>
-                  Sincronizar assinatura
-                </button>
-              </div>
-            )}
-
-            {cessao.status === 'ASSINADA' && !cessao.titularSituacao && !pagamento && (
-              <div className="mt-2 space-y-2">
-                <label className="block">
-                  <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
-                    Titular confirmado no laudo
-                  </span>
-                  <select
-                    value={situacao}
-                    onChange={(e) => setSituacao(e.target.value)}
-                    className="mt-1 w-full min-h-[44px] bg-white border border-base/55 px-3 py-2 font-text text-sm"
-                  >
-                    <option value="TITULAR_UNICO">Titular único</option>
-                    <option value="ESPOLIO">Espólio</option>
-                    <option value="COTITULARIDADE">Cotitularidade</option>
-                    <option value="PROCURADOR">Procurador</option>
-                  </select>
-                </label>
-                <label className="flex items-start gap-2 font-text text-xs text-base/80">
-                  <input
-                    type="checkbox"
-                    checked={atestado}
-                    onChange={(e) => setAtestado(e.target.checked)}
-                    className="mt-0.5 w-5 h-5 accent-primary-deep"
-                  />
-                  Atesto que o titular indicado no laudo é o titular do CPF do cadastro do cedente (na testnet, o cedente fictício do documento de teste).
-                </label>
-                <button
-                  onClick={() => call('confirmar-titular-laudo', { cessaoId: cessao.id, situacao, atestado })}
-                  disabled={busy || !atestado}
-                  className={BTN}
-                >
-                  Confirmar titular do laudo
-                </button>
-              </div>
-            )}
-
-            {cessao.status === 'ASSINADA' && cessao.titularSituacao && cessao.titularSituacao !== 'TITULAR_UNICO' && (
-              <p className="mt-2 font-text text-xs text-base/80">
-                Situação do titular: {cessao.titularSituacao}. Fora do fluxo automático (tratamento manual pela equipe).
-              </p>
-            )}
-
-            {cessao.laudoRegistrado && cessao.laudoHash && !cessao.anuenciaStatus && !cota && (
-              <div className="mt-2 space-y-2">
-                <label className="block">
-                  <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
-                    Anuência da administradora
-                  </span>
-                  <select
-                    value={anuenciaTipo}
-                    onChange={(e) => setAnuenciaTipo(e.target.value)}
-                    className="mt-1 w-full min-h-[44px] bg-white border border-base/55 px-3 py-2 font-text text-sm"
-                  >
-                    {!redePublica && <option value="DECLARADA_PENDENTE">Declarada, pendente (anuência simulada na testnet)</option>}
-                    <option value="CONFIRMADA">Confirmada pela administradora</option>
-                  </select>
-                  <span className="mt-1 block font-text text-xs text-base/70">
-                    Na demonstração, usar “Declarada, pendente”. “Confirmada pela administradora” só com documento dela, e exige
-                    a referência.
-                  </span>
-                </label>
-                <label className="block">
-                  <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
-                    {anuenciaTipo === 'CONFIRMADA' ? 'Referência do documento da administradora' : 'Referência (opcional)'}
-                  </span>
-                  <input
-                    type="text"
-                    maxLength={200}
-                    value={anuenciaRef}
-                    onChange={(e) => setAnuenciaRef(e.target.value)}
-                    className="mt-1 w-full min-h-[44px] bg-white border border-base/55 px-3 py-2 font-text text-sm"
-                  />
-                </label>
-                <button
-                  onClick={() =>
-                    call('registrar-anuencia', {
-                      hashValidacao: cessao.laudoHash,
-                      status: anuenciaTipo,
-                      ...(anuenciaRef.trim() ? { referencia: anuenciaRef.trim() } : {}),
-                    })
-                  }
-                  disabled={busy || (anuenciaTipo === 'CONFIRMADA' && !anuenciaRef.trim())}
-                  className={BTN}
-                >
-                  Registrar anuência
-                </button>
-              </div>
-            )}
-
-            {cessao.status === 'ASSINADA' &&
-              cessao.titularSituacao === 'TITULAR_UNICO' &&
-              cessao.pixStatus !== 'COMPROVADA' &&
-              (!pagamento || pagamento.status !== 'EXECUTADO') && (
-                <div className="mt-2">
-                  {cessao.pixStatus === 'FALHOU' ? (
-                    <>
-                      <p className="font-text text-xs text-base/70 mb-2">
-                        O Pix falhou e foi confirmado pelo PSP. Reabrir pagamento é uma ação auditada.
-                      </p>
-                      <button
-                        onClick={() => call('reabrir-pagamento-cedente', { cessaoId: cessao.id })}
-                        disabled={busy}
-                        className={BTN}
-                      >
-                        Reabrir pagamento
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      {cessao.pixStatus && (
-                        <p className="font-text text-xs text-base/70 mb-2">
-                          Pix em andamento ({cessao.pixStatus}). Repetir a ação só reconsulta o estado; não paga de novo.
-                        </p>
-                      )}
-                      <button
-                        onClick={() => call('pagar-cedente', { cessaoId: cessao.id })}
-                        disabled={busy}
-                        className={BTN}
-                      >
-                        {cessao.pixStatus ? 'Reconsultar pagamento' : redePublica ? 'Pagar cedente (Pix)' : 'Pagar cedente (Pix simulado, rede de testes)'}
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-          </div>
-        )}
-
-        {/* Stage 4: Tem pagamento */}
-        {pagamento && pagamento.status === 'EXECUTADO' && (
-          <div className="border-l-2 border-primary pl-4 py-2">
-            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
-              Pix · executado
-            </p>
-            {pagamento.onChainTxHash && (
-              <a
-                href={explorerTx(pagamento.onChainTxHash)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-[10px] underline text-primary-deep hover:text-primary"
-              >
-                {pagamento.onChainTxHash.slice(0, 16)}… ↗
-              </a>
-            )}
-
-            {!cota && cessao && (
-              <div className="mt-2">
-                {!cessao.anuenciaStatus && (
-                  <p className="font-text text-xs text-base/70 mb-2">Falta registrar a anuência da administradora.</p>
-                )}
-                <button
-                  onClick={() => call('incorporar-cota', { cessaoId: cessao.id })}
-                  disabled={busy || !cessao.anuenciaStatus}
-                  className={BTN}
-                >
-                  Incorporar cota ao pool · emitir PLINA-RF
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Stage 5: Cota incorporada */}
-        {cota && (
-          <div className="border-l-2 border-primary pl-4 py-2 bg-primary/5">
-            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">
-              ✓ Cota incorporada ao pool · {cota.id}
-            </p>
-          </div>
-        )}
-
-        {erro && (
-          <p className="font-text text-sm text-red-700">{erro}</p>
-        )}
-      </div>
-    </div>
-  );
+    default:
+      return null;
+  }
 }
 
 function NovaOfertaForm({
@@ -624,7 +787,7 @@ function NovaOfertaForm({
       <button
         type="submit"
         disabled={busy}
-        className="bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-3 py-2 hover:bg-primary-deep transition-colors disabled:opacity-50"
+        className="col-span-full md:col-span-1 w-full min-h-[44px] bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-3 py-2 hover:bg-primary-deep transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-deep"
       >
         Gerar oferta
       </button>
@@ -633,7 +796,7 @@ function NovaOfertaForm({
 }
 
 const inputCls =
-  'w-full bg-white border border-light-hairline px-2 py-1.5 font-text text-xs focus:outline-none focus:ring-2 focus:ring-primary';
+  'w-full bg-white border border-light-hairline min-h-[44px] px-2 py-1.5 font-text text-xs focus:outline-none focus:ring-2 focus:ring-primary-deep';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

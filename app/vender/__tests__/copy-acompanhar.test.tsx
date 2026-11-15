@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { vi } from 'vitest';
@@ -7,7 +8,7 @@ vi.mock('@/lib/hooks/privy', () => ({ useAppPrivy: () => ({ getAccessToken: asyn
 
 import AcompanharView, { type AcompanharData } from '@/components/vender/AcompanharView';
 import { LeadVendedorStatus } from '@prisma/client';
-import { contextoDoStatus } from '@/lib/vender/etapas';
+import { ETAPAS_VENDER, contextoDoStatus } from '@/lib/vender/etapas';
 
 const data: AcompanharData = {
   leadId: 'lead-1', cedenteNome: 'Cedente Teste', status: 'OFERTA_ACEITA', etapaAtual: 4,
@@ -73,5 +74,42 @@ describe('estados do acompanhamento do cedente (achados A-14, A-15, A-16 da Vera
 
   it('A-15: cessão ainda não assinada mostra o aviso do link de e-mail; já assinada (etapa além da cessão) não repete', () => {
     expect(render({ etapaAtual: 4 })).toContain('data-testid="assinatura-por-email"');
+  });
+});
+
+describe('vocabulário dos estados (Consuelo, item 11)', () => {
+  const titulos = Object.values(LeadVendedorStatus).map((st) => contextoDoStatus(st).titulo);
+  it('títulos novos: análise da cota, proposta, pagamento simulado e concluído com qualificador', () => {
+    expect(contextoDoStatus('CONTATADO').titulo).toBe('Análise da cota em andamento');
+    expect(contextoDoStatus('OFERTA_ENVIADA').titulo).toBe('Proposta enviada');
+    expect(contextoDoStatus('OFERTA_ACEITA').titulo).toBe('Proposta aceita');
+    expect(contextoDoStatus('CESSAO_ASSINADA').titulo).toBe('Cessão assinada (demonstração)');
+    expect(contextoDoStatus('PIX_EXECUTADO').titulo).toBe('Pagamento simulado enviado');
+    expect(contextoDoStatus('COTA_INCORPORADA').titulo).toBe('Concluído (simulação na rede de testes)');
+  });
+  it('nenhum título com "firme", "jurídica" nem "Pix enviado"', () => {
+    expect(titulos.join(' | ')).not.toMatch(/firme|jurídica|Pix enviado|Oferta/i);
+  });
+  it('descrições de oferta usam "proposta"', () => {
+    expect(contextoDoStatus('OFERTA_ENVIADA').descricao).toContain('Sua proposta está disponível');
+    expect(contextoDoStatus('OFERTA_ACEITA').descricao).toContain('Tudo certo com a proposta.');
+  });
+  it('descrições finais da Norma (seção H): sem prazo, sem "jurídica", sem "tokenizado", "Pix recebido" virou "Pagamento recebido"', () => {
+    expect(ETAPAS_VENDER[2]).toBe('Análise da cota');
+    expect(ETAPAS_VENDER[3]).toBe('Proposta de preço');
+    expect(ETAPAS_VENDER[5]).toBe('Pagamento enviado'); // nunca "recebido": só sabemos o que o parceiro informa (Consuelo)
+    expect(contextoDoStatus('NOVO').descricao).toBe('Sua cota entrou na fila da nossa mesa. Iniciamos a análise da cota e dos documentos. Avisamos por e-mail a cada avanço.');
+    expect(contextoDoStatus('CESSAO_ASSINADA').descricao).toContain('O pagamento do valor líquido é feito depois da cessão assinada. Não prometemos prazo.');
+    expect(contextoDoStatus('COTA_INCORPORADA').descricao).toBe('Pagamento simulado enviado e cota incorporada ao pool (simulação na rede de testes).');
+    const todas = Object.values(LeadVendedorStatus).map((st) => JSON.stringify(contextoDoStatus(st))).join(' ');
+    expect(todas).not.toMatch(/48h|em até|jurídica|tokenizad|Pix recebido|Em breve|garantido|recebido e cota/i);
+    expect(ETAPAS_VENDER.join(' ')).not.toMatch(/jurídica|Pix|recebido|Oferta/i);
+  });
+
+  it('A-24/A-25: a tela da proposta não cita SEP-24/Celcoin e usa "proposta" em vez de "oferta" nos textos novos', () => {
+    const fonte = readFileSync('components/vender/AcompanharView.tsx', 'utf8') + readFileSync('components/vender/MinhasSolicitacoes.tsx', 'utf8');
+    expect(fonte).not.toMatch(/SEP-24|Celcoin|Anchor BR/);
+    expect(fonte).toContain('Validade da proposta');
+    expect(fonte).not.toMatch(/Validade da oferta|valor líquido da oferta|Oferta ainda não enviada/);
   });
 });

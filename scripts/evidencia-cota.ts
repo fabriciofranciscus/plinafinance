@@ -13,13 +13,12 @@
  * Incorporação (E1-p): registro canônico no EventoAudit COTA_INCORPORADA (payloadJson.registroCanonico, payloadHash,
  * payloadJson.ancoraTxHash); o núcleo recalcula o SHA-256 dos bytes e confere com o memo da âncora e a ordem antes da emissão.
  */
-import { config as loadEnv } from 'dotenv';
+import { carregarEnv } from './lib/carregar-env';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { get } from '@vercel/blob';
 import { montarEvidencia, paraMarkdown, type Fontes, type TxLida } from './evidencia-cota/core';
 
-loadEnv({ path: '.env' });
-loadEnv({ path: '.env.local', override: true });
+carregarEnv(); // linha de comando > .env.local > .env (A-13)
 
 async function lerBlob(pathname: string): Promise<Buffer | null> {
   if (!process.env.BLOB_READ_WRITE_TOKEN) return null;

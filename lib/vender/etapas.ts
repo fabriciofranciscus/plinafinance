@@ -6,14 +6,15 @@
  */
 
 import { LeadVendedorStatus } from '@prisma/client';
+import { EM_REDE_DE_TESTES } from '../rede-de-testes';
 
 export const ETAPAS_VENDER = [
   'Cadastro & KYC',
   'Envio da cota',
-  'Validação jurídica',
-  'Oferta de preço',
+  'Análise da cota',
+  'Proposta de preço',
   'Cessão digital',
-  'Pix recebido',
+  'Pagamento enviado',
 ] as const;
 
 // Na página de acompanhamento o lead JÁ existe, então as duas primeiras etapas
@@ -69,10 +70,10 @@ const CONTEXTO_POR_STATUS: Record<LeadVendedorStatus, ContextoEtapa> = {
   NOVO: {
     titulo: 'Recebemos sua solicitação',
     descricao:
-      'Sua cota entrou na fila da nossa mesa. Em breve iniciamos a validação jurídica e documental — você é avisado por e-mail a cada avanço.',
+      'Sua cota entrou na fila da nossa mesa. Iniciamos a análise da cota e dos documentos. Avisamos por e-mail a cada avanço.',
   },
   CONTATADO: {
-    titulo: 'Validação jurídica em andamento',
+    titulo: 'Análise da cota em andamento',
     descricao:
       'Nossa mesa está conferindo a titularidade e a situação da sua cota junto à administradora.',
   },
@@ -89,27 +90,29 @@ const CONTEXTO_POR_STATUS: Record<LeadVendedorStatus, ContextoEtapa> = {
   OFERTA_ENVIADA: {
     titulo: 'Proposta enviada',
     descricao:
-      'Sua oferta está disponível abaixo, válida até a data indicada. Para aceitar, use o botão Aceitar nesta página.',
+      'Sua proposta está disponível abaixo, válida até a data indicada. Para aceitar, use o botão Aceitar nesta página.',
   },
   OFERTA_ACEITA: {
-    titulo: 'Oferta aceita',
+    titulo: 'Proposta aceita',
     descricao:
-      'Tudo certo com a oferta. Estamos preparando a cessão digital para assinatura.',
+      'Tudo certo com a proposta. Estamos preparando a cessão digital para assinatura.',
   },
   CESSAO_ASSINADA: {
-    titulo: 'Cessão assinada',
+    titulo: EM_REDE_DE_TESTES ? 'Cessão assinada (demonstração)' : 'Cessão assinada',
     descricao:
-      'A cessão foi assinada e registrada on-chain. O Pix do valor líquido é executado em até 48h.',
+      'A cessão foi assinada e registrada on-chain. O pagamento do valor líquido é feito depois da cessão assinada. Não prometemos prazo.',
   },
   PIX_EXECUTADO: {
-    titulo: 'Pix enviado',
+    titulo: EM_REDE_DE_TESTES ? 'Pagamento simulado enviado' : 'Pagamento enviado',
     descricao:
       'O Pix do valor líquido foi executado. Confira o comprovante e o registro on-chain abaixo.',
   },
   COTA_INCORPORADA: {
-    titulo: 'Concluído',
+    titulo: EM_REDE_DE_TESTES ? 'Concluído (simulação na rede de testes)' : 'Concluído',
     descricao:
-      'Pix recebido e cota incorporada ao pool tokenizado. Obrigado por vender com a Plina.',
+      EM_REDE_DE_TESTES
+        ? 'Pagamento simulado enviado e cota incorporada ao pool (simulação na rede de testes).'
+        : 'Pagamento enviado e cota incorporada ao pool. Obrigado por vender com a Plina.',
   },
   PERDIDO: {
     titulo: 'Solicitação encerrada',

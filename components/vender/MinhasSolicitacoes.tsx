@@ -54,8 +54,11 @@ export function idCurtoSolicitacao(id: string): string {
   return id.slice(-6).toUpperCase();
 }
 
-export function rotuloDaEtapa(s: Pick<Solicitacao, 'etapa' | 'encerrado' | 'concluido'>): string {
+export function rotuloDaEtapa(s: Pick<Solicitacao, 'status' | 'etapa' | 'encerrado' | 'concluido'>): string {
   if (s.encerrado) return 'Solicitação encerrada';
+  // "Concluída" só com a cota incorporada: com o Pix pago a incorporação ainda não aconteceu (Consuelo, A-26).
+  if (s.status === 'COTA_INCORPORADA') return 'Todas as etapas concluídas';
+  if (s.status === 'PIX_EXECUTADO') return `Etapa atual: ${ETAPAS_VENDER[ETAPAS_VENDER.length - 1]}`;
   if (s.concluido) return 'Todas as etapas concluídas';
   return `Etapa atual: ${ETAPAS_VENDER[s.etapa] ?? 'em andamento'}`;
 }
@@ -156,8 +159,8 @@ export default function MinhasSolicitacoes({ variante = 'pagina' }: { variante?:
                 <span className="block font-text text-sm font-semibold mt-1">{rotuloDaEtapa(s)}</span>
                 <span className="block font-text text-xs text-base/70 mt-1">
                   {s.oferta
-                    ? `${TIPO_BEM[s.oferta.tipoBem] ?? s.oferta.tipoBem} · carta ${brl(s.oferta.valorCarta)} · valor líquido da oferta ${brl(s.oferta.valorLiquido)}`
-                    : 'Oferta ainda não enviada'}
+                    ? `${TIPO_BEM[s.oferta.tipoBem] ?? s.oferta.tipoBem} · carta ${brl(s.oferta.valorCarta)} · valor líquido da proposta ${brl(s.oferta.valorLiquido)}`
+                    : 'Proposta ainda não enviada'}
                 </span>
                 <span className="block font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep mt-2">
                   Abrir acompanhamento →

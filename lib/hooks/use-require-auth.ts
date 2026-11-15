@@ -31,7 +31,9 @@ export function useRequireAuth(): { checking: boolean; authenticated: boolean } 
     if (!ready) return; // espera o Privy inicializar
     if (!authenticated) {
       fired.current = true;
-      router.replace(`/entrar?next=${encodeURIComponent(pathname)}`);
+      // Preserva a query string (link profundo, ex. /historico?x=1): o /entrar devolve `next` inteiro.
+      const destino = `${pathname}${window.location.search}`;
+      router.replace(`/entrar?next=${encodeURIComponent(destino)}`);
     }
   }, [ready, authenticated, pathname, router]);
 

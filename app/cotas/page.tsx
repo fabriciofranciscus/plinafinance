@@ -5,6 +5,7 @@
  * Administradora NÃO exposta (whitepaper: só revelada pós-qualificação).
  */
 
+import { fmtPrazo } from '@/lib/format/prazo';
 import Link from 'next/link';
 import { db } from '@/lib/db';
 import { listarCotasParaCompra } from '@/lib/services/realizacao';
@@ -134,12 +135,13 @@ function CotaCard({
             <p className="font-text mt-0.5">{localizacaoAprox}</p>
           </div>
         )}
-        {prazoRestanteMeses && (
+        {/* 0 é prazo válido (cota quitada): `&&` imprimiria o próprio 0 (A-21); só `null` esconde o bloco. */}
+        {prazoRestanteMeses != null && (
           <div>
             <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/50 group-hover:text-lightBg/50">
               Prazo
             </p>
-            <p className="font-mono mt-0.5">{prazoRestanteMeses}m</p>
+            <p className="font-mono mt-0.5">{fmtPrazo(prazoRestanteMeses)}</p>
           </div>
         )}
       </div>

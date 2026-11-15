@@ -10,6 +10,7 @@
  * editorial, números em mono.
  */
 
+import { fmtPrazo } from '@/lib/format/prazo';
 import { db } from '@/lib/db';
 import {
   caixaRealizado,
@@ -246,7 +247,7 @@ export default async function PoolPage() {
                       <Td mono>{tokenFmt(Number(c.tokensEmitidos))}</Td>
                       <Td>{c.localizacaoAprox ?? '—'}</Td>
                       <Td mono>
-                        {c.prazoRestanteMeses ? `${c.prazoRestanteMeses}m` : '—'}
+                        {fmtPrazo(c.prazoRestanteMeses)}
                       </Td>
                       <Td>
                         <span className="font-details text-[10px] tracking-[0.15em] uppercase">

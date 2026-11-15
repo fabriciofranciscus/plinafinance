@@ -64,7 +64,7 @@ const DESCRICAO_ETAPA = [
   'Nossa mesa valida a titularidade e a situação da cota junto à administradora.',
   'Proposta calculada sobre o prazo, a administradora e a curva de precificação da Plina (simulação em rede de testes).',
   'Cessão da cota assinada. A transferência depende da anuência da administradora; o hash do documento fica registrado em rede de testes.',
-  'Pix do valor líquido, previsto após a assinatura (simulado em rede de testes; sem prazo garantido).',
+  'Pix do valor líquido, previsto após a assinatura (simulado em rede de testes; sem prazo definido).',
 ] as const;
 
 export default function AcompanharView({ data }: { data: AcompanharData }) {
@@ -306,13 +306,8 @@ function PainelOferta({
           />
         )}
         <OfertaLinha label="Pagamento" value="Pix (simulado em rede de testes)" />
-        <OfertaLinha
-          label="Método"
-          value="Anchor BR · SEP-24 / BaaS Celcoin"
-          mono
-        />
         {v.validade && (
-          <OfertaLinha label="Validade da oferta" value={v.validade} mono />
+          <OfertaLinha label="Validade da proposta" value={v.validade} mono />
         )}
       </div>
 
