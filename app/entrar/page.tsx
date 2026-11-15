@@ -22,18 +22,13 @@ import {
 } from '@/lib/hooks/privy';
 import { usePessoa } from '@/components/PessoaProvider';
 import { LoginPanel } from '@/components/auth/LoginPanel';
-
-function safeNext(raw: string | null): string | null {
-  // Anti-open-redirect: só path same-origin (um único '/' inicial).
-  if (!raw) return null;
-  if (!raw.startsWith('/') || raw.startsWith('//')) return null;
-  return raw;
-}
+import { safeNext } from '@/lib/auth/safe-next';
 
 function EntrarInner() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = safeNext(params.get('next'));
+  // Mesma função no cliente e no servidor: a origem só importa para recusar destinos de outra origem.
+  const next = safeNext(params.get('next'), typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
   const { ready } = useAppPrivy();
   const pessoa = usePessoa();
   const emailLogin = useLoginWithEmail();
