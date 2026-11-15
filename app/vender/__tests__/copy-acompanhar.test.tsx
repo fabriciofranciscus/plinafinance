@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { vi } from 'vitest';
@@ -103,5 +104,12 @@ describe('vocabulário dos estados (Consuelo, item 11)', () => {
     const todas = Object.values(LeadVendedorStatus).map((st) => JSON.stringify(contextoDoStatus(st))).join(' ');
     expect(todas).not.toMatch(/48h|em até|jurídica|tokenizad|Pix recebido|Em breve|garantido|recebido e cota/i);
     expect(ETAPAS_VENDER.join(' ')).not.toMatch(/jurídica|Pix|recebido|Oferta/i);
+  });
+
+  it('A-24/A-25: a tela da proposta não cita SEP-24/Celcoin e usa "proposta" em vez de "oferta" nos textos novos', () => {
+    const fonte = readFileSync('components/vender/AcompanharView.tsx', 'utf8') + readFileSync('components/vender/MinhasSolicitacoes.tsx', 'utf8');
+    expect(fonte).not.toMatch(/SEP-24|Celcoin|Anchor BR/);
+    expect(fonte).toContain('Validade da proposta');
+    expect(fonte).not.toMatch(/Validade da oferta|valor líquido da oferta|Oferta ainda não enviada/);
   });
 });

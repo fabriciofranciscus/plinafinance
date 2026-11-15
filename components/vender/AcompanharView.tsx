@@ -306,13 +306,8 @@ function PainelOferta({
           />
         )}
         <OfertaLinha label="Pagamento" value="Pix (simulado em rede de testes)" />
-        <OfertaLinha
-          label="Método"
-          value="Anchor BR · SEP-24 / BaaS Celcoin"
-          mono
-        />
         {v.validade && (
-          <OfertaLinha label="Validade da oferta" value={v.validade} mono />
+          <OfertaLinha label="Validade da proposta" value={v.validade} mono />
         )}
       </div>
 

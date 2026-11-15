@@ -45,9 +45,9 @@ describe('Minhas solicitações (GET /api/vender/minhas)', () => {
       '/vender/acompanhar/cmlead0000bbb222',
     ]);
     expect(links[0]!.textContent).toContain('Solicitação #AAA111');
-    expect(links[0]!.textContent).toMatch(/Etapa atual: Oferta de preço/);
-    expect(links[0]!.textContent).toMatch(/Imóvel · carta R\$\s150\.000,00 · valor líquido da oferta R\$\s120\.000,00/);
-    expect(links[1]!.textContent).toContain('Oferta ainda não enviada');
+    expect(links[0]!.textContent).toMatch(/Etapa atual: Proposta de preço/);
+    expect(links[0]!.textContent).toMatch(/Imóvel · carta R\$\s150\.000,00 · valor líquido da proposta R\$\s120\.000,00/);
+    expect(links[1]!.textContent).toContain('Proposta ainda não enviada');
   });
 
   it('lista vazia (pré-KYC ou sem solicitação): estado vazio com link para /vender', async () => {
@@ -94,9 +94,11 @@ describe('Minhas solicitações (GET /api/vender/minhas)', () => {
   });
 
   it('rótulos: encerrada, concluída e id curto igual ao do /admin', () => {
-    expect(rotuloDaEtapa({ etapa: -1, encerrado: true, concluido: false })).toBe('Solicitação encerrada');
-    expect(rotuloDaEtapa({ etapa: 6, encerrado: false, concluido: true })).toBe('Todas as etapas concluídas');
-    expect(rotuloDaEtapa({ etapa: 4, encerrado: false, concluido: false })).toBe('Etapa atual: Cessão digital');
+    expect(rotuloDaEtapa({ status: 'PERDIDO', etapa: -1, encerrado: true, concluido: false })).toBe('Solicitação encerrada');
+    expect(rotuloDaEtapa({ status: 'COTA_INCORPORADA', etapa: 6, encerrado: false, concluido: true })).toBe('Todas as etapas concluídas');
+    expect(rotuloDaEtapa({ status: 'OFERTA_ACEITA', etapa: 4, encerrado: false, concluido: false })).toBe('Etapa atual: Cessão digital');
+    // A-26: Pix pago sem incorporação NÃO é concluído (mesmo com o `concluido: true` do servidor)
+    expect(rotuloDaEtapa({ status: 'PIX_EXECUTADO', etapa: 6, encerrado: false, concluido: true })).toBe('Etapa atual: Pagamento enviado');
     expect(idCurtoSolicitacao('cmabcdef123456ZZ99')).toBe('56ZZ99');
   });
 });
