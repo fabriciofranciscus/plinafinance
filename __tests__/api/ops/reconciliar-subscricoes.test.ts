@@ -147,7 +147,7 @@ describe('GET /api/ops/reconciliar-subscricoes', () => {
     expect(m.alerta).not.toHaveBeenCalled();
   });
 
-  it.each([['VENCIDA'], ['AUSENTE']])('referência de preço %s → alerta:true (todo resgate é recusado), só o estado na resposta', async (status) => {
+  it.each([['VENCIDA'], ['AUSENTE'], ['TAXA_INVALIDA']])('referência de preço %s → alerta:true (todo resgate é recusado), só o estado na resposta', async (status) => {
     m.ref.mockResolvedValue({ status, preco: '1.2345' });
     const body = await (await GET(req(`Bearer ${SECRET}`))).json();
     expect(body).toMatchObject({ alerta: true, referenciaPreco: status });

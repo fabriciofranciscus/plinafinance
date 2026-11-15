@@ -143,6 +143,10 @@ async function exigirPrecoETeto(i: { precoTesouroBrl: string | Prisma.Decimal; b
     console.error('[resgate] referência de preço do ativo-ponte VENCIDA — atualizar PRECO_TESOURO_REF_BRL/DATA');
     throw new ApiError('PRECO_FORA_DA_FAIXA', 409, 'A referência de preço do ativo-ponte está vencida. Nada foi enviado. Tente novamente mais tarde.');
   }
+  if (ref.status === 'TAXA_INVALIDA') {
+    console.error('[resgate] TESOURO_TAXA_ANUAL inválida (> 1, ou seja, > 100% ao ano): corrija a config (use fração, ex.: 0.14 para 14%)');
+    throw new ApiError('PRECO_FORA_DA_FAIXA', 409, 'A referência de preço do ativo-ponte está em configuração inválida. Nada foi enviado. Tente novamente mais tarde.');
+  }
   if (ref.status !== 'OK' || !precoNaFaixa(i.precoTesouroBrl, ref.preco)) {
     console.error('[resgate] preço do ativo-ponte fora da faixa ou sem referência independente');
     throw new ApiError('PRECO_FORA_DA_FAIXA', 409, 'O preço do ativo-ponte não pôde ser validado agora. Nada foi enviado. Tente novamente mais tarde.');

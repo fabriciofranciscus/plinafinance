@@ -68,7 +68,7 @@ export async function GET(req: Request) {
         }
       }
     }
-    // Referência de preço do TESOURO (F7): vencida (> 30 dias) ou ausente = todo resgate é recusado até a operação
+    // Referência de preço do TESOURO (F7): vencida (> 30 dias), ausente ou com taxa anual inválida (> 1) = todo resgate é recusado até a operação
     // atualizar PRECO_TESOURO_REF_BRL/DATA. Só o estado na resposta (sem valores).
     let referenciaPreco: string;
     try {

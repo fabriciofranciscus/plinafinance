@@ -1174,6 +1174,17 @@ describe.skipIf(!PG)('Resgate com queima (E2-6) — Postgres real', () => {
       await semPersistir();
     });
 
+    it('TESOURO_TAXA_ANUAL > 1 (ex.: 14 em vez de 0.14) → fail-closed: 409 PRECO_FORA_DA_FAIXA com a mensagem de configuração inválida e nada persistido', async () => {
+      vi.stubEnv('PRECO_TESOURO_REF_BRL', '1.1663');
+      vi.stubEnv('PRECO_TESOURO_REF_DATA', dataIso(20));
+      vi.stubEnv('TESOURO_TAXA_ANUAL', '14');
+      const e = (await erro(base('1.1663'))) as ApiError;
+      expect(e.code).toBe('PRECO_FORA_DA_FAIXA');
+      expect(e.message).toMatch(/configuração inválida/);
+      expect(e.message).not.toMatch(/TESOURO_TAXA_ANUAL|14/); // a mensagem ao usuário não cita variável nem valor
+      await semPersistir();
+    });
+
     async function semearSwapEscriturado(fromAmount: string, fee: string, toAmount: string, consumedAt: Date) {
       await db.quote.create({
         data: {

@@ -128,6 +128,27 @@ describe('correção pós-fixada: (1 + TESOURO_TAXA_ANUAL)^(dias/365) e faixa ±
     }
   });
 
+  it('taxa > 1 (ex.: 14 em vez de 0.14) → TAXA_INVALIDA, sem preço: nunca corrige a referência por uma taxa dessas', async () => {
+    config('1.1663', 10 * DIA);
+    for (const t of ['14', '1.0001', '100', '1e2']) {
+      process.env.TESOURO_TAXA_ANUAL = t;
+      expect(await obterPrecoReferenciaTesouro(AGORA)).toEqual({ status: 'TAXA_INVALIDA' });
+    }
+  });
+
+  it('taxa no limite (1 = 100% a.a.) ainda vale e corrige; só acima disso é inválida', async () => {
+    config('1.1663', 10 * DIA);
+    process.env.TESOURO_TAXA_ANUAL = '1';
+    expect(Number((await ok()).preco.toString())).toBeCloseTo(1.1663 * Math.pow(2, 10 / 365), 6);
+  });
+
+  it('a taxa só é julgada depois de a referência existir e estar em dia (VENCIDA/AUSENTE seguem como antes)', async () => {
+    process.env.TESOURO_TAXA_ANUAL = '14';
+    expect(await obterPrecoReferenciaTesouro(AGORA)).toEqual({ status: 'AUSENTE' });
+    config('1.1663', 31 * DIA);
+    expect(await obterPrecoReferenciaTesouro(AGORA)).toMatchObject({ status: 'VENCIDA' });
+  });
+
   it('corrigirReferencia: data no futuro conta como 0 dia (sem correção)', () => {
     expect(corrigirReferencia(D('1.1663'), AGORA + 5 * DIA, AGORA, D('0.14')).toString()).toBe('1.1663');
   });

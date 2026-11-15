@@ -4,7 +4,9 @@
  *   1. Candidatos: o preço líquido ((fromAmount − fee) ÷ toAmount) do ÚLTIMO swap escriturado (data = consumedAt) e a
  *      config `PRECO_TESOURO_REF_BRL` (data = `PRECO_TESOURO_REF_DATA`, ISO-8601). Vale o de data MAIS RECENTE.
  *   2. Corrigido até agora por (1 + TESOURO_TAXA_ANUAL)^(dias/365); a faixa de ±2% (quem usa) é sobre o valor corrigido.
- *      `TESOURO_TAXA_ANUAL` ausente/inválida = 0 (sem correção; com o teto de 30 dias o erro fica < 2%).
+ *      `TESOURO_TAXA_ANUAL` ausente/ilegível/negativa = 0 (sem correção; com o teto de 30 dias o erro fica < 2%).
+ *      Taxa MAIOR QUE 1 (> 100% ao ano) é erro de digitação provável (ex.: `14` em vez de `0.14`): `TAXA_INVALIDA`, o resgate
+ *      recusa (fail-closed) e a operação é alertada; nunca se corrige a referência por uma taxa dessas.
  *   3. Referência com mais de 30 dias → `VENCIDA` (o resgate recusa, fail-closed, e a operação é alertada).
  * Sem nenhum candidato válido → `AUSENTE` (recusa).
  */
@@ -20,7 +22,11 @@ const DIA_MS = 24 * 3600_000;
 export type ReferenciaPreco =
   | { status: 'OK'; preco: Prisma.Decimal; base: Prisma.Decimal; idadeDias: number; origem: 'SWAP' | 'CONFIG' }
   | { status: 'VENCIDA'; idadeDias: number; origem: 'SWAP' | 'CONFIG' }
-  | { status: 'AUSENTE' };
+  | { status: 'AUSENTE' }
+  | { status: 'TAXA_INVALIDA' };
+
+/** Teto da taxa anual aceita (1 = 100% a.a.). Acima disso a config é tratada como erro, não como correção. */
+export const TAXA_ANUAL_MAX = 1;
 
 function decimalPositivo(v: string | undefined): Prisma.Decimal | null {
   const t = (v ?? '').trim();
@@ -74,5 +80,6 @@ export async function obterPrecoReferenciaTesouro(agora: number = Date.now()): P
   const idadeDias = Math.max(0, agora - ref.em) / DIA_MS;
   if (idadeDias > REFERENCIA_MAX_IDADE_DIAS) return { status: 'VENCIDA', idadeDias, origem: ref.origem };
   const taxa = taxaAnual(process.env.TESOURO_TAXA_ANUAL);
+  if (taxa.gt(TAXA_ANUAL_MAX)) return { status: 'TAXA_INVALIDA' };
   return { status: 'OK', preco: corrigirReferencia(ref.preco, ref.em, agora, taxa), base: ref.preco, idadeDias, origem: ref.origem };
 }
