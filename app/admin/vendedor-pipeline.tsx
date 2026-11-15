@@ -502,13 +502,16 @@ function NovaOfertaForm({
       onSubmit={(e) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
+        // O schema da rota exige number inteiro (z.number().int()) em prazoRestanteMeses; FormData devolve string.
+        // valorCarta e desagioAquisicao ficam string de propósito: a rota os valida como NumericString.
+        const prazoTxt = String(fd.get('prazoRestanteMeses') ?? '').trim();
         onSubmit('gerar-oferta', {
           leadVendedorId: leadId,
           tipoBem: fd.get('tipoBem'),
           valorCarta: fd.get('valorCarta'),
           administradora: fd.get('administradora'),
           desagioAquisicao: fd.get('desagioAquisicao'),
-          prazoRestanteMeses: fd.get('prazoRestanteMeses') || undefined,
+          prazoRestanteMeses: prazoTxt ? Number(prazoTxt) : undefined,
           validadeHoras: 48,
         });
       }}
@@ -557,7 +560,9 @@ function NovaOfertaForm({
         <input
           name="prazoRestanteMeses"
           type="number"
-          min="0"
+          min="1"
+          max="600"
+          step="1"
           placeholder="18"
           className={inputCls + ' font-mono'}
         />
