@@ -370,6 +370,8 @@ export interface CreateOnRampInput {
     memo?: string;
     /** Bank account ID — required by some providers (e.g. Etherfuse). */
     bankAccountId?: string;
+    /** Etherfuse: `walletId` do registro da carteira no customer (`registerCustomerWallet`); vai como `cryptoWalletId` na ordem. */
+    cryptoWalletId?: string;
     /** Identity fields for providers that require inline identity (e.g. Transfero). */
     identity?: RampIdentity;
 }
@@ -390,6 +392,8 @@ export interface CreateOffRampInput {
     amount: string;
     /** Registered fiat account ID to receive the payout. */
     fiatAccountId: string;
+    /** Etherfuse: `walletId` do registro da carteira no customer (`registerCustomerWallet`); vai como `cryptoWalletId` na ordem. */
+    cryptoWalletId?: string;
     /** Optional memo for the Stellar transaction. */
     memo?: string;
     /** Identity fields for providers that require inline identity (e.g. Transfero). */

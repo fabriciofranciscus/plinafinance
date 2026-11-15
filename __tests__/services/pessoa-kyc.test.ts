@@ -10,10 +10,9 @@ const {
   createCustomer,
   submitKycIdentity,
   submitKycDocuments,
-  getKycUrl,
   getKycStatus,
-  acceptElectronicSignature,
-  acceptTermsAndConditions,
+  registerCustomerWallet,
+  createPixBankAccount,
   EtherfuseCtor,
 } = vi.hoisted(() => ({
   pessoaFindUnique: vi.fn(),
@@ -25,10 +24,9 @@ const {
   createCustomer: vi.fn(),
   submitKycIdentity: vi.fn(),
   submitKycDocuments: vi.fn(),
-  getKycUrl: vi.fn(),
   getKycStatus: vi.fn(),
-  acceptElectronicSignature: vi.fn(),
-  acceptTermsAndConditions: vi.fn(),
+  registerCustomerWallet: vi.fn(),
+  createPixBankAccount: vi.fn(),
   EtherfuseCtor: vi.fn(),
 }));
 
@@ -56,10 +54,9 @@ vi.mock('@/lib/anchors/etherfuse', () => ({
       createCustomer,
       submitKycIdentity,
       submitKycDocuments,
-      getKycUrl,
       getKycStatus,
-      acceptElectronicSignature,
-      acceptTermsAndConditions,
+      registerCustomerWallet,
+      createPixBankAccount,
     };
   }),
 }));
@@ -84,9 +81,7 @@ function mockFluxoCompleto() {
   createCustomer.mockResolvedValueOnce({ id: 'cust_new', bankAccountId: 'stub' });
   submitKycIdentity.mockResolvedValueOnce(undefined);
   submitKycDocuments.mockResolvedValue(undefined);
-  getKycUrl.mockResolvedValueOnce('https://kyc.url');
-  acceptElectronicSignature.mockResolvedValueOnce(undefined);
-  acceptTermsAndConditions.mockResolvedValueOnce(undefined);
+  registerCustomerWallet.mockResolvedValueOnce({ walletId: 'wallet-1' });
   getKycStatus.mockResolvedValueOnce('approved');
   pessoaUpsert.mockResolvedValueOnce({ id: 'pes_new', papeis: ['CEDENTE'] });
 }
@@ -148,8 +143,8 @@ describe('ensureKycForPessoa — KYC uma vez entre papéis', () => {
       papeis: ['INVESTIDOR'],
       nome: 'Maria',
     });
-    // registerPixForPessoa chama getKycUrl primeiro — fazemos falhar.
-    getKycUrl.mockRejectedValueOnce(new Error('etherfuse 503'));
+    // registerPixForPessoa chama createPixBankAccount (caminho atual, sem presignedUrl) — fazemos falhar.
+    createPixBankAccount.mockRejectedValueOnce(new Error('etherfuse 503'));
     pessoaUpdate.mockImplementation(
       async ({ data }: { data: { papeis: { set: string[] } } }) => ({
         id: 'pes_1',
@@ -189,9 +184,7 @@ describe('ensureKycForPessoa — KYC uma vez entre papéis', () => {
     createCustomer.mockResolvedValueOnce({ id: 'cust_new', bankAccountId: 'stub' });
     submitKycIdentity.mockResolvedValueOnce(undefined);
     submitKycDocuments.mockResolvedValue(undefined);
-    getKycUrl.mockResolvedValueOnce('https://kyc.url');
-    acceptElectronicSignature.mockResolvedValueOnce(undefined);
-    acceptTermsAndConditions.mockResolvedValueOnce(undefined);
+    registerCustomerWallet.mockResolvedValueOnce({ walletId: 'wallet-1' });
     getKycStatus.mockResolvedValueOnce('approved');
     pessoaUpsert.mockResolvedValueOnce({
       id: 'pes_new',
@@ -328,9 +321,6 @@ describe('ensureKycForPessoa — campos opcionais Etherfuse (sandbox vs. produç
     fundAccountIfNeeded.mockResolvedValueOnce({ funded: false });
     createCustomer.mockResolvedValueOnce({ id: 'cust_pending', bankAccountId: 'stub' });
     submitKycIdentity.mockResolvedValueOnce(undefined);
-    getKycUrl.mockResolvedValueOnce('https://kyc.url');
-    acceptElectronicSignature.mockResolvedValueOnce(undefined);
-    acceptTermsAndConditions.mockResolvedValueOnce(undefined);
     getKycStatus.mockResolvedValueOnce('pending');
     pessoaUpsert.mockResolvedValueOnce({ id: 'pes_pending', papeis: ['CEDENTE'] });
 
@@ -382,5 +372,54 @@ describe('ensureKycForPessoa — CPF real exigido em KYC de produção (não só
 
     expect(result.cpfNormalizado).toBe('52998224725');
     expect(result.isSyntheticCpf).toBe(false);
+  });
+});
+
+describe('ensureKycForPessoa — fluxo atual da Etherfuse (sem acordos removidos) e PJ', () => {
+  it('customer NOVO aprovado: registra a carteira no customer (idempotente) e NÃO chama getKycUrl nem aceite de acordos', async () => {
+    pessoaFindUnique.mockResolvedValueOnce(null);
+    mockFluxoCompleto();
+    await ensureKycForPessoa({ privyId: 'did:privy:new', email: 'novo@x.com', nome: 'Novo', papel: 'INVESTIDOR' as never });
+    expect(registerCustomerWallet).toHaveBeenCalledWith('cust_new', 'GNEW');
+    const chamados = Object.keys((EtherfuseCtor.mock.results[0]?.value ?? {}) as object);
+    expect(chamados).not.toContain('getKycUrl');
+    expect(chamados).not.toContain('acceptElectronicSignature');
+    expect(chamados).not.toContain('acceptTermsAndConditions');
+  });
+
+  it('KYC ainda pendente: a carteira NÃO é registrada agora (as rotas de ordem registram e falham fechado)', async () => {
+    pessoaFindUnique.mockResolvedValueOnce(null);
+    ensureStellarWallet.mockResolvedValueOnce('GNEW');
+    fundAccountIfNeeded.mockResolvedValueOnce({ funded: false });
+    createCustomer.mockResolvedValueOnce({ id: 'cust_new', bankAccountId: 'stub' });
+    submitKycIdentity.mockResolvedValueOnce(undefined);
+    submitKycDocuments.mockResolvedValue(undefined);
+    getKycStatus.mockResolvedValueOnce('in_progress');
+    pessoaUpsert.mockResolvedValueOnce({ id: 'pes_new', papeis: ['INVESTIDOR'] });
+    await ensureKycForPessoa({ privyId: 'did:privy:new', email: 'novo@x.com', papel: 'INVESTIDOR' as never });
+    expect(registerCustomerWallet).not.toHaveBeenCalled();
+  });
+
+  it('falha ao registrar a carteira não derruba o KYC aprovado (best-effort) e o erro logado não leva mensagem', async () => {
+    const erro = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    pessoaFindUnique.mockResolvedValueOnce(null);
+    mockFluxoCompleto();
+    registerCustomerWallet.mockReset().mockRejectedValueOnce(Object.assign(new Error('wallet de ana@exemplo.test'), { code: 'NOT_FOUND', statusCode: 404 }));
+    const r = await ensureKycForPessoa({ privyId: 'did:privy:new', email: 'novo@x.com', papel: 'INVESTIDOR' as never });
+    expect(r.kycAprovado).toBe(true);
+    expect(JSON.stringify(erro.mock.calls)).not.toContain('exemplo.test');
+    erro.mockRestore();
+  });
+
+  it('conta Pix pelo caminho atual: createPixBankAccount(customerId, conta), sem presignedUrl', async () => {
+    pessoaFindUnique.mockResolvedValueOnce(null);
+    mockFluxoCompleto();
+    createPixBankAccount.mockResolvedValueOnce({ bankAccountId: 'bank-9', status: 'active' });
+    const r = await ensureKycForPessoa({
+      privyId: 'did:privy:new', email: 'novo@x.com', papel: 'INVESTIDOR' as never,
+      bankAccount: { pixKey: 'novo@x.com', pixKeyType: 'email', firstName: 'N', lastName: 'S', cpf: '52998224725' },
+    });
+    expect(createPixBankAccount).toHaveBeenCalledWith('cust_new', expect.objectContaining({ pixKey: 'novo@x.com' }));
+    expect(r.etherfuseBankAccountId).toBe('bank-9');
   });
 });

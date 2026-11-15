@@ -26,6 +26,7 @@ import { requireInvestidor } from '@/lib/wallet/auth-guard';
 import { withApi } from '@/lib/api/with-api';
 import { ok } from '@/lib/api/response';
 import { ApiError } from '@/lib/api/errors';
+import { erroDoAnchor } from '@/lib/api/anchor-error';
 import { sandboxMockAllowed } from '@/lib/env/etherfuse';
 
 export const dynamic = 'force-dynamic';
@@ -126,7 +127,13 @@ export const POST = withApi(async (req, { requestId }) => {
         'Investidor sem fiat account registrada — chame /bank-account/register primeiro',
       );
     }
+    // Registro da carteira no customer (idempotente) → cryptoWalletId da ordem. Fail-closed.
+    const { walletId } = await anchor.registerCustomerWallet(
+      quote.investidor.etherfuseCustomerId,
+      quote.investidor.publicKey,
+    );
     const order = await anchor.createOffRamp({
+      cryptoWalletId: walletId,
       customerId: quote.investidor.etherfuseCustomerId,
       quoteId: quote.id,
       stellarAddress: quote.investidor.publicKey,
@@ -155,7 +162,7 @@ export const POST = withApi(async (req, { requestId }) => {
       };
       mock = true;
     } else {
-      throw err;
+      throw erroDoAnchor(err, 'offramp/create');
     }
   }
 

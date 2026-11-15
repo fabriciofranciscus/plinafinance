@@ -40,9 +40,9 @@ export function ClaimingScreen({
       <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
         A Etherfuse emitiu TESOURO num <Term>ClaimableBalance</Term> Stellar
         (PLINA-MOD-007). Pra ele entrar na sua wallet, você assina uma única
-        transação: ela abre a trustline do TESOURO (reserva patrocinada pela
-        anchor) e executa o <Term>claimClaimableBalance</Term>. Sem isso, o
-        swap atômico falha por saldo zero.
+        transação. Esta transação abre a trustline do TESOURO, se ela ainda
+        não existir, e recebe o TESOURO. A reserva de 0,5 XLM fica bloqueada
+        na sua carteira. Sem isso, o swap atômico falha por saldo zero.
       </p>
 
       <div className="mt-10 border-y border-light-hairline">

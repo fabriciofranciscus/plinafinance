@@ -208,8 +208,9 @@ export function IdentityScreen({
                 Pra operar o swap atômico (whitepaper §6.6), sua wallet precisa
                 de uma <Term>trustline</Term> PLINA-RF por classe (Sênior e
                 Subordinada). Você assina os dois hashes via Privy uma única
-                vez. A trustline do <Term>TESOURO</Term> (bridge da anchor)
-                abre no resgate, com a reserva patrocinada pela anchor.
+                vez. A trustline do <Term>TESOURO</Term> abre ao receber a
+                compra, na mesma transação do recebimento, com uma assinatura
+                sua. A reserva de 0,5 XLM fica bloqueada na sua carteira.
               </p>
               {trustlinesReady ? (
                 <p className="mt-4 font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">

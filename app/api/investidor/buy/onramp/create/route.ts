@@ -23,6 +23,7 @@ import { requireInvestidor } from '@/lib/wallet/auth-guard';
 import { withApi } from '@/lib/api/with-api';
 import { ok } from '@/lib/api/response';
 import { ApiError } from '@/lib/api/errors';
+import { erroDoAnchor } from '@/lib/api/anchor-error';
 import { mainnetCutoverGuard } from '@/lib/env/feature-gates';
 import { sandboxMockAllowed } from '@/lib/env/etherfuse';
 
@@ -105,8 +106,17 @@ export const POST = withApi(async (req, { requestId }) => {
   let mock = false;
 
   try {
+    // Registro da carteira no customer (idempotente: devolve o existente). O walletId vai como cryptoWalletId na ordem (doc
+    // create-order). Fail-closed: sem registro, a ordem não sai.
+    const { walletId } = await anchor.registerCustomerWallet(
+      quote.investidor.etherfuseCustomerId,
+      quote.investidor.publicKey,
+    );
     const order = await anchor.createOnRamp({
+      cryptoWalletId: walletId,
       customerId: quote.investidor.etherfuseCustomerId,
+      // Conta Pix registrada em /bank-account/register (como o off-ramp já faz); sem ela o cliente cairia na 1ª conta da lista.
+      bankAccountId: quote.investidor.etherfuseBankAccountId ?? undefined,
       quoteId: quote.id,
       stellarAddress: quote.investidor.publicKey,
       fromCurrency: quote.fromCurrency,
@@ -135,7 +145,7 @@ export const POST = withApi(async (req, { requestId }) => {
       };
       mock = true;
     } else {
-      throw err;
+      throw erroDoAnchor(err, 'onramp/create');
     }
   }
 

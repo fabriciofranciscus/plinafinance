@@ -14,7 +14,7 @@ export interface UseTrustlinesArgs {
   clearError: () => void;
   /**
    * E2-3: não cria a trustline do TESOURO aqui. O claim do claimable balance
-   * a abre (changeTrust + claim num envelope, reserva patrocinada pelo anchor),
+   * a abre (changeTrust + claim num envelope; a reserva de 0,5 XLM é paga pelo INVESTIDOR, não pela anchor),
    * como na execução de referência. Padrão `false`: o comportamento anterior.
    */
   skipTesouroTrustline?: boolean;

@@ -143,6 +143,7 @@ async function main() {
   // 4. createCustomer
   step(4, TOTAL_STEPS, 'POST /ramp/organization — cria org (customer)');
   const smokeEmail = `smoke+${Date.now()}@plina.finance`;
+  // Customer `personal` (PF). `business` (PJ) é KYB hospedado (/kyb + aprovação manual no sandbox): não dá para fazer só por API.
   const customer = await anchor.createCustomer({
     email: smokeEmail,
     publicKey: pubkey,
@@ -209,26 +210,8 @@ async function main() {
     });
     ok('documentos submetidos');
 
-    info('acceptAgreements (electronic-signature + terms + customer)');
-    try {
-      await anchor.acceptAgreements(kycUrl);
-      ok('agreements aceitos');
-      setVerdict('kyc_agreements', 'pass');
-    } catch (err) {
-      // customer-agreement falha com "Phone number not provided" em business
-      // — sandbox aceita os outros 2 e marca KYC approved mesmo assim.
-      expected(
-        `customer-agreement rejeita sem phoneNumber (esperado em business). KYC segue approving.`,
-      );
-      output.agreementsError = String(err);
-      setVerdict(
-        'kyc_agreements',
-        'expected_fail',
-        'customer-agreement exige phoneNumber em business; KYC approva sem.',
-      );
-    }
-  } else {
-    ok('KYC já approved (business pode auto-aprovar via accountType)');
+    info('acordos: endpoints /ramp/agreements/* foram REMOVIDOS pela Etherfuse (assinados dentro do /idv); nada a chamar');
+    setVerdict('kyc_agreements', 'expected_fail', 'endpoints /ramp/agreements/* removidos pela Etherfuse (acordos no /idv)');
   }
   output.kycSubmission = 'attempted';
 
@@ -238,6 +221,12 @@ async function main() {
   ok(`status final = ${finalKycStatus}`);
   output.kycStatusFinal = finalKycStatus;
   setVerdict('kyc_status_approved', 'pass');
+
+  // 6b. Fluxo atual da Etherfuse: a carteira é registrada no customer (idempotente); o walletId vira o cryptoWalletId das ordens.
+  const { walletId } = await anchor.registerCustomerWallet(customer.id, pubkey);
+  ok('carteira registrada no customer (walletId obtido)');
+  setVerdict('wallet_register', 'pass');
+  let smokeBankId: string | undefined;
 
   // 7. Probe duplo: POST /ramp/bank-account com PIX e CLABE.
   //
@@ -249,15 +238,13 @@ async function main() {
   //
   //    O smoke documenta isso com 2 probes consecutivos. Se um dia algum dos
   //    rails passar, vira `pass` (warn) e sabemos que dá pra ir headless.
-  step(7, TOTAL_STEPS, 'PROBE: POST /ramp/bank-account PIX + CLABE (ambos iframe-only)');
+  step(7, TOTAL_STEPS, 'POST /ramp/customer/{id}/bank-account (PIX, chave de API) + PROBE CLABE');
   try {
-    const bankResp = await anchor.registerPixBankAccount(kycUrl, {
-      pixKey: '52998224725',
-      pixKeyType: 'cpf',
-      firstName: 'Plina',
-      lastName: 'SmokeTest',
-      cpf: '52998224725',
-    });
+    const bankResp = await anchor.createPixBankAccount(
+      customer.id,
+      { pixKey: '52998224725', pixKeyType: 'cpf', firstName: 'Plina', lastName: 'SmokeTest', cpf: '52998224725' },
+    );
+    smokeBankId = bankResp.bankAccountId;
     ok(`PIX bank registrado: status=${bankResp.status} compliant=${bankResp.compliant ?? 'n/a'}`);
     output.bankRegisterResponse = bankResp;
     // Lista accounts pra confirmar estado pós-registro
@@ -345,7 +332,8 @@ async function main() {
     fromCurrency: 'BRL',
     toCurrency: 'TESOURO',
     amount: '100',
-    bankAccountId: customer.bankAccountId,
+    bankAccountId: smokeBankId ?? customer.bankAccountId,
+    cryptoWalletId: walletId,
   });
   ok(`onramp orderId = ${order.id}`);
   output.order = order;
@@ -450,7 +438,8 @@ async function main() {
       fromCurrency: 'TESOURO',
       toCurrency: 'BRL',
       amount: halfBalance,
-      fiatAccountId: customer.bankAccountId ?? '',
+      fiatAccountId: smokeBankId ?? customer.bankAccountId ?? '',
+      cryptoWalletId: walletId,
     });
     ok(`offramp orderId = ${offramp.id}`);
     output.offramp = offramp;

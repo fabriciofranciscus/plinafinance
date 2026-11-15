@@ -141,20 +141,12 @@ export async function seedE2eInvestidor(): Promise<E2eInvestidorSeed> {
     images: [{ label: 'selfie', image: DUMMY_PNG_BASE64 }],
   });
 
-  const bankAccountStubId = customer.bankAccountId ?? crypto.randomUUID();
-  const kycUrl = await anchor.getKycUrl(customer.id, pubkey, bankAccountStubId);
-  try {
-    await anchor.acceptElectronicSignature(kycUrl);
-    await anchor.acceptTermsAndConditions(kycUrl);
-  } catch {
-    // sandbox aceita os primeiros 2 mesmo sem phone; customer-agreement
-    // falha em business — KYC aprova mesmo assim.
-  }
+  // Acordos: sem endpoint (removidos); no sandbox o customer business aprova sem eles.
 
   await pollKycApproved(anchor, customer.id, pubkey);
 
   // 3. Register PIX bank (PLINA-MOD-006).
-  const bankResp = await anchor.registerPixBankAccount(kycUrl, {
+  const bankResp = await anchor.createPixBankAccount(customer.id, {
     pixKey: '52998224725',
     pixKeyType: 'cpf',
     firstName: 'E2E',

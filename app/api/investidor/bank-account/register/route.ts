@@ -14,13 +14,15 @@ import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { EtherfuseClient } from '@/lib/anchors/etherfuse';
-import { AnchorError } from '@/lib/anchors/types';
 import { requireInvestidor } from '@/lib/wallet/auth-guard';
 import { withApi } from '@/lib/api/with-api';
 import { ok } from '@/lib/api/response';
 import { ApiError } from '@/lib/api/errors';
+import { erroDoAnchor } from '@/lib/api/anchor-error';
 
 export const dynamic = 'force-dynamic';
+
+const MSG_PIX_4XX = 'A Etherfuse recusou o registro da conta Pix. Confira a chave Pix e o CPF e tente novamente.';
 
 const Schema = z
   .object({
@@ -31,24 +33,6 @@ const Schema = z
     lastName: z.string().min(1).max(100),
   })
   .strict();
-
-/**
- * Erro do anchor nunca sobe cru (viraria 500 INTERNAL): 4xx do anchor (dado recusado) → 422 com mensagem fixa; qualquer outro
- * erro do anchor (5xx, rede) → 502 ETHERFUSE_ERROR com mensagem fixa. A mensagem original do anchor NÃO vai ao cliente (pode
- * citar campo, e-mail ou detalhe do upstream); só o `code` do AnchorError vai ao log. Erros que não são do anchor sobem como são.
- */
-function erroDoAnchor(err: unknown, etapa: string): unknown {
-  if (!(err instanceof AnchorError)) return err;
-  console.error(`[bank-account/register] ${etapa}`, err.code, err.statusCode);
-  if (err.statusCode >= 400 && err.statusCode < 500) {
-    return new ApiError(
-      'VALIDATION_FAILED',
-      422,
-      'A Etherfuse recusou o registro da conta Pix. Confira a chave Pix e o CPF e tente novamente.',
-    );
-  }
-  return new ApiError('ETHERFUSE_ERROR', 502, 'Não foi possível registrar a conta Pix na Etherfuse agora. Tente novamente em instantes.');
-}
 
 export const POST = withApi(async (req, { requestId }) => {
   const user = await requireInvestidor(req);
@@ -74,7 +58,7 @@ export const POST = withApi(async (req, { requestId }) => {
     throw new ApiError(
       'CONFLICT',
       409,
-      'investidor sem etherfuseCustomerId — refaça onboarding',
+      'Complete o seu cadastro antes de continuar.',
     );
   }
 
@@ -141,39 +125,20 @@ export const POST = withApi(async (req, { requestId }) => {
   const reused = await tryReusePix();
   if (reused) return reused;
 
-  // Gera novo stub bankAccountId pro presignedUrl. Etherfuse aceita
-  // qualquer UUID; o register depois amarra esse UUID ao customer.
-  const bankAccountStubId = crypto.randomUUID();
-  // O anchor exige `userInfo.email` (PF, accountType 'personal'): o e-mail do investidor (espelho da Pessoa); o nome é opcional.
-  const email = (user.email || investidor.email || '').trim();
-  if (!email) {
-    throw new ApiError('CONFLICT', 409, 'Complete o seu cadastro antes de continuar.');
-  }
-  let presignedUrl: string;
-  try {
-    presignedUrl = await anchor.getKycUrl(custId, investidor.publicKey, bankAccountStubId, {
-      email,
-      displayName: investidor.nome?.trim() || undefined,
-    });
-  } catch (kycErr) {
-    throw erroDoAnchor(kycErr, 'getKycUrl');
-  }
+  // Caminho atual da Etherfuse: POST /ramp/customer/{id}/bank-account com a chave de API (o presignedUrl do onboarding-url foi
+  // descontinuado). A carteira também é (re)registrada no customer, idempotente: é o vínculo que libera as ordens.
+  const account = { pixKey, pixKeyType, cpf, firstName, lastName };
 
   let bankResp;
   try {
-    bankResp = await anchor.registerPixBankAccount(presignedUrl, {
-      pixKey,
-      pixKeyType,
-      cpf,
-      firstName,
-      lastName,
-    });
+    await anchor.registerCustomerWallet(custId, investidor.publicKey);
+    bankResp = await anchor.createPixBankAccount(custId, account);
   } catch (regErr) {
     // Limite org-level do sandbox: pode haver uma conta criada após o check
     // acima (corrida) ou sob este customer. Tenta reaproveitar antes de falhar.
     const reusedAfterRace = await tryReusePix();
     if (reusedAfterRace) return reusedAfterRace;
-    throw erroDoAnchor(regErr, 'registerPixBankAccount');
+    throw erroDoAnchor(regErr, 'bank-account/register', MSG_PIX_4XX);
   }
 
   const accountId =

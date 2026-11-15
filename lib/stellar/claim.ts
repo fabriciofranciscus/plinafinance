@@ -188,6 +188,83 @@ function is404(err: unknown): boolean {
   );
 }
 
+/** Limite que `Operation.changeTrust` usa sem `limit` (máximo do int64 em stroops). */
+const LIMITE_MAXIMO_TRUSTLINE = '922337203685.4775807';
+
+/**
+ * Confere, no SUBMIT, que o XDR é o envelope de claim que o build monta (fix/claim-submit-verify-xdr):
+ * tx comum (não fee bump), source = investidor, e ops exatamente
+ * `[changeTrust(ativo de crédito, limite máximo)?, claimClaimableBalance(balanceId)]`, sem source de outra conta.
+ * Pura: não lê o ledger. Devolve o ativo da trustline (quem chama compara com o ativo do CB) ou `null` se não
+ * confere. XDR ilegível → `null`, nunca lança.
+ */
+export function conferirEnvelopeClaim(
+  xdr: string,
+  esperado: { investorPubkey: string; balanceId: string },
+): { trustAsset: Asset | null } | null {
+  let tx: Transaction;
+  try {
+    tx = new Transaction(xdr, networkPassphrase);
+  } catch {
+    return null;
+  }
+  if (tx.source !== esperado.investorPubkey) return null;
+  const ops = tx.operations;
+  if (ops.length < 1 || ops.length > 2) return null;
+  if (ops.some((o) => o.source !== undefined && o.source !== esperado.investorPubkey)) return null;
+
+  let trustAsset: Asset | null = null;
+  if (ops.length === 2) {
+    const t = ops[0];
+    if (t.type !== 'changeTrust') return null;
+    if (!(t.line instanceof Asset) || t.line.isNative()) return null;
+    if (t.limit !== LIMITE_MAXIMO_TRUSTLINE) return null;
+    trustAsset = t.line;
+  }
+  const c = ops[ops.length - 1];
+  if (c.type !== 'claimClaimableBalance' || c.balanceId !== esperado.balanceId) return null;
+  return { trustAsset };
+}
+
+/** Ativo do claimable balance no Horizon; `null` se o CB não existe mais (404). Outros erros propagam. */
+export async function ativoDoClaimableBalance(balanceId: string): Promise<Asset | null> {
+  try {
+    const cb = await horizon.claimableBalances().claimableBalance(balanceId).call();
+    return assetDoHorizon(cb.asset);
+  } catch (err) {
+    if (is404(err)) return null;
+    throw err;
+  }
+}
+
+/**
+ * Prova, pelos efeitos da tx no ledger, que ELA resgatou o CB da ordem para o investidor: um efeito
+ * `claimable_balance_claimed` com `account` = investidor e `balance_id` = o da ordem. Devolve o ativo resgatado,
+ * ou `null` (sem esse efeito, ou tx inexistente). Outros erros do Horizon propagam.
+ */
+export async function claimConfirmadoNaTx(
+  hash: string,
+  esperado: { investorPubkey: string; balanceId: string },
+): Promise<Asset | null> {
+  let records: Array<Record<string, unknown>>;
+  try {
+    ({ records } = (await horizon.effects().forTransaction(hash).limit(50).call()) as unknown as {
+      records: Array<Record<string, unknown>>;
+    });
+  } catch (err) {
+    if (is404(err)) return null;
+    throw err;
+  }
+  const e = records.find(
+    (r) =>
+      r.type === 'claimable_balance_claimed' &&
+      r.account === esperado.investorPubkey &&
+      r.balance_id === esperado.balanceId &&
+      typeof r.asset === 'string',
+  );
+  return e ? assetDoHorizon(e.asset as string) : null;
+}
+
 /**
  * O XDR anterior ainda serve? Mesmo source, não expirado, sequência = conta+1
  * e exatamente as operações esperadas (mesmo CB, mesma trustline).

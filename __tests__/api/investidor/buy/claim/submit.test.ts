@@ -54,6 +54,16 @@ vi.mock('@/lib/stellar/transactions', () => ({
   fetchTransactionByHash: mockFetchTransactionByHash,
 }));
 
+// Harness (fix/claim-submit-verify-xdr): o XDR 'AAAA' do fixture é ilegível; a conferência do envelope e as
+// leituras do Horizon ficam stub aqui. O comportamento real delas é testado em submit-confere-xdr.test.ts e
+// __tests__/lib/stellar/claim-submit-confere.test.ts. Nenhuma asserção deste arquivo mudou.
+vi.mock('@/lib/stellar/claim', () => ({
+  conferirEnvelopeClaim: () => ({ trustAsset: null }),
+  ativoDoClaimableBalance: async () => ({ equals: () => true }),
+  claimConfirmadoNaTx: async () => ({ equals: () => true }),
+  erroDeXdrExpirado: () => false,
+}));
+
 import { POST } from '@/app/api/investidor/buy/claim/submit/route';
 
 function req(body: object): Request {
@@ -138,6 +148,7 @@ describe('POST /api/investidor/buy/claim/submit (PLINA-MOD-007)', () => {
       id: 'order-x',
       investidorId: 'inv_1',
       claimTxHash: null,
+      stellarClaimableBalanceId: 'cb_1',
     });
     mockFetchTransactionByHash.mockResolvedValueOnce({
       hash: 'tx_ja_onchain',
@@ -160,6 +171,7 @@ describe('POST /api/investidor/buy/claim/submit (PLINA-MOD-007)', () => {
       id: 'order-x',
       investidorId: 'inv_1',
       claimTxHash: null,
+      stellarClaimableBalanceId: 'cb_1',
     });
     const r = await POST(req(FULL_BODY));
     expect(r.status).toBe(200);

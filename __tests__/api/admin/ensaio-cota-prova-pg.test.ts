@@ -335,11 +335,27 @@ describe.skipIf(!PG)('ENSAIO — cota de prova inteira pela tela do /admin (bodi
     expect(await db.pagamento.count()).toBe(0);
   });
 
+  it('gerar-oferta com o corpo exato do formulário da tela (NovaOfertaForm): 200 e a Oferta fica gravada com o líquido do servidor', async () => {
+    const pessoa = await db.pessoa.create({ data: { privyId: 'did:privy:ensaio-oferta', email: 'pessoa.oferta@exemplo.test', nome: 'Cedente Ficticio', publicKey: 'GOFERTA'.padEnd(56, 'A'), cpfNormalizado: CPF, kycAprovado: true, isSyntheticCpf: false } as never });
+    const lead = await db.leadVendedor.create({ data: { nome: 'Cedente Ficticio', email: 'cedente.oferta@exemplo.test', pessoaId: pessoa.id } });
+    // Mesmos campos e tipos que app/admin/vendedor-pipeline.tsx (onSubmit('gerar-oferta', …)): números como string, prazo numérico, validade 48 h.
+    const r = await tela('gerar-oferta', { leadVendedorId: lead.id, tipoBem: 'IMOVEL', valorCarta: '50000.00', administradora: 'Administradora Ficticia', desagioAquisicao: '0.2000', prazoRestanteMeses: 0, validadeHoras: 48 });
+    expect(r.status, r.texto).toBe(200);
+    const o = await db.oferta.findFirstOrThrow({ where: { leadVendedorId: lead.id } });
+    expect(Number(o.valorCarta)).toBe(50000);
+    expect(Number(o.valorLiquidoVendedor)).toBeLessThan(50000);
+    expect(o.prazoRestanteMeses).toBe(0);
+  });
+
   it('a tela e o ensaio falam as MESMAS ações: toda action chamada em app/admin/vendedor-pipeline.tsx está coberta aqui (se a tela ganhar ou trocar um botão, este teste quebra e o ensaio precisa acompanhar)', async () => {
     const { readFileSync } = await import('node:fs');
     const fonte = readFileSync(new URL('../../../app/admin/vendedor-pipeline.tsx', import.meta.url), 'utf8');
-    const naTela = [...new Set([...fonte.matchAll(/call\('([a-z-]+)'/g)].map((m) => m[1]))].sort();
-    const noEnsaio = ['registrar-cessao', 'registrar-laudo', 'enviar-cessao', 'sincronizar-cessoes', 'confirmar-titular-laudo', 'registrar-anuencia', 'pagar-cedente', 'reabrir-pagamento-cedente', 'incorporar-cota'].sort();
+    // A tela dispara a ação pelo 1º argumento literal de call()/executar()/onExecutar()/onSubmit() (a tela nova de a1c9184 usa
+    // onExecutar/onSubmit; a antiga usava call()). Mesma garantia, sem afrouxar: qualquer ação nova ou trocada na tela quebra aqui.
+    const naTela = [...new Set([...fonte.matchAll(/\b(?:call|executar|onExecutar|onSubmit)\(\s*'([a-z]+(?:-[a-z]+)*)'/g)].map((m) => m[1]))].sort();
+    // Guarda contra o vácuo (foi o que escondeu a regressão): se a tela mudar de novo e nada casar, o teste NÃO pode passar vazio.
+    expect(naTela.length).toBeGreaterThanOrEqual(10);
+    const noEnsaio = ['gerar-oferta', 'registrar-cessao', 'registrar-laudo', 'enviar-cessao', 'sincronizar-cessoes', 'confirmar-titular-laudo', 'registrar-anuencia', 'pagar-cedente', 'reabrir-pagamento-cedente', 'incorporar-cota'].sort();
     expect(naTela).toEqual(noEnsaio);
     expect(naTela).not.toContain('executar-pix-simulado');
   });
