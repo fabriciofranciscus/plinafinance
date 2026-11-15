@@ -36,7 +36,7 @@ describe('aceitar oferta em /vender/acompanhar envia o token do Privy', () => {
     cleanup();
     vi.unstubAllGlobals();
   });
-  const aceitar = () => fireEvent.click(screen.getByRole('button', { name: /Aceitar oferta/ }));
+  const aceitar = () => fireEvent.click(screen.getByRole('button', { name: /Aceitar proposta/ }));
 
   it('manda authorization: Bearer <token> e o ofertaId', async () => {
     getAccessToken.mockResolvedValue('tok-privy-teste');

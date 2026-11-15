@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAppPrivy } from '@/lib/hooks/privy';
+import { useLatest } from '@/lib/hooks/use-latest';
 import { withTimeout } from '@/lib/http/client';
 import { ETAPAS_VENDER } from '@/lib/vender/etapas';
 
@@ -71,14 +72,16 @@ type Estado =
 export default function MinhasSolicitacoes({ variante = 'pagina' }: { variante?: 'pagina' | 'compacto' }) {
   const { ready, authenticated, getAccessToken } = useAppPrivy();
   const [estado, setEstado] = useState<Estado>({ tipo: 'carregando' });
+  // A função do Privy pode mudar a cada renderização: fora das dependências, senão o GET entra em laço.
+  const token = useLatest(getAccessToken);
 
   const carregar = useCallback(async () => {
     setEstado({ tipo: 'carregando' });
     try {
-      const token = await withTimeout(getAccessToken(), 8000, 'sessão');
+      const bearer = await withTimeout(token.current(), 8000, 'sessão');
       const res = await withTimeout(
         fetch('/api/vender/minhas', {
-          headers: { ...(token ? { authorization: `Bearer ${token}` } : {}) },
+          headers: { ...(bearer ? { authorization: `Bearer ${bearer}` } : {}) },
         }),
         10000,
         'tempo',
@@ -89,7 +92,7 @@ export default function MinhasSolicitacoes({ variante = 'pagina' }: { variante?:
     } catch {
       setEstado({ tipo: 'erro' });
     }
-  }, [getAccessToken]);
+  }, [token]);
 
   useEffect(() => {
     if (ready && authenticated) void carregar();
