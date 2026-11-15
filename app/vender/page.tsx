@@ -17,6 +17,7 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import WizardHeader from '@/components/vender/WizardHeader';
 import MinhasSolicitacoes from '@/components/vender/MinhasSolicitacoes';
+import { destinoAposEnvio } from '@/lib/vender/destino-lead';
 import StepperVender from '@/components/vender/StepperVender';
 import { usePessoa } from '@/components/PessoaProvider';
 import { useRequireAuth } from '@/lib/hooks/use-require-auth';
@@ -328,8 +329,8 @@ function WizardInner() {
         'A requisição demorou demais. Tente novamente.',
       );
       if (!res.ok) throw new Error((await res.json()).error ?? 'erro');
-      const { leadId } = (await res.json()) as { leadId: string };
-      router.push(`/vender/acompanhar/${leadId}`);
+      const lead = (await res.json()) as { leadId: string; reaproveitada?: boolean; statusAtual?: string | null };
+      router.push(destinoAposEnvio(lead));
     } catch (err) {
       setErro(err instanceof Error ? err.message : String(err));
       setEnviando(false);
