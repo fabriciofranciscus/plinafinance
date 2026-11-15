@@ -26,6 +26,7 @@ import { requireInvestidor } from '@/lib/wallet/auth-guard';
 import { withApi } from '@/lib/api/with-api';
 import { ok } from '@/lib/api/response';
 import { ApiError } from '@/lib/api/errors';
+import { erroDoAnchor } from '@/lib/api/anchor-error';
 import { sandboxMockAllowed } from '@/lib/env/etherfuse';
 
 export const dynamic = 'force-dynamic';
@@ -155,7 +156,7 @@ export const POST = withApi(async (req, { requestId }) => {
       };
       mock = true;
     } else {
-      throw err;
+      throw erroDoAnchor(err, 'offramp/create');
     }
   }
 

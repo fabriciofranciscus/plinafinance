@@ -71,6 +71,7 @@ function baseQuote(overrides: Partial<Record<string, unknown>> = {}) {
     fromAmount: new Prisma.Decimal('100'),
     investidor: {
       etherfuseCustomerId: 'cust_1',
+      etherfuseBankAccountId: 'bank_1',
       publicKey: 'GABC',
     },
     onRampOrder: null,
@@ -131,6 +132,43 @@ describe('POST /api/investidor/buy/onramp/create', () => {
     expect(json.data.mock).toBe(true);
     expect(onRampCreate).toHaveBeenCalledOnce();
     expect(onRampCreate.mock.calls[0][0].data.investidorId).toBe('inv_1');
+    // a conta Pix salva do investidor vai ao anchor (não a "1ª conta da lista")
+    expect(createOnRamp.mock.calls[0][0]).toMatchObject({ customerId: 'cust_1', bankAccountId: 'bank_1' });
     expect(eventoAuditCreate.mock.calls[0][0].data.privyId).toBe('did:privy:abc');
+  });
+
+  it('Vera E2: anchor 400 "Terms and conditions have not been completed" → 422 VALIDATION_FAILED com mensagem FIXA (antes 500 INTERNAL); nada persistido; o texto do upstream não vaza', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    createOnRamp.mockRejectedValueOnce(
+      new AnchorError('Terms and conditions have not been completed for the selected wallet GABC de ana@exemplo.test', 'UNKNOWN_ERROR', 400),
+    );
+    const r = await POST(req({ quoteId: 'q_1' }));
+    expect(r.status).toBe(422);
+    const j = await r.json();
+    expect(j.error.code).toBe('VALIDATION_FAILED');
+    expect(JSON.stringify(j)).not.toMatch(/Terms and conditions|GABC|exemplo\.test/);
+    expect(j.error.message).toMatch(/Complete o seu cadastro/);
+    expect(onRampCreate).not.toHaveBeenCalled();
+  });
+
+  it('anchor 5xx/rede → 502 ETHERFUSE_ERROR com mensagem fixa; erro que não é do anchor segue 500 INTERNAL', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    createOnRamp.mockRejectedValueOnce(new AnchorError('upstream caiu com segredo xyz', 'UNKNOWN_ERROR', 503));
+    const r = await POST(req({ quoteId: 'q_1' }));
+    expect(r.status).toBe(502);
+    const j = await r.json();
+    expect(j.error.code).toBe('ETHERFUSE_ERROR');
+    expect(JSON.stringify(j)).not.toContain('xyz');
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    createOnRamp.mockRejectedValueOnce(new Error('falha de banco'));
+    expect((await POST(req({ quoteId: 'q_1' }))).status).toBe(500);
+  });
+
+  it('o mock de sandbox para conta bancária ausente continua funcionando (4xx de "bank account" não vira 422)', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    createOnRamp.mockRejectedValueOnce(new AnchorError('Bank account not found', 'X', 400));
+    const r = await POST(req({ quoteId: 'q_1' }));
+    expect(r.status).toBe(200);
+    expect((await r.json()).data.mock).toBe(true);
   });
 });
