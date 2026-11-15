@@ -33,7 +33,7 @@ import {
 import { registrarTesourariaLegada } from '@/lib/services/tesouraria-legada';
 import { sincronizarCessoesDocusign } from '@/lib/services/cessao-assinatura';
 import { pagarCedenteDaCessao, PagamentoCedenteError, reabrirPagamentoCedente } from '@/lib/services/pagamento-cedente';
-import { LiquidacaoCedenteError } from '@/lib/services/liquidacao-cedente';
+import { LiquidacaoCedenteError, causaSegura } from '@/lib/services/liquidacao-cedente';
 import { DocusignError } from '@/lib/integrations/docusign';
 import { EnvioDocusignEmAndamentoError, EnvioDocusignLaudoAusenteError, EnvioDocusignNomeAusenteError, enviarCessaoParaAssinatura } from '@/lib/services/cessao-docusign';
 import { OriginacaoPrecondicaoError } from '@/lib/services/originacao-erros';
@@ -293,8 +293,14 @@ export async function POST(req: Request) {
     }
     const dominio = respostaDeErroDoPagamento(err);
     if (dominio) return dominio;
+    // Argus (LOW, 15/11): o 500 genérico NÃO ecoa `err.message`: mensagem de Prisma e de terceiros pode trazer id, valor ou status.
+    // A resposta é fixa ({ error, code }); no log do servidor vão só a ação, o nome e o código da causa (nunca a mensagem).
+    console.error('[admin/originacao] erro interno', { acao: body.action, ...causaSegura(err) });
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'unknown' },
+      {
+        error: 'Erro interno ao processar a ação. O resultado pode não ter sido gravado: confira o estado antes de repetir.',
+        code: 'ERRO_INTERNO',
+      },
       { status: 500 },
     );
   }
