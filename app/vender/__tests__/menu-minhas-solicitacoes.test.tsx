@@ -1,50 +1,76 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 let pathname = '/vender/minhas';
+let papeis: string[] = ['CEDENTE'];
+let carregando = false;
+const logout = vi.fn();
 vi.mock('next/navigation', () => ({ usePathname: () => pathname }));
 vi.mock('@privy-io/react-auth', () => ({
-  usePrivy: () => ({ ready: true, authenticated: true, user: null }),
-  useLogout: () => ({ logout: vi.fn() }),
+  usePrivy: () => ({ ready: true, authenticated: true, user: { linkedAccounts: [{ address: 'GABCDEFGHIJKLMNOPQRSTUVWXYZ' }] } }),
+  useLogout: () => ({ logout }),
 }));
-vi.mock('@/components/PessoaProvider', () => ({ usePessoa: () => ({ papeis: ['CEDENTE'] }) }));
+vi.mock('@/components/PessoaProvider', () => ({ usePessoa: () => ({ papeis, loading: carregando }) }));
 
 import { AppHeader } from '@/components/AppHeader';
-import WizardHeader from '@/components/vender/WizardHeader';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  pathname = '/vender/minhas';
+  papeis = ['CEDENTE'];
+  carregando = false;
+  logout.mockClear();
+});
 
-const barraAtiva = (nome: string) => {
-  const link = screen.getAllByRole('link', { name: nome })[0]!;
-  return link.querySelector('span.scale-x-100') !== null;
-};
+const desktop = () => within(screen.getByRole('navigation', { name: 'Principal' }));
+const celular = () => within(screen.getByRole('navigation', { name: 'Principal (celular)', hidden: true }));
 
-describe('link "Minhas solicitações" no menu', () => {
-  it('AppHeader (cedente): existe, aponta para /vender/minhas e só ele acende em /vender/minhas', () => {
-    pathname = '/vender/minhas';
+describe('AppHeader: menu único', () => {
+  it('desktop: só o link mais específico fica aria-current (Minhas solicitações, não Vender)', () => {
     render(<AppHeader isAdmin={false} />);
-    expect(screen.getByRole('link', { name: 'Minhas solicitações' }).getAttribute('href')).toBe('/vender/minhas');
-    expect(barraAtiva('Minhas solicitações')).toBe(true);
-    expect(barraAtiva('Vender')).toBe(false);
+    expect(desktop().getByRole('link', { name: 'Minhas solicitações' }).getAttribute('aria-current')).toBe('page');
+    expect(desktop().getByRole('link', { name: 'Vender' }).getAttribute('aria-current')).toBeNull();
   });
 
-  it('AppHeader: em /vender acende "Vender", não "Minhas solicitações"', () => {
-    pathname = '/vender';
+  it('investidor: Sacar tem link no menu e Minha posição saiu', () => {
+    papeis = ['INVESTIDOR'];
+    pathname = '/inicio';
     render(<AppHeader isAdmin={false} />);
-    expect(barraAtiva('Vender')).toBe(true);
-    expect(barraAtiva('Minhas solicitações')).toBe(false);
+    expect(desktop().getByRole('link', { name: 'Sacar (testnet)' }).getAttribute('href')).toBe('/sacar');
+    expect(desktop().queryByRole('link', { name: 'Minha posição' })).toBeNull();
+    expect(desktop().getByRole('link', { name: 'Início' }).getAttribute('aria-current')).toBe('page');
   });
 
-  it('WizardHeader (logado): link visível com aria-current só na própria página', () => {
-    pathname = '/vender/minhas';
-    const u = render(<WizardHeader active="cotistas" />);
-    expect(screen.getByRole('link', { name: 'Minhas solicitações' }).getAttribute('aria-current')).toBe('page');
-    u.unmount();
-    pathname = '/vender';
-    render(<WizardHeader active="cotistas" />);
-    const l = screen.getByRole('link', { name: 'Minhas solicitações' });
-    expect(l.getAttribute('href')).toBe('/vender/minhas');
-    expect(l.getAttribute('aria-current')).toBeNull();
+  it('celular: painel fechado, abre no botão Menu, vira Fechar, fecha com Esc', () => {
+    render(<AppHeader isAdmin={false} />);
+    const painel = document.getElementById('menu-principal')!;
+    const botao = screen.getByRole('button', { name: 'Menu' });
+    expect(botao.getAttribute('aria-expanded')).toBe('false');
+    expect(botao.getAttribute('aria-controls')).toBe('menu-principal');
+    expect(painel.hidden).toBe(true);
+    fireEvent.click(botao);
+    expect(painel.hidden).toBe(false);
+    expect(screen.getByRole('button', { name: 'Fechar' }).getAttribute('aria-expanded')).toBe('true');
+    expect(celular().getByRole('link', { name: /Minhas solicitações/ }).getAttribute('aria-current')).toBe('page');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(painel.hidden).toBe(true);
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeTruthy();
+  });
+
+  it('celular: a carteira abreviada e o Sair ficam no painel; Sair chama o logout', () => {
+    render(<AppHeader isAdmin={false} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    const painel = within(document.getElementById('menu-principal')!);
+    expect(painel.getByText(/Carteira GABC…/)).toBeTruthy();
+    fireEvent.click(painel.getByRole('button', { name: 'Sair' }));
+    expect(logout).toHaveBeenCalled();
+  });
+
+  it('papéis carregando: só Início e Histórico', () => {
+    papeis = [];
+    carregando = true;
+    render(<AppHeader isAdmin={false} />);
+    expect(desktop().getAllByRole('link').map((l) => l.textContent)).toEqual(['Início', 'Histórico']);
   });
 });
