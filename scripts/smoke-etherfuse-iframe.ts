@@ -180,12 +180,7 @@ async function main() {
     documentType: 'selfie',
     images: [{ label: 'selfie', image: DUMMY_PNG }],
   });
-  try {
-    await anchor.acceptAgreements(presignedUrl);
-    ok('agreements aceitos');
-  } catch (err) {
-    warn(`acceptAgreements parcial: ${err instanceof Error ? err.message : err}`);
-  }
+  // Acordos: endpoints removidos pela Etherfuse (assinados no /idv); nada a chamar.
 
   banner('4/8 · Poll KYC approved');
   const deadline = Date.now() + 60_000;

@@ -12,13 +12,11 @@ import { resolveTesouroAsset } from './etherfuse/tesouro';
 export type KycAnchor = Pick<
   EtherfuseClient,
   | 'createCustomer'
-  | 'getKycUrl'
   | 'getKycStatus'
   | 'submitKycIdentity'
   | 'submitKycDocuments'
-  | 'acceptElectronicSignature'
-  | 'acceptTermsAndConditions'
-  | 'registerPixBankAccount'
+  | 'registerCustomerWallet'
+  | 'createPixBankAccount'
 >;
 
 /** Cliente de KYC do anchor configurado pelo ambiente (sandbox por padrão). */

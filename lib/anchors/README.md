@@ -95,11 +95,27 @@ no código com `PLINA-MOD-NNN`.
 - **PLINA-MOD-001** (revisado 2026-11-09, E2-2) — `createCustomer` cria uma
   **organização** (`POST /ramp/organization`, UUID gerado por nós) com
   `accountType` condicional (`personal` default; `business` = KYB, sem `userInfo`).
-  `userInfo.email` é obrigatório em `personal`. `getKycUrl` ainda usa
-  `POST /ramp/onboarding-url` (sandbox), agora com `accountType: 'personal'` +
-  `userInfo`. Antes: `accountType: 'business'` fixo (SDF DevRel `PIX_Guide.md` §4).
-  Pendente (Fase 2): `acceptAgreements` por presigned URL devolve 410 — o aceite
-  passa a ser launch `/auth/launch` scope `agreements`.
+  `userInfo.email` é obrigatório em `personal`.
+  **Revisado em 2026-11-15 (migração para o fluxo atual da Etherfuse; decisão da Thais).** Descontinuados/removidos
+  pela Etherfuse e fora do caminho do app: `POST /ramp/onboarding-url` e o launch `scope: agreements`
+  (*Deprecated, sunset 16/08/2026*) e os 3 `POST /ramp/agreements/*` (*Removed*; o sandbox devolve 410). Os acordos
+  passam a ser assinados dentro do launch hospedado `/idv`; KYC e acordos são por ORGANIZAÇÃO (customer), não por
+  carteira nem por conta bancária. Fonte: https://docs.etherfuse.com/changelog/deprecations.md
+  O que o app usa hoje: (1) `POST /ramp/organization` (`personal`, com `userInfo.email`); (2) KYC programático ainda pelo
+  `POST /ramp/customer/{id}/kyc` e `/kyc/documents` (depreciados; trocar por `/verification` e `/verification/documents`
+  é pendência, ver abaixo); (3) `registerCustomerWallet` = `POST /ramp/customer/{id}/wallet` (idempotente; o `walletId`
+  vira o `cryptoWalletId` das ordens); (4) conta Pix por `createPixBankAccount` = `POST /ramp/customer/{id}/bank-account`
+  com a chave de API, sem presignedUrl (exige customer aprovado; 409 se não); (5) `POST /ramp/order` com
+  `cryptoWalletId` (doc create-order: `publicKey` OU `cryptoWalletId`). `getKycUrl`/`registerPixBankAccount` ficam só
+  como `@deprecated` para scripts de demonstração.
+  Verificado em 2026-11-15 no sandbox: customer `personal` NOVO percorre carteira → conta Pix → quote → ordem →
+  resgate com estes endpoints (`pnpm smoke:etherfuse`).
+  Pendências (doc: https://docs.etherfuse.com/guides/onboarding-programmatic.md e
+  https://docs.etherfuse.com/guides/onboarding-hosted.md): (a) trocar `/kyc` por `/verification`
+  (+ `/verification/documents`, multipart; os exemplos da doc são do México, campos de BR/CPF a confirmar);
+  (b) launch `/idv` (liveness e acordos) exige JWT RS256 assinado por nós, chave pública em JWKS HTTPS nosso e
+  issuer registrado pela Etherfuse (sem endpoint self-serve); (c) PJ (`business`) é KYB HOSPEDADO (`/kyb`, aprovação
+  manual no sandbox; um customer business rejeita a identidade de PF por API): https://docs.etherfuse.com/guides/kyb.md.
 - **PLINA-MOD-008** — `webhook.ts` (nosso): `X-Signature: sha256=<hex>` = HMAC-SHA256
   do JSON canonicalizado (RFC 8785), segredo base64 de `POST /ramp/webhook`.
   Sem id de evento na v1 → dedupe por hash do corpo canônico. Consumido via

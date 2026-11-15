@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { mockEtherfuseInstance, mockInvestidorFindUnique, mockInvestidorUpdate, mockEventoAuditCreate, mockDbTransaction } =
   vi.hoisted(() => ({
     mockEtherfuseInstance: {
-      getKycUrl: vi.fn(),
-      registerPixBankAccount: vi.fn(),
+      registerCustomerWallet: vi.fn(),
+      createPixBankAccount: vi.fn(),
       getFiatAccounts: vi.fn(),
     },
     mockInvestidorFindUnique: vi.fn(),
@@ -30,8 +30,8 @@ vi.mock('@/lib/wallet/auth-guard', async (importOriginal) => {
 
 vi.mock('@/lib/anchors/etherfuse', () => ({
   EtherfuseClient: class {
-    getKycUrl = mockEtherfuseInstance.getKycUrl;
-    registerPixBankAccount = mockEtherfuseInstance.registerPixBankAccount;
+    registerCustomerWallet = mockEtherfuseInstance.registerCustomerWallet;
+    createPixBankAccount = mockEtherfuseInstance.createPixBankAccount;
     getFiatAccounts = mockEtherfuseInstance.getFiatAccounts;
   },
 }));
@@ -79,10 +79,8 @@ beforeEach(() => {
     }),
   );
   mockEtherfuseInstance.getFiatAccounts.mockReset().mockResolvedValue([]);
-  mockEtherfuseInstance.getKycUrl
-    .mockReset()
-    .mockResolvedValue('https://devnet.etherfuse.com/ramp/onboarding?...sig=...');
-  mockEtherfuseInstance.registerPixBankAccount.mockReset().mockResolvedValue({
+  mockEtherfuseInstance.registerCustomerWallet.mockReset().mockResolvedValue({ walletId: 'wallet-1' });
+  mockEtherfuseInstance.createPixBankAccount.mockReset().mockResolvedValue({
     bankAccountId: 'bank-xyz',
     customerId: 'cust_1',
     status: 'active',
@@ -107,11 +105,16 @@ describe('POST /api/investidor/bank-account/register (PLINA-MOD-006)', () => {
     expect(r.status).toBe(400);
   });
 
-  it('400 sem cpf', async () => {
+  it('400 sem cpf: validado antes de qualquer chamada ao anchor', async () => {
+    mockInvestidorFindUnique.mockResolvedValueOnce({
+      id: 'inv_1', publicKey: 'GABC', etherfuseCustomerId: 'cust_1', etherfuseBankAccountId: null
+    });
     const { cpf: _, ...body } = FULL_BODY;
     void _;
     const r = await POST(req(body));
     expect(r.status).toBe(400);
+    expect(mockEtherfuseInstance.registerCustomerWallet).not.toHaveBeenCalled();
+    expect(mockEtherfuseInstance.createPixBankAccount).not.toHaveBeenCalled();
   });
 
   it('409 quando etherfuseCustomerId é null no Investidor', async () => {
@@ -137,7 +140,7 @@ describe('POST /api/investidor/bank-account/register (PLINA-MOD-006)', () => {
     const json = await r.json();
     expect(json.data.bankAccountId).toBe('existing-bank');
     expect(json.data.idempotent).toBe(true);
-    expect(mockEtherfuseInstance.registerPixBankAccount).not.toHaveBeenCalled();
+    expect(mockEtherfuseInstance.createPixBankAccount).not.toHaveBeenCalled();
   });
 
   it('200 reuso: conta PIX já existe na Etherfuse — reaproveita sem registrar', async () => {
@@ -155,7 +158,7 @@ describe('POST /api/investidor/bank-account/register (PLINA-MOD-006)', () => {
     const json = await r.json();
     expect(json.data.bankAccountId).toBe('bank-existente');
     expect(json.data.idempotent).toBe(true);
-    expect(mockEtherfuseInstance.registerPixBankAccount).not.toHaveBeenCalled();
+    expect(mockEtherfuseInstance.createPixBankAccount).not.toHaveBeenCalled();
     expect(mockInvestidorUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ etherfuseBankAccountId: 'bank-existente' }),
@@ -175,10 +178,12 @@ describe('POST /api/investidor/bank-account/register (PLINA-MOD-006)', () => {
     const json = await r.json();
     expect(json.data.bankAccountId).toBe('bank-xyz');
     expect(json.data.status).toBe('active');
-    expect(mockEtherfuseInstance.getKycUrl).toHaveBeenCalledOnce();
-    expect(mockEtherfuseInstance.registerPixBankAccount).toHaveBeenCalledOnce();
-    // Body do registerPixBankAccount chega com os 5 campos PIX (transactionId é injetado dentro do client).
-    expect(mockEtherfuseInstance.registerPixBankAccount.mock.calls[0][1]).toMatchObject({
+    // Caminho atual: carteira registrada no customer (idempotente) + conta Pix pela API; sem presignedUrl.
+    expect(mockEtherfuseInstance.registerCustomerWallet).toHaveBeenCalledWith('cust_1', 'GABC');
+    expect(mockEtherfuseInstance.createPixBankAccount).toHaveBeenCalledOnce();
+    // Body da conta chega com os 5 campos PIX (transactionId é injetado dentro do client); 1º argumento é o customer.
+    expect(mockEtherfuseInstance.createPixBankAccount.mock.calls[0][0]).toBe('cust_1');
+    expect(mockEtherfuseInstance.createPixBankAccount.mock.calls[0][1]).toMatchObject({
       pixKey: FULL_BODY.pixKey,
       pixKeyType: FULL_BODY.pixKeyType,
       cpf: FULL_BODY.cpf,

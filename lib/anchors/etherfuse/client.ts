@@ -537,7 +537,9 @@ export class EtherfuseClient implements Anchor {
         const response = await this.request<EtherfuseCreateOnRampResponse>('POST', '/ramp/order', {
             orderId,
             bankAccountId,
-            publicKey: input.stellarAddress,
+            // Doc create-order: `publicKey` OU `cryptoWalletId`; o exemplo oficial usa só o cryptoWalletId (registro da carteira no
+            // customer). Sem ele, cai no lookup por publicKey.
+            ...(input.cryptoWalletId ? { cryptoWalletId: input.cryptoWalletId } : { publicKey: input.stellarAddress }),
             quoteId: input.quoteId,
             memo: input.memo || undefined,
         });
@@ -643,7 +645,9 @@ export class EtherfuseClient implements Anchor {
         const response = await this.request<EtherfuseCreateOffRampResponse>('POST', '/ramp/order', {
             orderId,
             bankAccountId,
-            publicKey: input.stellarAddress,
+            // Doc create-order: `publicKey` OU `cryptoWalletId`; o exemplo oficial usa só o cryptoWalletId (registro da carteira no
+            // customer). Sem ele, cai no lookup por publicKey.
+            ...(input.cryptoWalletId ? { cryptoWalletId: input.cryptoWalletId } : { publicKey: input.stellarAddress }),
             quoteId: input.quoteId,
             memo: input.memo || undefined,
         });
@@ -705,6 +709,7 @@ export class EtherfuseClient implements Anchor {
      * @returns The onboarding URL string.
      * @throws {AnchorError} If `publicKey` is missing or on API failure.
      */
+    /** @deprecated `POST /ramp/onboarding-url` foi descontinuado pela Etherfuse (sunset 16/08/2026); só scripts de demonstração o usam. */
     async getKycUrl(
         customerId: string,
         publicKey?: string,
@@ -834,63 +839,48 @@ export class EtherfuseClient implements Anchor {
     }
 
     /**
-     * Accept the electronic signature consent agreement.
+     * Registra a carteira externa do investidor no customer (`POST /ramp/customer/{id}/wallet`). IDEMPOTENTE: carteira já ativa
+     * devolve o registro existente. No modelo atual da Etherfuse (onboarding-url descontinuado) é este registro que liga a
+     * carteira ao customer aprovado; o `walletId` devolvido é o `cryptoWalletId` das ordens.
      *
-     * @param presignedUrl - The presigned URL from the onboarding response.
-     * @returns The agreement response.
-     * @throws {AnchorError} On API failure.
+     * @throws {AnchorError} Customer/carteira inválidos (400), customer fora da organização (404) ou resposta sem `walletId`.
      */
-    async acceptElectronicSignature(presignedUrl: string): Promise<EtherfuseAgreementResponse> {
-        return this.request<EtherfuseAgreementResponse>(
+    async registerCustomerWallet(customerId: string, publicKey: string): Promise<{ walletId: string }> {
+        if (!customerId) {
+            throw new AnchorError('customerId is required to register a wallet', 'MISSING_CUSTOMER_ID', 400);
+        }
+        if (!publicKey || !StrKey.isValidEd25519PublicKey(publicKey)) {
+            throw new AnchorError('A valid Stellar public key is required to register a wallet', 'INVALID_PUBLIC_KEY', 400);
+        }
+        const response = await this.request<{ walletId?: string }>(
             'POST',
-            '/ramp/agreements/electronic-signature',
-            { presignedUrl },
+            `/ramp/customer/${customerId}/wallet`,
+            { publicKey, blockchain: this.blockchain },
         );
+        if (!response?.walletId) {
+            throw new AnchorError('Etherfuse returned a wallet registration without walletId', 'MISSING_WALLET_ID', 502);
+        }
+        return { walletId: response.walletId };
     }
 
     /**
-     * Accept the terms and conditions agreement.
+     * Registra a conta Pix do customer pelo caminho atual (`POST /ramp/customer/{id}/bank-account`, autenticado pela chave de API;
+     * não usa mais presignedUrl, descontinuado). Exige customer APROVADO (409 se não). `transactionId` é a chave de idempotência.
      *
-     * @param presignedUrl - The presigned URL from the onboarding response.
-     * @returns The agreement response.
-     * @throws {AnchorError} On API failure.
+     * @throws {AnchorError} 400/404/409 do upstream.
      */
-    async acceptTermsAndConditions(presignedUrl: string): Promise<EtherfuseAgreementResponse> {
-        return this.request<EtherfuseAgreementResponse>(
-            'POST',
-            '/ramp/agreements/terms-and-conditions',
-            { presignedUrl },
-        );
-    }
-
-    /**
-     * Accept the customer agreement.
-     *
-     * @param presignedUrl - The presigned URL from the onboarding response.
-     * @returns The agreement response.
-     * @throws {AnchorError} On API failure.
-     */
-    async acceptCustomerAgreement(presignedUrl: string): Promise<EtherfuseAgreementResponse> {
-        return this.request<EtherfuseAgreementResponse>(
-            'POST',
-            '/ramp/agreements/customer-agreement',
-            { presignedUrl },
-        );
-    }
-
-    /**
-     * Accept all legal agreements via a presigned onboarding URL.
-     *
-     * Convenience method that calls all three agreement endpoints in sequence.
-     *
-     * @param presignedUrl - The presigned URL from the onboarding response.
-     * @returns The final agreement response.
-     * @throws {AnchorError} On API failure.
-     */
-    async acceptAgreements(presignedUrl: string): Promise<EtherfuseAgreementResponse> {
-        await this.acceptElectronicSignature(presignedUrl);
-        await this.acceptTermsAndConditions(presignedUrl);
-        return this.acceptCustomerAgreement(presignedUrl);
+    async createPixBankAccount(
+        customerId: string,
+        account: EtherfusePixAccountBody,
+        bankAccountId?: string,
+    ): Promise<EtherfuseBankAccountResponse> {
+        if (!customerId) {
+            throw new AnchorError('customerId is required to register a bank account', 'MISSING_CUSTOMER_ID', 400);
+        }
+        return this.request<EtherfuseBankAccountResponse>('POST', `/ramp/customer/${customerId}/bank-account`, {
+            account: { ...account, transactionId: account.transactionId ?? crypto.randomUUID() },
+            ...(bankAccountId ? { bankAccountId } : {}),
+        });
     }
 
     /**
@@ -906,6 +896,7 @@ export class EtherfuseClient implements Anchor {
      * @param account - dados PIX (pixKey, pixKeyType, firstName, lastName, cpf).
      * @returns BankAccount registrada (pending/active depending on sandbox).
      */
+    /** @deprecated Use {@link createPixBankAccount} (sem presignedUrl). Só scripts de demonstração. */
     async registerPixBankAccount(
         presignedUrl: string,
         account: EtherfusePixAccountBody,

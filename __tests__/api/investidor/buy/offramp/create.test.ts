@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { AnchorError } from '@/lib/anchors/types';
 
-const m = vi.hoisted(() => ({ quoteFindUnique: vi.fn(), offCreate: vi.fn(), audit: vi.fn(), createOffRamp: vi.fn(), getFiatAccounts: vi.fn() }));
+const m = vi.hoisted(() => ({ quoteFindUnique: vi.fn(), offCreate: vi.fn(), audit: vi.fn(), createOffRamp: vi.fn(), getFiatAccounts: vi.fn(), registerCustomerWallet: vi.fn() }));
 vi.mock('@/lib/wallet/auth-guard', async (orig) => ({
   ...(await orig<typeof import('@/lib/wallet/auth-guard')>()),
   requireInvestidor: vi.fn().mockResolvedValue({ privyId: 'did:privy:abc', investidorId: 'inv_1', publicKey: 'GABC', email: 'x@y.z', etherfuseCustomerId: 'cust_1' }),
@@ -14,7 +14,7 @@ vi.mock('@/lib/db', () => ({
     $transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb({ offRampOrder: { create: m.offCreate }, eventoAudit: { create: m.audit } }),
   },
 }));
-vi.mock('@/lib/anchors/etherfuse', () => ({ EtherfuseClient: class { createOffRamp = m.createOffRamp; getFiatAccounts = m.getFiatAccounts; } }));
+vi.mock('@/lib/anchors/etherfuse', () => ({ EtherfuseClient: class { createOffRamp = m.createOffRamp; getFiatAccounts = m.getFiatAccounts; registerCustomerWallet = m.registerCustomerWallet; } }));
 process.env.ETHERFUSE_API_KEY = 'test';
 process.env.ETHERFUSE_ENV = 'sandbox';
 
@@ -34,6 +34,7 @@ beforeEach(() => {
   m.audit.mockReset().mockResolvedValue({});
   m.createOffRamp.mockReset();
   m.getFiatAccounts.mockReset();
+  m.registerCustomerWallet.mockReset().mockResolvedValue({ walletId: 'wallet-1' });
 });
 
 describe('POST /api/investidor/buy/offramp/create — erros do anchor', () => {
@@ -59,5 +60,15 @@ describe('POST /api/investidor/buy/offramp/create — erros do anchor', () => {
     const r = await POST(req());
     expect(r.status).toBe(200);
     expect((await r.json()).data.mock).toBe(true);
+  });
+  it('registra a carteira no customer e manda o walletId como cryptoWalletId; sem registro, a ordem não sai', async () => {
+    m.createOffRamp.mockResolvedValueOnce({ id: 'off_1', status: 'pending' });
+    expect((await POST(req())).status).toBe(200);
+    expect(m.registerCustomerWallet).toHaveBeenCalledWith('cust_1', 'GABC');
+    expect(m.createOffRamp.mock.calls[0][0]).toMatchObject({ cryptoWalletId: 'wallet-1', fiatAccountId: 'bank_1' });
+    m.registerCustomerWallet.mockRejectedValueOnce(new AnchorError('x', 'NOT_FOUND', 404));
+    m.createOffRamp.mockClear();
+    expect((await POST(req())).status).toBe(422);
+    expect(m.createOffRamp).not.toHaveBeenCalled();
   });
 });

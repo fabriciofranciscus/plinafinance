@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { AnchorError } from '@/lib/anchors/types';
 
-const { quoteFindUnique, onRampCreate, eventoAuditCreate, createOnRamp } =
+const { quoteFindUnique, onRampCreate, eventoAuditCreate, createOnRamp, registerCustomerWallet } =
   vi.hoisted(() => ({
+    registerCustomerWallet: vi.fn(),
     quoteFindUnique: vi.fn(),
     onRampCreate: vi.fn(),
     eventoAuditCreate: vi.fn(),
@@ -44,6 +45,7 @@ vi.mock('@/lib/db', () => ({
 vi.mock('@/lib/anchors/etherfuse', () => ({
   EtherfuseClient: class {
     createOnRamp = createOnRamp;
+    registerCustomerWallet = registerCustomerWallet;
   },
 }));
 
@@ -84,6 +86,7 @@ beforeEach(() => {
   onRampCreate.mockReset().mockResolvedValue({});
   eventoAuditCreate.mockReset().mockResolvedValue({});
   createOnRamp.mockReset();
+  registerCustomerWallet.mockReset().mockResolvedValue({ walletId: 'wallet-1' });
 });
 
 describe('POST /api/investidor/buy/onramp/create', () => {
@@ -133,7 +136,8 @@ describe('POST /api/investidor/buy/onramp/create', () => {
     expect(onRampCreate).toHaveBeenCalledOnce();
     expect(onRampCreate.mock.calls[0][0].data.investidorId).toBe('inv_1');
     // a conta Pix salva do investidor vai ao anchor (não a "1ª conta da lista")
-    expect(createOnRamp.mock.calls[0][0]).toMatchObject({ customerId: 'cust_1', bankAccountId: 'bank_1' });
+    expect(createOnRamp.mock.calls[0][0]).toMatchObject({ customerId: 'cust_1', bankAccountId: 'bank_1', cryptoWalletId: 'wallet-1' });
+    expect(registerCustomerWallet).toHaveBeenCalledWith('cust_1', 'GABC');
     expect(eventoAuditCreate.mock.calls[0][0].data.privyId).toBe('did:privy:abc');
   });
 
@@ -170,5 +174,15 @@ describe('POST /api/investidor/buy/onramp/create', () => {
     const r = await POST(req({ quoteId: 'q_1' }));
     expect(r.status).toBe(200);
     expect((await r.json()).data.mock).toBe(true);
+  });
+
+  it('fail-closed: se o registro da carteira falhar (4xx do anchor), a ordem NÃO sai: 422 fixo e createOnRamp não é chamado', async () => {
+    quoteFindUnique.mockResolvedValueOnce(baseQuote());
+    registerCustomerWallet.mockRejectedValueOnce(new AnchorError('wallet de ana@exemplo.test não encontrada', 'NOT_FOUND', 404));
+    const r = await POST(req({ quoteId: 'q_1' }));
+    expect(r.status).toBe(422);
+    expect(JSON.stringify(await r.json())).not.toContain('exemplo.test');
+    expect(createOnRamp).not.toHaveBeenCalled();
+    expect(onRampCreate).not.toHaveBeenCalled();
   });
 });

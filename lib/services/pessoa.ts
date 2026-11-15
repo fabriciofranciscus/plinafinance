@@ -14,6 +14,7 @@
  * identificador do customer; o cedente NÃO recebe trustline/compra de token.
  */
 
+import { causaSegura } from '../api/causa-segura';
 import { createHash } from 'node:crypto';
 import { Prisma, KycStatus, Papel } from '@prisma/client';
 import { db } from '../db';
@@ -150,19 +151,11 @@ function resolveCpf(cpf?: string): { cpfNormalizado: string; isSyntheticCpf: boo
  */
 export async function registerPixForPessoa(args: {
   etherfuseCustomerId: string;
-  publicKey: string;
-  email: string;
   account: PixBankAccountInput;
 }): Promise<string> {
   const anchor = kycAnchorFromEnv();
-  const bankAccountStubId = crypto.randomUUID();
-  const presignedUrl = await anchor.getKycUrl(
-    args.etherfuseCustomerId,
-    args.publicKey,
-    bankAccountStubId,
-    { email: args.email },
-  );
-  const resp = await anchor.registerPixBankAccount(presignedUrl, args.account);
+  // Caminho atual da Etherfuse (chave de API; sem presignedUrl, que foi descontinuado). Exige customer aprovado.
+  const resp = await anchor.createPixBankAccount(args.etherfuseCustomerId, args.account);
   const accountId =
     (resp as unknown as { accountId?: string; bankAccountId?: string }).accountId ??
     resp.bankAccountId;
@@ -199,8 +192,6 @@ export async function ensureKycForPessoa(
       try {
         bankAccountId = await registerPixForPessoa({
           etherfuseCustomerId: existing.etherfuseCustomerId,
-          publicKey: existing.publicKey,
-          email: existing.email,
           account: input.bankAccount,
         });
       } catch (err) {
@@ -369,22 +360,23 @@ export async function ensureKycForPessoa(
       });
     }
   }
-  const kycUrl = await anchor.getKycUrl(customer.id, publicKey, customer.bankAccountId, {
-    email: input.email,
-    displayName: input.nome,
-  });
-  try {
-    await anchor.acceptElectronicSignature(kycUrl);
-    await anchor.acceptTermsAndConditions(kycUrl);
-  } catch (err) {
-    logStellarError('[ensureKyc:agreements]', err);
-  }
-
+  // Os acordos (assinatura eletrônica, termos, contrato do cliente) deixaram de ter endpoint (removidos pela Etherfuse): são
+  // assinados dentro do launch /idv. Aqui não há mais getKycUrl nem accept*.
   let kycStatus: KycStatus = KycStatus.PENDENTE;
   try {
     kycStatus = mapEtherfuseKyc(await anchor.getKycStatus(customer.id, publicKey));
   } catch (err) {
     logStellarError('[ensureKyc:kyc-status]', err);
+  }
+
+  // Carteira registrada no customer (idempotente) assim que há KYC aprovado: é o vínculo que a Etherfuse usa para liberar ordens.
+  // Best-effort aqui (não derruba o KYC); as rotas de ordem registram de novo e FALHAM FECHADO se não der.
+  if (kycStatus === KycStatus.APROVADO) {
+    try {
+      await anchor.registerCustomerWallet(customer.id, publicKey);
+    } catch (err) {
+      console.error('[ensureKyc:wallet]', causaSegura(err));
+    }
   }
 
   // Bank Pix é best-effort: não pode derrubar (nem perder) o KYC já aprovado.
@@ -395,8 +387,6 @@ export async function ensureKycForPessoa(
     try {
       bankAccountId = await registerPixForPessoa({
         etherfuseCustomerId: customer.id,
-        publicKey,
-        email: input.email,
         account: input.bankAccount,
       });
     } catch (err) {

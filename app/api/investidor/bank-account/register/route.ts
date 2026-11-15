@@ -22,6 +22,8 @@ import { erroDoAnchor } from '@/lib/api/anchor-error';
 
 export const dynamic = 'force-dynamic';
 
+const MSG_PIX_4XX = 'A Etherfuse recusou o registro da conta Pix. Confira a chave Pix e o CPF e tente novamente.';
+
 const Schema = z
   .object({
     pixKey: z.string().min(1).max(200),
@@ -31,8 +33,6 @@ const Schema = z
     lastName: z.string().min(1).max(100),
   })
   .strict();
-
-const MSG_PIX_4XX = 'A Etherfuse recusou o registro da conta Pix. Confira a chave Pix e o CPF e tente novamente.';
 
 export const POST = withApi(async (req, { requestId }) => {
   const user = await requireInvestidor(req);
@@ -125,39 +125,20 @@ export const POST = withApi(async (req, { requestId }) => {
   const reused = await tryReusePix();
   if (reused) return reused;
 
-  // Gera novo stub bankAccountId pro presignedUrl. Etherfuse aceita
-  // qualquer UUID; o register depois amarra esse UUID ao customer.
-  const bankAccountStubId = crypto.randomUUID();
-  // O anchor exige `userInfo.email` (PF, accountType 'personal'): o e-mail do investidor (espelho da Pessoa); o nome é opcional.
-  const email = (user.email || investidor.email || '').trim();
-  if (!email) {
-    throw new ApiError('CONFLICT', 409, 'Complete o seu cadastro antes de continuar.');
-  }
-  let presignedUrl: string;
-  try {
-    presignedUrl = await anchor.getKycUrl(custId, investidor.publicKey, bankAccountStubId, {
-      email,
-      displayName: investidor.nome?.trim() || undefined,
-    });
-  } catch (kycErr) {
-    throw erroDoAnchor(kycErr, 'bank-account/getKycUrl');
-  }
+  // Caminho atual da Etherfuse: POST /ramp/customer/{id}/bank-account com a chave de API (o presignedUrl do onboarding-url foi
+  // descontinuado). A carteira também é (re)registrada no customer, idempotente: é o vínculo que libera as ordens.
+  const account = { pixKey, pixKeyType, cpf, firstName, lastName };
 
   let bankResp;
   try {
-    bankResp = await anchor.registerPixBankAccount(presignedUrl, {
-      pixKey,
-      pixKeyType,
-      cpf,
-      firstName,
-      lastName,
-    });
+    await anchor.registerCustomerWallet(custId, investidor.publicKey);
+    bankResp = await anchor.createPixBankAccount(custId, account);
   } catch (regErr) {
     // Limite org-level do sandbox: pode haver uma conta criada após o check
     // acima (corrida) ou sob este customer. Tenta reaproveitar antes de falhar.
     const reusedAfterRace = await tryReusePix();
     if (reusedAfterRace) return reusedAfterRace;
-    throw erroDoAnchor(regErr, 'bank-account/registerPix', MSG_PIX_4XX);
+    throw erroDoAnchor(regErr, 'bank-account/register', MSG_PIX_4XX);
   }
 
   const accountId =

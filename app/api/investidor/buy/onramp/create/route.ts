@@ -106,7 +106,14 @@ export const POST = withApi(async (req, { requestId }) => {
   let mock = false;
 
   try {
+    // Registro da carteira no customer (idempotente: devolve o existente). O walletId vai como cryptoWalletId na ordem (doc
+    // create-order). Fail-closed: sem registro, a ordem não sai.
+    const { walletId } = await anchor.registerCustomerWallet(
+      quote.investidor.etherfuseCustomerId,
+      quote.investidor.publicKey,
+    );
     const order = await anchor.createOnRamp({
+      cryptoWalletId: walletId,
       customerId: quote.investidor.etherfuseCustomerId,
       // Conta Pix registrada em /bank-account/register (como o off-ramp já faz); sem ela o cliente cairia na 1ª conta da lista.
       bankAccountId: quote.investidor.etherfuseBankAccountId ?? undefined,
