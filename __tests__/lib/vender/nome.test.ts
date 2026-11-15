@@ -24,10 +24,12 @@ describe('páginas que mostram o nome ao cedente passam pelo helper (deriva)', (
   const { join } = require('node:path') as typeof import('node:path');
   const ler = (f: string) => readFileSync(join(process.cwd(), f), 'utf8');
 
-  it('acompanhar/[leadId]/page.tsx: cedenteNome = nomeDoCedente(lead.nome), nunca lead.nome cru', () => {
-    const src = ler('app/vender/acompanhar/[leadId]/page.tsx');
-    expect(src).toMatch(/cedenteNome: nomeDoCedente\(lead\.nome\)/);
-    expect(src).not.toMatch(/cedenteNome: lead\.nome/);
+  it('acompanhar: o nome só sai do serviço do dono (nomeDoCedente) e a página pública nem lê o lead (item 19)', () => {
+    const servico = ler('lib/services/acompanhar.ts');
+    expect(servico).toMatch(/cedenteNome: nomeDoCedente\(/);
+    expect(servico).not.toMatch(/cedenteNome: lead\.nome/);
+    const pagina = ler('app/vender/acompanhar/[leadId]/page.tsx');
+    expect(pagina).not.toMatch(/lead\.nome|cedenteNome/);
   });
 
   it('api/conta/me devolve nomeDoCedente(user.nome)', () => {

@@ -45,7 +45,7 @@ async function semear(o: { kyc?: boolean; dono?: boolean; status?: 'ENVIADA' | '
   return { oferta, lead, data };
 }
 const estado = async (id: string) => (await db.oferta.findUniqueOrThrow({ where: { id } })).status;
-const aceitar = () => fireEvent.click(screen.getByRole('button', { name: /Aceitar oferta/ }));
+const aceitar = () => fireEvent.click(screen.getByRole('button', { name: /Aceitar proposta/ }));
 
 describe.skipIf(!PG)('hotfix 2 — aceitar oferta pelo /vender/acompanhar (componente → rota → serviço → Postgres)', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -124,7 +124,7 @@ describe.skipIf(!PG)('hotfix 2 — aceitar oferta pelo /vender/acompanhar (compo
   it('duplo clique rápido: 1 só aceite efetivo e 1 só requisição (o botão desabilita ao 1º clique); nunca 500', async () => {
     const s = await semear(); st.token = 'tok-dono';
     render(createElement(AcompanharView, { data: s.data }));
-    const b = screen.getByRole('button', { name: /Aceitar oferta/ });
+    const b = screen.getByRole('button', { name: /Aceitar proposta/ });
     fireEvent.click(b); fireEvent.click(b);
     await waitFor(() => expect(st.refresh).toHaveBeenCalled(), { timeout: 8000 });
     expect(await estado(s.oferta.id)).toBe('ACEITA');

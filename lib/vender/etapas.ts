@@ -48,12 +48,9 @@ export function isEncerrado(status: LeadVendedorStatus): boolean {
   return status === LeadVendedorStatus.PERDIDO;
 }
 
-/** Concluído com sucesso (Pix executado / cota incorporada). */
+/** Concluído com sucesso: SÓ com a cota incorporada. Pix executado ainda não é concluído (a cota está em incorporação). */
 export function isConcluido(status: LeadVendedorStatus): boolean {
-  return (
-    status === LeadVendedorStatus.PIX_EXECUTADO ||
-    status === LeadVendedorStatus.COTA_INCORPORADA
-  );
+  return status === LeadVendedorStatus.COTA_INCORPORADA;
 }
 
 export interface ContextoEtapa {
