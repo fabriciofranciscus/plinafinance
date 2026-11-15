@@ -302,13 +302,14 @@ describe('enviar-cessao com o DocuSign fora do ar ou sem configuração (A-02)',
 
 describe('oferta que o operador pode corrigir: 422 com a mensagem, nunca 500 (A-22)', () => {
   const previa = { action: 'previa-oferta', valorCarta: '40000', administradora: 'Administradora Demonstração (fictícia)', desagioAquisicao: '0.20' };
-  it('previa-oferta com o deságio total acima de 100% (prazo longo) → 422 DESAGIO_TOTAL_EXCEDE com a causa e o que fazer', async () => {
+  it('previa-oferta com o deságio total acima de 100% (prazo longo) → 422 DESAGIO_TOTAL_EXCEDE com a causa (mensagem neutra)', async () => {
     const r = await POST(req({ ...previa, prazoRestanteMeses: 120 }));
     expect(r.status).toBe(422);
     const corpo = await r.json();
     expect(corpo.code).toBe('DESAGIO_TOTAL_EXCEDE');
     expect(corpo.error).toMatch(/excede 100%/);
-    expect(corpo.error).toMatch(/reduza o deságio base ou o prazo/);
+    expect(corpo.error).toBe('O deságio total (base + anuência + prazo) excede 100%. Revise os dados da proposta.');
+    expect(corpo.error).not.toMatch(/reduza|prazo restante/i); // mensagem neutra, sem orientação para mudar a proposta
     expect(Object.keys(corpo).sort()).toEqual(['code', 'error']);
   });
   it('previa-oferta com valor da carta 0 → 422 VALOR_CARTA_INVALIDO; deságio base fora de [0,1] → 422 DESAGIO_BASE_INVALIDO', async () => {
@@ -325,7 +326,7 @@ describe('oferta que o operador pode corrigir: 422 com a mensagem, nunca 500 (A-
     expect((await r.json()).desagioTotal).toBeDefined();
   });
   it('gerar-oferta que o serviço recusa por OfertaInvalidaError → 422 (e nada além de código e mensagem)', async () => {
-    m.gerar.mockRejectedValue(new OfertaInvalidaError('DESAGIO_TOTAL_EXCEDE', 'O deságio total (base + anuência + prazo) excede 100%: reduza o deságio base ou o prazo restante.'));
+    m.gerar.mockRejectedValue(new OfertaInvalidaError('DESAGIO_TOTAL_EXCEDE', 'O deságio total (base + anuência + prazo) excede 100%. Revise os dados da proposta.'));
     const r = await POST(req({ action: 'gerar-oferta', leadVendedorId: 'l1', tipoBem: 'IMOVEL', valorCarta: '40000', administradora: 'Adm', desagioAquisicao: '0.2', prazoRestanteMeses: 120 }));
     expect(r.status).toBe(422);
     expect(Object.keys(await r.json()).sort()).toEqual(['code', 'error']);
