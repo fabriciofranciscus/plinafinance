@@ -120,7 +120,8 @@ export default function AcompanharView({ data }: { data: AcompanharData }) {
     <>
       <StepperVender
         current={view}
-        completedUpTo={data.etapaAtual}
+        // Pix enviado e cota ainda não incorporada: a última etapa não é ✓ (Íris R-3, coerente com A-26).
+        completedUpTo={data.temCota ? data.etapaAtual : Math.min(data.etapaAtual, ULTIMO)}
         onStepClick={setView}
         isStepEnabled={() => true}
       />
@@ -171,22 +172,23 @@ export default function AcompanharView({ data }: { data: AcompanharData }) {
           type="button"
           onClick={() => setView((v) => Math.max(0, v - 1))}
           disabled={view === 0}
-          className="font-details text-[11px] tracking-[0.2em] uppercase text-base/60 hover:text-base transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          className="inline-flex min-h-[44px] items-center font-details text-[11px] tracking-[0.2em] uppercase text-base/60 hover:text-base transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
         >
           ← Voltar
         </button>
         {view === ULTIMO ? (
+          // "Concluído" era um botão de estado que afirmava o que ainda pode não ter acontecido: agora é só navegação.
           <a
-            href="/pool"
-            className="bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors"
+            href={data.temCota ? '/pool' : '/vender/minhas'}
+            className="inline-flex min-h-[44px] items-center bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors"
           >
-            Concluído
+            {data.temCota ? 'Ver o pool →' : 'Ver minhas solicitações →'}
           </a>
         ) : (
           <button
             type="button"
             onClick={() => setView((v) => Math.min(ULTIMO, v + 1))}
-            className="font-details text-[11px] tracking-[0.2em] uppercase text-base/60 hover:text-base transition-colors"
+            className="inline-flex min-h-[44px] items-center font-details text-[11px] tracking-[0.2em] uppercase text-base/60 hover:text-base transition-colors"
           >
             Avançar →
           </button>
@@ -243,7 +245,7 @@ function PainelValidacao({ consentTx }: { consentTx: TxLink | null }) {
             href={consentTx.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="font-mono text-xs underline text-primary-deep hover:text-primary"
+            className="inline-flex min-h-[44px] items-center font-mono text-xs underline text-primary-deep hover:text-primary"
           >
             {consentTx.hashShort}… → Stellar Expert
           </a>
@@ -315,18 +317,18 @@ function PainelOferta({
         <button
           type="button"
           disabled
-          className="mt-6 bg-base/40 text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 cursor-not-allowed"
+          className="mt-6 min-h-[44px] bg-base/40 text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 cursor-not-allowed"
         >
-          Aceitar oferta →
+          Aceitar proposta →
         </button>
       ) : podeAceitar ? (
         <button
           type="button"
           onClick={onAceitar}
           disabled={aceitando}
-          className="mt-6 bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors disabled:opacity-50"
+          className="mt-6 min-h-[44px] bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors disabled:opacity-50"
         >
-          {aceitando ? 'Enviando…' : 'Aceitar oferta →'}
+          {aceitando ? 'Enviando…' : 'Aceitar proposta →'}
         </button>
       ) : null}
       {erro && <p className="font-text text-sm text-red-700 mt-4">{erro}</p>}
@@ -353,11 +355,11 @@ function OfertaLinha({
   mono?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-light-hairline last:border-b-0">
+    <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4 px-5 py-4 border-b border-light-hairline last:border-b-0">
       <span className="font-text text-sm text-base/70">{label}</span>
       <span
         className={[
-          'shrink-0 text-right',
+          'min-w-0 break-words text-left sm:text-right',
           destaque
             ? 'font-title text-2xl font-bold text-primary-deep'
             : accent
@@ -442,7 +444,7 @@ function PainelCessao({
                 href={cessaoTx.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-mono text-xs underline text-primary-deep hover:text-primary"
+                className="inline-flex min-h-[44px] items-center font-mono text-xs underline text-primary-deep hover:text-primary"
               >
                 {cessaoTx.hashShort}… → Stellar Expert
               </a>
@@ -451,7 +453,7 @@ function PainelCessao({
           {cessaoId && (
             <a
               href={`/cessao/${cessaoId}/comprovante`}
-              className="inline-block font-details text-[10px] tracking-[0.2em] uppercase underline text-primary-deep hover:text-primary"
+              className="inline-flex min-h-[44px] items-center font-details text-[10px] tracking-[0.2em] uppercase underline text-primary-deep hover:text-primary"
             >
               Ver comprovante →
             </a>
@@ -531,7 +533,7 @@ function PainelPix({
               href={pixTx.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-mono text-xs underline text-primary-deep hover:text-primary"
+              className="inline-flex min-h-[44px] items-center font-mono text-xs underline text-primary-deep hover:text-primary"
             >
               Pix on-chain: {pixTx.hashShort}… → Stellar Expert
             </a>
@@ -539,7 +541,7 @@ function PainelPix({
           {cessaoId && (
             <a
               href={`/cessao/${cessaoId}/comprovante`}
-              className="font-details text-[10px] tracking-[0.2em] uppercase underline text-primary-deep hover:text-primary"
+              className="inline-flex min-h-[44px] items-center font-details text-[10px] tracking-[0.2em] uppercase underline text-primary-deep hover:text-primary"
             >
               Ver comprovante →
             </a>

@@ -1,14 +1,17 @@
 /**
  * StepperVender — stepper horizontal dos 6 passos do funil do cedente.
  *
- * Componente puro (sem hooks): renderiza tanto no wizard client (`/vender`)
- * quanto na página server de acompanhamento (`/vender/acompanhar/[leadId]`).
+ * Componente cliente (um efeito rola a etapa atual para a vista no celular): usado no wizard (`/vender`)
+ * e no acompanhamento (`AcompanharView`).
  * Os rótulos vêm de `ETAPAS_VENDER`; o passo atual é dirigido por `current`
  * (índice 0-based — no wizard é o passo local, no acompanhamento vem de
  * `etapaDoStatus`). Tema claro, estilo do mockup: círculos numerados ligados
  * por uma hairline, sem accent de borda lateral (proibido no design system).
  */
 
+'use client';
+
+import { useEffect, useRef } from 'react';
 import { ETAPAS_VENDER } from '@/lib/vender/etapas';
 
 interface StepperVenderProps {
@@ -40,8 +43,20 @@ export default function StepperVender({
   isStepEnabled,
 }: StepperVenderProps) {
   const doneAte = completedUpTo ?? current;
+  const faixa = useRef<HTMLDivElement>(null);
+
+  // No celular a faixa rola na horizontal e abria sempre no início: a etapa atual ficava fora da tela (Íris R-4). Centraliza
+  // a etapa atual só dentro da faixa (sem rolar a página).
+  useEffect(() => {
+    const el = faixa.current;
+    const atual = el?.querySelector<HTMLElement>('[aria-current="step"]');
+    if (!el || !atual || el.scrollWidth <= el.clientWidth) return;
+    const alvo = atual.getBoundingClientRect().left - el.getBoundingClientRect().left + el.scrollLeft;
+    el.scrollLeft = Math.max(0, alvo - (el.clientWidth - atual.offsetWidth) / 2);
+  }, [current]);
+
   return (
-    <div className="overflow-x-auto -mx-6 px-6 md:mx-0 md:px-0">
+    <div ref={faixa} className="overflow-x-auto -mx-6 px-6 md:mx-0 md:px-0">
       <ol className="flex min-w-[680px] items-start">
         {ETAPAS_VENDER.map((etapa, idx) => {
           const isDone = doneAte >= 0 && idx < doneAte;
