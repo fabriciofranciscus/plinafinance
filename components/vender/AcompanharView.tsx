@@ -530,7 +530,7 @@ function PainelPix({
 
       {temCota && (
         <p className="font-text text-sm text-base/70 mt-6 text-center leading-relaxed">
-          Sua cota foi incorporada ao pool tokenizado público. Composição em{' '}
+          Sua cota foi incorporada ao pool de demonstração. Composição em{' '}
           <a href="/pool" className="underline">
             /pool
           </a>
