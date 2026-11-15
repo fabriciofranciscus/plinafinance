@@ -31,9 +31,10 @@ secret aparece aqui; o agente confere só **host (prefixo `ep-…`) e nomes**.
    ```
    O resultado tem de ser só `ep-rough-violet-…`; as duas variantes (`ep-rough-violet-…` e `ep-rough-violet-…-pooler`) são esperadas, uma por variável. Se aparecer `ep-lucky-breeze`, **pare**.
 3. `.env.local` é gerado do ambiente **Development** (dev). Não copie variável de Production para ele.
-   Os scripts do repositório podem fazê-lo vencer até uma variável passada no comando: `prisma:seed`,
-   `prisma:migrate`, `prisma:deploy` e `prisma:studio` apontam `DOTENV_CONFIG_PATH=.env.local`, e scripts como
-   `evidencia:cota` chamam `loadEnv({ path: '.env.local', override: true })`. Use **uma fonte só**: ou rode em
+   Scripts que chamam `loadEnv(..., { override: true })` (`prisma:seed`, `evidencia:cota`,
+   `registrar-tes-3-evento` e os `smoke-*`) fazem o `.env.local` **vencer** a variável passada no comando;
+   já `prisma:migrate`, `prisma:deploy` e `prisma:studio` carregam o `.env.local` sem override (a variável do
+   comando vence; se ela faltar, usam o `.env.local`). Use **uma fonte só**: ou rode em
    worktree/clone sem `.env.local` e passe o ambiente no processo, ou use um `.env.local` temporário sem
    duplicar as variáveis no comando. Em ambos os casos, confira o host efetivo antes de executar; para tarefas
    de dev ele tem de ser `ep-rough-violet-…`, nunca `ep-lucky-breeze-…`.

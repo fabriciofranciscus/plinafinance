@@ -62,7 +62,7 @@ Fonte canônica: `ops/runbooks/instaward2-cutover.md` §2. Regra: **todas** em `
 - [ ] Ausência, erro ou tipo inválido deixa todas desligadas (teste existente, rodar no candidato).
 - [ ] Edge Config e env sem divergência; `NEXT_PUBLIC_*` novo exige novo build.
 
-Varredura nominal de 14/11: nenhuma das flags acima existe nas variáveis Vercel. No servidor, `getFlag` consulta primeiro o Edge Config e ele **vence** o env; se o valor remoto estiver indisponível ou não for booleano, cai para o env, que só liga com a string exata `true`. No proxy/edge, `getFlagSync` lê **somente** o env. Antes do cutover, conferir cada nome nos dois lugares: ausente ou `false`, sem divergência; caso contrário, servidor e proxy podem decidir diferente.
+Varredura nominal de 14/11: nenhuma das flags acima existe nas variáveis Vercel. No servidor, `getFlag` consulta primeiro o Edge Config e ele **vence** o env; se o valor remoto estiver indisponível ou não for booleano, cai para o env, que só liga com a string exata `true`. `getFlagSync` existe e lê **somente** o env, mas hoje não tem chamador e o `proxy.ts` não lê flags; se alguém passar a usá-lo no proxy, Edge Config e env têm de coincidir. Antes do cutover, conferir cada nome nos dois lugares: ausente ou `false`, sem divergência.
 
 ## D. Ambientes: `main` × `dev`
 
