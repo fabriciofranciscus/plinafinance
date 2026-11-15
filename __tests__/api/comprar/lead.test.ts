@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { capturarLeadComprador } = vi.hoisted(() => ({
+const { capturarLeadComprador, checkBotId } = vi.hoisted(() => ({
   capturarLeadComprador: vi.fn(),
+  checkBotId: vi.fn(),
 }));
 
 vi.mock('@/lib/services/realizacao', () => ({ capturarLeadComprador }));
+vi.mock('botid/server', () => ({ checkBotId }));
 
 import { POST } from '@/app/api/comprar/lead/route';
 
@@ -23,6 +25,7 @@ const BASE = {
 };
 
 beforeEach(() => {
+  checkBotId.mockReset().mockResolvedValue({ isBot: false });
   capturarLeadComprador.mockReset().mockResolvedValue({
     leadId: 'l_1',
     payloadHash: 'hash',
@@ -64,5 +67,17 @@ describe('POST /api/comprar/lead', () => {
       req({ nome: 'X', email: 'x@x.com', consentimentoLgpd: false }),
     );
     expect(r.status).toBe(400);
+  });
+});
+
+describe('POST /api/comprar/lead — BotID SEM flag (anônima: grava lead e memo on-chain)', () => {
+  it("BOTID_ENFORCE='false' NÃO desliga o BotID aqui: bot → 403 e nada é capturado", async () => {
+    process.env.BOTID_ENFORCE = 'false';
+    checkBotId.mockResolvedValue({ isBot: true });
+    const r = await POST(req({ ...BASE, tipo: 'PESSOA_FISICA' }));
+    expect(r.status).toBe(403);
+    expect(capturarLeadComprador).not.toHaveBeenCalled();
+    expect(checkBotId).toHaveBeenCalled();
+    delete process.env.BOTID_ENFORCE;
   });
 });
