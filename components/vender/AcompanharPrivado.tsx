@@ -14,6 +14,7 @@ import Link from 'next/link';
 import AcompanharView, { type AcompanharData, type TxLink } from '@/components/vender/AcompanharView';
 import { useAppPrivy } from '@/lib/hooks/privy';
 import { withTimeout } from '@/lib/http/client';
+import { useLatest } from '@/lib/hooks/use-latest';
 
 /** Resposta do servidor: dinheiro e validade em string/ISO (a tela converte para exibir). */
 interface DetalheServidor {
@@ -65,14 +66,16 @@ export function paraAcompanharData(d: DetalheServidor): AcompanharData {
 export default function AcompanharPrivado({ leadId }: { leadId: string }) {
   const { ready, authenticated, getAccessToken } = useAppPrivy();
   const [estado, setEstado] = useState<Estado>({ tipo: 'carregando' });
+  // A função do Privy pode mudar a cada renderização: fora das dependências, senão o GET entra em laço (Vera).
+  const token = useLatest(getAccessToken);
 
   const carregar = useCallback(async () => {
     setEstado((e) => (e.tipo === 'ok' ? e : { tipo: 'carregando' }));
     try {
-      const token = await withTimeout(getAccessToken(), 8000, 'sessão');
+      const bearer = await withTimeout(token.current(), 8000, 'sessão');
       const res = await withTimeout(
         fetch(`/api/vender/acompanhar/${encodeURIComponent(leadId)}`, {
-          headers: { ...(token ? { authorization: `Bearer ${token}` } : {}) },
+          headers: { ...(bearer ? { authorization: `Bearer ${bearer}` } : {}) },
         }),
         10000,
         'tempo',
@@ -84,7 +87,7 @@ export default function AcompanharPrivado({ leadId }: { leadId: string }) {
     } catch {
       setEstado((e) => (e.tipo === 'ok' ? e : { tipo: 'erro' }));
     }
-  }, [leadId, getAccessToken]);
+  }, [leadId, token]);
 
   useEffect(() => {
     if (!ready) return;
