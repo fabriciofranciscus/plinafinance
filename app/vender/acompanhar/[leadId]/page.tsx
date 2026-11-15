@@ -1,139 +1,67 @@
 /**
- * /vender/acompanhar/[leadId] — acompanhamento do cedente (PRD §M1 F-M1-5).
+ * /vender/acompanhar/[leadId] — acompanhamento do cedente (PRD §M1 F-M1-5; item 19, Argus/Bento).
  *
- * Server Component, sem auth: o `leadId` (cuid não-adivinhável) é o token de
- * acesso — mesmo padrão de `/cessao/[id]/comprovante`. Busca o lead, serializa
- * (sem Decimal/Date/SDK) e entrega ao `AcompanharView` (client), que cuida da
- * navegação de preview e da ação real de aceitar a oferta.
+ * Server Component PÚBLICO que mostra só o que o link sozinho pode revelar: a ETAPA e o status
+ * (`acompanharPublico`, leitura com `select: { status }`: nome, valores, hashes e ids de oferta/cessão nem saem do
+ * banco). O detalhe do dono (nome, proposta, transações, aceite) vem de GET /api/vender/acompanhar/<id> com o Bearer
+ * do Privy, buscado pelo componente cliente `AcompanharPrivado`: quem tem o link mas não é o dono não vê dado pessoal.
  *
- * Privacidade: expõe só o que o próprio cedente já possui (status, valores da
- * oferta, hashes/links públicos, nome do cedente) — nunca reexpõe CPF.
+ * `referrer: no-referrer`: o id do lead está na URL e não deve vazar para links externos (explorer, e-mail do parceiro).
  */
 
-import { db } from '@/lib/db';
-import { nomeDoCedente } from '@/lib/vender/nome';
-import { txExplorerUrl } from '@/lib/stellar/config';
-import {
-  contextoDoStatus,
-  etapaDoStatus,
-  isEncerrado,
-} from '@/lib/vender/etapas';
+import type { Metadata } from 'next';
+import { acompanharPublico } from '@/lib/services/acompanhar';
+import { ETAPAS_VENDER } from '@/lib/vender/etapas';
 import WizardHeader from '@/components/vender/WizardHeader';
-import AcompanharView, {
-  type AcompanharData,
-} from '@/components/vender/AcompanharView';
+import AcompanharPrivado from '@/components/vender/AcompanharPrivado';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  referrer: 'no-referrer',
+  robots: { index: false, follow: false },
+};
 
 interface PageProps {
   params: Promise<{ leadId: string }>;
 }
 
-function txLink(hash: string | null | undefined) {
-  if (!hash) return null;
-  return { hashShort: hash.slice(0, 8), url: txExplorerUrl(hash) };
-}
-
 export default async function AcompanharPage({ params }: PageProps) {
   const { leadId } = await params;
+  const publico = await acompanharPublico(leadId);
 
-  const lead = await db.leadVendedor.findUnique({
-    where: { id: leadId },
-    include: {
-      ofertas: {
-        orderBy: { criadaEm: 'desc' },
-        take: 1,
-        include: {
-          cessao: { include: { pagamento: true, cota: true } },
-        },
-      },
-      // Prova on-chain do consentimento registrada na captura do lead —
-      // exibida na etapa de validação jurídica (hash do documento na Stellar).
-      eventos: {
-        where: { acao: 'LEAD_VENDEDOR_CAPTURADO' },
-        orderBy: { criadoEm: 'desc' },
-        take: 1,
-      },
-    },
-  });
-
-  if (!lead) {
+  if (!publico) {
     return (
       <div className="min-h-screen bg-sheet-white text-base">
         <WizardHeader active="cotistas" />
         <div className="mx-auto max-w-2xl px-6 py-16">
-          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-            Solicitação não encontrada
-          </p>
-          <h1 className="font-title text-3xl font-semibold mt-3">
-            Link inválido
-          </h1>
-          <p className="font-text text-base/70 mt-4">
-            O identificador informado não corresponde a nenhuma solicitação.
-            Confira o link recebido.
-          </p>
+          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">Solicitação não encontrada</p>
+          <h1 className="font-title text-3xl font-semibold mt-3">Link inválido</h1>
+          <p className="font-text text-base/70 mt-4">O identificador informado não corresponde a nenhuma solicitação. Confira o link recebido.</p>
         </div>
       </div>
     );
   }
 
-  const oferta = lead.ofertas[0] ?? null;
-  const cessao = oferta?.cessao ?? null;
-  const pagamento = cessao?.pagamento ?? null;
-
-  const data: AcompanharData = {
-    leadId: lead.id,
-    // Nunca o e-mail nem o marcador 'Nome não informado' na tela (pós-cota 15/11; Consuelo): sem nome de verdade a view mostra '—'.
-    cedenteNome: nomeDoCedente(lead.nome),
-    status: lead.status,
-    etapaAtual: etapaDoStatus(lead.status),
-    contextoDescricao: contextoDoStatus(lead.status).descricao,
-    ofertaId: oferta?.id ?? null,
-    oferta: oferta
-      ? {
-          valorCarta: Number(oferta.valorCarta),
-          desagioPct: (Number(oferta.desagioAquisicao) * 100).toFixed(1),
-          valorLiquido: Number(oferta.valorLiquidoVendedor),
-          prazoRestanteMeses: oferta.prazoRestanteMeses,
-          validade: new Date(oferta.validade).toLocaleString('pt-BR', {
-            hour12: false,
-          }),
-        }
-      : null,
-    cessaoId: cessao?.id ?? null,
-    consentTx: txLink(lead.eventos[0]?.stellarTxHash),
-    cessaoTx: txLink(cessao?.onChainTxHash),
-    pixTx: txLink(pagamento?.onChainTxHash),
-    temCota: !!cessao?.cota,
-    aguardandoAssinatura: cessao?.status === 'ENVIADA_DOCUSIGN',
-  };
-
-  const encerrado = isEncerrado(lead.status);
+  const etapa = publico.encerrado ? null : ETAPAS_VENDER[Math.min(Math.max(publico.etapaAtual, 0), ETAPAS_VENDER.length - 1)];
 
   return (
     <div className="min-h-screen bg-sheet-white text-base">
       <WizardHeader active="cotistas" />
       <div className="mx-auto max-w-3xl px-6 py-12 md:py-16">
         <header className="border-b border-light-hairline pb-8 mb-10">
-          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">
-            Acompanhamento · solicitação de venda
-          </p>
+          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">Acompanhamento · solicitação de venda</p>
           <h1 className="font-title text-3xl md:text-4xl font-semibold tracking-tight mt-3">
-            {encerrado
-              ? 'Solicitação encerrada'
-              : 'Sua solicitação em andamento'}
+            {publico.encerrado ? 'Solicitação encerrada' : 'Sua solicitação em andamento'}
           </h1>
-          <p className="font-mono text-xs text-base/60 mt-3">id: {lead.id}</p>
+          {etapa && (
+            <p data-testid="etapa-publica" className="font-text text-sm text-base/70 mt-3">
+              Etapa atual: {etapa}
+            </p>
+          )}
         </header>
 
-        {encerrado ? (
-          <p className="font-text text-base/80 leading-relaxed">
-            Esta solicitação foi encerrada. Se acha que houve engano, fale com a
-            equipe em contato@plina.finance informando o número do seu pedido.
-          </p>
-        ) : (
-          <AcompanharView data={data} />
-        )}
+        <AcompanharPrivado leadId={leadId} />
       </div>
     </div>
   );

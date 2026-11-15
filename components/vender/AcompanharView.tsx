@@ -20,7 +20,7 @@ import { ETAPAS_VENDER } from '@/lib/vender/etapas';
 import { useAppPrivy } from '@/lib/hooks/privy';
 import { withTimeout } from '@/lib/http/client';
 
-interface TxLink {
+export interface TxLink {
   hashShort: string;
   url: string;
 }
@@ -67,7 +67,7 @@ const DESCRICAO_ETAPA = [
   'Pix do valor líquido, previsto após a assinatura (simulado em rede de testes; sem prazo garantido).',
 ] as const;
 
-export default function AcompanharView({ data }: { data: AcompanharData }) {
+export default function AcompanharView({ data, onAtualizar }: { data: AcompanharData; onAtualizar?: () => void }) {
   const router = useRouter();
   const inicial = Math.min(Math.max(data.etapaAtual, 0), ULTIMO);
   const [view, setView] = useState(inicial);
@@ -109,6 +109,8 @@ export default function AcompanharView({ data }: { data: AcompanharData }) {
         'A requisição demorou demais. Tente novamente.',
       );
       if (!res.ok) throw new Error((await res.json()).error ?? 'erro');
+      // Os dados vêm de um fetch do cliente (AcompanharPrivado): recarrega por ele; o refresh cobre quem monta a view direto.
+      onAtualizar?.();
       router.refresh();
     } catch (err) {
       setErro(err instanceof Error ? err.message : String(err));

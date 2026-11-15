@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeTelemetryEvent, stripUrlQueryAndHash } from '@/components/telemetry-url';
+import { mascararIdDeAcompanhamento, sanitizeTelemetryEvent, stripUrlQueryAndHash } from '@/components/telemetry-url';
 
 describe('telemetria: URL sem query nem hash', () => {
   it('exemplo do Atlas: query com e-mail e hash saem', () => {
@@ -41,5 +41,17 @@ describe('telemetria: URL sem query nem hash', () => {
     const original = { type: 'pageview' as const, url: 'https://plina.finance/?email=a@b.c' };
     sanitizeTelemetryEvent(original);
     expect(original.url).toBe('https://plina.finance/?email=a@b.c');
+  });
+});
+
+describe('telemetria: o id do lead não vai ao Analytics (item 19)', () => {
+  it('/vender/acompanhar/<id> vira /vender/acompanhar/[id], com ou sem query/hash e em url e route', () => {
+    expect(mascararIdDeAcompanhamento('https://plina.finance/vender/acompanhar/cmabc123xyz')).toBe('https://plina.finance/vender/acompanhar/[id]');
+    const ev = { type: 'pageview' as const, url: 'https://plina.finance/vender/acompanhar/cmabc123xyz?aviso=reaproveitada#x', route: '/vender/acompanhar/cmabc123xyz' };
+    expect(sanitizeTelemetryEvent(ev)).toEqual({ type: 'pageview', url: 'https://plina.finance/vender/acompanhar/[id]', route: '/vender/acompanhar/[id]' });
+  });
+  it('não mexe em outras rotas', () => {
+    expect(mascararIdDeAcompanhamento('https://plina.finance/vender/minhas')).toBe('https://plina.finance/vender/minhas');
+    expect(mascararIdDeAcompanhamento('https://plina.finance/vender')).toBe('https://plina.finance/vender');
   });
 });
