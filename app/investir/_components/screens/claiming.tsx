@@ -77,13 +77,22 @@ export function ClaimingScreen({
 
       {/* Cartão "Controles on-chain" do mockup: flags reais do ativo PLINA-RF. */}
       <div className="mt-8">
-        <pre className="overflow-x-auto border border-light-hairline bg-document-grey/40 p-4 font-mono text-xs text-base/80 leading-relaxed whitespace-pre">
+        <pre
+          tabIndex={0}
+          role="region"
+          aria-label="Flags do ativo PLINA-RF (rolagem horizontal)"
+          data-testid="flags-ativo"
+          className="overflow-x-auto border border-light-hairline bg-document-grey/40 p-4 font-mono text-xs text-base/80 leading-relaxed whitespace-pre focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-deep"
+        >
 {`PLINA-RF asset flags:
   AUTH_CLAWBACK_ENABLED  ✓  reversão judicial / OFAC / fraude / erro operacional
   AUTH_REQUIRED          ✓  trustline exige KYC aprovado pela Plina
   AUTH_REVOCABLE         ✓  status de compliance revisável
   Claimable Balances     ✓  liquidação atômica em resgates e cross-border`}
         </pre>
+        <p className="md:hidden font-details text-[10px] tracking-[0.2em] uppercase text-base/65 mt-2" data-testid="flags-dica-rolagem">
+          Role para o lado para ver as linhas inteiras
+        </p>
         <p className="font-text text-xs text-base/55 mt-3 leading-relaxed">
           Compliance nativo Stellar · auditável via Stellar Expert · não
           replicável em ERC-20 sem contrato customizado.
