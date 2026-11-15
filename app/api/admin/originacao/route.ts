@@ -27,11 +27,13 @@ import {
   registrarLaudoDaCessao,
   registrarCessao,
   IncorporacaoFunilBloqueadaError,
+  comporDesagioDaOferta,
 } from '@/lib/services/originacao';
 import { registrarTesourariaLegada } from '@/lib/services/tesouraria-legada';
 import { sincronizarCessoesDocusign } from '@/lib/services/cessao-assinatura';
 import { pagarCedenteDaCessao, PagamentoCedenteError, reabrirPagamentoCedente } from '@/lib/services/pagamento-cedente';
 import { LiquidacaoCedenteError } from '@/lib/services/liquidacao-cedente';
+import { DocusignError } from '@/lib/integrations/docusign';
 import { EnvioDocusignLaudoAusenteError, EnvioDocusignNomeAusenteError, enviarCessaoParaAssinatura } from '@/lib/services/cessao-docusign';
 import { confirmarTitularDoLaudo, SITUACOES_TITULAR, TitularLaudoError } from '@/lib/services/titular-laudo';
 import { TipoBem } from '@prisma/client';
@@ -53,6 +55,34 @@ const OPERADOR_ADMIN = 'admin-panel';
 
 /** Erros de domínio do E1-2/DS2: mensagem fixa em PT (sem causa nem dado do cedente) + código. */
 function respostaDeErroDoPagamento(err: unknown): NextResponse | null {
+  // A-02: DocuSign sem configuração ou fora do ar não é "erro interno": o operador precisa saber a causa (mensagens fixas, sem
+  // nome de variável, chave nem corpo da resposta).
+  if (err instanceof DocusignError) {
+    if (err.codigo === 'CONFIG_INVALIDA' || err.codigo === 'CHAVE_PRIVADA_INVALIDA') {
+      return NextResponse.json(
+        { error: 'DocuSign não configurado neste ambiente (credenciais ausentes ou inválidas).', code: 'DOCUSIGN_NAO_CONFIGURADO' },
+        { status: 503 },
+      );
+    }
+    if (err.codigo === 'CONSENTIMENTO_NECESSARIO') {
+      return NextResponse.json(
+        { error: 'O DocuSign ainda não tem o consentimento da integração: conceda-o no painel do DocuSign e repita.', code: 'DOCUSIGN_CONSENTIMENTO_NECESSARIO' },
+        { status: 503 },
+      );
+    }
+    if (err.codigo === 'AUTENTICACAO_FALHOU') {
+      return NextResponse.json(
+        { error: 'O DocuSign recusou as credenciais da integração.', code: 'DOCUSIGN_AUTENTICACAO_FALHOU' },
+        { status: 503 },
+      );
+    }
+    if (err.codigo === 'INDISPONIVEL') {
+      return NextResponse.json(
+        { error: 'O DocuSign está indisponível agora. Nada foi enviado; tente novamente em instantes.', code: 'DOCUSIGN_INDISPONIVEL' },
+        { status: 503 },
+      );
+    }
+  }
   if (err instanceof EnvioDocusignLaudoAusenteError || err instanceof EnvioDocusignNomeAusenteError || err instanceof IncorporacaoFunilBloqueadaError) {
     return NextResponse.json({ error: err.message, code: err.code }, { status: 409 });
   }
@@ -77,8 +107,19 @@ const Schema = z.discriminatedUnion('action', [
       valorCarta: NumericString,
       administradora: z.string().min(1).max(200),
       desagioAquisicao: NumericString,
-      prazoRestanteMeses: z.number().int().positive().max(600).optional(),
+      // 0 = cota QUITADA (sem componente de prazo; guardado como 0, não null). A-01.
+      prazoRestanteMeses: z.number().int().min(0).max(600).optional(),
       validadeHoras: z.number().int().positive().max(168).optional(),
+    })
+    .strict(),
+  // A-08: prévia SOMENTE LEITURA do deságio final (mesma composição do gerar-oferta): o admin vê o que será gravado ANTES de gerar.
+  z
+    .object({
+      action: z.literal('previa-oferta'),
+      valorCarta: NumericString,
+      administradora: z.string().min(1).max(200),
+      desagioAquisicao: NumericString,
+      prazoRestanteMeses: z.number().int().min(0).max(600).optional(),
     })
     .strict(),
   z
@@ -154,6 +195,21 @@ export async function POST(req: Request) {
           operador: 'admin-panel',
         });
         return NextResponse.json({ ofertaId: result.id });
+      }
+      case 'previa-oferta': {
+        const c = comporDesagioDaOferta({
+          valorCarta: body.valorCarta,
+          administradora: body.administradora,
+          desagioAquisicao: body.desagioAquisicao,
+          prazoRestanteMeses: body.prazoRestanteMeses,
+        });
+        return NextResponse.json({
+          desagioBase: c.desagioBase.toFixed(4),
+          taxaAnuenciaBps: c.taxaAnuenciaBps,
+          taxaPrazoBps: c.taxaPrazoBps,
+          desagioTotal: c.desagioTotal.toFixed(4),
+          valorLiquido: c.valorLiquido.toFixed(2),
+        });
       }
       case 'registrar-cessao': {
         // Só cria a cessão: o envio ao DocuSign é o passo `enviar-cessao`, DEPOIS do laudo (o PDF cita o hash dele).

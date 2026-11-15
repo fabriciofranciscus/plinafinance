@@ -31,7 +31,7 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('@/lib/email/notify-cedente', () => ({ notifyCedente: vi.fn() }));
 
-import { gerarOferta } from '@/lib/services/originacao';
+import { comporDesagioDaOferta, gerarOferta } from '@/lib/services/originacao';
 
 beforeEach(() => {
   ofertaCount.mockReset().mockResolvedValue(0);
@@ -118,5 +118,50 @@ describe('gerarOferta · componente de prazo (curva de yield provisória, §3.4)
     const auditPayload = auditCreate.mock.calls[0][0].data.payloadJson;
     expect(auditPayload.taxaPrazoBps).toBe(1500);
     expect(auditPayload.prazoRestanteMeses).toBe(12);
+  });
+});
+
+describe('prazo 0 = cota QUITADA (A-01) e a composição pura do deságio (A-08)', () => {
+  const base = { valorCarta: '100000', administradora: 'Embracon Consórcios', desagioAquisicao: '0.18' };
+
+  it('prazo 0 não soma componente de prazo (igual a não informar), mas é GUARDADO como 0 (não null)', async () => {
+    await gerarOferta({ leadVendedorId: 'l_1', tipoBem: 'VEICULO', ...base, prazoRestanteMeses: 0, operador: 'op' });
+    const data = ofertaCreate.mock.calls[0][0].data;
+    expect(data.prazoRestanteMeses).toBe(0);
+    expect(data.desagioAquisicao).toBe('0.1950'); // 0,18 + 150 bps de anuência, sem prazo
+    expect(auditCreate.mock.calls[0][0].data.payloadJson).toMatchObject({ taxaPrazoBps: 0, prazoRestanteMeses: 0 });
+  });
+
+  it('sem prazo informado segue null no banco', async () => {
+    await gerarOferta({ leadVendedorId: 'l_1', tipoBem: 'VEICULO', ...base, operador: 'op' });
+    expect(ofertaCreate.mock.calls[0][0].data.prazoRestanteMeses).toBeNull();
+  });
+
+  it('comporDesagioDaOferta: prazo 12 meses soma 1500 bps; a composição bate com o que o gerarOferta grava', async () => {
+    const c = comporDesagioDaOferta({ ...base, prazoRestanteMeses: 12 });
+    expect(c.taxaPrazoBps).toBe(1500);
+    expect(c.taxaAnuenciaBps).toBe(150);
+    expect(c.desagioTotal.toFixed(4)).toBe('0.3450'); // 0,18 + 0,015 + 0,15
+    expect(c.valorLiquido.toFixed(2)).toBe('65500.00');
+    await gerarOferta({ leadVendedorId: 'l_1', tipoBem: 'VEICULO', ...base, prazoRestanteMeses: 12, operador: 'op' });
+    const data = ofertaCreate.mock.calls[0][0].data;
+    expect(data.desagioAquisicao).toBe(c.desagioTotal.toFixed(4));
+    expect(data.valorLiquidoVendedor).toBe(c.valorLiquido.toFixed(2));
+  });
+
+  it('prazo 0 e prazo ausente dão a MESMA composição', () => {
+    expect(comporDesagioDaOferta({ ...base, prazoRestanteMeses: 0 }).desagioTotal.toFixed(4)).toBe(
+      comporDesagioDaOferta({ ...base }).desagioTotal.toFixed(4),
+    );
+  });
+
+  it('caminho API_ADMINISTRADORA não tem taxa de anuência', () => {
+    expect(comporDesagioDaOferta({ ...base, caminhoCessao: CaminhoCessao.API_ADMINISTRADORA }).taxaAnuenciaBps).toBe(0);
+  });
+
+  it('mesmas recusas de sempre: valor inválido, base fora de [0,1] e total acima de 100%', () => {
+    expect(() => comporDesagioDaOferta({ ...base, valorCarta: '0' })).toThrow('valorCarta inválido');
+    expect(() => comporDesagioDaOferta({ ...base, desagioAquisicao: '1.5' })).toThrow('fora de [0, 1]');
+    expect(() => comporDesagioDaOferta({ ...base, desagioAquisicao: '0.95', prazoRestanteMeses: 12 })).toThrow('excede 100%');
   });
 });

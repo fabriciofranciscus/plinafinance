@@ -60,6 +60,13 @@ export interface CapturarLeadResult {
   leadId: string;
   payloadHash: string;
   txHash: string;
+  /**
+   * A-11: `true` quando o e-mail JÁ tinha uma solicitação (LeadVendedor.email é UNIQUE) e esta chamada a REAPROVEITOU, mesmo
+   * id, sem criar outra. A tela avisa ("você já tem uma solicitação") em vez de parecer que criou uma nova.
+   */
+  reaproveitada: boolean;
+  /** Estado atual do funil da solicitação devolvida (NOVO, OFERTA_ENVIADA, PERDIDO…). */
+  statusAtual: string;
 }
 
 export async function capturarLead(
@@ -86,7 +93,10 @@ export async function capturarLead(
   const onChain = await registerOnChainHash(payload);
 
   // 2. Persiste lead + audit log.
+  const emailNorm = input.email.toLowerCase().trim();
+  let reaproveitada = false;
   const lead = await db.$transaction(async (tx) => {
+    reaproveitada = (await tx.leadVendedor.findUnique({ where: { email: emailNorm }, select: { id: true } })) !== null;
     const created = await tx.leadVendedor.upsert({
       where: { email: input.email.toLowerCase().trim() },
       create: {
@@ -125,6 +135,8 @@ export async function capturarLead(
     leadId: lead.id,
     payloadHash: onChain.payloadHash,
     txHash: onChain.txHash,
+    reaproveitada,
+    statusAtual: lead.status,
   };
 }
 
@@ -189,7 +201,28 @@ export interface GerarOfertaInput {
   caminhoCessao?: CaminhoCessao;
 }
 
-export async function gerarOferta(input: GerarOfertaInput) {
+export interface ComposicaoDaOferta {
+  desagioBase: Prisma.Decimal;
+  taxaAnuenciaBps: number;
+  taxaPrazoBps: number;
+  caminho: CaminhoCessao;
+  desagioTotal: Prisma.Decimal;
+  valorLiquido: Prisma.Decimal;
+}
+
+/**
+ * Composição do deságio e do líquido de uma oferta (PURA, sem banco): base + anuência (só no caminho fallback) + prazo.
+ * Usada por `gerarOferta` e pela prévia do admin (A-08), para a tela mostrar EXATAMENTE o que será gravado.
+ * `prazoRestanteMeses`: 0 = cota quitada (sem componente de prazo, igual a não informar, mas guardado como 0 e não null);
+ * > 0 soma `taxaPrazoBpsFor` (15% a.a. linear). Valida valor, base e teto de 100% como o gerarOferta sempre fez.
+ */
+export function comporDesagioDaOferta(input: {
+  valorCarta: string;
+  administradora: string;
+  desagioAquisicao: string;
+  prazoRestanteMeses?: number;
+  caminhoCessao?: CaminhoCessao;
+}): ComposicaoDaOferta {
   const valor = Number(input.valorCarta);
   const desagio = Number(input.desagioAquisicao);
   if (!isFinite(valor) || valor <= 0) throw new Error('valorCarta inválido');
@@ -216,6 +249,11 @@ export async function gerarOferta(input: GerarOfertaInput) {
   const valorLiquido = new Prisma.Decimal(input.valorCarta)
     .mul(new Prisma.Decimal(1).minus(desagioTotal))
     .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_EVEN);
+  return { desagioBase, taxaAnuenciaBps, taxaPrazoBps, caminho, desagioTotal, valorLiquido };
+}
+
+export async function gerarOferta(input: GerarOfertaInput) {
+  const { desagioBase, taxaAnuenciaBps, taxaPrazoBps, caminho, desagioTotal, valorLiquido } = comporDesagioDaOferta(input);
   const validade = new Date(Date.now() + (input.validadeHoras ?? 48) * 3600 * 1000);
 
   const existingVersions = await db.oferta.count({

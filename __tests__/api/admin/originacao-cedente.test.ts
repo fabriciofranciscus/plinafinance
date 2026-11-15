@@ -3,13 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextResponse } from 'next/server';
 
 const m = vi.hoisted(() => ({
-  cessao: vi.fn(), enviar: vi.fn(), incorporar: vi.fn(), isAdmin: vi.fn(), csrf: vi.fn(), confirmar: vi.fn(), pagar: vi.fn(), reabrir: vi.fn(),
+  cessao: vi.fn(), enviar: vi.fn(), incorporar: vi.fn(), gerar: vi.fn(), isAdmin: vi.fn(), csrf: vi.fn(), confirmar: vi.fn(), pagar: vi.fn(), reabrir: vi.fn(),
 }));
 vi.mock('@/lib/auth/admin', () => ({ isAdminAuthenticated: m.isAdmin }));
 vi.mock('@/lib/auth/admin-csrf', () => ({ requireAdminCsrf: m.csrf }));
 vi.mock('@/lib/services/originacao', async (orig) => ({
   ...(await orig<typeof import('@/lib/services/originacao')>()),
-  gerarOferta: vi.fn(), registrarAnuencia: vi.fn(), registrarLaudoDaCessao: vi.fn(),
+  gerarOferta: m.gerar, registrarAnuencia: vi.fn(), registrarLaudoDaCessao: vi.fn(),
   incorporarCotaDoFunil: m.incorporar, registrarCessao: m.cessao,
 }));
 vi.mock('@/lib/services/cessao-docusign', async (orig) => ({
@@ -28,6 +28,7 @@ vi.mock('@/lib/services/pagamento-cedente', async (orig) => ({
 }));
 
 import { POST } from '@/app/api/admin/originacao/route';
+import { DocusignError } from '@/lib/integrations/docusign';
 import { EnvioDocusignLaudoAusenteError, EnvioDocusignNomeAusenteError } from '@/lib/services/cessao-docusign';
 import { IncorporacaoFunilBloqueadaError } from '@/lib/services/originacao';
 import { PagamentoCedenteError } from '@/lib/services/pagamento-cedente';
@@ -46,6 +47,7 @@ beforeEach(() => {
   m.cessao.mockReset().mockResolvedValue({ status: 'PENDENTE' });
   m.enviar.mockReset().mockResolvedValue({ status: 'ENVIADA_DOCUSIGN', envelopeId: 'env_1' });
   m.incorporar.mockReset().mockResolvedValue({ cotaId: 'cota_1' });
+  m.gerar.mockReset().mockResolvedValue({ id: 'of_1' });
   m.isAdmin.mockReset().mockResolvedValue(true);
   m.csrf.mockReset().mockReturnValue(null);
   m.confirmar.mockReset().mockResolvedValue({ situacao: 'TITULAR_UNICO', pagamentoAutomatico: true });
@@ -218,5 +220,81 @@ describe('incorporar-cota — provas do funil (IncorporacaoFunilBloqueadaError �
     const r = await POST(req({ action: 'incorporar-cota', cessaoId: 'ces_1' }));
     expect(r.status).toBe(409);
     expect(await r.json()).toEqual({ error: erro.message, code });
+  });
+});
+
+const OFERTA = { action: 'gerar-oferta', leadVendedorId: 'lead_1', tipoBem: 'VEICULO', valorCarta: '40000', administradora: 'Embracon Consórcios', desagioAquisicao: '0.22' };
+
+describe('gerar-oferta: prazo 0 = cota quitada (A-01)', () => {
+  it.each([0, 1, 12, 600])('prazoRestanteMeses=%s é aceito e passado ao serviço', async (prazo) => {
+    const r = await POST(req({ ...OFERTA, prazoRestanteMeses: prazo }));
+    expect(r.status).toBe(200);
+    expect(m.gerar.mock.calls[0][0].prazoRestanteMeses).toBe(prazo);
+  });
+  it.each([-1, 601, 1.5, '12', null])('prazoRestanteMeses=%j → 400 sem gerar', async (prazo) => {
+    expect((await POST(req({ ...OFERTA, prazoRestanteMeses: prazo }))).status).toBe(400);
+    expect(m.gerar).not.toHaveBeenCalled();
+  });
+  it('sem prazo continua valendo (opcional)', async () => {
+    expect((await POST(req(OFERTA))).status).toBe(200);
+    expect(m.gerar.mock.calls[0][0].prazoRestanteMeses).toBeUndefined();
+  });
+});
+
+describe('previa-oferta: o deságio final ANTES de gerar (A-08)', () => {
+  const PREVIA = { action: 'previa-oferta', valorCarta: '100000', administradora: 'Embracon Consórcios', desagioAquisicao: '0.18' };
+
+  it('devolve a composição exata (base + anuência + prazo), sem gerar nada nem tocar o banco', async () => {
+    const r = await POST(req({ ...PREVIA, prazoRestanteMeses: 12 }));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ desagioBase: '0.1800', taxaAnuenciaBps: 150, taxaPrazoBps: 1500, desagioTotal: '0.3450', valorLiquido: '65500.00' });
+    expect(m.gerar).not.toHaveBeenCalled();
+  });
+  it('prazo 0 e prazo em branco dão o mesmo resultado (sem componente de prazo)', async () => {
+    const a = await (await POST(req({ ...PREVIA, prazoRestanteMeses: 0 }))).json();
+    const b = await (await POST(req(PREVIA))).json();
+    expect(a).toEqual(b);
+    expect(a.taxaPrazoBps).toBe(0);
+  });
+  it('a prévia bate com o que o gerar-oferta gravaria (mesma função)', async () => {
+    const previa = await (await POST(req({ ...PREVIA, prazoRestanteMeses: 6 }))).json();
+    expect(previa.desagioTotal).toBe('0.2700'); // 0,18 + 0,015 + 0,075
+  });
+  it.each([{ leadVendedorId: 'x' }, { tipoBem: 'VEICULO' }, { operador: 'x' }, { valorCarta: '-1' }])('corpo estrito %o → 400', async (extra) => {
+    expect((await POST(req({ ...PREVIA, ...extra }))).status).toBe(400);
+  });
+  it('deságio fora da faixa (total > 100%) → erro do serviço, sem gravar; sem sessão → 401', async () => {
+    const r = await POST(req({ ...PREVIA, desagioAquisicao: '0.95', prazoRestanteMeses: 12 }));
+    expect(r.status).toBe(500);
+    m.isAdmin.mockResolvedValue(false);
+    expect((await POST(req(PREVIA))).status).toBe(401);
+  });
+});
+
+describe('enviar-cessao com o DocuSign fora do ar ou sem configuração (A-02)', () => {
+  const enviar = { action: 'enviar-cessao', cessaoId: 'ces_1' };
+  it.each([
+    ['CONFIG_INVALIDA', 503, 'DOCUSIGN_NAO_CONFIGURADO'],
+    ['CHAVE_PRIVADA_INVALIDA', 503, 'DOCUSIGN_NAO_CONFIGURADO'],
+    ['CONSENTIMENTO_NECESSARIO', 503, 'DOCUSIGN_CONSENTIMENTO_NECESSARIO'],
+    ['AUTENTICACAO_FALHOU', 503, 'DOCUSIGN_AUTENTICACAO_FALHOU'],
+    ['INDISPONIVEL', 503, 'DOCUSIGN_INDISPONIVEL'],
+  ] as const)('%s → %s %s (nunca 500)', async (codigo, status, code) => {
+    m.enviar.mockRejectedValue(new DocusignError(codigo, 'DocuSign: variáveis de ambiente ausentes: DOCUSIGN_INTEGRATION_KEY, DOCUSIGN_PRIVATE_KEY.'));
+    const r = await POST(req(enviar));
+    expect(r.status).toBe(status);
+    const corpo = await r.json();
+    expect(corpo.code).toBe(code);
+    // mensagem fixa: sem nome de variável, chave nem a causa original (o campo `code` é o único com prefixo DOCUSIGN_)
+    expect(corpo.error).not.toMatch(/DOCUSIGN_|PRIVATE_KEY|INTEGRATION_KEY|variáveis de ambiente/);
+    expect(Object.keys(corpo).sort()).toEqual(['code', 'error']);
+  });
+  it('a mensagem da config ausente diz "DocuSign não configurado"', async () => {
+    m.enviar.mockRejectedValue(new DocusignError('CONFIG_INVALIDA', 'x'));
+    expect((await (await POST(req(enviar))).json()).error).toMatch(/DocuSign não configurado/);
+  });
+  it('outros erros do DocuSign (RESULTADO_INCERTO, REQUISICAO_REJEITADA) seguem como antes (500 com a mensagem)', async () => {
+    m.enviar.mockRejectedValue(new DocusignError('RESULTADO_INCERTO', 'resultado incerto'));
+    expect((await POST(req(enviar))).status).toBe(500);
   });
 });

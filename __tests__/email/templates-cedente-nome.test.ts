@@ -1,4 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+const rede = vi.hoisted(() => ({ atual: 'TESTNET' }));
+vi.mock('@/lib/stellar/config', async (orig) => {
+  const mod = { ...(await orig<typeof import('@/lib/stellar/config')>()) } as Record<string, unknown>;
+  Object.defineProperty(mod, 'STELLAR_NETWORK', { get: () => rede.atual, enumerable: true });
+  return mod;
+});
 import { renderCedenteEmail } from '@/lib/email/templates-cedente';
 
 describe('e-mails do cedente: o e-mail nunca é o nome (pós-cota 15/11)', () => {
@@ -24,5 +31,24 @@ describe('e-mails do cedente: o e-mail nunca é o nome (pós-cota 15/11)', () =>
     expect(com.text).toMatch(new RegExp(`Prova on-chain: https?://\\S*${hash}`));
     expect(com.html).toContain(hash);
     expect(renderCedenteEmail('concluido', { leadId: 'l1', nome: 'Ana' }).text).not.toContain('Prova on-chain');
+  });
+});
+
+describe('rodapé com aviso de fase de testes (A-06)', () => {
+  const kinds = ['oferta', 'cessao', 'pix', 'concluido'] as const;
+
+  it.each(kinds)('%s: fora da mainnet o texto e o html levam o aviso de demonstração', (kind) => {
+    rede.atual = 'TESTNET';
+    const r = renderCedenteEmail(kind, { leadId: 'l1', nome: 'Ana' });
+    expect(r.text).toContain('Mensagem de demonstração (projeto em fase de testes, rede de testes): sem efeito jurídico nem financeiro.');
+    expect(r.html).toContain('projeto em fase de testes');
+    expect(r.text.trim().endsWith('sem efeito jurídico nem financeiro.')).toBe(true);
+  });
+
+  it.each(kinds)('%s: na mainnet NÃO leva o aviso', (kind) => {
+    rede.atual = 'PUBLIC';
+    const r = renderCedenteEmail(kind, { leadId: 'l1', nome: 'Ana' });
+    expect(`${r.text}${r.html}`).not.toMatch(/fase de testes|demonstração/);
+    rede.atual = 'TESTNET';
   });
 });
