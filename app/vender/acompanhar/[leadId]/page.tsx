@@ -11,6 +11,7 @@
  */
 
 import { db } from '@/lib/db';
+import { nomeDoCedente } from '@/lib/vender/nome';
 import { txExplorerUrl } from '@/lib/stellar/config';
 import {
   contextoDoStatus,
@@ -82,7 +83,8 @@ export default async function AcompanharPage({ params }: PageProps) {
 
   const data: AcompanharData = {
     leadId: lead.id,
-    cedenteNome: lead.nome,
+    // Nunca o e-mail nem o marcador 'Nome não informado' na tela (pós-cota 15/11; Consuelo): sem nome de verdade a view mostra '—'.
+    cedenteNome: nomeDoCedente(lead.nome),
     status: lead.status,
     etapaAtual: etapaDoStatus(lead.status),
     contextoDescricao: contextoDoStatus(lead.status).descricao,

@@ -10,6 +10,7 @@
 import { NextResponse } from 'next/server';
 import { requirePessoa } from '@/lib/wallet/pessoa-auth';
 import { AuthError } from '@/lib/wallet/auth-guard';
+import { nomeDoCedente } from '@/lib/vender/nome';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,9 @@ export async function GET(req: Request) {
     return NextResponse.json({
       authenticated: true,
       pessoaId: user.pessoaId,
-      nome: user.nome,
+      // Pessoa.nome nasce com o e-mail quando o onboarding não traz nome: a tela recebe null (e não o e-mail) nesse caso, para
+      // não pré-preencher o KYC nem exibir o e-mail como nome (pós-cota 15/11).
+      nome: nomeDoCedente(user.nome),
       email: user.email,
       kycAprovado: user.kycAprovado,
       kycStatus: user.kycStatus,

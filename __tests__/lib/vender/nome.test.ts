@@ -18,3 +18,19 @@ describe('nomeDoCedente: o e-mail nunca é nome (pós-cota 15/11)', () => {
     expect(nomeDoCedente(NOME_NAO_INFORMADO)).toBeNull();
   });
 });
+
+describe('páginas que mostram o nome ao cedente passam pelo helper (deriva)', () => {
+  const { readFileSync } = require('node:fs') as typeof import('node:fs');
+  const { join } = require('node:path') as typeof import('node:path');
+  const ler = (f: string) => readFileSync(join(process.cwd(), f), 'utf8');
+
+  it('acompanhar/[leadId]/page.tsx: cedenteNome = nomeDoCedente(lead.nome), nunca lead.nome cru', () => {
+    const src = ler('app/vender/acompanhar/[leadId]/page.tsx');
+    expect(src).toMatch(/cedenteNome: nomeDoCedente\(lead\.nome\)/);
+    expect(src).not.toMatch(/cedenteNome: lead\.nome/);
+  });
+
+  it('api/conta/me devolve nomeDoCedente(user.nome)', () => {
+    expect(ler('app/api/conta/me/route.ts')).toMatch(/nome: nomeDoCedente\(user\.nome\)/);
+  });
+});
