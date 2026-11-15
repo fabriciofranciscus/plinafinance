@@ -37,12 +37,25 @@ export function ClaimingScreen({
           ? 'TESOURO na sua trustline — prossiga'
           : 'Assine pra resgatar o TESOURO emitido'}
       </h1>
-      <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
-        A Etherfuse emitiu TESOURO num <Term>ClaimableBalance</Term> Stellar
-        (PLINA-MOD-007). Pra ele entrar na sua wallet, você assina uma única
-        transação. Esta transação abre a trustline do TESOURO, se ela ainda
-        não existir, e recebe o TESOURO. A reserva de 0,5 XLM fica bloqueada
-        na sua carteira. Sem isso, o swap atômico falha por saldo zero.
+      {/* Instrução de antes da assinatura: some quando o resgate já foi feito. */}
+      {!claimed && (
+        <p
+          data-testid="claim-instrucao"
+          className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose"
+        >
+          A Etherfuse emitiu TESOURO num <Term>ClaimableBalance</Term> Stellar
+          (PLINA-MOD-007). Pra ele entrar na sua wallet, você assina uma única
+          transação. Esta transação abre a trustline do TESOURO, se ela ainda
+          não existir, e recebe o TESOURO. Sem isso, o swap atômico falha por
+          saldo zero.
+        </p>
+      )}
+      {/* Aviso persistente (texto validado pela Norma): vale antes e depois do resgate. */}
+      <p
+        data-testid="aviso-reserva"
+        className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose"
+      >
+        A reserva de 0,5 XLM fica bloqueada na sua carteira.
       </p>
 
       <div className="mt-10 border-y border-light-hairline">
