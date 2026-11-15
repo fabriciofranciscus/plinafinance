@@ -775,7 +775,7 @@ function NovaOfertaForm({
         e.preventDefault();
         onSubmit('gerar-oferta', { leadVendedorId: leadId, ...lerCampos(e.currentTarget), validadeHoras: 48 });
       }}
-      className="bg-document-grey/40 p-3 border border-light-hairline grid grid-cols-2 md:grid-cols-6 gap-2 items-end"
+      className="bg-document-grey/40 p-3 border border-light-hairline grid grid-cols-2 gap-2 items-end"
     >
       <Field label="Tipo">
         <select name="tipoBem" defaultValue="IMOVEL" required className={inputCls}>
@@ -827,7 +827,7 @@ function NovaOfertaForm({
           className={inputCls + ' font-mono'}
         />
       </Field>
-      <div className="col-span-full md:col-span-1 flex flex-col gap-2">
+      <div className="col-span-full grid grid-cols-2 gap-2">
         <button
           type="button"
           onClick={() => void calcularPrevia()}
