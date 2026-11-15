@@ -45,3 +45,10 @@ export const STATUS_ABERTOS: readonly StatusSolicitacao[] = [
   'CESSAO_ASSINADA',
   'PIX_EXECUTADO',
 ];
+
+export const ROTULO_TIPO_BEM: Record<string, string> = {
+  IMOVEL: 'Imóvel',
+  VEICULO: 'Veículo',
+  EQUIPAMENTO: 'Equipamento',
+  SERVICO: 'Serviço',
+};

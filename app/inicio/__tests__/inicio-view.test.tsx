@@ -19,6 +19,7 @@ describe('/inicio (spec de UX §2)', () => {
     expect(html).toContain('https://stellar.expert/explorer/testnet/tx/e000');
     expect(html).toContain('Em andamento');
     expect(html).toContain('Etapa 4 de 6 · Proposta');
+    expect(html).toContain('Imóvel · carta');
     expect(html).toContain('Aguardando sua resposta');
     expect(html).toContain('Entrada no pool');
     expect(html).toContain('Ver posição completa');

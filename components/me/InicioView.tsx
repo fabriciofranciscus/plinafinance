@@ -5,7 +5,7 @@
 
 import Link from 'next/link';
 import { proximaAcao, linhaAndamento, idCurtoSolicitacao } from '@/lib/me/proxima-acao';
-import { STATUS_ABERTOS } from '@/lib/me/vocabulario';
+import { ROTULO_TIPO_BEM, STATUS_ABERTOS } from '@/lib/me/vocabulario';
 import { explorerTx, fmtBrl, fmtBrlInteiro, fmtDataHora, fmtNavToken, fmtTokens, nomeExibivel } from '@/lib/me/formato';
 import type { OperacaoPendente, ResumoDaConta } from '@/lib/me/tipos';
 
@@ -211,7 +211,7 @@ function AndamentoBloco({ resumo, abertas }: { resumo: ResumoDaConta; abertas: R
               <p className="font-text text-sm font-semibold mt-1">{l.etapa}</p>
               {s.valorCarta && (
                 <p className="font-mono text-xs text-base/70 mt-1">
-                  {s.tipoBem ? `${s.tipoBem.charAt(0)}${s.tipoBem.slice(1).toLowerCase()} · ` : ''}carta {fmtBrlInteiro(s.valorCarta)}
+                  {s.tipoBem ? `${ROTULO_TIPO_BEM[s.tipoBem] ?? s.tipoBem} · ` : ''}carta {fmtBrlInteiro(s.valorCarta)}
                 </p>
               )}
               <p className="font-text text-sm text-base/80 mt-1">{l.quemAge}</p>

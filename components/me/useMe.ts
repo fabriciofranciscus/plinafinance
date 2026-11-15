@@ -15,7 +15,9 @@ export type EstadoMe<T> = { tipo: 'carregando' } | { tipo: 'erro' } | { tipo: 'o
 export function useMe<T>(caminho: string, opcoes: { exemplo?: T | null } = {}): { estado: EstadoMe<T>; recarregar: () => void } {
   const { ready, authenticated, getAccessToken } = useAppPrivy();
   const exemplo = opcoes.exemplo ?? null;
-  const [estado, setEstado] = useState<EstadoMe<T>>(exemplo ? { tipo: 'ok', dados: exemplo } : { tipo: 'carregando' });
+  const [estadoReal, setEstado] = useState<EstadoMe<T>>({ tipo: 'carregando' });
+  // Com `exemplo` o estado é derivado do parâmetro (não guardado): a URL pode chegar depois da 1ª renderização.
+  const estado: EstadoMe<T> = exemplo ? { tipo: 'ok', dados: exemplo } : estadoReal;
 
   const carregar = useCallback(async () => {
     if (exemplo) return;
