@@ -17,6 +17,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import StepperVender from '@/components/vender/StepperVender';
 import { ETAPAS_VENDER } from '@/lib/vender/etapas';
+import { useAppPrivy } from '@/lib/hooks/privy';
+import { withTimeout } from '@/lib/http/client';
 
 interface TxLink {
   hashShort: string;
@@ -71,6 +73,7 @@ export default function AcompanharView({ data }: { data: AcompanharData }) {
   const [view, setView] = useState(inicial);
   const [aceitando, setAceitando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const { getAccessToken } = useAppPrivy();
 
   const ehAtual = view === data.etapaAtual;
   // DS5: entre o aceite e a assinatura a etapa 4 mostra o estado real, em vez
@@ -85,11 +88,25 @@ export default function AcompanharView({ data }: { data: AcompanharData }) {
     setAceitando(true);
     setErro(null);
     try {
-      const res = await fetch('/api/vender/aceitar-oferta', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ofertaId: data.ofertaId }),
-      });
+      // A rota é withPessoaAuth: sem o token do Privy responde 401 "token Privy ausente".
+      // getAccessToken() pode nunca resolver (mesma classe de bug do /vender): timeout de 8 s.
+      const token = await withTimeout(
+        getAccessToken(),
+        8000,
+        'Sessão demorou pra responder. Tente novamente.',
+      );
+      const res = await withTimeout(
+        fetch('/api/vender/aceitar-oferta', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ ofertaId: data.ofertaId }),
+        }),
+        10000,
+        'A requisição demorou demais. Tente novamente.',
+      );
       if (!res.ok) throw new Error((await res.json()).error ?? 'erro');
       router.refresh();
     } catch (err) {
