@@ -99,7 +99,7 @@ export default async function AdminPage() {
                 // etapas do pipeline: laudo = COTA_VALIDADA; anuência = ANUENCIA_REGISTRADA (o último vence)
                 eventos: {
                   where: { acao: { in: ['COTA_VALIDADA', 'ANUENCIA_REGISTRADA'] } },
-                  select: { acao: true, payloadHash: true, payloadJson: true },
+                  select: { acao: true, payloadHash: true, payloadJson: true, criadoEm: true },
                   orderBy: { criadoEm: 'desc' },
                 },
               },
@@ -151,12 +151,12 @@ export default async function AdminPage() {
 
   const sections = [
     { id: 'overview', label: 'Overview' },
-    { id: 'vendedores', label: `Vendedores (${leadsVendedor.length})` },
+    { id: 'vendedores', label: `Solicitações (${leadsVendedor.length})` },
     { id: 'compradores', label: `Compradores (${leadsComprador.length})` },
-    { id: 'incorporar', label: 'Incorporar' },
     { id: 'cotas', label: `Cotas (${cotas.length})` },
     { id: 'investidores', label: `Investidores (${investidores.length})` },
     { id: 'audit', label: 'Audit log' },
+    { id: 'incorporar', label: 'Avulsas' },
   ];
 
   return (
@@ -241,7 +241,7 @@ export default async function AdminPage() {
 
       <section id="vendedores" className="mb-16 scroll-mt-32">
         <h2 className="font-title text-2xl font-semibold mb-2 tracking-tight">
-          Funil vendedor ({leadsVendedor.length})
+          Solicitações de venda ({leadsVendedor.length})
         </h2>
         <p className="font-text text-sm text-base/70 mb-6 max-w-2xl">
           Leads capturados via <code className="font-mono text-xs">/vender</code>.
@@ -266,6 +266,7 @@ export default async function AdminPage() {
               administradora: o.administradora,
               status: o.status,
               validade: o.validade,
+              criadaEm: o.criadaEm,
               cessao: o.cessao
                 ? {
                     id: o.cessao.id,
@@ -279,6 +280,14 @@ export default async function AdminPage() {
                         }
                       : null,
                     cota: o.cessao.cota ? { id: o.cessao.cota.id } : null,
+                    // datas reais das etapas (nunca inventadas; null quando o servidor não as tem)
+                    criadaEm: o.cessao.criadaEm,
+                    envioEm: o.cessao.docusignEnvioIniciadoEm,
+                    assinadaEm: o.cessao.assinadaEm,
+                    laudoEm: o.cessao.eventos.find((e) => e.acao === 'COTA_VALIDADA')?.criadoEm ?? null,
+                    anuenciaEm: o.cessao.eventos.find((e) => e.acao === 'ANUENCIA_REGISTRADA')?.criadoEm ?? null,
+                    pagamentoEm: o.cessao.pagamento?.atualizadoEm ?? null,
+                    cotaEm: o.cessao.cota?.criadaEm ?? null,
                     laudoRegistrado: o.cessao.eventos.some((e) => e.acao === 'COTA_VALIDADA'),
                     laudoHash: o.cessao.eventos.find((e) => e.acao === 'COTA_VALIDADA')?.payloadHash ?? null,
                     anuenciaStatus: anuenciaDe(o.cessao.eventos),
@@ -325,17 +334,6 @@ export default async function AdminPage() {
             })),
           }))}
         />
-      </section>
-
-      <section id="incorporar" className="mb-16 scroll-mt-32">
-        <h2 className="font-title text-2xl font-semibold mb-4 tracking-tight">
-          Incorporar nova cota
-        </h2>
-        <p className="font-text text-sm text-base/70 mb-6 max-w-2xl">
-          Emite PLINA-RF on-chain (issuer → distributor) e persiste a cota no pool.
-          Operação real na testnet — irreversível.
-        </p>
-        <IncorporarCotaForm />
       </section>
 
       <section id="cotas" className="mb-16 scroll-mt-32">
@@ -575,6 +573,20 @@ export default async function AdminPage() {
           </table>
         </div>
       </section>
+
+      <details id="incorporar" className="mt-16 scroll-mt-32 border border-light-hairline p-4">
+        <summary className="min-h-[44px] flex items-center cursor-pointer font-title text-xl font-semibold tracking-tight">
+          Operações avulsas
+        </summary>
+        <p className="font-text text-sm text-base/70 mt-2 mb-6 max-w-2xl">
+          Uso excepcional. O caminho normal é pela solicitação, na seção de vendedores.
+        </p>
+        <h3 className="font-title text-lg font-semibold mb-2 tracking-tight">Incorporar nova cota</h3>
+        <p className="font-text text-sm text-base/70 mb-6 max-w-2xl">
+          Emite PLINA-RF on-chain (issuer → distributor) e persiste a cota no pool. Operação real na testnet — irreversível.
+        </p>
+        <IncorporarCotaForm />
+      </details>
     </div>
   );
 }
