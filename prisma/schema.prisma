@@ -136,6 +136,8 @@ enum AcaoAudit {
   // Funil vendedor (MVP testnet-first)
   CEDENTE_ONBOARDED
   LEAD_VENDEDOR_CAPTURADO
+  // A-11: reenvio do lead com a MESMA versão do consentimento (append-only, sem memo, sem fee, sem PII)
+  LEAD_VENDEDOR_REAPROVEITADO
   OFERTA_GERADA
   OFERTA_ACEITA
   CESSAO_ASSINADA

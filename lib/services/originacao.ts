@@ -28,6 +28,12 @@ import { taxaAnuenciaBpsFor } from '../config/administradoras';
 import { taxaPrazoBpsFor } from '../config/curva-yield';
 import { OriginacaoPrecondicaoError } from './originacao-erros';
 import { notifyCedente } from '../email/notify-cedente';
+import {
+  TEXTO_CONSENTIMENTO_APROVADO,
+  VERSAO_CONSENTIMENTO_LGPD,
+  VERSAO_LEGADO,
+  pseudonimoDoTitular,
+} from '../vender/consentimento';
 import { buildComprovantePdf } from '../comprovante/pdf';
 import { uploadComprovante } from '../comprovante/store';
 
@@ -80,11 +86,72 @@ export async function capturarLead(
     throw new Error('Nome e email obrigatórios.');
   }
 
-  // 1. Prova on-chain do consentimento (audit primeiro, DB depois).
+  const emailNorm = input.email.toLowerCase().trim();
+  const origem = input.origem ?? 'organico';
+  const pseudonimo = pseudonimoDoTitular(emailNorm);
+  // Mainnet: fail-closed. Sem texto de consentimento aprovado ou sem o segredo do pseudônimo não se coleta (o e-mail em claro
+  // não pode ir ao payload ancorado).
+  if (STELLAR_NETWORK === 'PUBLIC' && (!TEXTO_CONSENTIMENTO_APROVADO || !pseudonimo)) {
+    throw new Error('Consentimento indisponível: texto não aprovado ou segredo do pseudônimo não configurado.');
+  }
+
+  const existente = await db.leadVendedor.findUnique({
+    where: { email: emailNorm },
+    select: { id: true, nome: true, telefone: true },
+  });
+
+  // A-11 (Atlas 15/11; Consuelo): a prova on-chain do consentimento é ancorada SÓ na 1ª captura do lead ou quando a VERSÃO do
+  // texto (hash) ou a ORIGEM muda — aí é um consentimento novo. Reenvio igual: evento LEAD_VENDEDOR_REAPROVEITADO (append-only,
+  // sem memo, sem fee, sem PII) e devolve a âncora que já existe. Evento sem versão (lead antigo) = 'legado' ≠ versão atual →
+  // reancora uma vez, com o texto de hoje; o texto antigo não é reconstruído.
+  if (existente) {
+    const ultima = await db.eventoAudit.findFirst({
+      where: { acao: 'LEAD_VENDEDOR_CAPTURADO', leadVendedorId: existente.id },
+      orderBy: { criadoEm: 'desc' },
+      select: { payloadJson: true, payloadHash: true, stellarTxHash: true },
+    });
+    const anterior = (ultima?.payloadJson ?? {}) as { versaoConsentimento?: unknown; origem?: unknown };
+    const versaoAnterior = typeof anterior.versaoConsentimento === 'string' ? anterior.versaoConsentimento : VERSAO_LEGADO;
+    if (ultima?.payloadHash && ultima.stellarTxHash && versaoAnterior === VERSAO_CONSENTIMENTO_LGPD && anterior.origem === origem) {
+      const telefoneNovo = input.telefone?.trim() || undefined;
+      // Nome e telefone não fazem parte do consentimento: mudam sem nova âncora, mas o evento diz QUAIS campos (só os nomes).
+      const camposAtualizados = [
+        ...(input.nome.trim() !== existente.nome ? ['nome'] : []),
+        ...(telefoneNovo !== undefined && telefoneNovo !== existente.telefone ? ['telefone'] : []),
+      ];
+      const lead = await db.$transaction(async (tx) => {
+        const atual = await tx.leadVendedor.update({
+          where: { id: existente.id },
+          data: { nome: input.nome.trim(), telefone: telefoneNovo, pessoaId: input.pessoaId ?? undefined },
+        });
+        await tx.eventoAudit.create({
+          data: {
+            acao: 'LEAD_VENDEDOR_REAPROVEITADO',
+            operador: 'self-service',
+            leadVendedorId: atual.id,
+            privyId: input.privyId ?? null,
+            payloadJson: { versaoConsentimento: VERSAO_CONSENTIMENTO_LGPD, statusAtual: atual.status, camposAtualizados } as Prisma.InputJsonValue,
+          },
+        });
+        return atual;
+      });
+      return {
+        leadId: lead.id,
+        payloadHash: ultima.payloadHash,
+        txHash: ultima.stellarTxHash,
+        reaproveitada: true,
+        statusAtual: lead.status,
+      };
+    }
+  }
+
+  // 1. Prova on-chain do consentimento (audit primeiro, DB depois): 1ª captura, versão ou origem novas. O titular vai como
+  // pseudônimo (HMAC do e-mail) quando há segredo; o e-mail em claro só no fallback de testnet sem segredo (nunca na mainnet).
   const payload = buildAuditPayload('lead_vendedor', undefined, {
-    email: input.email.toLowerCase().trim(),
+    ...(pseudonimo ? { titular: pseudonimo } : { email: emailNorm }),
     consentimentoLgpd: true,
-    origem: input.origem ?? 'organico',
+    versaoConsentimento: VERSAO_CONSENTIMENTO_LGPD,
+    origem,
     utm: {
       source: input.utmSource ?? null,
       medium: input.utmMedium ?? null,
@@ -94,18 +161,15 @@ export async function capturarLead(
   const onChain = await registerOnChainHash(payload);
 
   // 2. Persiste lead + audit log.
-  const emailNorm = input.email.toLowerCase().trim();
-  let reaproveitada = false;
   const lead = await db.$transaction(async (tx) => {
-    reaproveitada = (await tx.leadVendedor.findUnique({ where: { email: emailNorm }, select: { id: true } })) !== null;
     const created = await tx.leadVendedor.upsert({
-      where: { email: input.email.toLowerCase().trim() },
+      where: { email: emailNorm },
       create: {
         nome: input.nome.trim(),
-        email: input.email.toLowerCase().trim(),
+        email: emailNorm,
         telefone: input.telefone?.trim() || null,
         cpf: input.cpf?.replace(/\D/g, '') || null,
-        origem: input.origem ?? 'organico',
+        origem,
         utmSource: input.utmSource ?? null,
         utmMedium: input.utmMedium ?? null,
         utmCampaign: input.utmCampaign ?? null,
@@ -136,7 +200,7 @@ export async function capturarLead(
     leadId: lead.id,
     payloadHash: onChain.payloadHash,
     txHash: onChain.txHash,
-    reaproveitada,
+    reaproveitada: existente !== null,
     statusAtual: lead.status,
   };
 }
