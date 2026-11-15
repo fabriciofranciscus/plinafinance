@@ -310,6 +310,46 @@ describe('detalhe: só a etapa "Agora" tem controles', () => {
   });
 });
 
+describe('razão visível quando o botão está desabilitado e largura total (revisão da Íris)', () => {
+  it('titular: "Marque o atesto para confirmar o titular." some ao marcar; botão ligado à razão por aria-describedby', () => {
+    montar([lead({ cessao: cessao({ status: 'ASSINADA', laudoRegistrado: true }) })]);
+    abrir();
+    const botao = agora().getByRole('button', { name: 'Confirmar titular do laudo' });
+    expect(agora().getByText('Marque o atesto para confirmar o titular.').id).toBe(botao.getAttribute('aria-describedby'));
+    fireEvent.click(agora().getByRole('checkbox'));
+    expect(agora().queryByText('Marque o atesto para confirmar o titular.')).toBeNull();
+  });
+  it('laudo: pede a URL; anuência Confirmada: pede a referência', () => {
+    montar([lead({ cessao: cessao({ laudoRegistrado: false }) })]);
+    abrir();
+    expect(agora().getByText('Informe a URL do laudo (começando com http ou https).')).toBeTruthy();
+    fireEvent.change(agora().getByPlaceholderText(/laudo\.pdf#sha256/), { target: { value: 'https://exemplo.test/l.pdf#sha256=a' } });
+    expect(agora().queryByText(/Informe a URL do laudo/)).toBeNull();
+    cleanup();
+    montar([lead({ cessao: assinada() })]);
+    abrir();
+    fireEvent.change(agora().getByRole('combobox', { name: /Anuência da administradora/ }), { target: { value: 'CONFIRMADA' } });
+    expect(agora().getByText('Informe a referência do documento da administradora.')).toBeTruthy();
+  });
+  it('botões de ação ocupam a largura total abaixo de lg (classe responsiva)', () => {
+    montar([lead()]);
+    abrir();
+    expect(agora().getByRole('button', { name: 'Registrar cessão' }).className).toContain('w-full lg:w-auto');
+  });
+  it('etapa 2 concluída sem data: diz "data do aceite não disponível" (não inventa data)', () => {
+    montar([lead({ cessao: cessao({ laudoRegistrado: false }) })]);
+    abrir();
+    fireEvent.click(screen.getByText(/Etapas concluídas/));
+    expect(screen.getByText(/data do aceite não disponível/)).toBeTruthy();
+  });
+  it('tabela com colunas de largura fixa: nada vaza por baixo do painel (F-UX-1)', () => {
+    montar([lead()]);
+    const t = screen.getByTestId('lista-tabela');
+    expect(t.className).toContain('table-fixed');
+    expect(t.querySelectorAll('col')).toHaveLength(5);
+  });
+});
+
 describe('estados fora da linha reta', () => {
   it('titular diferente de titular único: para com a razão, sem botão que avance', () => {
     montar([lead({ cessao: assinada({ titularSituacao: 'ESPOLIO' }) })]);
@@ -361,6 +401,16 @@ describe('erros e resultado incerto (checklist do item 14)', () => {
     expect(alerta.textContent).not.toMatch(/não enviada|não foi enviada/i);
   });
 
+  it('o erro leva rótulo em texto (não só cor): "Não concluído" para recusa conhecida e "Sem confirmação" para resultado incerto', async () => {
+    fetchMock.mockResolvedValueOnce(resposta({ error: 'Envio recusado: falta o laudo.', code: 'LAUDO_AUSENTE' }, 409));
+    abrirEnvio();
+    expect((await agora().findByRole('alert')).textContent).toContain('Não concluído');
+    cleanup();
+    fetchMock.mockResolvedValueOnce(resposta({ error: 'erro interno' }, 500));
+    abrirEnvio();
+    expect((await agora().findByRole('alert')).textContent).toContain('Sem confirmação');
+  });
+
   it('429 respeita Retry-After; 500 e falha de rede: resultado incerto, conferir antes de repetir', async () => {
     fetchMock.mockResolvedValueOnce(resposta({ error: 'too many requests' }, 429, { 'retry-after': '30' }));
     abrirEnvio();
@@ -383,6 +433,8 @@ describe('erros e resultado incerto (checklist do item 14)', () => {
     const set = (n: string, v: string) => fireEvent.change(f.querySelector(`[name="${n}"]`)!, { target: { value: v } });
     set('valorCarta', '150000'); set('administradora', 'Caixa'); set('desagioAquisicao', '0.99');
     fireEvent.submit(f);
-    expect((await agora().findByRole('alert')).textContent).toBe('Deságio total acima de 100%.');
+    const alerta = await agora().findByRole('alert');
+    expect(alerta.textContent).toContain('Deságio total acima de 100%.');
+    expect(alerta.textContent).toContain('Não concluído');
   });
 });

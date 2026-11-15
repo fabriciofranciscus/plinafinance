@@ -9,7 +9,7 @@ import type { StatusSolicitacao, TipoEvento } from './tipos';
 /** Nome da etapa do cedente, por índice 0-based (lib/vender/etapas: NOVO = 2). */
 export const NOME_ETAPA: Record<number, string> = {
   2: 'Análise da cota',
-  3: 'Proposta',
+  3: 'Proposta de preço',
   4: 'Cessão digital',
   5: 'Pagamento',
 };

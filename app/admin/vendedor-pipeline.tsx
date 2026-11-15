@@ -34,9 +34,9 @@ const ROTULO_TITULAR: Record<string, string> = {
 const ROTULO_TIPO_BEM: Record<string, string> = { IMOVEL: 'Imóvel', VEICULO: 'Veículo', EQUIPAMENTO: 'Equipamento', SERVICO: 'Serviço' };
 
 const BTN =
-  'min-h-[44px] bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-primary-deep transition-colors disabled:opacity-50';
+  'w-full lg:w-auto min-h-[44px] bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-primary-deep transition-colors disabled:opacity-50';
 const BTN_SECUNDARIO =
-  'min-h-[44px] border border-base text-base font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-document-grey/60 transition-colors disabled:opacity-50';
+  'w-full lg:w-auto min-h-[44px] border border-base text-base font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-document-grey/60 transition-colors disabled:opacity-50';
 const ROTULO = 'font-details text-[10px] tracking-[0.2em] uppercase text-base/70';
 
 /** Verbo no gerúndio enquanto a ação roda (checklist do item 14). */
@@ -123,7 +123,7 @@ export function VendedorPipeline({ leads, redePublica = false }: { leads: Pipeli
 
   return (
     <div className="grid gap-8 lg:grid-cols-12">
-      <div className={`${atual ? 'hidden lg:block' : ''} lg:col-span-7`}>
+      <div className={`${atual ? 'hidden lg:block' : ''} min-w-0 lg:col-span-7`}>
         <div role="group" aria-label="Filtrar solicitações" className="flex flex-wrap gap-2 mb-4">
           {(['abertas', 'concluidas', 'encerradas'] as const).map((f) => (
             <button
@@ -145,8 +145,15 @@ export function VendedorPipeline({ leads, redePublica = false }: { leads: Pipeli
         ) : (
           <>
             {/* Desktop: tabela semântica */}
-            <table data-testid="lista-tabela" className="hidden lg:table w-full font-text text-sm">
+            <table data-testid="lista-tabela" className="hidden lg:table w-full table-fixed font-text text-sm">
               <caption className="sr-only">Solicitações de venda</caption>
+              <colgroup>
+                <col className="w-[14%]" />
+                <col className="w-[27%]" />
+                <col className="w-[17%]" />
+                <col className="w-[22%]" />
+                <col className="w-[20%]" />
+              </colgroup>
               <thead>
                 <tr className="text-left">
                   <th scope="col" className={`${ROTULO} py-2 pr-3 font-normal`}>ID</th>
@@ -175,7 +182,7 @@ export function VendedorPipeline({ leads, redePublica = false }: { leads: Pipeli
                     </td>
                     <td className="py-3 pr-3">
                       {nomeDoLead(lead)}
-                      <div className="font-mono text-xs text-base/70">{lead.email}</div>
+                      <div className="font-mono text-xs text-base/70 break-all">{lead.email}</div>
                     </td>
                     <td className="py-3 pr-3 font-mono text-xs whitespace-nowrap">{valorDoLead(lead)}</td>
                     <td className="py-3 pr-3 text-xs">{rotuloEtapa(analise)}</td>
@@ -211,7 +218,7 @@ export function VendedorPipeline({ leads, redePublica = false }: { leads: Pipeli
         )}
       </div>
 
-      <div className={`${atual ? '' : 'hidden lg:block'} lg:col-span-5`}>
+      <div className={`${atual ? '' : 'hidden lg:block'} min-w-0 lg:col-span-5`}>
         {atual ? (
           <DetalheSolicitacao key={atual.lead.id} lead={atual.lead} analise={atual.analise} redePublica={redePublica} onVoltar={() => setSelecionado(null)} />
         ) : (
@@ -326,6 +333,7 @@ function DetalheSolicitacao({
                 <span aria-hidden="true">✓ </span>
                 <span className="font-mono text-xs text-base/70">{e.n}</span> {e.rotulo}
                 {e.data && <span className="font-mono text-xs text-base/70"> · {fmtData(e.data)}</span>}
+                {!e.data && e.id === 'aceite' && <span className="font-text text-xs text-base/70"> · data do aceite não disponível</span>}
               </p>
               <Evidencia etapa={e} copiado={copiado} onCopiar={copiar} comprovanteDe={e.id === 'assinatura' ? cessao?.id : undefined} />
             </li>
@@ -357,7 +365,8 @@ function DetalheSolicitacao({
               )}
               {erro && (
                 <div role="alert" className="mt-3">
-                  <p className="font-text text-sm text-red-700">{erro.texto}</p>
+                  <p className="font-details text-[10px] tracking-[0.2em] uppercase text-red-700">{erro.incerto ? 'Sem confirmação' : 'Não concluído'}</p>
+                  <p className="font-text text-sm text-red-700 mt-1">{erro.texto}</p>
                   {erro.codigo && <p className="font-mono text-[11px] text-base/70 mt-1">{erro.codigo}</p>}
                   {erro.texto.startsWith('Sessão expirada') && (
                     <p className="mt-1">
@@ -524,11 +533,15 @@ function ControlesDaEtapa({
           <button
             type="button"
             disabled={ocupado || !/^https?:\/\//.test(laudoUrl.trim())}
+            aria-describedby="razao-laudo"
             onClick={() => onExecutar('registrar-laudo', { cessaoId: cessao!.id, laudoUrl: laudoUrl.trim() })}
             className={BTN}
           >
             {rotulo('registrar-laudo', 'Registrar laudo')}
           </button>
+          {!/^https?:\/\//.test(laudoUrl.trim()) && (
+            <p id="razao-laudo" className="font-text text-xs text-base/70">Informe a URL do laudo (começando com http ou https).</p>
+          )}
           {processando}
         </div>
       );
@@ -579,11 +592,15 @@ function ControlesDaEtapa({
           <button
             type="button"
             disabled={ocupado || !atestado}
+            aria-describedby="razao-titular"
             onClick={() => onExecutar('confirmar-titular-laudo', { cessaoId: cessao!.id, situacao, atestado })}
             className={BTN}
           >
             {rotulo('confirmar-titular-laudo', 'Confirmar titular do laudo')}
           </button>
+          {!atestado && (
+            <p id="razao-titular" className="font-text text-xs text-base/70">Marque o atesto para confirmar o titular.</p>
+          )}
           {processando}
         </div>
       );
@@ -618,6 +635,7 @@ function ControlesDaEtapa({
           <button
             type="button"
             disabled={ocupado || (anuenciaTipo === 'CONFIRMADA' && !anuenciaRef.trim()) || !cessao?.laudoHash}
+            aria-describedby="razao-anuencia"
             onClick={() =>
               onExecutar('registrar-anuencia', {
                 hashValidacao: cessao!.laudoHash,
@@ -629,6 +647,11 @@ function ControlesDaEtapa({
           >
             {rotulo('registrar-anuencia', 'Registrar anuência')}
           </button>
+          {!cessao?.laudoHash ? (
+            <p id="razao-anuencia" className="font-text text-xs text-base/70">Falta o hash do laudo para registrar a anuência.</p>
+          ) : anuenciaTipo === 'CONFIRMADA' && !anuenciaRef.trim() ? (
+            <p id="razao-anuencia" className="font-text text-xs text-base/70">Informe a referência do documento da administradora.</p>
+          ) : null}
           {processando}
         </div>
       );
@@ -764,7 +787,7 @@ function NovaOfertaForm({
       <button
         type="submit"
         disabled={busy}
-        className="bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-3 py-2 hover:bg-primary-deep transition-colors disabled:opacity-50"
+        className="col-span-full md:col-span-1 w-full min-h-[44px] bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-3 py-2 hover:bg-primary-deep transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-deep"
       >
         Gerar oferta
       </button>
@@ -773,7 +796,7 @@ function NovaOfertaForm({
 }
 
 const inputCls =
-  'w-full bg-white border border-light-hairline px-2 py-1.5 font-text text-xs focus:outline-none focus:ring-2 focus:ring-primary';
+  'w-full bg-white border border-light-hairline min-h-[44px] px-2 py-1.5 font-text text-xs focus:outline-none focus:ring-2 focus:ring-primary-deep';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
