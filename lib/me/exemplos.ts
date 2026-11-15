@@ -23,7 +23,7 @@ export const RESUMO_EXEMPLO: ResumoDaConta = {
       valorCarta: '150000.00', valorLiquido: '120000.00', ofertaValidade: '2026-11-17T21:00:00Z', cessaoStatus: null,
     },
   ],
-  operacoesPendentes: [{ tipo: 'entrada', valor: 'R$ 500,00', situacao: 'aguardando o Pix', continuarEm: '/investir' }],
+  operacoesPendentes: [{ tipo: 'entrada', valor: 'R$ 500,00', situacao: 'em_conferencia', continuarEm: '/investir' }],
 };
 
 export const RESUMO_CONTA_NOVA_EXEMPLO: ResumoDaConta = {

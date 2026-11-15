@@ -1,8 +1,8 @@
 /**
- * Contrato PROVISÓRIO de GET /api/me/resumo e GET /api/me/historico (spec de UX
- * da Íris, §7). O Bento ainda não publicou o contrato (item 12): quando sair em
- * contratos/, ajustar só este arquivo. Valores monetários e de tokens chegam
- * como string do servidor; a tela só os formata, nunca calcula.
+ * Contrato de GET /api/me/resumo e GET /api/me/historico (item 12, Bento):
+ * contratos/2026-11-15-me-resumo-historico.md. Respostas diretas, sem envelope.
+ * Valores monetários e de tokens chegam como string do servidor; a tela só os
+ * formata, nunca calcula. Campos marcados "reservado" não vêm na v1.
  */
 
 export type StatusSolicitacao =
@@ -33,31 +33,32 @@ export interface SolicitacaoResumo {
 export interface OperacaoPendente {
   tipo: 'entrada' | 'saida';
   valor: string;
-  situacao: string;
-  /** Rota onde a pessoa continua (/investir ou /sacar). */
-  continuarEm: string;
+  situacao: 'em_conferencia' | 'aguardando_assinatura';
+  /** Rota onde a pessoa continua. */
+  continuarEm: '/investir' | '/sacar';
 }
 
 export interface PosicaoResumo {
   tokens: string;
   navPorToken: string | null;
   valorPeloNav: string | null;
-  navFonte: string | null;
+  navFonte: 'ledger' | 'soroban' | null;
   snapshotEm: string | null;
   snapshotTxHash: string | null;
-  /** Ledger falhou: a tela mostra "—", nunca 1 nem 0 no lugar. */
+  /** Ledger falhou ou gate fechado: a tela mostra "—", nunca 1 nem 0 no lugar. */
   navIndisponivel?: boolean;
 }
 
 export interface ResumoDaConta {
   nome: string | null;
   papeis: string[];
-  /** Ausente para quem não é investidor. */
+  /** null = não é investidor. */
   posicao?: PosicaoResumo | null;
+  /** Só as ABERTAS (exceto PERDIDO e COTA_INCORPORADA), até 20. */
   solicitacoes: SolicitacaoResumo[];
   operacoesPendentes: OperacaoPendente[];
-  /** Pendência de verificação de identidade, se o resumo trouxer. */
-  bloqueio?: { motivo: 'kyc_pendente' | 'conta_suspensa'; destino?: string } | null;
+  /** A rota de destino da verificação é decisão da tela (proxima-acao.ts), não do servidor. */
+  bloqueio?: { motivo: 'kyc_pendente' | 'conta_suspensa' } | null;
 }
 
 export type TipoEvento =
@@ -67,7 +68,7 @@ export type TipoEvento =
   | 'cessao_assinada'
   | 'pix_enviado'
   | 'cota_incorporada'
-  | 'solicitacao_encerrada'
+  | 'solicitacao_encerrada' // reservado: não vem na v1 (PERDIDO não gera evento)
   | 'entrada_no_pool'
   | 'saida_do_pool';
 
@@ -86,7 +87,7 @@ export interface EventoHistorico {
   /** Link interno (acompanhamento ou comprovante). */
   link: string | null;
   simulado: boolean;
-  /** Motivo do "falhou" em linguagem comum, quando existir. */
+  /** Reservado: não vem na v1 (situacao é sempre 'concluido'). */
   motivo?: string | null;
 }
 

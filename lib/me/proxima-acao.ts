@@ -13,7 +13,8 @@ export type ProximaAcao =
   | { caso: 4; titulo: string; apoio: string; botao: string; href: string; escuro: true }
   | { caso: 5 | 6; titulo: string; apoio: string | null; href: string | null; escuro: false }
   | { caso: 7; titulo: string; apoio: string; escuro: false; dois: true }
-  | { caso: 'bloqueio'; titulo: string; apoio: string; botao: string; href: string; escuro: true };
+  | { caso: 'bloqueio'; titulo: string; apoio: string; botao: string; href: string; escuro: true }
+  | { caso: 'suspensa'; titulo: string; apoio: string; escuro: false };
 
 const acompanhar = (id: string) => `/vender/acompanhar/${id}`;
 
@@ -28,13 +29,23 @@ function fmtValidade(iso: string | null): string {
 const temSaldo = (r: ResumoDaConta) => !!r.posicao && Number(r.posicao.tokens) > 0;
 
 export function proximaAcao(r: ResumoDaConta): ProximaAcao {
+  if (r.bloqueio?.motivo === 'conta_suspensa') {
+    return {
+      caso: 'suspensa',
+      titulo: 'Sua conta está com restrição',
+      apoio: 'Fale com a equipe em contato@plina.finance.',
+      escuro: false,
+    };
+  }
   if (r.bloqueio?.motivo === 'kyc_pendente') {
+    // A verificação começa no fluxo de quem chega: cedente puro em /vender, o resto em /investir.
+    const soCedente = r.papeis.includes('CEDENTE') && !r.papeis.includes('INVESTIDOR');
     return {
       caso: 'bloqueio',
       titulo: 'Concluir a verificação de identidade',
       apoio: 'Investir e sacar ficam indisponíveis até a verificação terminar.',
       botao: 'Continuar a verificação',
-      href: r.bloqueio.destino ?? '/entrar',
+      href: soCedente ? '/vender' : '/investir',
       escuro: true,
     };
   }

@@ -22,6 +22,7 @@ describe('/inicio (spec de UX §2)', () => {
     expect(html).toContain('Imóvel · carta');
     expect(html).toContain('Aguardando sua resposta');
     expect(html).toContain('Entrada no pool');
+    expect(html).toContain('Em conferência (Pix simulado)');
     expect(html).toContain('Ver posição completa');
     expect(html).toContain('href="/sacar"');
   });

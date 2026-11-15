@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { linhaAndamento, proximaAcao } from '@/lib/me/proxima-acao';
-import type { ResumoDaConta, SolicitacaoResumo } from '@/lib/me/tipos';
+import type { PosicaoResumo, ResumoDaConta, SolicitacaoResumo } from '@/lib/me/tipos';
 
 const sol = (over: Partial<SolicitacaoResumo> = {}): SolicitacaoResumo => ({
   id: 'cmlead0000a1b2c3', status: 'NOVO', etapa: 2, tipoBem: 'IMOVEL', valorCarta: '150000.00',
@@ -9,7 +9,7 @@ const sol = (over: Partial<SolicitacaoResumo> = {}): SolicitacaoResumo => ({
 const resumo = (over: Partial<ResumoDaConta> = {}): ResumoDaConta => ({
   nome: null, papeis: [], posicao: null, solicitacoes: [], operacoesPendentes: [], ...over,
 });
-const posicao = (tokens: string) => ({ tokens, navPorToken: '1.0000', valorPeloNav: '1250.00', navFonte: 'ledger', snapshotEm: null, snapshotTxHash: null });
+const posicao = (tokens: string): PosicaoResumo => ({ tokens, navPorToken: '1.0000', valorPeloNav: '1250.00', navFonte: 'ledger', snapshotEm: null, snapshotTxHash: null });
 
 describe('proximaAcao (spec §2.3): uma ação, a primeira que valer', () => {
   it('1: proposta aguardando resposta, a de validade mais próxima', () => {
@@ -30,14 +30,14 @@ describe('proximaAcao (spec §2.3): uma ação, a primeira que valer', () => {
     expect(proximaAcao(resumo({ solicitacoes: [sol({ status: 'DOCS_SOLICITADOS' })] })).caso).toBe(3);
   });
   it('4: operação de entrada/saída pendente leva a /investir ou /sacar, com Pix simulado', () => {
-    const a = proximaAcao(resumo({ operacoesPendentes: [{ tipo: 'saida', valor: 'R$ 200,00', situacao: 'processing', continuarEm: '/sacar' }], posicao: posicao('10') }));
+    const a = proximaAcao(resumo({ operacoesPendentes: [{ tipo: 'saida', valor: 'R$ 200,00', situacao: 'em_conferencia', continuarEm: '/sacar' }], posicao: posicao('10') }));
     expect(a).toMatchObject({ caso: 4, titulo: 'Concluir a saída do pool', href: '/sacar' });
     expect((a as { apoio: string }).apoio).toContain('Pix simulado, rede de testes');
   });
   it('prioridade: proposta antes de assinatura antes de documentos antes de operação', () => {
     const r = resumo({
       solicitacoes: [sol({ id: 'd', status: 'DOCS_SOLICITADOS' }), sol({ id: 'a', status: 'OFERTA_ACEITA', etapa: 4, cessaoStatus: 'ENVIADA_DOCUSIGN' })],
-      operacoesPendentes: [{ tipo: 'entrada', valor: 'R$ 1,00', situacao: 'x', continuarEm: '/investir' }],
+      operacoesPendentes: [{ tipo: 'entrada', valor: 'R$ 1,00', situacao: 'em_conferencia', continuarEm: '/investir' }],
     });
     expect(proximaAcao(r).caso).toBe(2);
   });
@@ -57,8 +57,15 @@ describe('proximaAcao (spec §2.3): uma ação, a primeira que valer', () => {
     expect(proximaAcao(resumo({ solicitacoes: [sol({ status: 'PERDIDO', etapa: -1 }), sol({ id: 'q', status: 'COTA_INCORPORADA', etapa: 6 })] })).caso).toBe(7);
   });
   it('KYC pendente: a ação é concluir a verificação', () => {
-    const a = proximaAcao(resumo({ bloqueio: { motivo: 'kyc_pendente', destino: '/vender' }, solicitacoes: [sol({ status: 'OFERTA_ENVIADA', etapa: 3 })] }));
+    const a = proximaAcao(resumo({ papeis: ['CEDENTE'], bloqueio: { motivo: 'kyc_pendente' }, solicitacoes: [sol({ status: 'OFERTA_ENVIADA', etapa: 3 })] }));
     expect(a).toMatchObject({ caso: 'bloqueio', href: '/vender' });
+    expect(proximaAcao(resumo({ papeis: ['INVESTIDOR'], bloqueio: { motivo: 'kyc_pendente' } }))).toMatchObject({ caso: 'bloqueio', href: '/investir' });
+    expect(proximaAcao(resumo({ bloqueio: { motivo: 'kyc_pendente' } }))).toMatchObject({ caso: 'bloqueio', href: '/investir' });
+  });
+  it('conta suspensa: sem botão, bloco claro, fala com a equipe; vence qualquer outra ação', () => {
+    const a = proximaAcao(resumo({ bloqueio: { motivo: 'conta_suspensa' }, solicitacoes: [sol({ status: 'OFERTA_ENVIADA', etapa: 3 })] }));
+    expect(a).toMatchObject({ caso: 'suspensa', titulo: 'Sua conta está com restrição', escuro: false });
+    expect('botao' in a).toBe(false);
   });
 });
 

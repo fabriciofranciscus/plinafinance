@@ -19,6 +19,10 @@ const BTN_PRIMARIO =
 const BTN_SECUNDARIO =
   'inline-flex min-h-[44px] items-center justify-center border border-base text-base font-details text-[10px] tracking-[0.2em] uppercase px-5 py-3 hover:bg-document-grey/60 transition-colors';
 const LINK = 'inline-flex min-h-[44px] items-center font-details text-[10px] tracking-[0.2em] uppercase underline underline-offset-4 text-primary-deep';
+const SITUACAO_OPERACAO: Record<OperacaoPendente['situacao'], string> = {
+  em_conferencia: 'Em conferência',
+  aguardando_assinatura: 'Aguardando sua assinatura',
+};
 const ROTULO = 'font-details text-[10px] tracking-[0.2em] uppercase text-base/70';
 
 export default function InicioView({ estado, exemplo = false }: { estado: EstadoInicio; exemplo?: boolean }) {
@@ -242,7 +246,7 @@ function OperacaoItem({ op }: { op: OperacaoPendente }) {
       <p className="font-text text-sm font-semibold">
         {op.tipo === 'entrada' ? 'Entrada no pool' : 'Saída do pool'} · <span className="font-mono">{op.valor}</span>
       </p>
-      <p className="font-text text-sm text-base/80 mt-1">{op.situacao} (Pix simulado)</p>
+      <p className="font-text text-sm text-base/80 mt-1">{SITUACAO_OPERACAO[op.situacao]} (Pix simulado)</p>
       <Link href={op.continuarEm} className={`${LINK} mt-1`}>
         Continuar →
       </Link>
