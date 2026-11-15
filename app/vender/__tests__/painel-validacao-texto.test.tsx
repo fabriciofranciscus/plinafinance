@@ -28,6 +28,13 @@ describe('PainelValidacao (hotfix de texto falso, Consuelo 15/11)', () => {
     expect(html).toContain('Hash do consentimento registrado on-chain na Stellar');
     expect(html).toContain('https://stellar.expert/explorer/testnet/tx/abcd1234');
   });
+
+  it('sem consentTx não afirma o registro on-chain: diz que está indisponível para este cadastro', () => {
+    const h = renderToStaticMarkup(<AcompanharView data={{ ...data, consentTx: null }} />);
+    expect(h).not.toContain('registrado on-chain na Stellar');
+    expect(h).toContain('Hash do consentimento: registro indisponível para este cadastro.');
+    expect(h).not.toContain('pendente');
+  });
 });
 
 describe('mensagem do cadastro do investidor (register/route.ts)', () => {

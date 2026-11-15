@@ -211,12 +211,13 @@ function PainelValidacao({ consentTx }: { consentTx: TxLink | null }) {
         Nossa mesa está conferindo a titularidade e a situação da sua cota junto à administradora.
       </p>
 
-      <div className="mt-4 flex flex-wrap items-center gap-3 border border-primary/30 bg-document-grey/40 p-4">
-        <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
-        <span className="flex-1 font-text text-sm text-base/70 min-w-[12rem]">
-          Hash do consentimento registrado on-chain na Stellar
-        </span>
-        {consentTx ? (
+      {/* Só afirma o registro quando há link para conferir (Consuelo, ✓ do hotfix): sem consentTx a tela não o comprova. */}
+      {consentTx ? (
+        <div className="mt-4 flex flex-wrap items-center gap-3 border border-primary/30 bg-document-grey/40 p-4">
+          <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
+          <span className="flex-1 font-text text-sm text-base/70 min-w-[12rem]">
+            Hash do consentimento registrado on-chain na Stellar
+          </span>
           <a
             href={consentTx.url}
             target="_blank"
@@ -225,10 +226,12 @@ function PainelValidacao({ consentTx }: { consentTx: TxLink | null }) {
           >
             {consentTx.hashShort}… → Stellar Expert
           </a>
-        ) : (
-          <span className="font-mono text-xs text-base/50">pendente</span>
-        )}
-      </div>
+        </div>
+      ) : (
+        <p data-testid="consentimento-indisponivel" className="mt-4 font-text text-sm text-base/70">
+          Hash do consentimento: registro indisponível para este cadastro.
+        </p>
+      )}
     </div>
   );
 }
