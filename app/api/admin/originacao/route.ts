@@ -35,7 +35,8 @@ import { sincronizarCessoesDocusign } from '@/lib/services/cessao-assinatura';
 import { pagarCedenteDaCessao, PagamentoCedenteError, reabrirPagamentoCedente } from '@/lib/services/pagamento-cedente';
 import { LiquidacaoCedenteError } from '@/lib/services/liquidacao-cedente';
 import { DocusignError } from '@/lib/integrations/docusign';
-import { EnvioDocusignLaudoAusenteError, EnvioDocusignNomeAusenteError, enviarCessaoParaAssinatura } from '@/lib/services/cessao-docusign';
+import { EnvioDocusignEmAndamentoError, EnvioDocusignLaudoAusenteError, EnvioDocusignNomeAusenteError, enviarCessaoParaAssinatura } from '@/lib/services/cessao-docusign';
+import { OriginacaoPrecondicaoError } from '@/lib/services/originacao-erros';
 import { confirmarTitularDoLaudo, SITUACOES_TITULAR, TitularLaudoError } from '@/lib/services/titular-laudo';
 import { TipoBem } from '@prisma/client';
 
@@ -83,6 +84,13 @@ function respostaDeErroDoPagamento(err: unknown): NextResponse | null {
         { status: 503 },
       );
     }
+  }
+  // G5 (item 14): pré-condições do funil que o operador corrige — 404 se não existe, 409 se o estado não permite; mensagem fixa + code.
+  if (err instanceof OriginacaoPrecondicaoError) {
+    return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+  }
+  if (err instanceof EnvioDocusignEmAndamentoError) {
+    return NextResponse.json({ error: err.message, code: err.code }, { status: 409 });
   }
   if (err instanceof EnvioDocusignLaudoAusenteError || err instanceof EnvioDocusignNomeAusenteError || err instanceof IncorporacaoFunilBloqueadaError) {
     return NextResponse.json({ error: err.message, code: err.code }, { status: 409 });

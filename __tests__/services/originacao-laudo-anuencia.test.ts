@@ -54,9 +54,9 @@ describe('registrarLaudoDaCessao', () => {
   it('recusa URL inválida, cessão inexistente e cessão já incorporada — sem tocar a chain', async () => {
     await expect(registrarLaudoDaCessao({ cessaoId: 'c', laudoUrl: 'ftp://x', operador: 'a' })).rejects.toThrow(/laudoUrl/);
     m.cessaoFind.mockResolvedValueOnce(null);
-    await expect(registrarLaudoDaCessao({ cessaoId: 'c', laudoUrl: 'https://x.test', operador: 'a' })).rejects.toThrow(/não encontrada/);
+    await expect(registrarLaudoDaCessao({ cessaoId: 'c', laudoUrl: 'https://x.test', operador: 'a' })).rejects.toMatchObject({ code: 'CESSAO_NAO_ENCONTRADA', status: 404 });
     m.cessaoFind.mockResolvedValueOnce({ id: 'c', oferta: {}, cota: { id: 'k' } });
-    await expect(registrarLaudoDaCessao({ cessaoId: 'c', laudoUrl: 'https://x.test', operador: 'a' })).rejects.toThrow(/já tem cota/);
+    await expect(registrarLaudoDaCessao({ cessaoId: 'c', laudoUrl: 'https://x.test', operador: 'a' })).rejects.toMatchObject({ code: 'CESSAO_JA_TEM_COTA', status: 409, message: 'Cessão já tem cota incorporada' });
     expect(m.registerOnChainHash).not.toHaveBeenCalled();
   });
 });
@@ -74,18 +74,18 @@ describe('registrarAnuencia', () => {
 
   it('DECLARADA_PENDENTE é recusada em mainnet', async () => {
     m.cfg.network = 'PUBLIC';
-    await expect(registrarAnuencia({ hashValidacao: HASH, status: 'DECLARADA_PENDENTE', operador: 'a' })).rejects.toThrow(/mainnet/);
+    await expect(registrarAnuencia({ hashValidacao: HASH, status: 'DECLARADA_PENDENTE', operador: 'a' })).rejects.toMatchObject({ code: 'ANUENCIA_DECLARADA_EM_MAINNET', status: 409 });
     expect(m.eventoCreate).not.toHaveBeenCalled();
   });
 
   it('CONFIRMADA exige referência', async () => {
-    await expect(registrarAnuencia({ hashValidacao: HASH, status: 'CONFIRMADA', operador: 'a' })).rejects.toThrow(/referência/);
+    await expect(registrarAnuencia({ hashValidacao: HASH, status: 'CONFIRMADA', operador: 'a' })).rejects.toMatchObject({ code: 'ANUENCIA_SEM_REFERENCIA', status: 409 });
     await registrarAnuencia({ hashValidacao: HASH, status: 'CONFIRMADA', referencia: 'prot-123', operador: 'a' });
     expect(m.eventoCreate.mock.calls[0][0].data.payloadJson.referencia).toBe('prot-123');
   });
 
   it('recusa anuência de laudo inexistente', async () => {
     m.eventoFind.mockResolvedValue(null);
-    await expect(registrarAnuencia({ hashValidacao: HASH, status: 'DECLARADA_PENDENTE', operador: 'a' })).rejects.toThrow(/Laudo não registrado/);
+    await expect(registrarAnuencia({ hashValidacao: HASH, status: 'DECLARADA_PENDENTE', operador: 'a' })).rejects.toMatchObject({ code: 'LAUDO_NAO_ENCONTRADO', status: 404, message: 'Laudo não registrado para este hashValidacao.' });
   });
 });

@@ -26,6 +26,7 @@ import { enviarCessaoParaAssinatura } from './cessao-docusign';
 import { tokensParaEmitir } from './pool';
 import { taxaAnuenciaBpsFor } from '../config/administradoras';
 import { taxaPrazoBpsFor } from '../config/curva-yield';
+import { OriginacaoPrecondicaoError } from './originacao-erros';
 import { notifyCedente } from '../email/notify-cedente';
 import { buildComprovantePdf } from '../comprovante/pdf';
 import { uploadComprovante } from '../comprovante/store';
@@ -316,6 +317,12 @@ export async function gerarOferta(input: GerarOfertaInput) {
       },
     });
     return created;
+  }).catch((err: unknown) => {
+    // Lead inexistente: FK da oferta (P2003) ou update sem linha (P2025) é "não encontrado" para o operador, não 500.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && (err.code === 'P2003' || err.code === 'P2025')) {
+      throw new OriginacaoPrecondicaoError('LEAD_NAO_ENCONTRADO', 'Lead não encontrado');
+    }
+    throw err;
   });
 
   // F-M1-7: email transacional (best-effort, não bloqueia o funil).
@@ -417,9 +424,9 @@ export async function registrarCessao(input: {
     where: { id: input.ofertaId },
     include: { cessao: true },
   });
-  if (!oferta) throw new Error('Oferta não encontrada');
+  if (!oferta) throw new OriginacaoPrecondicaoError('OFERTA_NAO_ENCONTRADA', 'Oferta não encontrada');
   if (oferta.status !== OfertaStatus.ACEITA) {
-    throw new Error('Oferta precisa estar ACEITA antes de cessão');
+    throw new OriginacaoPrecondicaoError('OFERTA_NAO_ACEITA', 'Oferta precisa estar ACEITA antes de cessão');
   }
 
   let cessao = oferta.cessao;
@@ -580,7 +587,7 @@ export async function incorporarCotaDoFunil(input: {
       cota: true,
     },
   });
-  if (!cessao) throw new Error('Cessão não encontrada');
+  if (!cessao) throw new OriginacaoPrecondicaoError('CESSAO_NAO_ENCONTRADA', 'Cessão não encontrada');
   if (cessao.pagamento?.status !== PagamentoStatus.EXECUTADO) {
     throw new IncorporacaoFunilBloqueadaError('PAGAMENTO_NAO_EXECUTADO');
   }
@@ -743,8 +750,8 @@ export async function registrarLaudoDaCessao(input: {
     where: { id: input.cessaoId },
     include: { oferta: true, cota: { select: { id: true } } },
   });
-  if (!cessao) throw new Error('Cessão não encontrada');
-  if (cessao.cota) throw new Error('Cessão já tem cota incorporada');
+  if (!cessao) throw new OriginacaoPrecondicaoError('CESSAO_NAO_ENCONTRADA', 'Cessão não encontrada');
+  if (cessao.cota) throw new OriginacaoPrecondicaoError('CESSAO_JA_TEM_COTA', 'Cessão já tem cota incorporada');
 
   const payload = buildAuditPayload('cota_validacao', cessao.id, {
     cessaoId: cessao.id,
@@ -781,16 +788,16 @@ export async function registrarAnuencia(input: {
   operador: string;
 }): Promise<{ hashValidacao: string; status: string }> {
   if (input.status === 'CONFIRMADA' && !input.referencia) {
-    throw new Error('Anuência CONFIRMADA exige referência (protocolo ou documento).');
+    throw new OriginacaoPrecondicaoError('ANUENCIA_SEM_REFERENCIA', 'Anuência CONFIRMADA exige referência (protocolo ou documento).');
   }
   if (input.status === 'DECLARADA_PENDENTE' && STELLAR_NETWORK === 'PUBLIC') {
-    throw new Error('Em mainnet a anuência precisa ser CONFIRMADA; "declarada pendente" só em testnet.');
+    throw new OriginacaoPrecondicaoError('ANUENCIA_DECLARADA_EM_MAINNET', 'Em mainnet a anuência precisa ser CONFIRMADA; "declarada pendente" só em testnet.');
   }
   const laudo = await db.eventoAudit.findFirst({
     where: { acao: 'COTA_VALIDADA', payloadHash: input.hashValidacao },
     select: { id: true, cessaoId: true, cotaId: true },
   });
-  if (!laudo) throw new Error('Laudo não registrado para este hashValidacao.');
+  if (!laudo) throw new OriginacaoPrecondicaoError('LAUDO_NAO_ENCONTRADO', 'Laudo não registrado para este hashValidacao.');
 
   await db.eventoAudit.create({
     data: {

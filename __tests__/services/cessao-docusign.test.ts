@@ -170,14 +170,14 @@ describe('DS2 — registrarCessao envia ao DocuSign', () => {
 
   it('oferta que não está ACEITA é recusada sem criar cessão nem envelope', async () => {
     st.oferta!.status = 'ENVIADA';
-    await expect(registrarCessao(input)).rejects.toThrow(/ACEITA/);
+    await expect(registrarCessao(input)).rejects.toMatchObject({ code: 'OFERTA_NAO_ACEITA', status: 409, message: 'Oferta precisa estar ACEITA antes de cessão' });
     expect(st.cessoes.size).toBe(0);
     expect(st.criar).toHaveLength(0);
   });
 
   it('cedente sem e-mail: recusa antes de chamar o DocuSign', async () => {
     st.oferta!.leadVendedor.email = '';
-    await expect(registrarCessao(input)).rejects.toThrow(/e-mail/);
+    await expect(registrarCessao(input)).rejects.toMatchObject({ code: 'CEDENTE_SEM_EMAIL', status: 409 });
     expect(st.criar).toHaveLength(0);
   });
 });

@@ -177,3 +177,17 @@ describe('prazo 0 = cota QUITADA (A-01) e a composição pura do deságio (A-08)
     expect((t as OfertaInvalidaError).message).toMatch(/reduza o deságio base ou o prazo restante/);
   });
 });
+
+describe('gerarOferta · lead inexistente (G5: 404 com code, não 500)', () => {
+  const entrada = { leadVendedorId: 'l_x', tipoBem: 'VEICULO' as const, valorCarta: '100000', administradora: 'Embracon Consórcios', desagioAquisicao: '0.18', operador: 'op' };
+  it.each(['P2003', 'P2025'])('erro %s do banco vira LEAD_NAO_ENCONTRADO (404) com mensagem fixa', async (codigo) => {
+    const { Prisma } = await import('@prisma/client');
+    ofertaCreate.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('FK com o id do lead dentro', { code: codigo, clientVersion: 'x' }));
+    await expect(gerarOferta(entrada)).rejects.toMatchObject({ code: 'LEAD_NAO_ENCONTRADO', status: 404, message: 'Lead não encontrado' });
+    expect(auditCreate).not.toHaveBeenCalled();
+  });
+  it('outro erro do banco segue como está (não mascara falha)', async () => {
+    ofertaCreate.mockRejectedValue(new Error('conexão caiu'));
+    await expect(gerarOferta(entrada)).rejects.toThrow('conexão caiu');
+  });
+});
