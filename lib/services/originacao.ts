@@ -26,6 +26,7 @@ import { enviarCessaoParaAssinatura } from './cessao-docusign';
 import { tokensParaEmitir } from './pool';
 import { taxaAnuenciaBpsFor } from '../config/administradoras';
 import { taxaPrazoBpsFor } from '../config/curva-yield';
+import { causaSegura } from '../api/causa-segura';
 import { OriginacaoPrecondicaoError } from './originacao-erros';
 import { notifyCedente } from '../email/notify-cedente';
 import { buildComprovantePdf } from '../comprovante/pdf';
@@ -541,7 +542,7 @@ export async function executarPixSimulado(input: {
       comprovanteUrl = `${APP_BASE_URL}/api/comprovante/${cessao.id}`;
     }
   } catch (err) {
-    console.error('[executarPixSimulado] comprovante PDF falhou', err);
+    console.error('[executarPixSimulado] comprovante PDF falhou', causaSegura(err));
   }
 
   // F-M1-7: email transacional de Pix (best-effort), com link do comprovante.

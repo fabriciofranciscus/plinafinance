@@ -10,6 +10,7 @@
  * envio best-effort via transporter SMTP compartilhado.
  */
 
+import { causaSegura } from '@/lib/api/causa-segura';
 import { headers } from 'next/headers';
 import { z } from 'zod';
 import { getIncidentTransporter, incidentFromAddress } from '@/lib/email/transporter';
@@ -96,7 +97,7 @@ export async function submitIncident(
       html,
     });
   } catch (err) {
-    console.error('[submitIncident] SMTP error', err);
+    console.error('[submitIncident] SMTP error', causaSegura(err)); // sem a mensagem: cita o destinatário
     return {
       status: 'error',
       message:

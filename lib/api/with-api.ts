@@ -31,6 +31,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { causaSegura } from './causa-segura';
 import { ZodError } from 'zod';
 import { ApiError } from './errors';
 import { fail } from './response';
@@ -70,7 +71,8 @@ export function withApi<R extends NextResponse>(
           .join('; ');
         return fail('VALIDATION_FAILED', message, 400, requestId);
       }
-      console.error(`[api ${requestId}]`, err);
+      // Só a causa segura (nome, code, frames): o erro cru pode trazer valores de argumentos do Prisma ou texto do anchor (PII).
+      console.error(`[api ${requestId}] erro interno`, causaSegura(err));
       return fail('INTERNAL', 'unexpected error', 500, requestId);
     }
   };
