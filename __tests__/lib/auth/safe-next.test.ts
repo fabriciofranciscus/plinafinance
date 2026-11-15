@@ -26,6 +26,9 @@ describe('safeNext (U1: open redirect no /entrar)', () => {
     ['/%0Aevil.com'],
     ['/%'],
     ['/.//evil.com'],
+    ['/..//evil.com'],
+    ['/a/../..//evil.com'],
+    ['/%2e//evil.com'],
     ['/a/..//evil.com'],
     ['/%2E//evil.com'],
     ['/%2e%2e//evil.com'],
@@ -71,5 +74,26 @@ describe('safeNext (U1: open redirect no /entrar)', () => {
       const r = safeNext(raw, O);
       if (r !== null) expect(new URL(r, O).origin).toBe(O);
     }
+  });
+
+  it('PROPRIEDADE: para qualquer entrada, o que for aceito fica na mesma origem e não começa com //', () => {
+    const pedacos = ['/', '.', '..', '%2e', '%2E', '%2f', '%5c', '\\', '//', 'a', 'pool', '?', '#', 'x=1', 'evil.com', '\t', '%09', ':', '@'];
+    // determinístico: gera combinações de 1 a 5 pedaços
+    let n = 0;
+    const gera = (prefixo: string, nivel: number) => {
+      if (nivel > 0) {
+        const r = safeNext(prefixo, O);
+        if (r !== null) {
+          n++;
+          expect(new URL(r, O).origin).toBe(O);
+          expect(r.startsWith('//')).toBe(false);
+          expect(r.includes('\\')).toBe(false);
+        }
+      }
+      if (nivel === 5) return;
+      for (const p of pedacos) gera(prefixo + p, nivel + 1);
+    };
+    for (const p of pedacos) gera('/' + p, 1);
+    expect(n).toBeGreaterThan(100); // a propriedade foi de fato exercitada com entradas aceitas
   });
 });
