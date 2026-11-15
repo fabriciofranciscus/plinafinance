@@ -31,7 +31,7 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('@/lib/email/notify-cedente', () => ({ notifyCedente: vi.fn() }));
 
-import { comporDesagioDaOferta, gerarOferta } from '@/lib/services/originacao';
+import { comporDesagioDaOferta, gerarOferta, OfertaInvalidaError } from '@/lib/services/originacao';
 
 beforeEach(() => {
   ofertaCount.mockReset().mockResolvedValue(0);
@@ -163,5 +163,17 @@ describe('prazo 0 = cota QUITADA (A-01) e a composição pura do deságio (A-08)
     expect(() => comporDesagioDaOferta({ ...base, valorCarta: '0' })).toThrow('valorCarta inválido');
     expect(() => comporDesagioDaOferta({ ...base, desagioAquisicao: '1.5' })).toThrow('fora de [0, 1]');
     expect(() => comporDesagioDaOferta({ ...base, desagioAquisicao: '0.95', prazoRestanteMeses: 12 })).toThrow('excede 100%');
+  });
+
+  it('as recusas são OfertaInvalidaError com código (A-22: a rota as devolve como 422, não 500)', () => {
+    const erro = (f: () => unknown) => { try { f(); } catch (e) { return e; } return null; };
+    const v = erro(() => comporDesagioDaOferta({ ...base, valorCarta: '0' }));
+    const d = erro(() => comporDesagioDaOferta({ ...base, desagioAquisicao: '1.5' }));
+    const t = erro(() => comporDesagioDaOferta({ ...base, desagioAquisicao: '0.95', prazoRestanteMeses: 12 }));
+    expect(v).toBeInstanceOf(OfertaInvalidaError);
+    expect((v as OfertaInvalidaError).code).toBe('VALOR_CARTA_INVALIDO');
+    expect((d as OfertaInvalidaError).code).toBe('DESAGIO_BASE_INVALIDO');
+    expect((t as OfertaInvalidaError).code).toBe('DESAGIO_TOTAL_EXCEDE');
+    expect((t as OfertaInvalidaError).message).toMatch(/reduza o deságio base ou o prazo restante/);
   });
 });

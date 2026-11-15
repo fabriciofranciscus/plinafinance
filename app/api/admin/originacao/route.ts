@@ -28,6 +28,7 @@ import {
   registrarCessao,
   IncorporacaoFunilBloqueadaError,
   comporDesagioDaOferta,
+  OfertaInvalidaError,
 } from '@/lib/services/originacao';
 import { registrarTesourariaLegada } from '@/lib/services/tesouraria-legada';
 import { sincronizarCessoesDocusign } from '@/lib/services/cessao-assinatura';
@@ -278,6 +279,10 @@ export async function POST(req: Request) {
       }
     }
   } catch (err) {
+    // A-22: oferta que o operador pode corrigir (deságio total > 100%, valor inválido) é 422 com a mensagem, não 500.
+    if (err instanceof OfertaInvalidaError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: 422 });
+    }
     const dominio = respostaDeErroDoPagamento(err);
     if (dominio) return dominio;
     return NextResponse.json(

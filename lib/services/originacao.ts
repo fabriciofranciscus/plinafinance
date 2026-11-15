@@ -211,6 +211,18 @@ export interface ComposicaoDaOferta {
 }
 
 /**
+ * Entrada de oferta que o operador pode corrigir (A-22): valor da carta inválido, deságio base fora de [0, 1] ou deságio TOTAL
+ * (base + anuência + prazo) acima de 100%. É erro de validação, não falha do servidor: a rota admin responde 422 com a
+ * mensagem (fixa, sem dado de ninguém) e o `code`. As mensagens mantêm os trechos que os testes e a tela já conheciam.
+ */
+export class OfertaInvalidaError extends Error {
+  constructor(readonly code: 'VALOR_CARTA_INVALIDO' | 'DESAGIO_BASE_INVALIDO' | 'DESAGIO_TOTAL_EXCEDE', message: string) {
+    super(message);
+    this.name = 'OfertaInvalidaError';
+  }
+}
+
+/**
  * Composição do deságio e do líquido de uma oferta (PURA, sem banco): base + anuência (só no caminho fallback) + prazo.
  * Usada por `gerarOferta` e pela prévia do admin (A-08), para a tela mostrar EXATAMENTE o que será gravado.
  * `prazoRestanteMeses`: 0 = cota quitada (sem componente de prazo, igual a não informar, mas guardado como 0 e não null);
@@ -225,9 +237,9 @@ export function comporDesagioDaOferta(input: {
 }): ComposicaoDaOferta {
   const valor = Number(input.valorCarta);
   const desagio = Number(input.desagioAquisicao);
-  if (!isFinite(valor) || valor <= 0) throw new Error('valorCarta inválido');
+  if (!isFinite(valor) || valor <= 0) throw new OfertaInvalidaError('VALOR_CARTA_INVALIDO', 'valorCarta inválido: informe um valor maior que zero.');
   if (!isFinite(desagio) || desagio < 0 || desagio > 1)
-    throw new Error('desagioAquisicao fora de [0, 1]');
+    throw new OfertaInvalidaError('DESAGIO_BASE_INVALIDO', 'desagioAquisicao fora de [0, 1]: use uma fração entre 0 e 1 (ex.: 0.20 para 20%).');
 
   // F-M1-4: taxa de anuência embutida no deságio quando caminho = fallback.
   const caminho = input.caminhoCessao ?? CaminhoCessao.CARTORIO_DIGITAL;
@@ -243,7 +255,10 @@ export function comporDesagioDaOferta(input: {
     .plus(new Prisma.Decimal(taxaPrazoBps).div(10000))
     .toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_EVEN);
   if (desagioTotal.greaterThan(1)) {
-    throw new Error('deságio total (base + anuência) excede 100%');
+    throw new OfertaInvalidaError(
+      'DESAGIO_TOTAL_EXCEDE',
+      'O deságio total (base + anuência + prazo) excede 100%: reduza o deságio base ou o prazo restante.',
+    );
   }
 
   const valorLiquido = new Prisma.Decimal(input.valorCarta)

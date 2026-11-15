@@ -30,7 +30,7 @@ vi.mock('@/lib/services/pagamento-cedente', async (orig) => ({
 import { POST } from '@/app/api/admin/originacao/route';
 import { DocusignError } from '@/lib/integrations/docusign';
 import { EnvioDocusignLaudoAusenteError, EnvioDocusignNomeAusenteError } from '@/lib/services/cessao-docusign';
-import { IncorporacaoFunilBloqueadaError } from '@/lib/services/originacao';
+import { IncorporacaoFunilBloqueadaError, OfertaInvalidaError } from '@/lib/services/originacao';
 import { PagamentoCedenteError } from '@/lib/services/pagamento-cedente';
 import { LiquidacaoCedenteError } from '@/lib/services/liquidacao-cedente';
 import { TitularLaudoError } from '@/lib/services/titular-laudo';
@@ -263,9 +263,10 @@ describe('previa-oferta: o deságio final ANTES de gerar (A-08)', () => {
   it.each([{ leadVendedorId: 'x' }, { tipoBem: 'VEICULO' }, { operador: 'x' }, { valorCarta: '-1' }])('corpo estrito %o → 400', async (extra) => {
     expect((await POST(req({ ...PREVIA, ...extra }))).status).toBe(400);
   });
-  it('deságio fora da faixa (total > 100%) → erro do serviço, sem gravar; sem sessão → 401', async () => {
+  it('deságio fora da faixa (total > 100%) → 422 com a causa (A-22; antes era 500), sem gravar; sem sessão → 401', async () => {
     const r = await POST(req({ ...PREVIA, desagioAquisicao: '0.95', prazoRestanteMeses: 12 }));
-    expect(r.status).toBe(500);
+    expect(r.status).toBe(422);
+    expect((await r.json()).code).toBe('DESAGIO_TOTAL_EXCEDE');
     m.isAdmin.mockResolvedValue(false);
     expect((await POST(req(PREVIA))).status).toBe(401);
   });
@@ -298,3 +299,41 @@ describe('enviar-cessao com o DocuSign fora do ar ou sem configuração (A-02)',
     expect((await POST(req(enviar))).status).toBe(500);
   });
 });
+
+describe('oferta que o operador pode corrigir: 422 com a mensagem, nunca 500 (A-22)', () => {
+  const previa = { action: 'previa-oferta', valorCarta: '40000', administradora: 'Administradora Demonstração (fictícia)', desagioAquisicao: '0.20' };
+  it('previa-oferta com o deságio total acima de 100% (prazo longo) → 422 DESAGIO_TOTAL_EXCEDE com a causa e o que fazer', async () => {
+    const r = await POST(req({ ...previa, prazoRestanteMeses: 120 }));
+    expect(r.status).toBe(422);
+    const corpo = await r.json();
+    expect(corpo.code).toBe('DESAGIO_TOTAL_EXCEDE');
+    expect(corpo.error).toMatch(/excede 100%/);
+    expect(corpo.error).toMatch(/reduza o deságio base ou o prazo/);
+    expect(Object.keys(corpo).sort()).toEqual(['code', 'error']);
+  });
+  it('previa-oferta com valor da carta 0 → 422 VALOR_CARTA_INVALIDO; deságio base fora de [0,1] → 422 DESAGIO_BASE_INVALIDO', async () => {
+    const v = await POST(req({ ...previa, valorCarta: '0' }));
+    expect(v.status).toBe(422);
+    expect((await v.json()).code).toBe('VALOR_CARTA_INVALIDO');
+    const d = await POST(req({ ...previa, desagioAquisicao: '1.5' }));
+    expect(d.status).toBe(422);
+    expect((await d.json()).code).toBe('DESAGIO_BASE_INVALIDO');
+  });
+  it('previa-oferta válida segue 200 (a regra não barra o que antes passava)', async () => {
+    const r = await POST(req({ ...previa, prazoRestanteMeses: 12 }));
+    expect(r.status).toBe(200);
+    expect((await r.json()).desagioTotal).toBeDefined();
+  });
+  it('gerar-oferta que o serviço recusa por OfertaInvalidaError → 422 (e nada além de código e mensagem)', async () => {
+    m.gerar.mockRejectedValue(new OfertaInvalidaError('DESAGIO_TOTAL_EXCEDE', 'O deságio total (base + anuência + prazo) excede 100%: reduza o deságio base ou o prazo restante.'));
+    const r = await POST(req({ action: 'gerar-oferta', leadVendedorId: 'l1', tipoBem: 'IMOVEL', valorCarta: '40000', administradora: 'Adm', desagioAquisicao: '0.2', prazoRestanteMeses: 120 }));
+    expect(r.status).toBe(422);
+    expect(Object.keys(await r.json()).sort()).toEqual(['code', 'error']);
+  });
+  it('um erro que NÃO é de validação continua 500 (não mascara falha do servidor)', async () => {
+    m.gerar.mockRejectedValue(new Error('falha inesperada'));
+    const r = await POST(req({ action: 'gerar-oferta', leadVendedorId: 'l1', tipoBem: 'IMOVEL', valorCarta: '40000', administradora: 'Adm', desagioAquisicao: '0.2' }));
+    expect(r.status).toBe(500);
+  });
+});
+
