@@ -87,7 +87,7 @@ export default async function ComprovanteCompradorPage({ params }: PageProps) {
         <Row label="Status da cota" value={reserva.cota.status} mono />
         {cessao && (
           <Row
-            label="Envelope (e-CPF/DocuSign)"
+            label="Registro da simulação (rede de testes)"
             value={cessao.docusignEnvelopeId ?? '—'}
             mono
           />
