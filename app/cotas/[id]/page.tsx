@@ -5,6 +5,7 @@
  *   valor, deságio revenda, economia, local, prazo, status, CTA reservar.
  */
 
+import { fmtPrazo } from '@/lib/format/prazo';
 import Link from 'next/link';
 import { db } from '@/lib/db';
 
@@ -133,7 +134,7 @@ export default async function CotaDetailPage({ params }: PageProps) {
         <Row label="Localização aproximada" value={cota.localizacaoAprox ?? '—'} />
         <Row
           label="Prazo restante"
-          value={cota.prazoRestanteMeses ? `${cota.prazoRestanteMeses} meses` : '—'}
+          value={fmtPrazo(cota.prazoRestanteMeses, 'longa')}
           mono
         />
         <Row label="Status" value={cota.status} mono />
