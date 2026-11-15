@@ -12,7 +12,7 @@
  * router.refresh.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface PipelineLead {
@@ -97,16 +97,59 @@ export function VendedorPipeline({ leads, redePublica = false }: { leads: Pipeli
     );
   }
 
+  return <ListaDeLeads leads={leads} redePublica={redePublica} />;
+}
+
+/** Id curto para o operador citar um lead sem copiar o id inteiro (os 6 últimos caracteres do id). */
+export function idCurto(id: string): string {
+  return id.slice(-6).toUpperCase();
+}
+
+const BRL_INTEIRO = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+
+function valorDoLead(lead: PipelineLead): string {
+  const o = lead.ofertas[0];
+  if (!o) return 'sem oferta';
+  const n = Number(o.valorCarta.toString());
+  return Number.isFinite(n) ? BRL_INTEIRO.format(n) : 'sem oferta';
+}
+
+/** O lead selecionado fica destacado (borda, marca "Selecionado" em texto) e vem de um clique ou de `#lead-<id>` na URL. */
+function ListaDeLeads({ leads, redePublica }: { leads: PipelineLead[]; redePublica: boolean }) {
+  const [selecionado, setSelecionado] = useState<string | null>(null);
+  useEffect(() => {
+    const m = /^#lead-(.+)$/.exec(window.location.hash);
+    if (m && leads.some((l) => l.id === m[1])) setSelecionado(m[1]!);
+  }, [leads]);
   return (
     <div className="space-y-3">
       {leads.map((l) => (
-        <LeadCard key={l.id} lead={l} redePublica={redePublica} />
+        <LeadCard
+          key={l.id}
+          lead={l}
+          redePublica={redePublica}
+          selecionado={selecionado === l.id}
+          onSelecionar={() => {
+            setSelecionado(l.id);
+            window.history.replaceState(null, '', `#lead-${l.id}`);
+          }}
+        />
       ))}
     </div>
   );
 }
 
-function LeadCard({ lead, redePublica }: { lead: PipelineLead; redePublica: boolean }) {
+function LeadCard({
+  lead,
+  redePublica,
+  selecionado,
+  onSelecionar,
+}: {
+  lead: PipelineLead;
+  redePublica: boolean;
+  selecionado: boolean;
+  onSelecionar: () => void;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -151,19 +194,30 @@ function LeadCard({ lead, redePublica }: { lead: PipelineLead; redePublica: bool
   }
 
   return (
-    <div className="border border-light-hairline">
+    <div
+      id={`lead-${lead.id}`}
+      className={`scroll-mt-32 border ${selecionado ? 'border-primary-deep border-l-4' : 'border-light-hairline'}`}
+    >
       <header className="px-4 py-3 border-b border-light-hairline flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-        <div>
-          <p className="font-text text-sm font-semibold">{lead.nome}</p>
-          <p className="font-mono text-xs text-base/60">{lead.email}</p>
-        </div>
+        <button
+          type="button"
+          onClick={onSelecionar}
+          aria-pressed={selecionado}
+          className="min-h-[44px] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-deep"
+        >
+          <span className="block font-text text-sm font-semibold">{lead.nome}</span>
+          <span className="block font-mono text-xs text-base/60">{lead.email}</span>
+          <span className="block font-mono text-xs text-base/70 mt-1" data-testid="lead-resumo">
+            #{idCurto(lead.id)} · {valorDoLead(lead)} · {new Date(lead.criadoEm).toLocaleDateString('pt-BR')}
+          </span>
+        </button>
         <div className="flex items-center gap-3">
           <span className="font-details text-[10px] tracking-[0.2em] uppercase bg-base text-lightBg px-2 py-1">
             {STATUS_LABEL[lead.status] ?? lead.status}
           </span>
-          <span className="font-mono text-[10px] text-base/50">
-            {new Date(lead.criadoEm).toLocaleDateString('pt-BR')}
-          </span>
+          {selecionado && (
+            <span className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">Selecionado</span>
+          )}
         </div>
       </header>
 
