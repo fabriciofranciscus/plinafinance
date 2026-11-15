@@ -84,12 +84,12 @@ const CONTEXTO_POR_STATUS: Record<LeadVendedorStatus, ContextoEtapa> = {
   DOCS_RECEBIDOS: {
     titulo: 'Documentos recebidos',
     descricao:
-      'Recebemos sua documentação e estamos finalizando a validação para gerar a oferta firme.',
+      'Recebemos sua documentação e estamos finalizando a validação para gerar a proposta.',
   },
   OFERTA_ENVIADA: {
-    titulo: 'Oferta firme enviada',
+    titulo: 'Proposta enviada',
     descricao:
-      'Sua oferta está disponível abaixo, válida até a data indicada. Para aceitar, responda o e-mail recebido.',
+      'Sua oferta está disponível abaixo, válida até a data indicada. Para aceitar, use o botão Aceitar nesta página.',
   },
   OFERTA_ACEITA: {
     titulo: 'Oferta aceita',
@@ -114,7 +114,7 @@ const CONTEXTO_POR_STATUS: Record<LeadVendedorStatus, ContextoEtapa> = {
   PERDIDO: {
     titulo: 'Solicitação encerrada',
     descricao:
-      'Esta solicitação foi encerrada. Se acha que houve engano, responda o último e-mail recebido da equipe Plina.',
+      'Esta solicitação foi encerrada. Se acha que houve engano, fale com a equipe em contato@plina.finance informando o número do seu pedido.',
   },
 };
 

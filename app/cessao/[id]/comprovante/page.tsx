@@ -114,7 +114,7 @@ export default async function ComprovantePage({ params }: PageProps) {
           <HashRow
             label="SHA-256 do documento"
             value={cessao.hashDocumento}
-            hint="Compute o SHA-256 do PDF que você assinou. Deve bater com este valor."
+            hint="Este é o SHA-256 da cópia do PDF assinado que a Plina guardou. O arquivo que o DocuSign entrega a cada download pode diferir byte a byte, então só a cópia guardada confere com este valor; o mesmo hash está no Memo da transação abaixo."
           />
           <HashRow
             label="Tx Stellar (Memo.hash)"

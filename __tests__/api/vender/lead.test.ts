@@ -5,9 +5,10 @@ vi.mock('botid/server', () => ({ checkBotId: m.checkBotId }));
 vi.mock('@/lib/rate-limit/config', () => ({ leadLimiter: { consume: m.consume }, clientIp: () => '203.0.113.9' }));
 vi.mock('@/lib/services/originacao', () => ({ capturarLead: m.capturar }));
 // withPessoaAuth: entrega um usuário já autenticado (a autenticação em si tem teste próprio).
+const u = vi.hoisted(() => ({ nome: 'Ana' as string | null }));
 vi.mock('@/lib/wallet/pessoa-auth', () => ({
   withPessoaAuth: (h: (req: Request, ctx: { user: unknown }) => unknown) => (req: Request) =>
-    h(req, { user: { pessoaId: 'p_1', kycAprovado: true, nome: 'Ana', email: 'ana@exemplo.test', privyId: 'did:privy:1' } }),
+    h(req, { user: { pessoaId: 'p_1', kycAprovado: true, nome: u.nome, email: 'ana@exemplo.test', privyId: 'did:privy:1' } }),
 }));
 
 import { POST } from '@/app/api/vender/lead/route';
@@ -21,6 +22,7 @@ const req = (body: object) =>
 const OK = { consentimentoLgpd: true };
 
 beforeEach(() => {
+  u.nome = 'Ana';
   delete process.env.BOTID_ENFORCE;
   m.checkBotId.mockReset().mockResolvedValue({ isBot: false });
   m.consume.mockReset().mockResolvedValue(true);
@@ -64,5 +66,21 @@ describe('POST /api/vender/lead — BotID atrás de flag (hotfix 14/11)', () => 
       expect((await POST(req(OK))).status).toBe(403);
     }
     expect(m.capturar).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/vender/lead — o e-mail nunca vira o nome do lead (pós-cota 15/11)', () => {
+  it('Pessoa com nome de verdade: o lead leva esse nome', async () => {
+    u.nome = 'Ana Souza';
+    await POST(req(OK));
+    expect(m.capturar.mock.calls[0][0].nome).toBe('Ana Souza');
+  });
+  it.each([['ana@exemplo.test'], ['test-4872@privy.io'], [''], [null]])('Pessoa com nome %j (e-mail, vazio ou ausente): grava o marcador "Nome não informado", nunca o e-mail', async (nome) => {
+    u.nome = nome;
+    await POST(req(OK));
+    const dados = m.capturar.mock.calls[0][0];
+    expect(dados.nome).toBe('Nome não informado');
+    expect(dados.nome).not.toContain('@');
+    expect(dados.email).toBe('ana@exemplo.test'); // o e-mail segue no campo de e-mail
   });
 });

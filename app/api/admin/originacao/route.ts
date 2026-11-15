@@ -32,7 +32,7 @@ import { registrarTesourariaLegada } from '@/lib/services/tesouraria-legada';
 import { sincronizarCessoesDocusign } from '@/lib/services/cessao-assinatura';
 import { pagarCedenteDaCessao, PagamentoCedenteError, reabrirPagamentoCedente } from '@/lib/services/pagamento-cedente';
 import { LiquidacaoCedenteError } from '@/lib/services/liquidacao-cedente';
-import { EnvioDocusignLaudoAusenteError, enviarCessaoParaAssinatura } from '@/lib/services/cessao-docusign';
+import { EnvioDocusignLaudoAusenteError, EnvioDocusignNomeAusenteError, enviarCessaoParaAssinatura } from '@/lib/services/cessao-docusign';
 import { confirmarTitularDoLaudo, SITUACOES_TITULAR, TitularLaudoError } from '@/lib/services/titular-laudo';
 import { TipoBem } from '@prisma/client';
 
@@ -53,7 +53,7 @@ const OPERADOR_ADMIN = 'admin-panel';
 
 /** Erros de domínio do E1-2/DS2: mensagem fixa em PT (sem causa nem dado do cedente) + código. */
 function respostaDeErroDoPagamento(err: unknown): NextResponse | null {
-  if (err instanceof EnvioDocusignLaudoAusenteError || err instanceof IncorporacaoFunilBloqueadaError) {
+  if (err instanceof EnvioDocusignLaudoAusenteError || err instanceof EnvioDocusignNomeAusenteError || err instanceof IncorporacaoFunilBloqueadaError) {
     return NextResponse.json({ error: err.message, code: err.code }, { status: 409 });
   }
   if (err instanceof TitularLaudoError || err instanceof PagamentoCedenteError || err instanceof LiquidacaoCedenteError) {

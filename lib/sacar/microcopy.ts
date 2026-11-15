@@ -36,6 +36,12 @@ export const SACAR = {
     aviso:
       'Valores estimados. O valor final pode mudar se a cotação expirar. Rede de testes: nenhum dinheiro real é enviado.',
   },
+  // Antes da cotação: o cadastro na Etherfuse e a carteira só são conferidos/criados com o clique.
+  preparar: {
+    texto:
+      'Para cotar o saque, a Plina confere a sua conta de teste (carteira e cadastro na Etherfuse). Se ela ainda não existir, será criada agora, em rede de testes.',
+    botao: 'Continuar',
+  },
   pedido: { botao: 'Solicitar saque', carregando: 'Registrando pedido…' },
   assinar: {
     titulo: 'Confirme o saque com sua assinatura',

@@ -61,6 +61,8 @@ describe('incorporarCotaDoFunil — provas antes de emitir (qualquer rede)', () 
     expect(m.incorporar.mock.calls[0][0]).toMatchObject({ cessaoId: 'ces_1', pixHash: 'tx_pix', hashValidacao: 'a'.repeat(64) });
     expect(m.cessaoUpdate).not.toHaveBeenCalled(); // sem o "re-assert"
     expect(m.leadUpdate).toHaveBeenCalledOnce();
+    // e-mail 'Cota incorporada': leva a tx de emissão como 'Prova on-chain'
+    expect(m.notify).toHaveBeenCalledWith('a@exemplo.test', 'concluido', expect.objectContaining({ onChainTxHash: 'tx_emissao' }));
   });
 
   it.each(['PENDENTE', 'ENVIADA_DOCUSIGN', 'CANCELADA', 'EXPIRADA'])('cessão %s: recusa CESSAO_NAO_ASSINADA e NÃO emite', async (status) => {
@@ -109,7 +111,7 @@ describe('incorporarCotaDoFunil — provas antes de emitir (qualquer rede)', () 
       where: { cotaId: 'cota_1', acao: 'COTA_INCORPORADA' },
       data: { leadVendedorId: 'lead_1', cessaoId: 'ces_1' },
     });
-    expect(m.notify).toHaveBeenCalledOnce();
+    expect(m.notify).toHaveBeenCalledWith('a@exemplo.test', 'concluido', expect.objectContaining({ onChainTxHash: 'tx_emissao' }));
   });
 
   it('a retomada também exige as provas (cessão ASSINADA e Pix COMPROVADO)', async () => {
