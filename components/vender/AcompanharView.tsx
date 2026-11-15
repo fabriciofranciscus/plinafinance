@@ -483,16 +483,26 @@ function PainelPix({
 
         {/* Cota → Pool → token de demonstração · Stellar testnet (só depois da incorporação) */}
         {temCota && (
-        <div className="mx-auto mt-8 flex max-w-2xl items-center justify-between gap-3 border border-light-hairline bg-document-grey/40 p-5 font-mono text-xs">
-          <span className="flex-1 border border-light-hairline bg-white px-3 py-3 text-center text-base/80">
+        // Íris: no celular os três blocos empilham (setas para baixo) e o texto pode quebrar; de sm em diante, a linha de antes.
+        <div
+          data-testid="diagrama-cota-pool-token"
+          className="mx-auto mt-8 flex min-w-0 max-w-2xl flex-col items-stretch gap-2 border border-light-hairline bg-document-grey/40 p-5 font-mono text-xs sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+        >
+          <span className="min-w-0 break-words border border-light-hairline bg-white px-3 py-3 text-center text-base/80 sm:flex-1">
             Cota
           </span>
-          <span className="text-primary-deep">→</span>
-          <span className="flex-1 border border-light-hairline bg-white px-3 py-3 text-center text-base/80">
+          <span aria-hidden="true" className="text-center text-primary-deep">
+            <span className="sm:hidden">↓</span>
+            <span className="hidden sm:inline">→</span>
+          </span>
+          <span className="min-w-0 break-words border border-light-hairline bg-white px-3 py-3 text-center text-base/80 sm:flex-1">
             Pool
           </span>
-          <span className="text-primary-deep">→</span>
-          <span className="flex-1 border border-primary/40 bg-primary/10 px-3 py-3 text-center text-primary-deep">
+          <span aria-hidden="true" className="text-center text-primary-deep">
+            <span className="sm:hidden">↓</span>
+            <span className="hidden sm:inline">→</span>
+          </span>
+          <span className="min-w-0 break-words border border-primary/40 bg-primary/10 px-3 py-3 text-center text-primary-deep sm:flex-1">
             Token de demonstração · Stellar testnet
           </span>
         </div>

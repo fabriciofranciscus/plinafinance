@@ -415,7 +415,7 @@ function WizardInner() {
                   type="button"
                   onClick={() => setPasso(0)}
                   disabled={passo === 0}
-                  className="font-details text-[11px] tracking-[0.2em] uppercase text-base/60 hover:text-base transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="inline-flex min-h-[44px] items-center font-details text-[11px] tracking-[0.2em] uppercase text-base/60 hover:text-base transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   ← Voltar
                 </button>
@@ -423,7 +423,7 @@ function WizardInner() {
                   <button
                     type="button"
                     onClick={() => setPasso(1)}
-                    className="bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors"
+                    className="min-h-[44px] bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors"
                   >
                     Avançar →
                   </button>
@@ -432,7 +432,7 @@ function WizardInner() {
                     type="button"
                     onClick={enviar}
                     disabled={enviando}
-                    className="bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors disabled:opacity-50"
+                    className="min-h-[44px] bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors disabled:opacity-50"
                   >
                     {enviando ? 'Enviando…' : 'Enviar e acompanhar →'}
                   </button>
@@ -1264,7 +1264,7 @@ function PassoEnvioCota(props: {
         type="button"
         onClick={props.simular}
         disabled={props.simulando}
-        className="mt-6 font-details text-[11px] tracking-[0.2em] uppercase border border-base/20 px-5 py-2.5 hover:border-base transition-colors disabled:opacity-50"
+        className="mt-6 w-full sm:w-auto min-h-[44px] font-details text-[11px] tracking-[0.2em] uppercase border border-base/20 px-5 py-2.5 hover:border-base transition-colors disabled:opacity-50"
       >
         {props.simulando ? 'Calculando…' : 'Calcular estimativa'}
       </button>

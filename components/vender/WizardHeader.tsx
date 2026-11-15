@@ -46,9 +46,10 @@ export default function WizardHeader({ active }: { active: Caminho }) {
             <Link
               key={t.id}
               href={t.href}
-              aria-current={t.id === active ? 'page' : undefined}
+              // Em /vender/minhas o item atual é "Minhas solicitações": um só aria-current no cabeçalho (A-10).
+              aria-current={t.id === active && pathname !== '/vender/minhas' ? 'page' : undefined}
               className={`rounded-md px-3 py-2 transition-colors whitespace-nowrap ${
-                t.id === active
+                t.id === active && pathname !== '/vender/minhas'
                   ? 'text-primary-deep font-bold'
                   : 'text-base/60 hover:text-base'
               }`}

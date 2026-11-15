@@ -29,6 +29,7 @@ import { fetchSupplyOnChainFromEnv } from '@/lib/stellar/supply';
 import { LoginForm } from './login-form';
 import { IncorporarCotaForm } from './incorporar-cota-form';
 import { ClawbackForm } from './clawback-form';
+import { Concentracao } from './concentracao';
 import { ValidacaoForm } from './validacao-form';
 import { VendedorPipeline } from './vendedor-pipeline';
 import { CompradorPipeline } from './comprador-pipeline';
@@ -422,36 +423,14 @@ export default async function AdminPage() {
           </table>
         </div>
 
-        {concentracao.length > 0 && (
-          <div className="mt-8 border border-light-hairline">
-            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 px-4 py-3 border-b border-light-hairline">
-              Concentração por administradora · alerta &gt; 40%
-            </p>
-            <ul className="divide-y divide-light-hairline">
-              {concentracao.map((c) => (
-                <li
-                  key={c.administradora}
-                  className="px-4 py-3 grid grid-cols-[1fr_120px_80px_100px] items-center gap-4"
-                >
-                  <span className="font-text text-sm">{c.administradora}</span>
-                  <span className="font-mono text-xs text-right">
-                    {brl(c.nav)}
-                  </span>
-                  <span className="font-mono text-xs text-right">
-                    {c.pct.toFixed(1)}%
-                  </span>
-                  <span
-                    className={`font-details text-[10px] tracking-[0.15em] uppercase text-right ${
-                      c.alerta ? 'text-amber-700' : 'text-primary-deep'
-                    }`}
-                  >
-                    {c.alerta ? 'concentrado' : 'ok'}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <Concentracao
+          itens={concentracao.map((c) => ({
+            administradora: c.administradora,
+            valor: brl(c.nav),
+            participacao: `${c.pct.toFixed(1)}%`,
+            alerta: c.alerta,
+          }))}
+        />
       </section>
 
       <section id="investidores" className="mb-16 scroll-mt-32">

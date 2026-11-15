@@ -20,7 +20,7 @@
 
 import { usePrivy, useLogout } from '@privy-io/react-auth';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { itemAtivo, itensDoMenu } from '@/lib/nav/menu';
 import { usePessoa } from '@/components/PessoaProvider';
@@ -40,6 +40,7 @@ export function AppHeader({ isAdmin }: AppHeaderProps) {
   const { papeis, loading: carregandoPapeis } = usePessoa();
   const pathname = usePathname();
   const [aberto, setAberto] = useState(false);
+  const botaoMenu = useRef<HTMLButtonElement>(null);
 
   const stellarAddress =
     (user?.linkedAccounts ?? [])
@@ -58,7 +59,12 @@ export function AppHeader({ isAdmin }: AppHeaderProps) {
   useEffect(() => setAberto(false), [pathname]);
   useEffect(() => {
     if (!aberto) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setAberto(false);
+    // Esc fecha e devolve o foco ao botão do menu (A-09).
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setAberto(false);
+      botaoMenu.current?.focus();
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [aberto]);
@@ -126,6 +132,7 @@ export function AppHeader({ isAdmin }: AppHeaderProps) {
             </button>
           )}
           <button
+            ref={botaoMenu}
             type="button"
             aria-expanded={aberto}
             aria-controls="menu-principal"

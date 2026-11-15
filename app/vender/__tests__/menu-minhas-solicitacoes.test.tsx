@@ -14,6 +14,7 @@ vi.mock('@privy-io/react-auth', () => ({
 vi.mock('@/components/PessoaProvider', () => ({ usePessoa: () => ({ papeis, loading: carregando }) }));
 
 import { AppHeader } from '@/components/AppHeader';
+import WizardHeader from '@/components/vender/WizardHeader';
 
 afterEach(() => {
   cleanup();
@@ -72,5 +73,15 @@ describe('AppHeader: menu único', () => {
     carregando = true;
     render(<AppHeader isAdmin={false} />);
     expect(desktop().getAllByRole('link').map((l) => l.textContent)).toEqual(['Início', 'Histórico']);
+  });
+
+  it('A-10: em /vender/minhas o cabeçalho tem UM só aria-current (Minhas solicitações), não também "Para Cotistas"', () => {
+    pathname = '/vender/minhas';
+    render(<WizardHeader active="cotistas" />);
+    expect([...document.querySelectorAll('[aria-current="page"]')].map((e) => e.textContent)).toEqual(['Minhas solicitações']);
+    cleanup();
+    pathname = '/vender';
+    render(<WizardHeader active="cotistas" />);
+    expect([...document.querySelectorAll('[aria-current="page"]')].map((e) => e.textContent)).toEqual(['Para Cotistas']);
   });
 });
