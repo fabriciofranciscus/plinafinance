@@ -147,7 +147,7 @@ export const POST = withApi(async (req, { requestId }) => {
   // O anchor exige `userInfo.email` (PF, accountType 'personal'): o e-mail do investidor (espelho da Pessoa); o nome é opcional.
   const email = (user.email || investidor.email || '').trim();
   if (!email) {
-    throw new ApiError('CONFLICT', 409, 'investidor sem e-mail cadastrado — refaça o onboarding');
+    throw new ApiError('CONFLICT', 409, 'Complete o seu cadastro antes de continuar.');
   }
   let presignedUrl: string;
   try {

@@ -205,37 +205,11 @@ export default function AcompanharView({ data, onAtualizar }: { data: Acompanhar
 function PainelValidacao({ consentTx }: { consentTx: TxLink | null }) {
   return (
     <div className="mt-6 border-t border-light-hairline pt-6">
-      <p className="font-text text-sm text-base/70">
-        Duas camadas — caminho preferencial e fallback.
+      {/* Texto único da etapa (Consuelo, fechamento 15/11): antes havia "integração B2B via API/SLA", "cartório com e-CPF" e
+          "taxa de anuência 1–3%", nada disso existe ou está decidido. */}
+      <p data-testid="texto-validacao" className="font-text text-sm text-base/70">
+        Nossa mesa está conferindo a titularidade e a situação da sua cota junto à administradora.
       </p>
-
-      <div className="mt-4 space-y-3">
-        <div className="flex items-start gap-4 border border-primary/30 bg-primary/5 p-4">
-          <span className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] text-base shrink-0">
-            ✓
-          </span>
-          <div>
-            <p className="font-text text-sm font-semibold text-base">
-              Integração B2B com administradora via API
-            </p>
-            <p className="font-mono text-xs text-base/60 mt-0.5">
-              Caminho preferencial · SLA contratual
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-start gap-4 border border-light-hairline p-4">
-          <span className="mt-0.5 h-5 w-5 rounded-full border border-base/30 shrink-0" />
-          <div>
-            <p className="font-text text-sm font-semibold text-base">
-              Cartório digital com e-CPF
-            </p>
-            <p className="font-mono text-xs text-base/60 mt-0.5">
-              Fallback · Taxa de anuência 1–3% embutida no deságio
-            </p>
-          </div>
-        </div>
-      </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3 border border-primary/30 bg-document-grey/40 p-4">
         <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
