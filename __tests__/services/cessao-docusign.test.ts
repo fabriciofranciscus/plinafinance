@@ -8,7 +8,7 @@ const st = vi.hoisted(() => ({
   oferta: null as Row | null,
   audits: [] as Row[],
   envelopes: new Map<string, string>(), // transactionId → envelopeId (lado DocuSign)
-  criar: [] as Array<{ transactionId: string; pdf: Buffer; email: string }>,
+  criar: [] as Array<{ transactionId: string; pdf: Buffer; email: string; nome?: string }>,
   busca: [] as string[],
   script: [] as Array<'OK' | 'INCERTO_CRIADO' | 'INCERTO_NAO_CRIADO' | 'REJEITADO'>,
   memo: vi.fn(),
@@ -38,9 +38,9 @@ vi.mock('@/lib/integrations/docusign', async () => {
       st.busca.push(t);
       return st.envelopes.get(t) ?? null;
     }),
-    criarEnvelope: vi.fn(async (e: { transactionId: string; documentoPdf: Buffer; signatario: { email: string } }) => {
+    criarEnvelope: vi.fn(async (e: { transactionId: string; documentoPdf: Buffer; signatario: { email: string; nome?: string } }) => {
       await Promise.resolve();
-      st.criar.push({ transactionId: e.transactionId, pdf: e.documentoPdf, email: e.signatario.email });
+      st.criar.push({ transactionId: e.transactionId, pdf: e.documentoPdf, email: e.signatario.email, nome: e.signatario.nome });
       const out = st.script.shift() ?? 'OK';
       if (out === 'REJEITADO') throw new DocusignError('REQUISICAO_REJEITADA', 'rejeitada');
       // reenvio sequencial com a mesma transactionId devolve o MESMO envelope (medido no sandbox)
@@ -268,5 +268,45 @@ describe('DS2 — laudo antes do envelope, em QUALQUER rede (Vera F-DS2-1; Atlas
     expect(r.status).toBe('ENVIADA_DOCUSIGN');
     expect([...st.cessoes.values()]).toHaveLength(1);
     expect(st.criar).toHaveLength(1);
+  });
+});
+
+describe('DS2 — nome do cedente no instrumento: nunca o e-mail (pós-cota 15/11)', () => {
+  const lead = (nomeLead: string, nomePessoa?: string | null) => {
+    st.oferta = { ...st.oferta!, leadVendedor: { nome: nomeLead, email: 'ana@example.com', pessoa: nomePessoa === undefined ? null : { nome: nomePessoa } } };
+  };
+
+  it('usa o nome da Pessoa (KYC) no signatário, mesmo que o nome do lead seja o e-mail', async () => {
+    lead('test-4872@privy.io', 'Ana Souza');
+    await registrarCessao(input);
+    expect(st.criar).toHaveLength(1);
+    expect(st.criar[0].nome).toBe('Ana Souza');
+    expect(st.criar[0].email).toBe('ana@example.com');
+  });
+
+  it('sem nome na Pessoa, usa o nome do lead (se for um nome de verdade)', async () => {
+    lead('Ana Teste', null);
+    await registrarCessao(input);
+    expect(st.criar[0].nome).toBe('Ana Teste');
+  });
+
+  it.each([
+    ['e-mail no lead e na Pessoa', 'test-4872@privy.io', 'test-4872@privy.io'],
+    ['marcador no lead e e-mail na Pessoa', 'Nome não informado', 'ana@example.com'],
+    ['marcador no lead e Pessoa sem nome', 'Nome não informado', null],
+    ['lead vazio e Pessoa ausente', '  ', undefined],
+  ])('%s: recusa NOME_AUSENTE ANTES do claim e do DocuSign (nada criado, nenhum envelope)', async (_n, nomeLead, nomePessoa) => {
+    lead(nomeLead as string, nomePessoa as string | null | undefined);
+    await expect(registrarCessao(input)).rejects.toMatchObject({ code: 'NOME_AUSENTE' });
+    expect(st.criar).toHaveLength(0);
+    expect(st.busca).toHaveLength(0);
+    const c = [...st.cessoes.values()][0];
+    expect(c?.docusignEnvioIniciadoEm ?? null).toBeNull();
+  });
+
+  it('a mensagem do erro é fixa, sem e-mail nem dado do cedente', async () => {
+    lead('test-4872@privy.io', null);
+    const e = await registrarCessao(input).catch((x) => x);
+    expect(String(e.message)).not.toMatch(/@|privy|ana/i);
   });
 });

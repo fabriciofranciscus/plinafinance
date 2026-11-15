@@ -28,7 +28,7 @@ vi.mock('@/lib/services/pagamento-cedente', async (orig) => ({
 }));
 
 import { POST } from '@/app/api/admin/originacao/route';
-import { EnvioDocusignLaudoAusenteError } from '@/lib/services/cessao-docusign';
+import { EnvioDocusignLaudoAusenteError, EnvioDocusignNomeAusenteError } from '@/lib/services/cessao-docusign';
 import { IncorporacaoFunilBloqueadaError } from '@/lib/services/originacao';
 import { PagamentoCedenteError } from '@/lib/services/pagamento-cedente';
 import { LiquidacaoCedenteError } from '@/lib/services/liquidacao-cedente';
@@ -198,6 +198,16 @@ describe('registrar-cessao / enviar-cessao (laudo antes do envelope)', () => {
     const r = await POST(req({ action: 'enviar-cessao', cessaoId: 'ces_1' }));
     expect(r.status).toBe(409);
     expect(await r.json()).toEqual({ error: erro.message, code: 'LAUDO_AUSENTE' });
+  });
+});
+
+describe('enviar-cessao — cedente sem nome de verdade (pós-cota 15/11)', () => {
+  it('EnvioDocusignNomeAusenteError → 409 NOME_AUSENTE com mensagem fixa', async () => {
+    const erro = new EnvioDocusignNomeAusenteError();
+    m.enviar.mockRejectedValue(erro);
+    const r = await POST(req({ action: 'enviar-cessao', cessaoId: 'ces_1' }));
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({ error: erro.message, code: 'NOME_AUSENTE' });
   });
 });
 

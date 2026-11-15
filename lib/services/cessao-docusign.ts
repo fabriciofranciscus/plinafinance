@@ -23,6 +23,7 @@ import {
 import { buildCessaoPdf } from '../comprovante/cessao-pdf';
 import { STELLAR_NETWORK } from '../stellar/config';
 import { hashDoLaudo } from './titular-laudo';
+import { nomeDoCedente } from '../vender/nome';
 
 /** Janela em que um envio em curso não pode ser assumido por outro (> timeouts do cliente). */
 export const DOCUSIGN_ENVIO_JANELA_MS = 120_000;
@@ -35,6 +36,15 @@ export class EnvioDocusignLaudoAusenteError extends Error {
   constructor() {
     super('Não há laudo de validação registrado para esta cessão: o envio para assinatura na mainnet exige o laudo.');
     this.name = 'EnvioDocusignLaudoAusenteError';
+  }
+}
+
+/** Cedente sem nome de verdade (só e-mail ou nada): o instrumento não sai. */
+export class EnvioDocusignNomeAusenteError extends Error {
+  readonly code = 'NOME_AUSENTE' as const;
+  constructor() {
+    super('O cedente não tem nome cadastrado (KYC) para constar no instrumento: complete o cadastro antes de enviar para assinatura.');
+    this.name = 'EnvioDocusignNomeAusenteError';
   }
 }
 
@@ -66,7 +76,7 @@ export async function enviarCessaoParaAssinatura(input: {
   const agora = input.agora ?? Date.now();
   const cessao = await db.cessao.findUnique({
     where: { id: input.cessaoId },
-    include: { oferta: { include: { leadVendedor: { select: { nome: true, email: true } } } } },
+    include: { oferta: { include: { leadVendedor: { select: { nome: true, email: true, pessoa: { select: { nome: true } } } } } } },
   });
   if (!cessao) throw new Error('Cessão não encontrada');
   if (cessao.status !== CessaoStatus.PENDENTE) {
@@ -76,7 +86,11 @@ export async function enviarCessaoParaAssinatura(input: {
     throw new Error(`Cessão em estado ${cessao.status} não pode ser enviada`);
   }
   const lead = cessao.oferta.leadVendedor;
-  if (!lead?.email || !lead.nome) throw new Error('Cedente sem nome ou e-mail para assinatura');
+  if (!lead?.email) throw new Error('Cedente sem nome ou e-mail para assinatura');
+  // O instrumento leva o NOME do cedente (do KYC, em Pessoa; senão o do lead), nunca o e-mail (pós-cota 15/11). Sem nome de
+  // verdade o envio é recusado ANTES do claim e do DocuSign: contrato sem nome não vale.
+  const nomeCedente = nomeDoCedente(lead.pessoa?.nome) ?? nomeDoCedente(lead.nome);
+  if (!nomeCedente) throw new EnvioDocusignNomeAusenteError();
 
   // Laudo (último COTA_VALIDADA da cessão): o PDF o cita. O envio sem laudo é recusado ANTES do claim, em qualquer rede, para
   // nunca emitir "quitada … conforme o laudo (ainda não registrado)".
@@ -125,7 +139,7 @@ export async function enviarCessaoParaAssinatura(input: {
       const o = cessao.oferta;
       const pdf = await buildCessaoPdf({
         cessaoId: cessao.id,
-        cedenteNome: lead.nome,
+        cedenteNome: nomeCedente,
         administradora: o.administradora,
         tipoBem: o.tipoBem,
         valorCarta: BRL.format(Number(o.valorCarta)),
@@ -139,7 +153,7 @@ export async function enviarCessaoParaAssinatura(input: {
           await criarEnvelope({
             documentoPdf: pdf,
             nomeDocumento: 'Cessão de cota de consórcio.pdf',
-            signatario: { nome: lead.nome, email: lead.email },
+            signatario: { nome: nomeCedente, email: lead.email },
             emailSubject: 'Plina — assine a cessão da sua cota de consórcio',
             transactionId,
           })

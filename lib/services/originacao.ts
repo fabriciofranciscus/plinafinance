@@ -597,6 +597,8 @@ export async function incorporarCotaDoFunil(input: {
   await notifyCedente(cessao.oferta.leadVendedor?.email, 'concluido', {
     leadId: cessao.oferta.leadVendedorId,
     nome: cessao.oferta.leadVendedor?.nome,
+    // Pós-cota 15/11: link da tx de emissão como 'Prova on-chain', igual ao e-mail da cessão.
+    onChainTxHash: result.txHash || null,
   });
 
   return result;

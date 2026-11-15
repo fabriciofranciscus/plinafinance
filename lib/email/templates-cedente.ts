@@ -5,6 +5,7 @@
  * de clientes de email. Um template por transição do funil.
  */
 
+import { nomeDoCedente } from '@/lib/vender/nome';
 import { txExplorerUrl } from '../stellar/config';
 
 export type CedenteEmailKind = 'oferta' | 'cessao' | 'pix' | 'concluido';
@@ -58,7 +59,9 @@ export function renderCedenteEmail(
 ): { subject: string; text: string; html: string } {
   const c = COPY[kind];
   const url = acompanharUrl(data.leadId);
-  const saudacao = data.nome ? `Olá, ${data.nome}.` : 'Olá.';
+  // Nunca e-mail (nem o marcador de 'sem nome') como nome: saudação neutra (pós-cota 15/11).
+  const nome = nomeDoCedente(data.nome);
+  const saudacao = nome ? `Olá, ${nome}.` : 'Olá.';
 
   const linhas: string[] = [];
   if (data.valorLiquido) linhas.push(`Valor líquido: ${data.valorLiquido}`);

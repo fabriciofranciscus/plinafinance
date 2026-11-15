@@ -17,6 +17,7 @@ import { capturarLead } from '@/lib/services/originacao';
 import { parseBody } from '@/lib/http/parse-body';
 import { leadLimiter, clientIp } from '@/lib/rate-limit/config';
 import { withPessoaAuth } from '@/lib/wallet/pessoa-auth';
+import { NOME_NAO_INFORMADO, nomeDoCedente } from '@/lib/vender/nome';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,7 +58,8 @@ export const POST = withPessoaAuth(async (req, { user }) => {
 
   try {
     const result = await capturarLead({
-      nome: user.nome ?? user.email,
+      // Nunca o e-mail como nome (pós-cota 15/11): sem nome de verdade grava o marcador e os e-mails/PDF tratam como "sem nome".
+      nome: nomeDoCedente(user.nome) ?? NOME_NAO_INFORMADO,
       email: user.email,
       telefone: body.telefone,
       consentimentoLgpd: true,
