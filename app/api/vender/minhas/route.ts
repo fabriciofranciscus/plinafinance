@@ -13,7 +13,7 @@
  *   status: LeadVendedorStatus, // NOVO … COTA_INCORPORADA | PERDIDO
  *   etapa: number,              // etapa do wizard (lib/vender/etapas)
  *   encerrado: boolean,         // PERDIDO (solicitação encerrada sem sucesso)
- *   concluido: boolean,         // PIX_EXECUTADO ou COTA_INCORPORADA
+ *   concluido: boolean,         // SÓ COTA_INCORPORADA (Pix executado ainda não é concluído)
  *   criadoEm: string,           // ISO-8601
  *   atualizadoEm: string,       // ISO-8601
  *   oferta: null | { status: OfertaStatus, tipoBem: TipoBem, valorCarta: string, valorLiquido: string, validade: string }

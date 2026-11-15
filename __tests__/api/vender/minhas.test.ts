@@ -71,7 +71,7 @@ describe('GET /api/vender/minhas', () => {
     expect(corpo).not.toMatch(/Ana Souza|ana@exemplo|1199|12345678909|privy/);
   });
 
-  it('lead sem oferta → oferta null; PERDIDO → encerrado; COTA_INCORPORADA/PIX_EXECUTADO → concluido', async () => {
+  it('lead sem oferta → oferta null; PERDIDO → encerrado; só COTA_INCORPORADA é concluido; PIX_EXECUTADO ainda não (a cota está em incorporação)', async () => {
     m.findMany.mockResolvedValue([
       lead({ id: 'a', status: 'NOVO', ofertas: [] }),
       lead({ id: 'b', status: 'PERDIDO' }),
@@ -83,7 +83,7 @@ describe('GET /api/vender/minhas', () => {
     expect(por.a.oferta).toBeNull();
     expect(por.b).toMatchObject({ encerrado: true, concluido: false });
     expect(por.c).toMatchObject({ encerrado: false, concluido: true });
-    expect(por.d).toMatchObject({ encerrado: false, concluido: true });
+    expect(por.d).toMatchObject({ encerrado: false, concluido: false });
   });
 
   it('Pessoa ainda não criada (pré-KYC): 200 com lista vazia, sem consultar o banco', async () => {
