@@ -26,6 +26,7 @@ import { enviarCessaoParaAssinatura } from './cessao-docusign';
 import { tokensParaEmitir } from './pool';
 import { taxaAnuenciaBpsFor } from '../config/administradoras';
 import { taxaPrazoBpsFor } from '../config/curva-yield';
+import { OriginacaoPrecondicaoError } from './originacao-erros';
 import { notifyCedente } from '../email/notify-cedente';
 import { buildComprovantePdf } from '../comprovante/pdf';
 import { uploadComprovante } from '../comprovante/store';
@@ -60,6 +61,13 @@ export interface CapturarLeadResult {
   leadId: string;
   payloadHash: string;
   txHash: string;
+  /**
+   * A-11: `true` quando o e-mail JÁ tinha uma solicitação (LeadVendedor.email é UNIQUE) e esta chamada a REAPROVEITOU, mesmo
+   * id, sem criar outra. A tela avisa ("você já tem uma solicitação") em vez de parecer que criou uma nova.
+   */
+  reaproveitada: boolean;
+  /** Estado atual do funil da solicitação devolvida (NOVO, OFERTA_ENVIADA, PERDIDO…). */
+  statusAtual: string;
 }
 
 export async function capturarLead(
@@ -86,7 +94,10 @@ export async function capturarLead(
   const onChain = await registerOnChainHash(payload);
 
   // 2. Persiste lead + audit log.
+  const emailNorm = input.email.toLowerCase().trim();
+  let reaproveitada = false;
   const lead = await db.$transaction(async (tx) => {
+    reaproveitada = (await tx.leadVendedor.findUnique({ where: { email: emailNorm }, select: { id: true } })) !== null;
     const created = await tx.leadVendedor.upsert({
       where: { email: input.email.toLowerCase().trim() },
       create: {
@@ -125,6 +136,8 @@ export async function capturarLead(
     leadId: lead.id,
     payloadHash: onChain.payloadHash,
     txHash: onChain.txHash,
+    reaproveitada,
+    statusAtual: lead.status,
   };
 }
 
@@ -189,12 +202,45 @@ export interface GerarOfertaInput {
   caminhoCessao?: CaminhoCessao;
 }
 
-export async function gerarOferta(input: GerarOfertaInput) {
+export interface ComposicaoDaOferta {
+  desagioBase: Prisma.Decimal;
+  taxaAnuenciaBps: number;
+  taxaPrazoBps: number;
+  caminho: CaminhoCessao;
+  desagioTotal: Prisma.Decimal;
+  valorLiquido: Prisma.Decimal;
+}
+
+/**
+ * Entrada de oferta que o operador pode corrigir (A-22): valor da carta inválido, deságio base fora de [0, 1] ou deságio TOTAL
+ * (base + anuência + prazo) acima de 100%. É erro de validação, não falha do servidor: a rota admin responde 422 com a
+ * mensagem (fixa, sem dado de ninguém) e o `code`. As mensagens mantêm os trechos que os testes e a tela já conheciam.
+ */
+export class OfertaInvalidaError extends Error {
+  constructor(readonly code: 'VALOR_CARTA_INVALIDO' | 'DESAGIO_BASE_INVALIDO' | 'DESAGIO_TOTAL_EXCEDE', message: string) {
+    super(message);
+    this.name = 'OfertaInvalidaError';
+  }
+}
+
+/**
+ * Composição do deságio e do líquido de uma oferta (PURA, sem banco): base + anuência (só no caminho fallback) + prazo.
+ * Usada por `gerarOferta` e pela prévia do admin (A-08), para a tela mostrar EXATAMENTE o que será gravado.
+ * `prazoRestanteMeses`: 0 = cota quitada (sem componente de prazo, igual a não informar, mas guardado como 0 e não null);
+ * > 0 soma `taxaPrazoBpsFor` (15% a.a. linear). Valida valor, base e teto de 100% como o gerarOferta sempre fez.
+ */
+export function comporDesagioDaOferta(input: {
+  valorCarta: string;
+  administradora: string;
+  desagioAquisicao: string;
+  prazoRestanteMeses?: number;
+  caminhoCessao?: CaminhoCessao;
+}): ComposicaoDaOferta {
   const valor = Number(input.valorCarta);
   const desagio = Number(input.desagioAquisicao);
-  if (!isFinite(valor) || valor <= 0) throw new Error('valorCarta inválido');
+  if (!isFinite(valor) || valor <= 0) throw new OfertaInvalidaError('VALOR_CARTA_INVALIDO', 'valorCarta inválido: informe um valor maior que zero.');
   if (!isFinite(desagio) || desagio < 0 || desagio > 1)
-    throw new Error('desagioAquisicao fora de [0, 1]');
+    throw new OfertaInvalidaError('DESAGIO_BASE_INVALIDO', 'desagioAquisicao fora de [0, 1]: use uma fração entre 0 e 1 (ex.: 0.20 para 20%).');
 
   // F-M1-4: taxa de anuência embutida no deságio quando caminho = fallback.
   const caminho = input.caminhoCessao ?? CaminhoCessao.CARTORIO_DIGITAL;
@@ -210,12 +256,20 @@ export async function gerarOferta(input: GerarOfertaInput) {
     .plus(new Prisma.Decimal(taxaPrazoBps).div(10000))
     .toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_EVEN);
   if (desagioTotal.greaterThan(1)) {
-    throw new Error('deságio total (base + anuência) excede 100%');
+    throw new OfertaInvalidaError(
+      'DESAGIO_TOTAL_EXCEDE',
+      'O deságio total (base + anuência + prazo) excede 100%: reduza o deságio base ou o prazo restante.',
+    );
   }
 
   const valorLiquido = new Prisma.Decimal(input.valorCarta)
     .mul(new Prisma.Decimal(1).minus(desagioTotal))
     .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_EVEN);
+  return { desagioBase, taxaAnuenciaBps, taxaPrazoBps, caminho, desagioTotal, valorLiquido };
+}
+
+export async function gerarOferta(input: GerarOfertaInput) {
+  const { desagioBase, taxaAnuenciaBps, taxaPrazoBps, caminho, desagioTotal, valorLiquido } = comporDesagioDaOferta(input);
   const validade = new Date(Date.now() + (input.validadeHoras ?? 48) * 3600 * 1000);
 
   const existingVersions = await db.oferta.count({
@@ -263,6 +317,12 @@ export async function gerarOferta(input: GerarOfertaInput) {
       },
     });
     return created;
+  }).catch((err: unknown) => {
+    // Lead inexistente: FK da oferta (P2003) ou update sem linha (P2025) é "não encontrado" para o operador, não 500.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && (err.code === 'P2003' || err.code === 'P2025')) {
+      throw new OriginacaoPrecondicaoError('LEAD_NAO_ENCONTRADO', 'Lead não encontrado');
+    }
+    throw err;
   });
 
   // F-M1-7: email transacional (best-effort, não bloqueia o funil).
@@ -364,9 +424,9 @@ export async function registrarCessao(input: {
     where: { id: input.ofertaId },
     include: { cessao: true },
   });
-  if (!oferta) throw new Error('Oferta não encontrada');
+  if (!oferta) throw new OriginacaoPrecondicaoError('OFERTA_NAO_ENCONTRADA', 'Oferta não encontrada');
   if (oferta.status !== OfertaStatus.ACEITA) {
-    throw new Error('Oferta precisa estar ACEITA antes de cessão');
+    throw new OriginacaoPrecondicaoError('OFERTA_NAO_ACEITA', 'Oferta precisa estar ACEITA antes de cessão');
   }
 
   let cessao = oferta.cessao;
@@ -527,7 +587,7 @@ export async function incorporarCotaDoFunil(input: {
       cota: true,
     },
   });
-  if (!cessao) throw new Error('Cessão não encontrada');
+  if (!cessao) throw new OriginacaoPrecondicaoError('CESSAO_NAO_ENCONTRADA', 'Cessão não encontrada');
   if (cessao.pagamento?.status !== PagamentoStatus.EXECUTADO) {
     throw new IncorporacaoFunilBloqueadaError('PAGAMENTO_NAO_EXECUTADO');
   }
@@ -690,8 +750,8 @@ export async function registrarLaudoDaCessao(input: {
     where: { id: input.cessaoId },
     include: { oferta: true, cota: { select: { id: true } } },
   });
-  if (!cessao) throw new Error('Cessão não encontrada');
-  if (cessao.cota) throw new Error('Cessão já tem cota incorporada');
+  if (!cessao) throw new OriginacaoPrecondicaoError('CESSAO_NAO_ENCONTRADA', 'Cessão não encontrada');
+  if (cessao.cota) throw new OriginacaoPrecondicaoError('CESSAO_JA_TEM_COTA', 'Cessão já tem cota incorporada');
 
   const payload = buildAuditPayload('cota_validacao', cessao.id, {
     cessaoId: cessao.id,
@@ -728,16 +788,16 @@ export async function registrarAnuencia(input: {
   operador: string;
 }): Promise<{ hashValidacao: string; status: string }> {
   if (input.status === 'CONFIRMADA' && !input.referencia) {
-    throw new Error('Anuência CONFIRMADA exige referência (protocolo ou documento).');
+    throw new OriginacaoPrecondicaoError('ANUENCIA_SEM_REFERENCIA', 'Anuência CONFIRMADA exige referência (protocolo ou documento).');
   }
   if (input.status === 'DECLARADA_PENDENTE' && STELLAR_NETWORK === 'PUBLIC') {
-    throw new Error('Em mainnet a anuência precisa ser CONFIRMADA; "declarada pendente" só em testnet.');
+    throw new OriginacaoPrecondicaoError('ANUENCIA_DECLARADA_EM_MAINNET', 'Em mainnet a anuência precisa ser CONFIRMADA; "declarada pendente" só em testnet.');
   }
   const laudo = await db.eventoAudit.findFirst({
     where: { acao: 'COTA_VALIDADA', payloadHash: input.hashValidacao },
     select: { id: true, cessaoId: true, cotaId: true },
   });
-  if (!laudo) throw new Error('Laudo não registrado para este hashValidacao.');
+  if (!laudo) throw new OriginacaoPrecondicaoError('LAUDO_NAO_ENCONTRADO', 'Laudo não registrado para este hashValidacao.');
 
   await db.eventoAudit.create({
     data: {

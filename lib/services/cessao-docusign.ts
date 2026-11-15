@@ -23,6 +23,7 @@ import {
 import { buildCessaoPdf } from '../comprovante/cessao-pdf';
 import { STELLAR_NETWORK } from '../stellar/config';
 import { hashDoLaudo } from './titular-laudo';
+import { OriginacaoPrecondicaoError } from './originacao-erros';
 import { nomeDoCedente } from '../vender/nome';
 
 /** Janela em que um envio em curso não pode ser assumido por outro (> timeouts do cliente). */
@@ -78,15 +79,15 @@ export async function enviarCessaoParaAssinatura(input: {
     where: { id: input.cessaoId },
     include: { oferta: { include: { leadVendedor: { select: { nome: true, email: true, pessoa: { select: { nome: true } } } } } } },
   });
-  if (!cessao) throw new Error('Cessão não encontrada');
+  if (!cessao) throw new OriginacaoPrecondicaoError('CESSAO_NAO_ENCONTRADA', 'Cessão não encontrada');
   if (cessao.status !== CessaoStatus.PENDENTE) {
     if (cessao.docusignEnvelopeId && cessao.status !== CessaoStatus.CANCELADA && cessao.status !== CessaoStatus.EXPIRADA) {
       return { cessaoId: cessao.id, status: cessao.status, envelopeId: cessao.docusignEnvelopeId, jaEnviada: true };
     }
-    throw new Error(`Cessão em estado ${cessao.status} não pode ser enviada`);
+    throw new OriginacaoPrecondicaoError('CESSAO_ESTADO_INVALIDO', 'A cessão não está mais pendente e não pode ser enviada para assinatura.');
   }
   const lead = cessao.oferta.leadVendedor;
-  if (!lead?.email) throw new Error('Cedente sem nome ou e-mail para assinatura');
+  if (!lead?.email) throw new OriginacaoPrecondicaoError('CEDENTE_SEM_EMAIL', 'Cedente sem nome ou e-mail para assinatura');
   // O instrumento leva o NOME do cedente (do KYC, em Pessoa; senão o do lead), nunca o e-mail (pós-cota 15/11). Sem nome de
   // verdade o envio é recusado ANTES do claim e do DocuSign: contrato sem nome não vale.
   const nomeCedente = nomeDoCedente(lead.pessoa?.nome) ?? nomeDoCedente(lead.nome);

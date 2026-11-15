@@ -6,7 +6,7 @@
  */
 
 import { nomeDoCedente } from '@/lib/vender/nome';
-import { txExplorerUrl } from '../stellar/config';
+import { STELLAR_NETWORK, txExplorerUrl } from '../stellar/config';
 
 export type CedenteEmailKind = 'oferta' | 'cessao' | 'pix' | 'concluido';
 
@@ -22,6 +22,10 @@ export interface CedenteEmailData {
 }
 
 const BASE_URL = process.env.APP_BASE_URL ?? 'https://plina.finance';
+
+/** A-06: fora da mainnet o e-mail leva o aviso de que é demonstração (mesma regra do PDF da cessão). */
+const AVISO_TESTES = 'Mensagem de demonstração (projeto em fase de testes, rede de testes): sem efeito jurídico nem financeiro.';
+const emTestes = () => STELLAR_NETWORK !== 'PUBLIC';
 
 function acompanharUrl(leadId: string): string {
   return `${BASE_URL}/vender/acompanhar/${leadId}`;
@@ -80,6 +84,7 @@ export function renderCedenteEmail(
     `Acompanhe sua solicitação: ${url}`,
     '',
     'Plina Finance',
+    ...(emTestes() ? [AVISO_TESTES] : []),
   ].join('\n');
 
   const detalhesHtml = linhas
@@ -103,6 +108,7 @@ export function renderCedenteEmail(
     <tr><td style="padding:20px 28px 28px;">
       <a href="${url}" style="display:inline-block;background:#132728;color:#e4e4e4;text-decoration:none;font-size:12px;letter-spacing:2px;text-transform:uppercase;padding:14px 28px;">Acompanhar minha solicitação</a>
     </td></tr>
+    ${emTestes() ? `<tr><td style="padding:0 28px 24px;"><p style="margin:0;font-size:11px;color:#888;line-height:1.4;">${escapeHtml(AVISO_TESTES)}</p></td></tr>` : ''}
   </table>
 </body></html>`;
 

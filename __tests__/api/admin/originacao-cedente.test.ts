@@ -3,13 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextResponse } from 'next/server';
 
 const m = vi.hoisted(() => ({
-  cessao: vi.fn(), enviar: vi.fn(), incorporar: vi.fn(), isAdmin: vi.fn(), csrf: vi.fn(), confirmar: vi.fn(), pagar: vi.fn(), reabrir: vi.fn(),
+  cessao: vi.fn(), enviar: vi.fn(), incorporar: vi.fn(), gerar: vi.fn(), isAdmin: vi.fn(), csrf: vi.fn(), confirmar: vi.fn(), pagar: vi.fn(), reabrir: vi.fn(),
 }));
 vi.mock('@/lib/auth/admin', () => ({ isAdminAuthenticated: m.isAdmin }));
 vi.mock('@/lib/auth/admin-csrf', () => ({ requireAdminCsrf: m.csrf }));
 vi.mock('@/lib/services/originacao', async (orig) => ({
   ...(await orig<typeof import('@/lib/services/originacao')>()),
-  gerarOferta: vi.fn(), registrarAnuencia: vi.fn(), registrarLaudoDaCessao: vi.fn(),
+  gerarOferta: m.gerar, registrarAnuencia: vi.fn(), registrarLaudoDaCessao: vi.fn(),
   incorporarCotaDoFunil: m.incorporar, registrarCessao: m.cessao,
 }));
 vi.mock('@/lib/services/cessao-docusign', async (orig) => ({
@@ -28,8 +28,9 @@ vi.mock('@/lib/services/pagamento-cedente', async (orig) => ({
 }));
 
 import { POST } from '@/app/api/admin/originacao/route';
+import { DocusignError } from '@/lib/integrations/docusign';
 import { EnvioDocusignLaudoAusenteError, EnvioDocusignNomeAusenteError } from '@/lib/services/cessao-docusign';
-import { IncorporacaoFunilBloqueadaError } from '@/lib/services/originacao';
+import { IncorporacaoFunilBloqueadaError, OfertaInvalidaError } from '@/lib/services/originacao';
 import { PagamentoCedenteError } from '@/lib/services/pagamento-cedente';
 import { LiquidacaoCedenteError } from '@/lib/services/liquidacao-cedente';
 import { TitularLaudoError } from '@/lib/services/titular-laudo';
@@ -46,6 +47,7 @@ beforeEach(() => {
   m.cessao.mockReset().mockResolvedValue({ status: 'PENDENTE' });
   m.enviar.mockReset().mockResolvedValue({ status: 'ENVIADA_DOCUSIGN', envelopeId: 'env_1' });
   m.incorporar.mockReset().mockResolvedValue({ cotaId: 'cota_1' });
+  m.gerar.mockReset().mockResolvedValue({ id: 'of_1' });
   m.isAdmin.mockReset().mockResolvedValue(true);
   m.csrf.mockReset().mockReturnValue(null);
   m.confirmar.mockReset().mockResolvedValue({ situacao: 'TITULAR_UNICO', pagamentoAutomatico: true });
@@ -220,3 +222,118 @@ describe('incorporar-cota — provas do funil (IncorporacaoFunilBloqueadaError �
     expect(await r.json()).toEqual({ error: erro.message, code });
   });
 });
+
+const OFERTA = { action: 'gerar-oferta', leadVendedorId: 'lead_1', tipoBem: 'VEICULO', valorCarta: '40000', administradora: 'Embracon Consórcios', desagioAquisicao: '0.22' };
+
+describe('gerar-oferta: prazo 0 = cota quitada (A-01)', () => {
+  it.each([0, 1, 12, 600])('prazoRestanteMeses=%s é aceito e passado ao serviço', async (prazo) => {
+    const r = await POST(req({ ...OFERTA, prazoRestanteMeses: prazo }));
+    expect(r.status).toBe(200);
+    expect(m.gerar.mock.calls[0][0].prazoRestanteMeses).toBe(prazo);
+  });
+  it.each([-1, 601, 1.5, '12', null])('prazoRestanteMeses=%j → 400 sem gerar', async (prazo) => {
+    expect((await POST(req({ ...OFERTA, prazoRestanteMeses: prazo }))).status).toBe(400);
+    expect(m.gerar).not.toHaveBeenCalled();
+  });
+  it('sem prazo continua valendo (opcional)', async () => {
+    expect((await POST(req(OFERTA))).status).toBe(200);
+    expect(m.gerar.mock.calls[0][0].prazoRestanteMeses).toBeUndefined();
+  });
+});
+
+describe('previa-oferta: o deságio final ANTES de gerar (A-08)', () => {
+  const PREVIA = { action: 'previa-oferta', valorCarta: '100000', administradora: 'Embracon Consórcios', desagioAquisicao: '0.18' };
+
+  it('devolve a composição exata (base + anuência + prazo), sem gerar nada nem tocar o banco', async () => {
+    const r = await POST(req({ ...PREVIA, prazoRestanteMeses: 12 }));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ desagioBase: '0.1800', taxaAnuenciaBps: 150, taxaPrazoBps: 1500, desagioTotal: '0.3450', valorLiquido: '65500.00' });
+    expect(m.gerar).not.toHaveBeenCalled();
+  });
+  it('prazo 0 e prazo em branco dão o mesmo resultado (sem componente de prazo)', async () => {
+    const a = await (await POST(req({ ...PREVIA, prazoRestanteMeses: 0 }))).json();
+    const b = await (await POST(req(PREVIA))).json();
+    expect(a).toEqual(b);
+    expect(a.taxaPrazoBps).toBe(0);
+  });
+  it('a prévia bate com o que o gerar-oferta gravaria (mesma função)', async () => {
+    const previa = await (await POST(req({ ...PREVIA, prazoRestanteMeses: 6 }))).json();
+    expect(previa.desagioTotal).toBe('0.2700'); // 0,18 + 0,015 + 0,075
+  });
+  it.each([{ leadVendedorId: 'x' }, { tipoBem: 'VEICULO' }, { operador: 'x' }, { valorCarta: '-1' }])('corpo estrito %o → 400', async (extra) => {
+    expect((await POST(req({ ...PREVIA, ...extra }))).status).toBe(400);
+  });
+  it('deságio fora da faixa (total > 100%) → 422 com a causa (A-22; antes era 500), sem gravar; sem sessão → 401', async () => {
+    const r = await POST(req({ ...PREVIA, desagioAquisicao: '0.95', prazoRestanteMeses: 12 }));
+    expect(r.status).toBe(422);
+    expect((await r.json()).code).toBe('DESAGIO_TOTAL_EXCEDE');
+    m.isAdmin.mockResolvedValue(false);
+    expect((await POST(req(PREVIA))).status).toBe(401);
+  });
+});
+
+describe('enviar-cessao com o DocuSign fora do ar ou sem configuração (A-02)', () => {
+  const enviar = { action: 'enviar-cessao', cessaoId: 'ces_1' };
+  it.each([
+    ['CONFIG_INVALIDA', 503, 'DOCUSIGN_NAO_CONFIGURADO'],
+    ['CHAVE_PRIVADA_INVALIDA', 503, 'DOCUSIGN_NAO_CONFIGURADO'],
+    ['CONSENTIMENTO_NECESSARIO', 503, 'DOCUSIGN_CONSENTIMENTO_NECESSARIO'],
+    ['AUTENTICACAO_FALHOU', 503, 'DOCUSIGN_AUTENTICACAO_FALHOU'],
+    ['INDISPONIVEL', 503, 'DOCUSIGN_INDISPONIVEL'],
+  ] as const)('%s → %s %s (nunca 500)', async (codigo, status, code) => {
+    m.enviar.mockRejectedValue(new DocusignError(codigo, 'DocuSign: variáveis de ambiente ausentes: DOCUSIGN_INTEGRATION_KEY, DOCUSIGN_PRIVATE_KEY.'));
+    const r = await POST(req(enviar));
+    expect(r.status).toBe(status);
+    const corpo = await r.json();
+    expect(corpo.code).toBe(code);
+    // mensagem fixa: sem nome de variável, chave nem a causa original (o campo `code` é o único com prefixo DOCUSIGN_)
+    expect(corpo.error).not.toMatch(/DOCUSIGN_|PRIVATE_KEY|INTEGRATION_KEY|variáveis de ambiente/);
+    expect(Object.keys(corpo).sort()).toEqual(['code', 'error']);
+  });
+  it('a mensagem da config ausente diz "DocuSign não configurado"', async () => {
+    m.enviar.mockRejectedValue(new DocusignError('CONFIG_INVALIDA', 'x'));
+    expect((await (await POST(req(enviar))).json()).error).toMatch(/DocuSign não configurado/);
+  });
+  it('outros erros do DocuSign (RESULTADO_INCERTO, REQUISICAO_REJEITADA) seguem como antes (500 com a mensagem)', async () => {
+    m.enviar.mockRejectedValue(new DocusignError('RESULTADO_INCERTO', 'resultado incerto'));
+    expect((await POST(req(enviar))).status).toBe(500);
+  });
+});
+
+describe('oferta que o operador pode corrigir: 422 com a mensagem, nunca 500 (A-22)', () => {
+  const previa = { action: 'previa-oferta', valorCarta: '40000', administradora: 'Administradora Demonstração (fictícia)', desagioAquisicao: '0.20' };
+  it('previa-oferta com o deságio total acima de 100% (prazo longo) → 422 DESAGIO_TOTAL_EXCEDE com a causa e o que fazer', async () => {
+    const r = await POST(req({ ...previa, prazoRestanteMeses: 120 }));
+    expect(r.status).toBe(422);
+    const corpo = await r.json();
+    expect(corpo.code).toBe('DESAGIO_TOTAL_EXCEDE');
+    expect(corpo.error).toMatch(/excede 100%/);
+    expect(corpo.error).toMatch(/reduza o deságio base ou o prazo/);
+    expect(Object.keys(corpo).sort()).toEqual(['code', 'error']);
+  });
+  it('previa-oferta com valor da carta 0 → 422 VALOR_CARTA_INVALIDO; deságio base fora de [0,1] → 422 DESAGIO_BASE_INVALIDO', async () => {
+    const v = await POST(req({ ...previa, valorCarta: '0' }));
+    expect(v.status).toBe(422);
+    expect((await v.json()).code).toBe('VALOR_CARTA_INVALIDO');
+    const d = await POST(req({ ...previa, desagioAquisicao: '1.5' }));
+    expect(d.status).toBe(422);
+    expect((await d.json()).code).toBe('DESAGIO_BASE_INVALIDO');
+  });
+  it('previa-oferta válida segue 200 (a regra não barra o que antes passava)', async () => {
+    const r = await POST(req({ ...previa, prazoRestanteMeses: 12 }));
+    expect(r.status).toBe(200);
+    expect((await r.json()).desagioTotal).toBeDefined();
+  });
+  it('gerar-oferta que o serviço recusa por OfertaInvalidaError → 422 (e nada além de código e mensagem)', async () => {
+    m.gerar.mockRejectedValue(new OfertaInvalidaError('DESAGIO_TOTAL_EXCEDE', 'O deságio total (base + anuência + prazo) excede 100%: reduza o deságio base ou o prazo restante.'));
+    const r = await POST(req({ action: 'gerar-oferta', leadVendedorId: 'l1', tipoBem: 'IMOVEL', valorCarta: '40000', administradora: 'Adm', desagioAquisicao: '0.2', prazoRestanteMeses: 120 }));
+    expect(r.status).toBe(422);
+    expect(Object.keys(await r.json()).sort()).toEqual(['code', 'error']);
+  });
+  it('um erro que NÃO é de validação continua 500 (não mascara falha do servidor)', async () => {
+    m.gerar.mockRejectedValue(new Error('falha inesperada'));
+    const r = await POST(req({ action: 'gerar-oferta', leadVendedorId: 'l1', tipoBem: 'IMOVEL', valorCarta: '40000', administradora: 'Adm', desagioAquisicao: '0.2' }));
+    expect(r.status).toBe(500);
+  });
+});
+
