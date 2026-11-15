@@ -37,8 +37,8 @@ export function useClaim({
   const [claimRegenerated, setClaimRegenerated] = useState(false);
 
   // PLINA-MOD-007 / E2-3: o investidor reclama o ClaimableBalance do anchor. O
-  // servidor monta o XDR (changeTrust do TESOURO quando falta + claim, com a
-  // reserva patrocinada) e o regenera quando vence. Aqui: se o XDR devolvido
+  // servidor monta o XDR (changeTrust do TESOURO quando falta + claim; a reserva
+  // de 0,5 XLM da trustline é paga pelo INVESTIDOR, não pela anchor) e o regenera quando vence. Aqui: se o XDR devolvido
   // já venceu (ou vence antes de dar tempo de assinar), pede outro; se o
   // submit responder XDR expirado (409 `XDR_EXPIRADO`), refaz o build e a
   // assinatura uma vez. Nunca submete um XDR velho.

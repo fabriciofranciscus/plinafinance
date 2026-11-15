@@ -61,7 +61,7 @@ export function useInvestirFlow() {
     getAccessToken,
     onError,
     clearError,
-    // E2-3: o claim abre a trustline do TESOURO (changeTrust patrocinado pelo anchor).
+    // E2-3: o claim abre a trustline do TESOURO (changeTrust no MESMO envelope do claim; a reserva de 0,5 XLM é paga pelo investidor).
     skipTesouroTrustline: true,
   });
 

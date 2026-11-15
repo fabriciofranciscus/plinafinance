@@ -5,11 +5,15 @@
  * o TESOURO emitido pela Etherfuse pós-onramp. Sem esse claim, balance
  * fica em CB pendente e o off-ramp burn falha (op_underfunded).
  *
+ * O setup do investidor NÃO abre a trustline TESOURO (E2-3: a reserva só quando precisa). Por isso o envelope leva, no MESMO XDR e
+ * ANTES do claim, o `changeTrust` do TESOURO quando a carteira ainda não tem a trustline (1 assinatura do investidor; sem
+ * trustline não há `op_no_trust`). Com a trustline já aberta, o envelope é só o claim. Via `prepararClaimXdr`.
+ *
  * Pré-req: OnRampOrder.stellarClaimableBalanceId preenchido (vem do
  * /onramp/sandbox-pay quando status flippa pra completed).
  *
  * Body: { orderId }
- * Returns: { xdr, hashHex, balanceId }
+ * Returns: { xdr, hashHex, balanceId, operacoes }  (operacoes: ['changeTrust','claimClaimableBalance'] ou só o claim)
  */
 
 import { NextResponse } from 'next/server';
@@ -17,7 +21,8 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { parseBody } from '@/lib/http/parse-body';
-import { buildClaimClaimableBalanceXdr } from '@/lib/stellar/transactions';
+import { ClaimError, prepararClaimXdr } from '@/lib/stellar/claim';
+import { internalErrorResponse } from '@/lib/api/internal-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,20 +55,26 @@ export const POST = withAuth(async (req, { user }) => {
       );
     }
 
-    const { xdr, hashHex } = await buildClaimClaimableBalanceXdr({
+    const claim = await prepararClaimXdr({
       investorPubkey: user.publicKey,
       balanceId: order.stellarClaimableBalanceId,
     });
 
     return NextResponse.json({
-      xdr,
-      hashHex,
+      xdr: claim.xdr,
+      hashHex: claim.hashHex,
       balanceId: order.stellarClaimableBalanceId,
+      operacoes: claim.operacoes,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'unknown' },
-      { status: 500 },
-    );
+    // Erros tipados do claim (mensagem fixa e code; sem segredo nem env).
+    if (err instanceof ClaimError) {
+      const status = err.code === 'NOT_CLAIMANT' ? 403 : 409;
+      return NextResponse.json(
+        { error: err.message, code: err.code, ...(err.aporteXlm ? { aporteXlm: err.aporteXlm } : {}) },
+        { status },
+      );
+    }
+    return internalErrorResponse(err, 'claim/build');
   }
 });
