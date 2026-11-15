@@ -7,7 +7,7 @@ vi.mock('@/lib/hooks/privy', () => ({ useAppPrivy: () => ({ getAccessToken: asyn
 
 import AcompanharView, { type AcompanharData } from '@/components/vender/AcompanharView';
 import { LeadVendedorStatus } from '@prisma/client';
-import { contextoDoStatus } from '@/lib/vender/etapas';
+import { ETAPAS_VENDER, contextoDoStatus } from '@/lib/vender/etapas';
 
 const data: AcompanharData = {
   leadId: 'lead-1', cedenteNome: 'Cedente Teste', status: 'OFERTA_ACEITA', etapaAtual: 4,
@@ -92,5 +92,14 @@ describe('vocabulário dos estados (Consuelo, item 11)', () => {
   it('descrições de oferta usam "proposta"', () => {
     expect(contextoDoStatus('OFERTA_ENVIADA').descricao).toContain('Sua proposta está disponível');
     expect(contextoDoStatus('OFERTA_ACEITA').descricao).toContain('Tudo certo com a proposta.');
+  });
+  it('descrições finais da Norma (seção H): sem prazo, sem "jurídica", sem "tokenizado", "Pix recebido" virou "Pagamento recebido"', () => {
+    expect(ETAPAS_VENDER[5]).toBe('Pagamento recebido');
+    expect(contextoDoStatus('NOVO').descricao).toBe('Sua cota entrou na fila da nossa mesa. Iniciamos a análise da cota e dos documentos. Avisamos por e-mail a cada avanço.');
+    expect(contextoDoStatus('CESSAO_ASSINADA').descricao).toContain('O pagamento do valor líquido é feito depois da cessão assinada. Não prometemos prazo.');
+    expect(contextoDoStatus('COTA_INCORPORADA').descricao).toBe('Pagamento simulado recebido e cota incorporada ao pool (simulação na rede de testes).');
+    const todas = Object.values(LeadVendedorStatus).map((st) => JSON.stringify(contextoDoStatus(st))).join(' ');
+    expect(todas).not.toMatch(/48h|em até|jurídica|tokenizad|Pix recebido|Em breve/i);
+    // O nome "Validação jurídica" do stepper (ETAPAS_VENDER[2]) não está na lista da Norma: pendente de decisão dela.
   });
 });

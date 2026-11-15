@@ -14,7 +14,7 @@ export const ETAPAS_VENDER = [
   'Validação jurídica',
   'Oferta de preço',
   'Cessão digital',
-  'Pix recebido',
+  'Pagamento recebido',
 ] as const;
 
 // Na página de acompanhamento o lead JÁ existe, então as duas primeiras etapas
@@ -70,7 +70,7 @@ const CONTEXTO_POR_STATUS: Record<LeadVendedorStatus, ContextoEtapa> = {
   NOVO: {
     titulo: 'Recebemos sua solicitação',
     descricao:
-      'Sua cota entrou na fila da nossa mesa. Em breve iniciamos a validação jurídica e documental — você é avisado por e-mail a cada avanço.',
+      'Sua cota entrou na fila da nossa mesa. Iniciamos a análise da cota e dos documentos. Avisamos por e-mail a cada avanço.',
   },
   CONTATADO: {
     titulo: 'Análise da cota em andamento',
@@ -100,7 +100,7 @@ const CONTEXTO_POR_STATUS: Record<LeadVendedorStatus, ContextoEtapa> = {
   CESSAO_ASSINADA: {
     titulo: EM_REDE_DE_TESTES ? 'Cessão assinada (demonstração)' : 'Cessão assinada',
     descricao:
-      'A cessão foi assinada e registrada on-chain. O Pix do valor líquido é executado em até 48h.',
+      'A cessão foi assinada e registrada on-chain. O pagamento do valor líquido é feito depois da cessão assinada. Não prometemos prazo.',
   },
   PIX_EXECUTADO: {
     titulo: EM_REDE_DE_TESTES ? 'Pagamento simulado enviado' : 'Pagamento enviado',
@@ -110,7 +110,9 @@ const CONTEXTO_POR_STATUS: Record<LeadVendedorStatus, ContextoEtapa> = {
   COTA_INCORPORADA: {
     titulo: EM_REDE_DE_TESTES ? 'Concluído (simulação na rede de testes)' : 'Concluído',
     descricao:
-      'Pix recebido e cota incorporada ao pool tokenizado. Obrigado por vender com a Plina.',
+      EM_REDE_DE_TESTES
+        ? 'Pagamento simulado recebido e cota incorporada ao pool (simulação na rede de testes).'
+        : 'Pagamento recebido e cota incorporada ao pool. Obrigado por vender com a Plina.',
   },
   PERDIDO: {
     titulo: 'Solicitação encerrada',
