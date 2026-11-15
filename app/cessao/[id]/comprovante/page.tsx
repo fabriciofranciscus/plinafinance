@@ -203,7 +203,7 @@ export default async function ComprovantePage({ params }: PageProps) {
               <span className="text-lightBg/70 text-lg">PLINA-RF emitido</span>
             </p>
             <p className="font-text text-sm text-lightBg/80 mt-3 max-w-prose">
-              Sua cota faz parte do pool tokenizado público. Composição
+              Sua cota foi incorporada ao pool de demonstração. Composição
               visível em <a href="/pool" className="underline">/pool</a>.
             </p>
             {cessao.cota.emissaoTxHash && (
