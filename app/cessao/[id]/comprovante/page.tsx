@@ -13,10 +13,17 @@
  * Por design, NÃO expõe dados pessoais do vendedor — só hashes e IDs.
  */
 
+import type { Metadata } from 'next';
 import { db } from '@/lib/db';
 import { txExplorerUrl } from '@/lib/stellar/config';
 
 export const dynamic = 'force-dynamic';
+
+// O id da cessão está no caminho: não vaza por Referer para links externos (explorer) nem entra em índice (Argus, item 19).
+export const metadata: Metadata = {
+  referrer: 'no-referrer',
+  robots: { index: false, follow: false },
+};
 
 const BRL = new Intl.NumberFormat('pt-BR', {
   style: 'currency',

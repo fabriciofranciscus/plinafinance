@@ -50,6 +50,10 @@ describe('telemetria: o id do lead não vai ao Analytics (item 19)', () => {
     const ev = { type: 'pageview' as const, url: 'https://plina.finance/vender/acompanhar/cmabc123xyz?aviso=reaproveitada#x', route: '/vender/acompanhar/cmabc123xyz' };
     expect(sanitizeTelemetryEvent(ev)).toEqual({ type: 'pageview', url: 'https://plina.finance/vender/acompanhar/[id]', route: '/vender/acompanhar/[id]' });
   });
+  it('/cessao/<id>/comprovante vira /cessao/[id]/comprovante (Argus, LOW)', () => {
+    expect(mascararIdDeAcompanhamento('https://plina.finance/cessao/cmcessao123/comprovante')).toBe('https://plina.finance/cessao/[id]/comprovante');
+    expect(sanitizeTelemetryEvent({ type: 'pageview' as const, url: 'https://plina.finance/cessao/cmcessao123/comprovante?x=1', route: '/cessao/cmcessao123/comprovante' })).toEqual({ type: 'pageview', url: 'https://plina.finance/cessao/[id]/comprovante', route: '/cessao/[id]/comprovante' });
+  });
   it('não mexe em outras rotas', () => {
     expect(mascararIdDeAcompanhamento('https://plina.finance/vender/minhas')).toBe('https://plina.finance/vender/minhas');
     expect(mascararIdDeAcompanhamento('https://plina.finance/vender')).toBe('https://plina.finance/vender');

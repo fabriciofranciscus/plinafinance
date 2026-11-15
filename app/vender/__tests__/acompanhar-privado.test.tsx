@@ -113,4 +113,9 @@ describe('página pública /vender/acompanhar/[leadId]', () => {
     expect(src).toMatch(/referrer: 'no-referrer'/);
     expect(src).toMatch(/robots: \{ index: false/);
   });
+  it('/cessao/[id]/comprovante também sai com no-referrer e noindex (Argus, LOW)', () => {
+    const c = readFileSync('app/cessao/[id]/comprovante/page.tsx', 'utf8');
+    expect(c).toMatch(/referrer: 'no-referrer'/);
+    expect(c).toMatch(/robots: \{ index: false/);
+  });
 });

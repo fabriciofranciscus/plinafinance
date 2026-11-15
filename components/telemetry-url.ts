@@ -13,7 +13,9 @@ export function stripUrlQueryAndHash(url: string): string {
  * painel não guardar um id por solicitação.
  */
 export function mascararIdDeAcompanhamento(url: string): string {
-  return url.replace(/(\/vender\/acompanhar\/)[^/?#]+/, '$1[id]');
+  return url
+    .replace(/(\/vender\/acompanhar\/)[^/?#]+/, '$1[id]')
+    .replace(/(\/cessao\/)[^/?#]+(\/comprovante)/, '$1[id]$2');
 }
 
 /** `beforeSend` das duas bibliotecas: mesma regra para `url` e, se houver, `route`. */
