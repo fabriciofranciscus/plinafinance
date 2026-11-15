@@ -75,4 +75,23 @@ describe('revisão visual da Íris (R-1 a R-5)', () => {
     for (const nome of [/Voltar/, /Avançar/]) expect(screen.getByRole('button', { name: nome }).className).toContain('min-h-[44px]');
     for (const link of [...screen.getAllByRole('link', { name: /Ver comprovante|Stellar Expert/ })]) expect(link.className).toContain('min-h-[44px]');
   });
+
+  it('diagrama Cota → Pool → Token: empilha no celular e deixa o texto quebrar (sem passar da borda a 390)', () => {
+    const { container } = render(<AcompanharView data={{ ...base, status: 'COTA_INCORPORADA', etapaAtual: 6, temCota: true }} />);
+    const d = container.querySelector('[data-testid="diagrama-cota-pool-token"]')!;
+    expect(d.className).toContain('flex-col');
+    expect(d.className).toContain('sm:flex-row');
+    expect(d.className).toContain('min-w-0');
+    const caixas = [...d.children].filter((c) => c.getAttribute('aria-hidden') !== 'true');
+    expect(caixas.map((c) => c.textContent)).toEqual(['Cota', 'Pool', 'Token de demonstração · Stellar testnet']);
+    for (const c of caixas) {
+      expect(c.className).toContain('min-w-0');
+      expect(c.className).toContain('break-words');
+      expect(c.className).toContain('sm:flex-1');
+    }
+    // setas decorativas: escondidas dos leitores de tela; ↓ no celular, → de sm em diante
+    expect(d.querySelectorAll('[aria-hidden="true"]').length).toBe(2);
+    expect(d.textContent).toContain('↓');
+    expect(d.textContent).toContain('→');
+  });
 });
