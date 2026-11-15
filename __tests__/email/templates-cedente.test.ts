@@ -11,6 +11,11 @@ describe('e-mail do cedente — texto da proposta (Norma/Consuelo, 15/11)', () =
     expect(`${r.text}${r.html}`).not.toMatch(/oferta firme|Oferta firme/);
   });
 
+  it("assunto 'Sua proposta Plina está pronta' (Norma/Consuelo, 15/11), sem 'oferta'", () => {
+    expect(r.subject).toBe('Sua proposta Plina está pronta');
+    expect(r.subject).not.toMatch(/oferta/i);
+  });
+
   it('o link de acompanhamento e os valores seguem no corpo', () => {
     expect(r.text).toContain('/vender/acompanhar/lead_1');
     expect(r.text).toContain('Valor líquido: R$ 100,00');

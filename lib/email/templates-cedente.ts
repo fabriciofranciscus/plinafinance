@@ -31,7 +31,7 @@ const COPY: Record<
   { subject: string; titulo: string; corpo: string }
 > = {
   oferta: {
-    subject: 'Sua oferta Plina está pronta',
+    subject: 'Sua proposta Plina está pronta',
     titulo: 'Proposta disponível',
     corpo: 'Preparamos uma proposta para a sua cota. Confira os valores e acompanhe o andamento pelo link abaixo.',
   },
