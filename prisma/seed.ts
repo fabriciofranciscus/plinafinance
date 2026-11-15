@@ -17,7 +17,7 @@
  */
 
 import { PrismaClient, TipoBem, CaminhoRealizacao } from '@prisma/client';
-import { config as loadEnv } from 'dotenv';
+import { carregarEnv } from '../scripts/lib/carregar-env';
 import { issueAsset } from '../lib/stellar/issuer';
 import { KeypairSigner } from '../lib/stellar/signer';
 import {
@@ -27,8 +27,7 @@ import {
 } from '../lib/stellar/config';
 import { tokensParaEmitir } from '../lib/services/pool';
 
-loadEnv({ path: '.env' });
-loadEnv({ path: '.env.local', override: true });
+carregarEnv(); // linha de comando > .env.local > .env (A-13)
 
 const prisma = new PrismaClient();
 

@@ -32,14 +32,13 @@
  * Rodar:  npx tsx scripts/video/iframe-helper.ts
  */
 
-import { config as loadEnv } from 'dotenv';
+import { carregarEnv } from '../lib/carregar-env';
 import { spawn } from 'node:child_process';
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { EtherfuseClient } from '../../lib/anchors/etherfuse';
 
-loadEnv({ path: '.env' });
-loadEnv({ path: '.env.local', override: true });
+carregarEnv(); // linha de comando > .env.local > .env (A-13)
 
 const STATE_PATH = join(process.cwd(), 'scripts/video/state.json');
 const API_BASE = process.env.PLINA_API_BASE ?? 'http://localhost:3002';
