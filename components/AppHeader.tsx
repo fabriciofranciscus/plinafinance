@@ -65,7 +65,12 @@ export function AppHeader({ isAdmin }: AppHeaderProps) {
           ...(isInvestidor
             ? [{ href: '/minha-posicao', label: 'Minha posição' }]
             : []),
-          ...(isCedente ? [{ href: '/vender', label: 'Vender' }] : []),
+          ...(isCedente
+            ? [
+                { href: '/vender', label: 'Vender' },
+                { href: '/vender/minhas', label: 'Minhas solicitações' },
+              ]
+            : []),
         ]
       : [...base, { href: '/investir', label: 'Investir (testnet)' }];
 
@@ -81,9 +86,12 @@ export function AppHeader({ isAdmin }: AppHeaderProps) {
           </Link>
           <nav className="hidden md:flex items-center gap-6">
             {links.map((l) => {
+              const casa = (href: string) =>
+                pathname === href || (href !== '/' && pathname.startsWith(href));
+              // Só o link mais específico acende (/vender/minhas não acende também "Vender").
               const active =
-                pathname === l.href ||
-                (l.href !== '/' && pathname.startsWith(l.href));
+                casa(l.href) &&
+                !links.some((o) => o.href.length > l.href.length && casa(o.href));
               return (
                 <Link
                   key={l.href}
