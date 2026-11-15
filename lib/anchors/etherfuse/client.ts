@@ -18,6 +18,7 @@
  * ```
  */
 
+import { idDeCorrelacao, logAnchor } from './log';
 import type {
     Anchor,
     AnchorCapabilities,
@@ -164,10 +165,9 @@ export class EtherfuseClient implements Anchor {
             'etherfuse.request',
             { 'http.method': method, 'etherfuse.endpoint': endpoint },
             async (span) => {
-                console.log(
-                    `[Etherfuse] ${method} ${url}`,
-                    body ? JSON.stringify(body) : '',
-                );
+                // Sem corpo nem texto do upstream no log (PII: e-mail, chave Pix, CPF): só método, rota genérica, status e id.
+                const id = idDeCorrelacao();
+                logAnchor('log', { id, metodo: method, endpoint });
 
                 const response = await fetch(url, {
                     method,
@@ -181,7 +181,6 @@ export class EtherfuseClient implements Anchor {
 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    console.error(`[Etherfuse] Error ${response.status}:`, errorText);
 
                     let errorData: EtherfuseErrorResponse = {
                         error: { code: 'UNKNOWN_ERROR', message: '' },
@@ -191,6 +190,7 @@ export class EtherfuseClient implements Anchor {
                     } catch {
                         // Not JSON
                     }
+                    logAnchor('error', { id, metodo: method, endpoint, status: response.status, codigo: errorData.error?.code || 'UNKNOWN_ERROR' });
 
                     throw new AnchorError(
                         errorData.error?.message ||
@@ -202,7 +202,7 @@ export class EtherfuseClient implements Anchor {
                 }
 
                 const text = await response.text();
-                console.log(`[Etherfuse] Response:`, text || '(empty)');
+                logAnchor('log', { id, metodo: method, endpoint, status: response.status });
 
                 if (!text) {
                     return undefined as T;
@@ -954,7 +954,8 @@ export class EtherfuseClient implements Anchor {
      */
     async simulateFiatReceived(orderId: string): Promise<number> {
         const url = `${this.config.baseUrl}/ramp/order/fiat_received`;
-        console.log(`[Etherfuse] POST ${url}`, JSON.stringify({ orderId }));
+        const idLog = idDeCorrelacao();
+        logAnchor('log', { id: idLog, metodo: 'POST', endpoint: url.slice(this.config.baseUrl.length) });
 
         const response = await fetch(url, {
             method: 'POST',
@@ -965,8 +966,8 @@ export class EtherfuseClient implements Anchor {
             body: JSON.stringify({ orderId }),
         });
 
-        const text = await response.text();
-        console.log(`[Etherfuse] Response (${response.status}):`, text || '(empty)');
+        await response.text(); // corpo descartado: não é logado
+        logAnchor('log', { id: idLog, metodo: 'POST', endpoint: url.slice(this.config.baseUrl.length), status: response.status });
 
         return response.status;
     }
@@ -984,7 +985,8 @@ export class EtherfuseClient implements Anchor {
         // PLINA-MOD-003: helper para off-ramp sandbox que o upstream original
         // não expõe. Documentado no PIX_Guide.md §7.4.
         const url = `${this.config.baseUrl}/ramp/order/crypto_received`;
-        console.log(`[Etherfuse] POST ${url}`, JSON.stringify({ orderId }));
+        const idLog = idDeCorrelacao();
+        logAnchor('log', { id: idLog, metodo: 'POST', endpoint: url.slice(this.config.baseUrl.length) });
 
         const response = await fetch(url, {
             method: 'POST',
@@ -995,8 +997,8 @@ export class EtherfuseClient implements Anchor {
             body: JSON.stringify({ orderId }),
         });
 
-        const text = await response.text();
-        console.log(`[Etherfuse] Response (${response.status}):`, text || '(empty)');
+        await response.text(); // corpo descartado: não é logado
+        logAnchor('log', { id: idLog, metodo: 'POST', endpoint: url.slice(this.config.baseUrl.length), status: response.status });
 
         return response.status;
     }
