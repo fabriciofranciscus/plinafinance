@@ -1,6 +1,6 @@
 # Ambientes: produção × dev (banco, Vercel e scripts)
 
-Estado em 2026-11-13. Decisão do Atlas e da Thais: o banco da produção e o de dev são **bancos separados**.
+Estado em 2026-11-14. Decisão do Atlas e da Thais: o banco da produção e o de dev são **bancos separados**.
 Este runbook diz qual é qual, a regra que nunca se quebra e como provar a separação. Nenhum valor de
 secret aparece aqui; o agente confere só **host (prefixo `ep-…`) e nomes**.
 
@@ -31,6 +31,13 @@ secret aparece aqui; o agente confere só **host (prefixo `ep-…`) e nomes**.
    ```
    O resultado tem de ser só `ep-rough-violet-…`; as duas variantes (`ep-rough-violet-…` e `ep-rough-violet-…-pooler`) são esperadas, uma por variável. Se aparecer `ep-lucky-breeze`, **pare**.
 3. `.env.local` é gerado do ambiente **Development** (dev). Não copie variável de Production para ele.
+   Scripts que chamam `loadEnv(..., { override: true })` (`prisma:seed`, `evidencia:cota`,
+   `registrar-tes-3-evento` e os `smoke-*`) fazem o `.env.local` **vencer** a variável passada no comando;
+   já `prisma:migrate`, `prisma:deploy` e `prisma:studio` carregam o `.env.local` sem override (a variável do
+   comando vence; se ela faltar, usam o `.env.local`). Use **uma fonte só**: ou rode em
+   worktree/clone sem `.env.local` e passe o ambiente no processo, ou use um `.env.local` temporário sem
+   duplicar as variáveis no comando. Em ambos os casos, confira o host efetivo antes de executar; para tarefas
+   de dev ele tem de ser `ep-rough-violet-…`, nunca `ep-lucky-breeze-…`.
 4. Teste de banco (Vitest com `-pg`) usa Postgres **local descartável**, nunca o dev nem a produção.
 5. Todo build de Preview roda `prisma migrate deploy` (ver `vercel.json`) no `dev`. Isso é o ensaio da
    migration antes da produção: migration que quebra no Preview não chega à `main`.

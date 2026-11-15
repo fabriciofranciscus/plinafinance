@@ -57,10 +57,15 @@ export async function downloadFromBlob(pathname, token, signal) {
   return Buffer.from(await new Response(res.stream).arrayBuffer());
 }
 
-function reason(err) {
-  const msg = err instanceof Error ? err.message : String(err);
-  // Só o motivo curto; sem URL, sem cabeçalhos, sem token.
-  return msg.replace(/https?:\/\/\S+/g, '<url>').slice(0, 120);
+function reason(err, token = '') {
+  let msg = err instanceof Error ? err.message : String(err);
+  // Só o motivo curto; sem URL, sem cabeçalhos, sem token. A redação do token vem
+  // ANTES do corte em 120 caracteres para que um pedaço dele não sobreviva ao slice.
+  if (token) msg = msg.split(token).join('<token>');
+  return msg
+    .replace(/https?:\/\/\S+/g, '<url>')
+    .replace(/vercel_blob_rw_[A-Za-z0-9_]+/g, '<token>')
+    .slice(0, 120);
 }
 
 /**
@@ -124,7 +129,7 @@ export async function run({
     return { status: 'downloaded', ok: total, total };
   } catch (err) {
     for (const f of manifest.files) rmSync(join(dir, `${f.name}.tmp`), { force: true });
-    warn(`[itf-fonts] AVISO: download falhou (${reason(err)}); a build segue com Geist.`);
+    warn(`[itf-fonts] AVISO: download falhou (${reason(err, token)}); a build segue com Geist.`);
     return { status: 'failed', ok: present.length, total };
   }
 }

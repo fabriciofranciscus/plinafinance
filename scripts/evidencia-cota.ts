@@ -42,7 +42,10 @@ async function main() {
   if (STELLAR_NETWORK !== 'TESTNET') throw new Error('Recusado: evidência só roda contra TESTNET.');
   const { db } = await import('../lib/db');
   const { sha256OfPayload } = await import('../lib/stellar/audit');
-  const { issuerSigner } = await import('../lib/stellar/signer');
+  const { StrKey } = await import('@stellar/stellar-sdk');
+  // Só leitura: o emissor vem da chave PÚBLICA do env; nenhuma chave secreta é exigida.
+  const issuerPublico = process.env.STELLAR_ISSUER_PUBLIC?.trim() ?? '';
+  if (!StrKey.isValidEd25519PublicKey(issuerPublico)) throw new Error('STELLAR_ISSUER_PUBLIC ausente ou inválido.');
   const { assetCode } = await import('../lib/stellar/config');
   const { bytesCanonicos } = await import('../lib/services/json-canonico');
 
@@ -50,7 +53,7 @@ async function main() {
 
   const fontes: Fontes = {
     hashPayload: sha256OfPayload,
-    ativo: () => ({ code: assetCode, issuer: issuerSigner().publicKey() }),
+    ativo: () => ({ code: assetCode, issuer: issuerPublico }),
     // E1-p (a5c1258): o registro canônico da incorporação fica no EventoAudit COTA_INCORPORADA da cota:
     // bytes = RFC 8785 de payloadJson.registroCanonico; hash registrado = payloadHash; tx = payloadJson.ancoraTxHash.
     async registroIncorporacao(cotaId) {
@@ -106,9 +109,8 @@ async function main() {
     },
   };
 
-  // Nesta base (fabricio/main 4f337e8) o DS3 e o registro canônico da incorporação (E1-p) ainda não existem:
-  // esses passos saem como PENDENTE se não houver nenhum artefato deles. Tire da lista quando entrarem.
-  const ev = await montarEvidencia(cotaId, fontes, undefined, { pendentesNestaBase: ['CESSAO', 'INCORPORACAO'] });
+  // DS3 e E1-p já estão na main (2f01001): nenhum passo fica "pendente"; artefato ausente é falha.
+  const ev = await montarEvidencia(cotaId, fontes, undefined, { pendentesNestaBase: [] });
   mkdirSync('exports', { recursive: true });
   writeFileSync(`exports/evidencia-cota-${cotaId}.json`, JSON.stringify(ev, null, 2));
   writeFileSync(`exports/evidencia-cota-${cotaId}.md`, paraMarkdown(ev));
