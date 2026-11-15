@@ -19,10 +19,12 @@ export const TEXTO_INCERTO =
  * "O que fazer" (GUIA admin §4, item 3) pelo código do servidor. Só os códigos da prévia/geração de proposta, cuja
  * condição vem da própria mensagem da API (lib/services/originacao.ts); código desconhecido: sem linha.
  */
+const ORIENTACAO_NEUTRA = 'Revise os dados da proposta e solicite uma nova prévia.';
+// Neutra de propósito: não infere ajuste de regra financeira (Íris); Bento/Consuelo validam antes de qualquer frase específica.
 const O_QUE_FAZER: Record<string, string> = {
-  DESAGIO_TOTAL_EXCEDE: 'Reduza o deságio base ou o prazo restante e peça a prévia de novo.',
-  DESAGIO_BASE_INVALIDO: 'Informe o deságio como fração entre 0 e 1 (ex.: 0.20 para 20%).',
-  VALOR_CARTA_INVALIDO: 'Informe um valor de carta maior que zero.',
+  DESAGIO_TOTAL_EXCEDE: ORIENTACAO_NEUTRA,
+  DESAGIO_BASE_INVALIDO: ORIENTACAO_NEUTRA,
+  VALOR_CARTA_INVALIDO: ORIENTACAO_NEUTRA,
 };
 export function oQueFazer(codigo: string | null | undefined): string | null {
   return (codigo && O_QUE_FAZER[codigo]) || null;

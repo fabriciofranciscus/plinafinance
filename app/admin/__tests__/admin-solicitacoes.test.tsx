@@ -219,7 +219,7 @@ describe('detalhe: só a etapa "Agora" tem controles', () => {
     const alerta = await screen.findByRole('alert');
     expect(alerta.textContent).toContain('Não concluído');
     expect(alerta.textContent).toContain('excede 100%');
-    expect(alerta.textContent).toContain('Reduza o deságio base ou o prazo restante e peça a prévia de novo.');
+    expect(alerta.textContent).toContain('Revise os dados da proposta e solicite uma nova prévia.');
     expect(alerta.textContent).toContain('DESAGIO_TOTAL_EXCEDE');
   });
 
