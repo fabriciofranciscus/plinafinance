@@ -63,6 +63,8 @@ export default function SacarPage() {
   const { signRawHash } = useSignRawHash();
 
   const [step, setStep] = useState<Step>('quote');
+  // O onboard cria carteira e cadastro na Etherfuse: só roda DEPOIS do clique em "Continuar", nunca ao abrir a página.
+  const [preparar, setPreparar] = useState(false);
   const [pubkey, setPubkey] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [amountTesouro, setAmountTesouro] = useState('10');
@@ -75,10 +77,10 @@ export default function SacarPage() {
   const [finalStatus, setFinalStatus] = useState<OffRampStatusData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Pubkey + customerId via onboard endpoint (idempotente — apenas leitura
-  // efetiva pra wallets já onboarded).
+  // Pubkey + customerId via onboard endpoint (idempotente). Tem efeito colateral
+  // (cria carteira e cliente Etherfuse se não existirem), por isso só com o clique.
   useEffect(() => {
-    if (!ready || !authenticated) return;
+    if (!ready || !authenticated || !preparar) return;
     let cancelled = false;
     const load = async () => {
       try {
@@ -101,14 +103,17 @@ export default function SacarPage() {
           setCustomerId(data.etherfuseCustomerId);
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+          setPreparar(false); // permite tentar de novo pelo botão
+        }
       }
     };
     void load();
     return () => {
       cancelled = true;
     };
-  }, [ready, authenticated, getAccessToken]);
+  }, [ready, authenticated, preparar, getAccessToken]);
 
   const refreshQuote = useCallback(async () => {
     if (!customerId || !pubkey) return;
@@ -325,7 +330,20 @@ export default function SacarPage() {
           (terminalRuim && resultado ? resultado.titulo : 'Off-ramp em processing')}
       </h1>
 
-      {step === 'quote' && (
+      {step === 'quote' && !preparar && (
+        <div className="mt-10" data-testid="sacar-preparar">
+          <p className="font-text text-base text-base/80 leading-relaxed max-w-xl">{SACAR.preparar.texto}</p>
+          <button
+            type="button"
+            onClick={() => setPreparar(true)}
+            className="mt-6 min-h-[44px] bg-base text-white font-details text-xs tracking-[0.2em] uppercase px-8 py-4 rounded-full hover:bg-primary-deep transition-colors"
+          >
+            {SACAR.preparar.botao}
+          </button>
+        </div>
+      )}
+
+      {step === 'quote' && preparar && (
         <div className="mt-10">
           <label className="block">
             <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
