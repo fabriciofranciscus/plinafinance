@@ -40,3 +40,38 @@ describe('copy do /vender/acompanhar (Norma/Consuelo, 15/11)', () => {
     expect(JSON.stringify(contextoDoStatus('DOCS_RECEBIDOS'))).toContain('para gerar a proposta.');
   });
 });
+
+describe('estados do acompanhamento do cedente (achados A-14, A-15, A-16 da Vera)', () => {
+  const render = (over: Partial<AcompanharData>) => renderToStaticMarkup(<AcompanharView data={{ ...data, ...over }} />);
+
+  it('A-16: etapa da cessão não afirma "validade jurídica plena" (texto da Consuelo)', () => {
+    const html = render({ etapaAtual: 4 });
+    expect(html).not.toContain('Validade jurídica plena');
+    expect(html).toContain('Hash do documento registrado em rede de testes. A validade da cessão depende da anuência da administradora e dos instrumentos jurídicos.');
+  });
+
+  it('A-14: Pix pago e cota NÃO incorporada: não afirma incorporação nem mostra o diagrama até o token', () => {
+    const html = render({ etapaAtual: 5, temCota: false });
+    expect(html).toContain('data-testid="cota-nao-incorporada"');
+    expect(html).toContain('Pagamento simulado registrado. A incorporação da cota ao pool de demonstração ainda não aconteceu.');
+    expect(html).not.toContain('Cota incorporada ao pool');
+    expect(html).not.toContain('Token de demonstração · Stellar testnet');
+  });
+
+  it('A-14: com a cota incorporada (temCota), mostra a frase e o diagrama', () => {
+    const html = render({ etapaAtual: 5, temCota: true });
+    expect(html).toContain('data-testid="cota-incorporada"');
+    expect(html).toContain('Cota incorporada ao pool de demonstração · tokens de demonstração emitidos na Stellar testnet.');
+    expect(html).toContain('Token de demonstração · Stellar testnet');
+  });
+
+  it('A-15: fluxo concluído (etapaAtual 6) mostra "Etapa atual" na última etapa, não "Pré-visualização"', () => {
+    const html = render({ etapaAtual: 6, temCota: true });
+    expect(html).toContain('Etapa atual');
+    expect(html).not.toContain('Pré-visualização');
+  });
+
+  it('A-15: cessão ainda não assinada mostra o aviso do link de e-mail; já assinada (etapa além da cessão) não repete', () => {
+    expect(render({ etapaAtual: 4 })).toContain('data-testid="assinatura-por-email"');
+  });
+});

@@ -75,7 +75,8 @@ export default function AcompanharView({ data }: { data: AcompanharData }) {
   const [erro, setErro] = useState<string | null>(null);
   const { getAccessToken } = useAppPrivy();
 
-  const ehAtual = view === data.etapaAtual;
+  // etapaAtual pode ser ULTIMO + 1 (fluxo concluído): a última etapa é então a atual, não uma pré-visualização.
+  const ehAtual = view === Math.min(data.etapaAtual, ULTIMO);
   // DS5: entre o aceite e a assinatura a etapa 4 mostra o estado real, em vez
   // do texto genérico de cessão.
   const aguardando = !!data.aguardandoAssinatura && view === 4 && ehAtual;
@@ -151,6 +152,7 @@ export default function AcompanharView({ data }: { data: AcompanharData }) {
             cessaoId={data.cessaoId}
             cessaoTx={data.cessaoTx}
             aguardandoAssinatura={aguardando}
+            assinada={data.etapaAtual > 4}
           />
         )}
         {view === 5 && (
@@ -386,16 +388,20 @@ function PainelCessao({
   cessaoId,
   cessaoTx,
   aguardandoAssinatura = false,
+  assinada = false,
 }: {
   cedenteNome: string | null;
   cessaoId: string | null;
   cessaoTx: TxLink | null;
   aguardandoAssinatura?: boolean;
+  /** Cessão já assinada (etapa atual além da cessão): não repetir o aviso de "link de e-mail". */
+  assinada?: boolean;
 }) {
   return (
     <div className="mt-6 border-t border-light-hairline pt-6">
       <p className="font-text text-sm text-base/70">
-        Validade jurídica plena · hash do contrato registrado on-chain.
+        Hash do documento registrado em rede de testes. A validade da cessão depende da anuência da administradora e dos
+        instrumentos jurídicos.
       </p>
 
       <div className="mt-4 border border-light-hairline bg-document-grey/30 p-6">
@@ -423,7 +429,7 @@ function PainelCessao({
           </span>
           Enviado por DocuSign. Nenhum pagamento é feito antes da sua assinatura.
         </p>
-      ) : (
+      ) : assinada ? null : (
         <p data-testid="assinatura-por-email" className="mt-4 font-text text-sm text-base/80">
           A assinatura eletrônica é feita pelo link de e-mail que a equipe envia nesta etapa. Verifique a caixa de spam. Enquanto isso, nada
           precisa ser feito aqui.
@@ -490,12 +496,17 @@ function PainelPix({
         <p className="font-mono text-sm text-base/60 mt-2">
           Simulação em rede de testes: nenhum dinheiro real foi enviado.
         </p>
-        <p className="font-text text-sm text-base/70 mt-4 max-w-md mx-auto leading-relaxed">
-          Cota incorporada ao pool de demonstração · tokens de demonstração
-          emitidos na Stellar testnet.
+        <p
+          data-testid={temCota ? 'cota-incorporada' : 'cota-nao-incorporada'}
+          className="font-text text-sm text-base/70 mt-4 max-w-md mx-auto leading-relaxed"
+        >
+          {temCota
+            ? 'Cota incorporada ao pool de demonstração · tokens de demonstração emitidos na Stellar testnet.'
+            : 'Pagamento simulado registrado. A incorporação da cota ao pool de demonstração ainda não aconteceu.'}
         </p>
 
-        {/* Cota → Pool → token de demonstração · Stellar testnet */}
+        {/* Cota → Pool → token de demonstração · Stellar testnet (só depois da incorporação) */}
+        {temCota && (
         <div className="mx-auto mt-8 flex max-w-2xl items-center justify-between gap-3 border border-light-hairline bg-document-grey/40 p-5 font-mono text-xs">
           <span className="flex-1 border border-light-hairline bg-white px-3 py-3 text-center text-base/80">
             Cota
@@ -509,6 +520,7 @@ function PainelPix({
             Token de demonstração · Stellar testnet
           </span>
         </div>
+        )}
 
         {ilustrativo && (
           <p className="font-mono text-[11px] text-base/55 mt-4">
