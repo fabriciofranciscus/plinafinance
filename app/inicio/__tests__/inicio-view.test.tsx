@@ -15,14 +15,17 @@ describe('/inicio (spec de UX §2)', () => {
     expect(html).toContain('href="/vender/acompanhar/exemplo000000a1b2c3"');
     expect(html).toMatch(/1\.250,0000/);
     expect(html).toMatch(/NAV por token<\/dt><dd[^>]*>R\$\s1,0000/);
-    expect(html).toContain('Valor pelo NAV');
+    expect(html).toContain('Valor de referência (NAV)');
+    expect(html).toContain('Não é preço garantido de compra ou venda.');
+    expect(html).toContain('Pool e valor do token');
+    expect(html).toContain('Política de clawback (revogação de tokens, só nos casos previstos)');
     expect(html).toContain('https://stellar.expert/explorer/testnet/tx/e000');
     expect(html).toContain('Em andamento');
     expect(html).toContain('Etapa 4 de 6 · Proposta');
     expect(html).toContain('Imóvel · carta');
     expect(html).toContain('Aguardando sua resposta');
     expect(html).toContain('Entrada no pool');
-    expect(html).toContain('Em conferência (Pix simulado)');
+    expect(html).toContain('Em conferência (pagamento simulado)');
     expect(html).toContain('Ver posição completa');
     expect(html).toContain('href="/sacar"');
   });
@@ -41,7 +44,7 @@ describe('/inicio (spec de UX §2)', () => {
   it('NAV indisponível: "—" nos dois valores e a frase fixa; nunca 1,0000 nem 0 no lugar', () => {
     const html = ok(sem({ posicao: { ...RESUMO_EXEMPLO.posicao!, navPorToken: null, valorPeloNav: null, navIndisponivel: true } }));
     expect(html).toContain('NAV indisponível agora. O saldo em PLINA-RF não muda.');
-    expect(html).toMatch(/Valor pelo NAV<\/dt><dd[^>]*>—/);
+    expect(html).toMatch(/Valor de referência \(NAV\)<\/dt><dd[^>]*>—/);
     expect(html).toMatch(/NAV por token<\/dt><dd[^>]*>—/);
     expect(html).not.toMatch(/R\$\s1,0000/);
     expect(html).toContain('1.250,0000');

@@ -3,6 +3,7 @@
  * Função pura: uma ação por vez, a primeira que valer. Sem cálculo de valores.
  */
 
+import { EM_REDE_DE_TESTES } from '../rede-de-testes';
 import { NOME_ETAPA, STATUS_ABERTOS, TOTAL_ETAPAS } from './vocabulario';
 import type { ResumoDaConta, SolicitacaoResumo } from './tipos';
 
@@ -92,7 +93,7 @@ export function proximaAcao(r: ResumoDaConta): ProximaAcao {
     return {
       caso: 4,
       titulo: entrada ? 'Concluir a entrada no pool' : 'Concluir a saída do pool',
-      apoio: `Valor: ${op.valor}. Pix simulado, rede de testes.`,
+      apoio: `Valor: ${op.valor}. Pagamento simulado, rede de testes.`,
       botao: 'Continuar',
       href: op.continuarEm,
       escuro: true,
@@ -136,7 +137,7 @@ export function linhaAndamento(s: SolicitacaoResumo): LinhaAndamento {
   switch (s.status) {
     case 'NOVO':
     case 'CONTATADO':
-      return { etapa, quemAge: 'Com a equipe · em validação' };
+      return { etapa, quemAge: 'Com a equipe · análise da cota em andamento' };
     case 'DOCS_SOLICITADOS':
       return { etapa, quemAge: 'Aguardando seus documentos' };
     case 'DOCS_RECEBIDOS':
@@ -149,9 +150,13 @@ export function linhaAndamento(s: SolicitacaoResumo): LinhaAndamento {
         quemAge: s.cessaoStatus === 'ENVIADA_DOCUSIGN' ? 'Aguardando sua assinatura' : 'Com a equipe · preparando a cessão',
       };
     case 'CESSAO_ASSINADA':
-      return { etapa, quemAge: 'Com a equipe · Pix sem prazo garantido' };
+      return { etapa, quemAge: 'Com a equipe · pagamento sem prazo definido' };
     case 'PIX_EXECUTADO':
-      return { etapa: 'Concluída', quemAge: 'Pix enviado · cota em incorporação' };
+      // O pagamento já saiu, mas a cota ainda está em incorporação: ainda não é "Concluída" (Norma A3).
+      return {
+        etapa: `Etapa ${TOTAL_ETAPAS} de ${TOTAL_ETAPAS} · ${NOME_ETAPA[5]}`,
+        quemAge: `${EM_REDE_DE_TESTES ? 'Pagamento simulado enviado' : 'Pagamento enviado'} · cota em incorporação`,
+      };
     default:
       return { etapa: 'Encerrada', quemAge: '' };
   }

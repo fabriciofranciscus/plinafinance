@@ -23,6 +23,9 @@ const SITUACAO_OPERACAO: Record<OperacaoPendente['situacao'], string> = {
   em_conferencia: 'Em conferência',
   aguardando_assinatura: 'Aguardando sua assinatura',
 };
+/** Norma B1 (Consuelo aprovou): o valor é referência, não preço de compra ou venda. */
+const APOIO_NAV =
+  'Cálculo pelo custo de aquisição das cotas e pelos tokens emitidos. Não é preço garantido de compra ou venda. O valor pode mudar com emissões, resgates e realizações, e pode ficar indisponível.';
 const ROTULO = 'font-details text-[10px] tracking-[0.2em] uppercase text-base/70';
 
 export default function InicioView({ estado, exemplo = false }: { estado: EstadoInicio; exemplo?: boolean }) {
@@ -147,7 +150,7 @@ function PosicaoBloco({ posicao }: { posicao: NonNullable<ResumoDaConta['posicao
       </h2>
       <dl className="mt-3 divide-y divide-light-hairline border border-light-hairline bg-white lg:flex lg:divide-y-0 lg:divide-x">
         <Dado rotulo="PLINA-RF" valor={fmtTokens(posicao.tokens)} grande />
-        <Dado rotulo="Valor pelo NAV" valor={navFora ? '—' : fmtBrl(posicao.valorPeloNav)} />
+        <Dado rotulo="Valor de referência (NAV)" valor={navFora ? '—' : fmtBrl(posicao.valorPeloNav)} />
         <Dado rotulo="NAV por token" valor={navFora ? '—' : fmtNavToken(posicao.navPorToken)} />
       </dl>
       {navFora ? (
@@ -171,6 +174,7 @@ function PosicaoBloco({ posicao }: { posicao: NonNullable<ResumoDaConta['posicao
           </p>
         )
       )}
+      <p className="mt-2 font-text text-xs text-base/70">{APOIO_NAV}</p>
       {zero && <p className="mt-2 font-text text-sm text-base/70">Você ainda não tem PLINA-RF.</p>}
       <div className="mt-4 flex flex-wrap gap-3">
         <Link href="/investir" className={BTN_SECUNDARIO}>
@@ -246,7 +250,7 @@ function OperacaoItem({ op }: { op: OperacaoPendente }) {
       <p className="font-text text-sm font-semibold">
         {op.tipo === 'entrada' ? 'Entrada no pool' : 'Saída do pool'} · <span className="font-mono">{op.valor}</span>
       </p>
-      <p className="font-text text-sm text-base/80 mt-1">{SITUACAO_OPERACAO[op.situacao]} (Pix simulado)</p>
+      <p className="font-text text-sm text-base/80 mt-1">{SITUACAO_OPERACAO[op.situacao]} (pagamento simulado)</p>
       <Link href={op.continuarEm} className={`${LINK} mt-1`}>
         Continuar →
       </Link>
@@ -261,9 +265,9 @@ function Atalhos() {
       <ul className="mt-2 flex flex-col md:flex-row md:flex-wrap md:gap-x-8">
         {[
           ['/historico', 'Histórico'],
-          ['/pool', 'Pool e NAV'],
+          ['/pool', 'Pool e valor do token'],
           ['/cotas', 'Cotas do pool'],
-          ['/politica-clawback', 'Política de clawback'],
+          ['/politica-clawback', 'Política de clawback (revogação de tokens, só nos casos previstos)'],
         ].map(([href, rotulo]) => (
           <li key={href}>
             <Link href={href!} className={LINK}>

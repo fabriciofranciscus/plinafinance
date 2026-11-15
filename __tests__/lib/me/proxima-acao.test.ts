@@ -32,7 +32,7 @@ describe('proximaAcao (spec §2.3): uma ação, a primeira que valer', () => {
   it('4: operação de entrada/saída pendente leva a /investir ou /sacar, com Pix simulado', () => {
     const a = proximaAcao(resumo({ operacoesPendentes: [{ tipo: 'saida', valor: 'R$ 200,00', situacao: 'em_conferencia', continuarEm: '/sacar' }], posicao: posicao('10') }));
     expect(a).toMatchObject({ caso: 4, titulo: 'Concluir a saída do pool', href: '/sacar' });
-    expect((a as { apoio: string }).apoio).toContain('Pix simulado, rede de testes');
+    expect((a as { apoio: string }).apoio).toContain('Pagamento simulado, rede de testes');
   });
   it('prioridade: proposta antes de assinatura antes de documentos antes de operação', () => {
     const r = resumo({
@@ -71,16 +71,16 @@ describe('proximaAcao (spec §2.3): uma ação, a primeira que valer', () => {
 
 describe('linhaAndamento (spec §2.4)', () => {
   it('etapa N de 6 e quem age, por status', () => {
-    expect(linhaAndamento(sol({ status: 'NOVO', etapa: 2 }))).toEqual({ etapa: 'Etapa 3 de 6 · Validação', quemAge: 'Com a equipe · em validação' });
+    expect(linhaAndamento(sol({ status: 'NOVO', etapa: 2 }))).toEqual({ etapa: 'Etapa 3 de 6 · Análise da cota', quemAge: 'Com a equipe · análise da cota em andamento' });
     expect(linhaAndamento(sol({ status: 'DOCS_SOLICITADOS' })).quemAge).toBe('Aguardando seus documentos');
     expect(linhaAndamento(sol({ status: 'OFERTA_ACEITA', etapa: 4, cessaoStatus: 'ENVIADA_DOCUSIGN' })).quemAge).toBe('Aguardando sua assinatura');
     expect(linhaAndamento(sol({ status: 'OFERTA_ACEITA', etapa: 4, cessaoStatus: 'PENDENTE' })).quemAge).toBe('Com a equipe · preparando a cessão');
-    expect(linhaAndamento(sol({ status: 'CESSAO_ASSINADA', etapa: 5 }))).toEqual({ etapa: 'Etapa 6 de 6 · Pix', quemAge: 'Com a equipe · Pix sem prazo garantido' });
-    expect(linhaAndamento(sol({ status: 'PIX_EXECUTADO', etapa: 6 })).quemAge).toBe('Pix enviado · cota em incorporação');
+    expect(linhaAndamento(sol({ status: 'CESSAO_ASSINADA', etapa: 5 }))).toEqual({ etapa: 'Etapa 6 de 6 · Pagamento', quemAge: 'Com a equipe · pagamento sem prazo definido' });
+    expect(linhaAndamento(sol({ status: 'PIX_EXECUTADO', etapa: 6 }))).toEqual({ etapa: 'Etapa 6 de 6 · Pagamento', quemAge: 'Pagamento simulado enviado · cota em incorporação' });
   });
   it('não promete prazo nem usa "oferta firme"', () => {
     const todos = (['NOVO', 'DOCS_SOLICITADOS', 'DOCS_RECEBIDOS', 'OFERTA_ENVIADA', 'OFERTA_ACEITA', 'CESSAO_ASSINADA', 'PIX_EXECUTADO'] as const)
       .map((st) => JSON.stringify(linhaAndamento(sol({ status: st, etapa: 3 })))).join(' ');
-    expect(todos).not.toMatch(/oferta firme|em até|48/i);
+    expect(todos).not.toMatch(/oferta firme|em até|48|garantido|jurídica|Pix enviado/i);
   });
 });

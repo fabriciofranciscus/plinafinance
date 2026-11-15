@@ -8,10 +8,10 @@ import type { StatusSolicitacao, TipoEvento } from './tipos';
 
 /** Nome da etapa do cedente, por índice 0-based (lib/vender/etapas: NOVO = 2). */
 export const NOME_ETAPA: Record<number, string> = {
-  2: 'Validação',
+  2: 'Análise da cota',
   3: 'Proposta',
   4: 'Cessão digital',
-  5: 'Pix',
+  5: 'Pagamento',
 };
 
 export const TOTAL_ETAPAS = 6;
@@ -21,7 +21,7 @@ export const ROTULO_EVENTO: Record<TipoEvento, string> = {
   proposta_recebida: 'Proposta recebida',
   proposta_aceita: 'Proposta aceita',
   cessao_assinada: 'Cessão assinada',
-  pix_enviado: 'Pix enviado',
+  pix_enviado: 'Pagamento enviado',
   cota_incorporada: 'Cota incorporada ao pool',
   solicitacao_encerrada: 'Solicitação encerrada',
   entrada_no_pool: 'Entrada no pool',
@@ -52,3 +52,10 @@ export const ROTULO_TIPO_BEM: Record<string, string> = {
   EQUIPAMENTO: 'Equipamento',
   SERVICO: 'Serviço',
 };
+
+/** Sufixos de rede de testes (Consuelo, item 11): evento simulado nunca aparece como real. */
+export const SUFIXO_SIMULADO = {
+  pagamento: 'Pagamento simulado enviado',
+  cessao: ' (demonstração)',
+  concluido: 'Concluído (simulação na rede de testes)',
+} as const;

@@ -37,7 +37,9 @@ describe('/historico (spec de UX §3)', () => {
 
   it('Pix leva "(simulado)"; evento da venda aponta para o acompanhamento', () => {
     montar(estado());
-    expect(screen.getAllByText('Pix enviado (simulado)').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Pagamento simulado enviado').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Pix enviado/)).toBeNull();
+    expect(screen.getAllByText(/Concluído \(simulação na rede de testes\)/).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: 'Abrir acompanhamento →' })[0]!.getAttribute('href')).toBe('/vender/acompanhar/exemplo000000a1b2c3');
   });
 
@@ -105,11 +107,23 @@ describe('/historico (spec de UX §3)', () => {
     expect(document.querySelectorAll('ol li').length).toBe(HISTORICO_EXEMPLO.length);
   });
 
-  it('falha mostra o motivo em linguagem comum; sem termos proibidos', () => {
+  it('falha: só "O pagamento não foi concluído." (sem prometer que nada foi cobrado, nem repetir texto do servidor); sem termos proibidos', () => {
     const falhou: EventoHistorico = { ...HISTORICO_EXEMPLO[0]!, id: 'f1', situacao: 'falhou', motivo: 'O Pix não foi concluído. Nada foi cobrado.', txHash: null };
     montar(estado({ itens: [falhou] }));
-    expect(screen.getAllByText('O Pix não foi concluído. Nada foi cobrado.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('O pagamento não foi concluído.').length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toMatch(/Nada foi cobrado|cobrad/i);
     expect(screen.getAllByText(/Falhou/).length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toMatch(/rendimento|retorno|yield|oferta firme/i);
+  });
+
+  it('Consuelo item 11: cessão simulada leva "(demonstração)"; real não; nenhum rótulo "Pix enviado" nem "jurídica"', () => {
+    const cessao: EventoHistorico = { ...HISTORICO_EXEMPLO[2]!, id: 'c1', tipo: 'cessao_assinada', simulado: true };
+    montar(estado({ itens: [cessao] }));
+    expect(screen.getAllByText('Cessão assinada (demonstração)').length).toBeGreaterThan(0);
+    cleanup();
+    montar(estado({ itens: [{ ...cessao, simulado: false }] }));
+    expect(screen.getAllByText('Cessão assinada').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^Concluído$/).length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toMatch(/Pix enviado|jurídica/i);
   });
 });

@@ -5,7 +5,7 @@
 
 import Link from 'next/link';
 import { explorerTx, fmtBrl, fmtDataHora, fmtTokens, hashCurto } from '@/lib/me/formato';
-import { ROTULO_EVENTO, ROTULO_SITUACAO } from '@/lib/me/vocabulario';
+import { ROTULO_EVENTO, ROTULO_SITUACAO, SUFIXO_SIMULADO } from '@/lib/me/vocabulario';
 import type { EventoHistorico } from '@/lib/me/tipos';
 
 export type FiltroHistorico = 'tudo' | 'vender' | 'investir';
@@ -25,8 +25,18 @@ const ROTULO = 'font-details text-[10px] tracking-[0.2em] uppercase text-base/70
 const LINK =
   'inline-flex min-h-[44px] items-center font-details text-[10px] tracking-[0.2em] uppercase underline underline-offset-4 text-primary-deep';
 
-const rotuloDoEvento = (e: EventoHistorico) =>
-  e.tipo === 'pix_enviado' && e.simulado ? `${ROTULO_EVENTO.pix_enviado} (simulado)` : ROTULO_EVENTO[e.tipo];
+/** Evento simulado nunca aparece como real (Consuelo, item 11). */
+const rotuloDoEvento = (e: EventoHistorico) => {
+  if (e.tipo === 'pix_enviado' && e.simulado) return SUFIXO_SIMULADO.pagamento;
+  if (e.tipo === 'cessao_assinada' && e.simulado) return `${ROTULO_EVENTO.cessao_assinada}${SUFIXO_SIMULADO.cessao}`;
+  return ROTULO_EVENTO[e.tipo];
+};
+
+const rotuloDaSituacao = (e: EventoHistorico) =>
+  e.situacao === 'concluido' && e.simulado ? SUFIXO_SIMULADO.concluido : ROTULO_SITUACAO[e.situacao];
+
+/** Falha: texto fixo. O servidor não garante "nada foi cobrado" (Norma A8, confirmado pelo Bento). */
+const MENSAGEM_FALHA = 'O pagamento não foi concluído.';
 
 function valorDoEvento(e: EventoHistorico): string {
   if (e.tipo === 'entrada_no_pool') return `${fmtBrl(e.valorBrl)} → ${fmtTokens(e.tokens)} PLINA-RF`;
@@ -175,9 +185,9 @@ export default function HistoricoView({
                         </p>
                       )}
                       <p className="font-text text-sm text-base/80 mt-1">
-                        {ROTULO_SITUACAO[e.situacao]} · <Transacao e={e} />
+                        {rotuloDaSituacao(e)} · <Transacao e={e} />
                       </p>
-                      {e.situacao === 'falhou' && e.motivo && <p className="font-text text-sm text-base/80 mt-1">{e.motivo}</p>}
+                      {e.situacao === 'falhou' && <p className="font-text text-sm text-base/80 mt-1">{MENSAGEM_FALHA}</p>}
                       {linkInterno(e) && (
                         <Link href={linkInterno(e)!.href} className={LINK}>
                           {linkInterno(e)!.rotulo}
@@ -215,8 +225,8 @@ export default function HistoricoView({
                         </td>
                         <td className="py-3 pr-4 font-mono text-right whitespace-nowrap">{valorDoEvento(e)}</td>
                         <td className="py-3">
-                          {ROTULO_SITUACAO[e.situacao]} · <Transacao e={e} />
-                          {e.situacao === 'falhou' && e.motivo && <div className="text-base/80">{e.motivo}</div>}
+                          {rotuloDaSituacao(e)} · <Transacao e={e} />
+                          {e.situacao === 'falhou' && <div className="text-base/80">{MENSAGEM_FALHA}</div>}
                         </td>
                       </tr>
                     ))}
