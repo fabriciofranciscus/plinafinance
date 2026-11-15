@@ -11,10 +11,10 @@ import { EM_REDE_DE_TESTES } from '../rede-de-testes';
 export const ETAPAS_VENDER = [
   'Cadastro & KYC',
   'Envio da cota',
-  'Validação jurídica',
-  'Oferta de preço',
+  'Análise da cota',
+  'Proposta de preço',
   'Cessão digital',
-  'Pagamento recebido',
+  'Pagamento enviado',
 ] as const;
 
 // Na página de acompanhamento o lead JÁ existe, então as duas primeiras etapas
@@ -111,8 +111,8 @@ const CONTEXTO_POR_STATUS: Record<LeadVendedorStatus, ContextoEtapa> = {
     titulo: EM_REDE_DE_TESTES ? 'Concluído (simulação na rede de testes)' : 'Concluído',
     descricao:
       EM_REDE_DE_TESTES
-        ? 'Pagamento simulado recebido e cota incorporada ao pool (simulação na rede de testes).'
-        : 'Pagamento recebido e cota incorporada ao pool. Obrigado por vender com a Plina.',
+        ? 'Pagamento simulado enviado e cota incorporada ao pool (simulação na rede de testes).'
+        : 'Pagamento enviado e cota incorporada ao pool. Obrigado por vender com a Plina.',
   },
   PERDIDO: {
     titulo: 'Solicitação encerrada',

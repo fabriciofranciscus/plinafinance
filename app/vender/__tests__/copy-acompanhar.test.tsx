@@ -94,12 +94,14 @@ describe('vocabulário dos estados (Consuelo, item 11)', () => {
     expect(contextoDoStatus('OFERTA_ACEITA').descricao).toContain('Tudo certo com a proposta.');
   });
   it('descrições finais da Norma (seção H): sem prazo, sem "jurídica", sem "tokenizado", "Pix recebido" virou "Pagamento recebido"', () => {
-    expect(ETAPAS_VENDER[5]).toBe('Pagamento recebido');
+    expect(ETAPAS_VENDER[2]).toBe('Análise da cota');
+    expect(ETAPAS_VENDER[3]).toBe('Proposta de preço');
+    expect(ETAPAS_VENDER[5]).toBe('Pagamento enviado'); // nunca "recebido": só sabemos o que o parceiro informa (Consuelo)
     expect(contextoDoStatus('NOVO').descricao).toBe('Sua cota entrou na fila da nossa mesa. Iniciamos a análise da cota e dos documentos. Avisamos por e-mail a cada avanço.');
     expect(contextoDoStatus('CESSAO_ASSINADA').descricao).toContain('O pagamento do valor líquido é feito depois da cessão assinada. Não prometemos prazo.');
-    expect(contextoDoStatus('COTA_INCORPORADA').descricao).toBe('Pagamento simulado recebido e cota incorporada ao pool (simulação na rede de testes).');
+    expect(contextoDoStatus('COTA_INCORPORADA').descricao).toBe('Pagamento simulado enviado e cota incorporada ao pool (simulação na rede de testes).');
     const todas = Object.values(LeadVendedorStatus).map((st) => JSON.stringify(contextoDoStatus(st))).join(' ');
-    expect(todas).not.toMatch(/48h|em até|jurídica|tokenizad|Pix recebido|Em breve/i);
-    // O nome "Validação jurídica" do stepper (ETAPAS_VENDER[2]) não está na lista da Norma: pendente de decisão dela.
+    expect(todas).not.toMatch(/48h|em até|jurídica|tokenizad|Pix recebido|Em breve|garantido|recebido e cota/i);
+    expect(ETAPAS_VENDER.join(' ')).not.toMatch(/jurídica|Pix|recebido|Oferta/i);
   });
 });
