@@ -31,6 +31,10 @@ describe('copy do /vender/acompanhar (Norma/Consuelo, 15/11)', () => {
     const todos = Object.values(LeadVendedorStatus).map((st) => JSON.stringify(contextoDoStatus(st))).join(' ');
     expect(todos).not.toMatch(/oferta firme/i);
     expect(JSON.stringify(contextoDoStatus('OFERTA_ENVIADA'))).not.toMatch(/responda o e-mail/i);
+    // Solicitação encerrada: canal declarado (Norma/Consuelo, 15/11 00:52), não "responda o e-mail".
+    const encerrada = JSON.stringify(contextoDoStatus('PERDIDO'));
+    expect(encerrada).toContain('fale com a equipe em contato@plina.finance informando o número do seu pedido.');
+    expect(encerrada).not.toMatch(/responda o último/i);
     expect(JSON.stringify(contextoDoStatus('OFERTA_ENVIADA'))).toContain('Proposta enviada');
     expect(JSON.stringify(contextoDoStatus('OFERTA_ENVIADA'))).toContain('Para aceitar, use o botão Aceitar nesta página.');
     expect(JSON.stringify(contextoDoStatus('DOCS_RECEBIDOS'))).toContain('para gerar a proposta.');

@@ -127,7 +127,7 @@ export default async function AcompanharPage({ params }: PageProps) {
         {encerrado ? (
           <p className="font-text text-base/80 leading-relaxed">
             Esta solicitação foi encerrada. Se acha que houve engano, fale com a
-            equipe Plina respondendo o último email recebido.
+            equipe em contato@plina.finance informando o número do seu pedido.
           </p>
         ) : (
           <AcompanharView data={data} />

@@ -114,7 +114,7 @@ const CONTEXTO_POR_STATUS: Record<LeadVendedorStatus, ContextoEtapa> = {
   PERDIDO: {
     titulo: 'Solicitação encerrada',
     descricao:
-      'Esta solicitação foi encerrada. Se acha que houve engano, responda o último e-mail recebido da equipe Plina.',
+      'Esta solicitação foi encerrada. Se acha que houve engano, fale com a equipe em contato@plina.finance informando o número do seu pedido.',
   },
 };
 
