@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { NOME_EM_ANDAMENTO, etapasDoLead, ordenarSolicitacoes, type AnaliseSolicitacao, type EtapaOperador } from '@/lib/admin/etapas-operador';
-import { avisoDeResposta, interpretarErroDeAcao, TEXTO_INCERTO, type ErroDeAcao } from '@/lib/admin/erro-acao';
+import { avisoDeResposta, interpretarErroDeAcao, oQueFazer, TEXTO_INCERTO, type ErroDeAcao } from '@/lib/admin/erro-acao';
 import type { LeadAdmin } from '@/lib/admin/tipos';
 
 type PipelineLead = LeadAdmin;
@@ -367,6 +367,7 @@ function DetalheSolicitacao({
                 <div role="alert" className="mt-3">
                   <p className="font-details text-[10px] tracking-[0.2em] uppercase text-red-700">{erro.incerto ? 'Sem confirmação' : 'Não concluído'}</p>
                   <p className="font-text text-sm text-red-700 mt-1">{erro.texto}</p>
+                  {oQueFazer(erro.codigo) && <p className="font-text text-sm text-base mt-1">{oQueFazer(erro.codigo)}</p>}
                   {erro.codigo && <p className="font-mono text-[11px] text-base/70 mt-1">{erro.codigo}</p>}
                   {erro.texto.startsWith('Sessão expirada') && (
                     <p className="mt-1">
@@ -841,7 +842,7 @@ function NovaOfertaForm({
           disabled={busy}
           className="w-full min-h-[44px] bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-3 py-2 hover:bg-primary-deep transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-deep"
         >
-          Gerar oferta
+          Gerar proposta
         </button>
       </div>
       <p className="col-span-full font-text text-xs text-base/70">
@@ -855,10 +856,12 @@ function NovaOfertaForm({
         </p>
       )}
       {erroPrevia && (
-        <p role="alert" className="col-span-full font-text text-xs text-red-700">
-          {erroPrevia.texto}
-          {erroPrevia.codigo ? <span className="block font-mono">{erroPrevia.codigo}</span> : null}
-        </p>
+        <div role="alert" className="col-span-full">
+          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-red-700">{erroPrevia.incerto ? 'Sem confirmação' : 'Não concluído'}</p>
+          <p className="font-text text-xs text-red-700 mt-1">{erroPrevia.texto}</p>
+          {oQueFazer(erroPrevia.codigo) && <p className="font-text text-xs text-base mt-1">{oQueFazer(erroPrevia.codigo)}</p>}
+          {erroPrevia.codigo ? <p className="font-mono text-[11px] text-base/70 mt-1">{erroPrevia.codigo}</p> : null}
+        </div>
       )}
     </form>
   );

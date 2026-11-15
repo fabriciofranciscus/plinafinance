@@ -203,10 +203,24 @@ describe('detalhe: só a etapa "Agora" tem controles', () => {
     set('valorCarta', '150000'); set('administradora', 'Caixa'); set('desagioAquisicao', '0.20');
     fireEvent.click(screen.getByRole('button', { name: 'Ver prévia' }));
     const alerta = await screen.findByRole('alert');
-    expect(alerta.textContent).toBe('Parâmetros inválidos.ENTRADA_INVALIDA');
+    expect(alerta.textContent).toBe('Não concluídoParâmetros inválidos.ENTRADA_INVALIDA');
     expect(screen.queryByTestId('previa-oferta')).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(corpo().action).toBe('previa-oferta');
+  });
+
+  it('A-08: DESAGIO_TOTAL_EXCEDE mostra rótulo, mensagem do servidor, "O que fazer" e o código; o botão se chama "Gerar proposta"', async () => {
+    fetchMock.mockResolvedValueOnce(resposta({ error: 'O deságio total (base + anuência + prazo) excede 100%: reduza o deságio base ou o prazo restante.', code: 'DESAGIO_TOTAL_EXCEDE' }, 422));
+    const set = formularioDaProposta();
+    set('valorCarta', '150000'); set('administradora', 'Caixa'); set('desagioAquisicao', '0.99'); set('prazoRestanteMeses', '18');
+    expect(within(screen.getByTestId('etapa-agora')).getByRole('button', { name: 'Gerar proposta' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Gerar oferta' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver prévia' }));
+    const alerta = await screen.findByRole('alert');
+    expect(alerta.textContent).toContain('Não concluído');
+    expect(alerta.textContent).toContain('excede 100%');
+    expect(alerta.textContent).toContain('Reduza o deságio base ou o prazo restante e peça a prévia de novo.');
+    expect(alerta.textContent).toContain('DESAGIO_TOTAL_EXCEDE');
   });
 
   it('2 aceite do cedente: sem botão, só o texto com a validade', () => {
