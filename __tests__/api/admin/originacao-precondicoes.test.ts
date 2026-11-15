@@ -87,3 +87,39 @@ describe('admin/originacao — pré-condições (G5)', () => {
     expect(m.cessao).not.toHaveBeenCalled();
   });
 });
+
+describe('500 genérico: mensagem fixa, sem dado de ninguém (Argus, LOW 15/11)', () => {
+  const SEGREDOS = [
+    'Invalid `prisma.cessao.findUnique()` invocation: where id cmwhdg0o10001l008sjp17wug',
+    'postgresql://usuario:SENHA-SECRETA@host-do-banco/plina',
+    'Cota 4f9c1 em estado REALIZADA (status 3) — chave Pix 12345678909',
+  ];
+  it.each(SEGREDOS)('o corpo do 500 não traz a mensagem do erro: %s', async (msg) => {
+    m.cessao.mockRejectedValue(new Error(msg));
+    const r = await POST(req(ACOES.cessao.body));
+    expect(r.status).toBe(500);
+    const corpo = await r.json();
+    expect(corpo).toEqual({
+      error: 'Erro interno ao processar a ação. O resultado pode não ter sido gravado: confira o estado antes de repetir.',
+      code: 'ERRO_INTERNO',
+    });
+    expect(JSON.stringify(corpo)).not.toMatch(/prisma|postgresql|SENHA|cmwhdg|chave Pix|12345678909|REALIZADA/);
+  });
+  it('o log do servidor leva a ação, o nome e o código da causa, nunca a mensagem', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const causa = Object.assign(new Error('Unique constraint failed on id cmabc123 valor 99'), { name: 'PrismaClientKnownRequestError', code: 'P2002' });
+    m.cessao.mockRejectedValue(causa);
+    await POST(req(ACOES.cessao.body));
+    const linhas = JSON.stringify(log.mock.calls);
+    expect(linhas).toContain('P2002');
+    expect(linhas).toContain('PrismaClientKnownRequestError');
+    expect(linhas).toContain('registrar-cessao');
+    expect(linhas).not.toMatch(/cmabc123|Unique constraint|valor 99/);
+  });
+  it('os erros mapeados NÃO mudaram de contrato (404/409/422/503 seguem com error e code próprios)', async () => {
+    m.cessao.mockRejectedValue(new OriginacaoPrecondicaoError('OFERTA_NAO_ENCONTRADA', 'Oferta não encontrada.'));
+    const r = await POST(req(ACOES.cessao.body));
+    expect(r.status).toBe(404);
+    expect((await r.json()).code).toBe('OFERTA_NAO_ENCONTRADA');
+  });
+});
