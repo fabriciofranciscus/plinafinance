@@ -84,6 +84,8 @@ beforeEach(() => {
     fn({
       onRampOrder: { update: mockUpdate },
       eventoAudit: { create: mockEventoAuditCreate },
+      // Harness (fix/claim-submit-single-event): a trava da linha da ordem; aqui ela nunca tem hash gravado.
+      $queryRaw: async () => [{ claimTxHash: null }],
     }),
   );
   mockSubmitWithPrivySignature.mockReset().mockResolvedValue({ hash: 'tx_claim_xyz' });

@@ -129,7 +129,13 @@ export const POST = withAuth(async (req, { user }) => {
       }
     }
 
-    await db.$transaction(async (tx) => {
+    // Submits simultâneos do mesmo claim (duplo clique, retry do cliente) passam juntos pela checagem de
+    // `claimTxHash` lá em cima. A trava da linha da ordem serializa o commit: o 1º grava o hash e o evento; os
+    // seguintes acham o hash já gravado e respondem idempotente, sem 2º evento.
+    const jaGravado = await db.$transaction(async (tx) => {
+      const [atual] = await tx.$queryRaw<Array<{ claimTxHash: string | null }>>`
+        SELECT "claimTxHash" FROM "OnRampOrder" WHERE "id" = ${order.id} FOR UPDATE`;
+      if (atual?.claimTxHash) return atual.claimTxHash;
       await tx.onRampOrder.update({
         where: { id: order.id },
         data: { claimTxHash: res.hash },
@@ -147,7 +153,11 @@ export const POST = withAuth(async (req, { user }) => {
           } as Prisma.InputJsonValue,
         },
       });
+      return null;
     });
+    if (jaGravado) {
+      return NextResponse.json({ claimTxHash: jaGravado, idempotent: true });
+    }
 
     return NextResponse.json({ claimTxHash: res.hash });
   } catch (err) {
