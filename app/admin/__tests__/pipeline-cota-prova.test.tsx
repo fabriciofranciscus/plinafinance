@@ -236,3 +236,38 @@ describe('VendedorPipeline: fluxo da cota de prova', () => {
     expect(screen.getByRole('button', { name: 'Pagar cedente (Pix)' })).toBeTruthy();
   });
 });
+
+describe('lead no /admin: id curto, valor, data e destaque do selecionado', () => {
+  afterEach(() => {
+    cleanup();
+    window.history.replaceState(null, '', '/');
+  });
+  const dois = () => {
+    const [a] = leads({ laudoRegistrado: true });
+    return [a!, { ...a!, id: 'cmabcdef123456ZZ99', nome: 'Outro cedente', ofertas: [] }];
+  };
+
+  it('cada lead mostra #idCurto · valor · data; sem oferta, "sem oferta"', () => {
+    render(<VendedorPipeline leads={dois()} />);
+    const r = screen.getAllByTestId('lead-resumo').map((e) => e.textContent);
+    expect(r[0]).toMatch(/^#L1 · R\$\s100\.000 · \d{2}\/\d{2}\/\d{4}$/);
+    expect(r[1]).toMatch(/^#56ZZ99 · sem oferta · \d{2}\/\d{2}\/\d{4}$/);
+  });
+
+  it('clicar no lead o seleciona (aria-pressed + texto "Selecionado") e grava #lead-<id>', () => {
+    render(<VendedorPipeline leads={dois()} />);
+    expect(screen.queryByText('Selecionado')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Outro cedente/ }));
+    expect(screen.getByRole('button', { name: /Outro cedente/ }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: /Cedente de teste/ }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getAllByText('Selecionado')).toHaveLength(1);
+    expect(window.location.hash).toBe('#lead-cmabcdef123456ZZ99');
+  });
+
+  it('abre já com o lead do #lead-<id> da URL selecionado', async () => {
+    window.history.replaceState(null, '', '#lead-cmabcdef123456ZZ99');
+    render(<VendedorPipeline leads={dois()} />);
+    await waitFor(() => expect(screen.getAllByText('Selecionado')).toHaveLength(1));
+    expect(screen.getByRole('button', { name: /Outro cedente/ }).getAttribute('aria-pressed')).toBe('true');
+  });
+});

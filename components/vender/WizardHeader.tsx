@@ -15,6 +15,7 @@
 
 import { usePrivy, useLogout } from '@privy-io/react-auth';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 type Caminho = 'cotistas' | 'investidores' | 'comprar';
 
@@ -27,6 +28,7 @@ const TABS: { id: Caminho; label: string; href: string }[] = [
 export default function WizardHeader({ active }: { active: Caminho }) {
   const { ready, authenticated } = usePrivy();
   const { logout } = useLogout();
+  const pathname = usePathname();
 
   return (
     <header className="border-b border-light-hairline bg-sheet-white">
@@ -60,6 +62,17 @@ export default function WizardHeader({ active }: { active: Caminho }) {
           <span className="hidden sm:inline font-mono text-[11px] text-base/50 whitespace-nowrap">
             stellar · testnet
           </span>
+          {ready && authenticated && (
+            <Link
+              href="/vender/minhas"
+              aria-current={pathname === '/vender/minhas' ? 'page' : undefined}
+              className={`font-details text-[10px] tracking-[0.2em] uppercase min-h-[44px] inline-flex items-center ${
+                pathname === '/vender/minhas' ? 'text-primary-deep font-bold' : 'text-base/70 hover:text-base'
+              }`}
+            >
+              Minhas solicitações
+            </Link>
+          )}
           {ready && authenticated && (
             <button
               onClick={() => logout()}

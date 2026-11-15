@@ -16,6 +16,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import WizardHeader from '@/components/vender/WizardHeader';
+import MinhasSolicitacoes from '@/components/vender/MinhasSolicitacoes';
 import StepperVender from '@/components/vender/StepperVender';
 import { usePessoa } from '@/components/PessoaProvider';
 import { useRequireAuth } from '@/lib/hooks/use-require-auth';
@@ -350,6 +351,12 @@ function WizardInner() {
           <p className="font-text text-lg text-base/70 mt-3">
             Proposta com deságio explicado, após a análise da cota. Simulação em rede de testes.
           </p>
+
+          {pessoa.authenticated && (
+            <div className="mt-10">
+              <MinhasSolicitacoes variante="compacto" />
+            </div>
+          )}
 
           <div className="mt-12">
             <StepperVender
