@@ -80,6 +80,10 @@ export function TopBar({ dict, locale }: Props) {
         <a href="#contato" className="contact" onClick={close}>
           {dict.nav.falar} <Icon name="arrow-up-right" />
         </a>
+        {/* A-09: acesso secundário (não é CTA do hero). Sem sessão, /vender/minhas encaminha para /entrar?next=/vender/minhas. */}
+        <a href="/vender/minhas" className="secondary" onClick={close}>
+          {dict.nav.minhas}
+        </a>
         <div className="lang" role="group" aria-label={dict.a11y.idioma}>
           <button type="button" lang="pt-BR" aria-current={locale === 'pt-BR'} onClick={() => switchLocale('pt-BR')}>
             {dict.languageSwitcher.pt}

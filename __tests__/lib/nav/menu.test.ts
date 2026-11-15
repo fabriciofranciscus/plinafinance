@@ -27,7 +27,9 @@ describe('itensDoMenu (spec de UX §1.1)', () => {
     expect(itensDoMenu({ ...base, papeis: ['INVESTIDOR'] }).find((i) => i.label.startsWith('Sacar'))?.href).toBe('/sacar');
   });
   it('deslogado mantém o menu público; admin mantém Operação · Pool', () => {
-    expect(rotulos([], { authenticated: false })).toEqual(['Pool', 'Cotas', 'Política', 'Investir (testnet)']);
+    // A-09: o acesso secundário a /vender/minhas fica no menu público, sem simular sessão
+    expect(rotulos([], { authenticated: false })).toEqual(['Pool', 'Cotas', 'Política', 'Investir (testnet)', 'Minhas solicitações']);
+    expect(itensDoMenu({ ...base, authenticated: false, papeis: [] }).find((i) => i.label === 'Minhas solicitações')?.href).toBe('/vender/minhas');
     expect(rotulos(['INVESTIDOR'], { isAdmin: true })).toEqual(['Operação', 'Pool']);
   });
 });

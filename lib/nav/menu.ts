@@ -32,7 +32,8 @@ const PUBLICO: ItemMenu[] = [
 
 export function itensDoMenu({ isAdmin, authenticated, carregandoPapeis, papeis }: EntradaMenu): ItemMenu[] {
   if (isAdmin) return [{ href: '/admin', label: 'Operação' }, { href: '/pool', label: 'Pool' }];
-  if (!authenticated) return [...PUBLICO, { href: '/investir', label: 'Investir (testnet)' }];
+  // Deslogado: o acesso secundário a /vender/minhas fica no menu público (A-09); sem sessão o guard leva ao /entrar com retorno.
+  if (!authenticated) return [...PUBLICO, { href: '/investir', label: 'Investir (testnet)' }, { href: '/vender/minhas', label: 'Minhas solicitações' }];
 
   const inicio: ItemMenu = { href: '/inicio', label: 'Início' };
   const historico: ItemMenu = { href: '/historico', label: 'Histórico' };

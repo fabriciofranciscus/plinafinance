@@ -39,6 +39,7 @@ export const en: Dictionary = {
       estagio: 'Stage',
       paraQuem: 'For whom',
       falar: 'Talk to the team',
+      minhas: 'My requests',
     },
     hero: {
       kicker: 'Brazilian consortium · Under development',

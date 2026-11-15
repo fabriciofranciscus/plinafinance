@@ -39,6 +39,7 @@ export const ptBR: Dictionary = {
       estagio: 'Estágio',
       paraQuem: 'Para quem',
       falar: 'Falar com o time',
+      minhas: 'Minhas solicitações',
     },
     hero: {
       kicker: 'Consórcio brasileiro · Em desenvolvimento',

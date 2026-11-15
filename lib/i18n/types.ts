@@ -48,6 +48,8 @@ export interface LandingV2 {
     estagio: string;
     paraQuem: string;
     falar: string;
+    /** Acesso secundário a /vender/minhas (A-09, Íris). */
+    minhas: string;
   };
   hero: {
     kicker: string;
