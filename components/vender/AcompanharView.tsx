@@ -407,7 +407,7 @@ function PainelCessao({
         </p>
         <div className="mt-4 space-y-1 font-mono text-xs text-base/70">
           <div>Cedente: {cedenteNome ?? '—'}</div>
-          <div>Cessionária: Plina Securitizadora S.A.</div>
+          <div>Cessionária: Plina Finance (projeto em fase de testes, empresa em constituição)</div>
           <div>Objeto: Direito creditório da cota cedida</div>
         </div>
       </div>
@@ -424,16 +424,10 @@ function PainelCessao({
           Enviado por DocuSign. Nenhum pagamento é feito antes da sua assinatura.
         </p>
       ) : (
-        <div className="mt-4">
-          <button
-            type="button"
-            disabled
-            className="bg-base/40 text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 cursor-not-allowed"
-          >
-            Assinar com e-CPF via DocuSign
-          </button>
-          <span className="ml-3 font-mono text-[11px] text-base/50">em breve</span>
-        </div>
+        <p data-testid="assinatura-por-email" className="mt-4 font-text text-sm text-base/80">
+          A assinatura eletrônica é feita pelo link de e-mail que a equipe envia nesta etapa. Verifique a caixa de spam. Enquanto isso, nada
+          precisa ser feito aqui.
+        </p>
       )}
 
       {(cessaoTx || cessaoId) && (

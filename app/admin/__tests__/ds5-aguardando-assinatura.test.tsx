@@ -85,6 +85,9 @@ describe('DS5 — /vender/acompanhar', () => {
     const html = renderToStaticMarkup(<AcompanharView data={data(false)} />);
     expect(html).not.toContain('aguardando-assinatura');
     expect(html).toContain('Texto genérico da cessão.');
-    expect(html).toContain('Assinar com e-CPF via DocuSign');
+    expect(html).toContain('A assinatura eletrônica é feita pelo link de e-mail que a equipe envia nesta etapa.');
+    expect(html).toContain('Verifique a caixa de spam.');
+    expect(html).not.toContain('e-CPF');
+    expect(html).not.toContain('em breve');
   });
 });
