@@ -32,8 +32,8 @@ const COPY: Record<
 > = {
   oferta: {
     subject: 'Sua oferta Plina está pronta',
-    titulo: 'Oferta firme disponível',
-    corpo: 'Preparamos uma oferta firme para a sua cota. Confira os valores e acompanhe o andamento pelo link abaixo.',
+    titulo: 'Proposta disponível',
+    corpo: 'Preparamos uma proposta para a sua cota. Confira os valores e acompanhe o andamento pelo link abaixo.',
   },
   cessao: {
     subject: 'Cessão registrada — Plina',

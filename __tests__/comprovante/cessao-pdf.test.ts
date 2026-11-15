@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FAIXA_DEMONSTRACAO, FRASE_PIX, buildCessaoPdf, textosCessao } from '@/lib/comprovante/cessao-pdf';
+import { CESSIONARIA, FAIXA_DEMONSTRACAO, FRASE_PIX, buildCessaoPdf, textosCessao } from '@/lib/comprovante/cessao-pdf';
 
 const HASH = 'c'.repeat(64);
 
@@ -56,5 +56,20 @@ describe('buildCessaoPdf', () => {
       expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
       expect(pdf.toString('latin1').match(/\/Type \/Page\b/g)).toHaveLength(1);
     }
+  });
+});
+
+describe('cessionária no instrumento (Norma/Consuelo, 15/11)', () => {
+  it('identifica o projeto em fase de testes e a empresa em constituição', () => {
+    expect(CESSIONARIA).toBe('Plina Finance (projeto em fase de testes, empresa em constituição)');
+  });
+
+  it('o PDF é gerado com a nova cessionária e continua com UMA página', async () => {
+    const pdf = await buildCessaoPdf({
+      cessaoId: 'ces_1', cedenteNome: 'Fulano de Teste', administradora: 'Adm X', tipoBem: 'VEICULO',
+      valorCarta: 'R$ 50.000,00', valorLiquido: 'R$ 30.000,00', desagioPct: '40.00%', hashLaudo: 'c'.repeat(64), demonstracao: true,
+    });
+    expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(pdf.toString('latin1').match(/\/Type \/Page\b/g)).toHaveLength(1);
   });
 });

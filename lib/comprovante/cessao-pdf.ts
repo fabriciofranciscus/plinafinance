@@ -28,6 +28,9 @@ export interface CessaoPdfData {
 export const FRASE_PIX =
   'O pagamento é feito por Pix para a chave CPF (ou CNPJ) do titular. Cadastre-a no seu banco antes de assinar.';
 
+/** Identificação da cessionária no instrumento (Norma/Consuelo, 15/11): o projeto está em fase de testes e a empresa em constituição. */
+export const CESSIONARIA = 'Plina Finance (projeto em fase de testes, empresa em constituição)';
+
 export const FAIXA_DEMONSTRACAO =
   'DEMONSTRAÇÃO · REDE DE TESTES · DADOS FICTÍCIOS · SEM EFEITO JURÍDICO NEM FINANCEIRO';
 
@@ -86,7 +89,7 @@ export function buildCessaoPdf(data: CessaoPdfData): Promise<Buffer> {
       doc.moveDown(0.5);
     };
     row('Cedente', data.cedenteNome);
-    row('Cessionária', 'Plina Finance');
+    row('Cessionária', CESSIONARIA);
     row('Administradora do grupo', data.administradora);
     row('Tipo de bem', data.tipoBem);
     row('Valor da carta de crédito', data.valorCarta);
