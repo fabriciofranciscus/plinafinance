@@ -122,18 +122,17 @@ describe('GET /api/vender/acompanhar/[leadId]', () => {
   });
 });
 
-describe('acompanharPublico (o que a página sem sessão pode mostrar)', () => {
-  it('só status, etapa, encerrado e a descrição da etapa: nenhum dado pessoal, valor, id ou hash', async () => {
-    m.findUnique.mockResolvedValue({ status: 'OFERTA_ENVIADA' });
-    const r = await acompanharPublico('lead_1');
-    expect(Object.keys(r!).sort()).toEqual(['contextoDescricao', 'encerrado', 'etapaAtual', 'status']);
-    expect(m.findUnique.mock.calls[0][0].select).toEqual({ status: true }); // nem lê nome nem oferta
-  });
-  it('id inexistente → null; PERDIDO → encerrado', async () => {
-    m.findUnique.mockResolvedValueOnce(null);
-    expect(await acompanharPublico('nada')).toBeNull();
-    m.findUnique.mockResolvedValueOnce({ status: 'PERDIDO' });
-    expect((await acompanharPublico('l'))!.encerrado).toBe(true);
+describe('acompanharPublico (o que a página sem sessão mostra: o mesmo para qualquer id)', () => {
+  it('não lê o banco e devolve o MESMO objeto para id existente, inexistente e qualquer texto: sem status, etapa, nome, valores, ids ou hashes', () => {
+    m.findUnique.mockResolvedValue({ status: 'PERDIDO' });
+    const a = acompanharPublico('lead_1');
+    const b = acompanharPublico('id-que-nao-existe');
+    const c = acompanharPublico();
+    expect(a).toEqual({ exigeLogin: true });
+    expect(b).toEqual(a);
+    expect(c).toEqual(a);
+    expect(m.findUnique).not.toHaveBeenCalled();
+    expect(m.findFirst).not.toHaveBeenCalled();
   });
 });
 
