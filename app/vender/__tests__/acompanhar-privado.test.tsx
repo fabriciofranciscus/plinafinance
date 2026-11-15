@@ -104,10 +104,10 @@ describe('paraAcompanharData', () => {
 
 describe('página pública /vender/acompanhar/[leadId]', () => {
   const src = readFileSync('app/vender/acompanhar/[leadId]/page.tsx', 'utf8');
-  it('não consulta o banco direto nem monta dados pessoais: usa só acompanharPublico', () => {
-    expect(src).not.toMatch(/from '@\/lib\/db'/);
-    expect(src).not.toMatch(/nomeDoCedente|valorLiquidoVendedor|stellarTxHash/);
-    expect(src).toContain("acompanharPublico");
+  it('idêntica para qualquer id: não lê o banco, não confirma o id, sem etapa nem "Link inválido" públicos', () => {
+    expect(src).not.toMatch(/from '@\/lib\/db'|acompanharPublico|ETAPAS_VENDER/);
+    expect(src).not.toMatch(/Link inválido|Etapa atual|etapa-publica|nomeDoCedente|valorLiquidoVendedor|stellarTxHash/);
+    expect(src).toContain('<AcompanharPrivado leadId={leadId} />');
   });
   it('Referrer-Policy no-referrer e noindex pelos metadados', () => {
     expect(src).toMatch(/referrer: 'no-referrer'/);
