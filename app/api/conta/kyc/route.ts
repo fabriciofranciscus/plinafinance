@@ -19,6 +19,8 @@ import { ensureKycForPessoa } from '@/lib/services/pessoa';
 import { parseBody } from '@/lib/http/parse-body';
 import { sensitiveAuthLimiter, clientIp } from '@/lib/rate-limit/config';
 import { ApiError } from '@/lib/api/errors';
+import { erroDoAnchor } from '@/lib/api/anchor-error';
+import { internalErrorResponse } from '@/lib/api/internal-error';
 import { isMaiorDeIdade } from '@/lib/format/idade';
 import { isUfValida } from '@/lib/format/uf';
 
@@ -121,10 +123,12 @@ export const POST = withPessoaAuth(async (req, { user }) => {
       etherfuseBankAccountId: result.etherfuseBankAccountId,
     });
   } catch (err) {
-    if (err instanceof ApiError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
+    // Nunca o err.message cru (Prisma/Etherfuse ecoam e-mail, CPF, valores): AnchorError vira 422/502 fixo, ApiError mantém a
+    // mensagem FIXA do app (ex.: CPF inválido) e o resto é 500 "erro interno".
+    const erro = erroDoAnchor(err, 'conta/kyc');
+    if (erro instanceof ApiError) {
+      return NextResponse.json({ error: erro.message, code: erro.code }, { status: erro.status });
     }
-    const message = err instanceof Error ? err.message : 'unknown';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return internalErrorResponse(erro, 'conta/kyc');
   }
 });

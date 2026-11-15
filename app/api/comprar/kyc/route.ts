@@ -21,6 +21,9 @@ import { resolverLeadCompradorPorPessoa } from '@/lib/services/realizacao';
 import { parseBody } from '@/lib/http/parse-body';
 import { sensitiveAuthLimiter, clientIp } from '@/lib/rate-limit/config';
 import { db } from '@/lib/db';
+import { ApiError } from '@/lib/api/errors';
+import { erroDoAnchor } from '@/lib/api/anchor-error';
+import { internalErrorResponse } from '@/lib/api/internal-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,11 +79,11 @@ export const POST = withPessoaAuth(async (req, { user }) => {
       papeis: result.papeis,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'unknown';
-    const isClientError = message.startsWith('cpf obrigatório');
-    return NextResponse.json(
-      { error: message },
-      { status: isClientError ? 400 : 500 },
-    );
+    // Nunca o err.message cru. O CPF ausente/inválido sobe como ApiError 400 do próprio serviço (mensagem fixa do app).
+    const erro = erroDoAnchor(err, 'comprar/kyc');
+    if (erro instanceof ApiError) {
+      return NextResponse.json({ error: erro.message, code: erro.code }, { status: erro.status });
+    }
+    return internalErrorResponse(erro, 'comprar/kyc');
   }
 });
