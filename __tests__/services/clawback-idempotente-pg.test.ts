@@ -13,11 +13,11 @@ const PG = vi.hoisted(() => {
   }
   return url;
 });
-const st = vi.hoisted(() => ({ chamadas: 0, atraso: 80, falhaMemo: false }));
+const st = vi.hoisted(() => ({ chamadas: 0, atraso: 80, falhaMemo: false, errosRede: [] as unknown[] }));
 vi.mock('@/lib/stellar/signer', () => ({ issuerSigner: () => ({}) }));
 vi.mock('@/lib/stellar/issuer', async (orig) => ({
   ...(await orig<typeof import('@/lib/stellar/issuer')>()),
-  executeClawback: vi.fn(async () => { st.chamadas += 1; await new Promise((r) => setTimeout(r, st.atraso)); return { hash: `tx_claw_${st.chamadas}` }; }),
+  executeClawback: vi.fn(async () => { st.chamadas += 1; await new Promise((r) => setTimeout(r, st.atraso)); const e = st.errosRede.shift(); if (e) throw e; return { hash: `tx_claw_${st.chamadas}` }; }),
 }));
 vi.mock('@/lib/stellar/audit', () => ({
   buildAuditPayload: (_t: string, _i: string, x: object) => x,
@@ -35,7 +35,7 @@ describe.skipIf(!PG)('clawback — idempotência sob concorrência real no Postg
   beforeEach(async () => {
     process.env.STELLAR_ISSUER_SECRET = 'SXXXX';
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    st.chamadas = 0; st.falhaMemo = false;
+    st.chamadas = 0; st.falhaMemo = false; st.errosRede = [];
     await db.$executeRawUnsafe('TRUNCATE "EventoAudit", "HoldingPLINARF", "Investidor" RESTART IDENTITY CASCADE');
     await db.investidor.create({ data: { id: 'inv_cb', nome: 'Inv', email: 'inv@exemplo.test', publicKey: 'G' + 'A'.repeat(55), privyId: 'did:privy:cb', saldoEsperado: 1000 } });
   });
@@ -80,5 +80,27 @@ describe.skipIf(!PG)('clawback — idempotência sob concorrência real no Postg
     await executarClawback({ ...IN, pedidoId: 'pedido-pg-outro-9876543210' });
     expect(st.chamadas).toBe(2);
     expect(await saldo()).toBe(800);
+  });
+
+  it('R1 (cobertura PG): mesmo pedido com OUTRO valor, OUTRA URL ou OUTRO motivo é recusado; só os dados do registro executam', async () => {
+    await executarClawback(IN);
+    await expect(executarClawback({ ...IN, amount: '500' })).rejects.toMatchObject({ code: 'PEDIDO_INVALIDO' });
+    await expect(executarClawback({ ...IN, fundamentoUrl: 'https://outro.test/falso.pdf' })).rejects.toMatchObject({ code: 'PEDIDO_INVALIDO' });
+    await expect(executarClawback({ ...IN, motivo: 'FRAUDE_DOCUMENTAL' as never })).rejects.toMatchObject({ code: 'PEDIDO_INVALIDO' });
+    expect(st.chamadas).toBe(1);
+    expect(await saldo()).toBe(900);
+  });
+
+  it('R2 (PG): erro sem result_codes → incerto, o saldo NÃO baixa e o mesmo pedido não reexecuta; rejeição com result_codes → failed', async () => {
+    st.errosRede = [new Error('ETIMEDOUT')];
+    await expect(executarClawback(IN)).rejects.toMatchObject({ code: 'EXECUCAO_INCERTA' });
+    await expect(executarClawback(IN)).rejects.toMatchObject({ code: 'EXECUCAO_INCERTA' });
+    expect(st.chamadas).toBe(1);
+    expect(await saldo()).toBe(1000);
+    const outro = { ...IN, pedidoId: 'pedido-pg-rejeitado-0123456' };
+    st.errosRede = [Object.assign(new Error('rejeitada'), { response: { data: { extras: { result_codes: { transaction: 'tx_failed' } } } } })];
+    await expect(executarClawback(outro)).rejects.toMatchObject({ code: 'EXECUCAO_FALHOU' });
+    await expect(executarClawback(outro)).rejects.toMatchObject({ code: 'PEDIDO_FALHOU' });
+    expect(st.chamadas).toBe(2);
   });
 });

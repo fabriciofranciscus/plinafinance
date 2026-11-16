@@ -769,6 +769,7 @@ export type ClawbackErrorCode =
   | 'PEDIDO_EM_ANDAMENTO'
   | 'PEDIDO_FALHOU'
   | 'EXECUCAO_FALHOU'
+  | 'EXECUCAO_INCERTA'
   | 'REGISTRO_PENDENTE';
 
 /** Mensagens FIXAS (sem nome de variável, id, valor nem texto de terceiros): é o que o operador vê na tela. */
@@ -778,9 +779,10 @@ const MENSAGENS_CLAWBACK: Record<ClawbackErrorCode, string> = {
   VALOR_INVALIDO: 'Informe uma quantidade maior que zero.',
   EMISSOR_NAO_CONFIGURADO: 'A execução do clawback não está configurada neste ambiente.',
   INVESTIDOR_NAO_ENCONTRADO: 'Investidor não encontrado.',
-  PEDIDO_EM_ANDAMENTO: 'Este pedido já foi enviado e está em andamento ou foi interrompido. Nada foi executado de novo; confira o histórico antes de criar outro pedido.',
+  PEDIDO_EM_ANDAMENTO: 'Este pedido já foi enviado e está em andamento ou foi interrompido. Nada foi executado de novo. O clawback pode ter entrado na rede: NÃO crie outro pedido antes de conferir o saldo on-chain e o histórico.',
   PEDIDO_FALHOU: 'Este pedido já falhou antes e não será repetido. Confira o saldo e o histórico; se precisar, crie um novo pedido.',
-  EXECUCAO_FALHOU: 'O clawback não foi concluído. Confira o saldo do investidor e o histórico antes de criar um novo pedido.',
+  EXECUCAO_FALHOU: 'A rede recusou o clawback e ele não foi executado. Confira o saldo e o histórico; se precisar, crie um novo pedido.',
+  EXECUCAO_INCERTA: 'O resultado do clawback é incerto: ele pode ter entrado na rede. NÃO crie outro pedido; confira o saldo on-chain e o histórico.',
   REGISTRO_PENDENTE: 'O clawback JÁ foi executado na rede, mas o registro não foi concluído. NÃO crie outro pedido: reenvie este mesmo para concluir o registro.',
 };
 
@@ -798,7 +800,7 @@ type PayloadClawback = {
   pedidoId?: string;
   amount?: string;
   targetPubkey?: string;
-  status?: 'attempting' | 'onchain' | 'executed' | 'failed';
+  status?: 'attempting' | 'onchain' | 'executed' | 'failed' | 'incerto';
   clawbackTxHash?: string;
   fundamentoTxHash?: string;
   causa?: unknown;
@@ -864,7 +866,13 @@ export async function executarClawback(
 
   if (!claim.novo) {
     // O pedido só vale para os MESMOS dados (investidor e valor): outra combinação com a mesma chave é recusada.
-    if (claim.evento.investidorId !== input.investidorId || guardado.amount !== input.amount) {
+    // R1 (Argus): também o motivo e o fundamento: o memo ancorado na retomada tem de ser o do REGISTRO, nunca o de um reenvio com outra URL.
+    if (
+      claim.evento.investidorId !== input.investidorId ||
+      guardado.amount !== input.amount ||
+      claim.evento.motivoClawback !== input.motivo ||
+      claim.evento.fundamentoUrl !== input.fundamentoUrl
+    ) {
       throw new ClawbackError('PEDIDO_INVALIDO');
     }
     if (guardado.status === 'executed') {
@@ -878,7 +886,7 @@ export async function executarClawback(
     if (guardado.status === 'onchain' && guardado.clawbackTxHash) {
       return concluirRegistroDoClawback({ eventoId, chaveLock, input, publicKey: investidor.publicKey, clawbackTxHash: guardado.clawbackTxHash, retomada: true });
     }
-    throw new ClawbackError(guardado.status === 'failed' ? 'PEDIDO_FALHOU' : 'PEDIDO_EM_ANDAMENTO');
+    throw new ClawbackError(guardado.status === 'failed' ? 'PEDIDO_FALHOU' : guardado.status === 'incerto' ? 'EXECUCAO_INCERTA' : 'PEDIDO_EM_ANDAMENTO');
   }
 
   // 2) On-chain (clawback). Só quem gravou a tentativa chega aqui.
@@ -887,13 +895,16 @@ export async function executarClawback(
     clawbackTxHash = (await executeClawback(issuerSigner(), investidor.publicKey, input.amount)).hash;
   } catch (err) {
     console.error('[clawback] execução falhou', causaSegura(err));
+    // R2 (Argus): só a REJEIÇÃO DEFINITIVA da rede (result_codes) prova que a tx não entrou. Timeout, 5xx, queda de conexão e
+    // tx_too_late/tx_bad_seq podem ter deixado a tx entrar: ficam `incerto` (o pedido recusa, sem orientar um 2º clawback).
+    const definitiva = rejeicaoDefinitivaDaRede(err);
     await db.eventoAudit
       .update({
         where: { id: eventoId },
-        data: { payloadJson: { ...guardado, status: 'failed', causa: causaSegura(err) } as unknown as Prisma.InputJsonValue },
+        data: { payloadJson: { ...guardado, status: definitiva ? 'failed' : 'incerto', causa: causaSegura(err) } as unknown as Prisma.InputJsonValue },
       })
       .catch(() => undefined);
-    throw new ClawbackError('EXECUCAO_FALHOU');
+    throw new ClawbackError(definitiva ? 'EXECUCAO_FALHOU' : 'EXECUCAO_INCERTA');
   }
 
   // Guarda o hash IMEDIATAMENTE: se algo cair daqui em diante, o mesmo pedido retoma o registro sem reexecutar o clawback.
@@ -906,6 +917,16 @@ export async function executarClawback(
   });
 
   return concluirRegistroDoClawback({ eventoId, chaveLock, input, publicKey: investidor.publicKey, clawbackTxHash, retomada: false });
+}
+
+/**
+ * `true` só quando o Horizon devolveu `result_codes` (a rede REJEITOU a tx: ela não entrou). `tx_too_late` e `tx_bad_seq` não provam
+ * isso (reenviar uma tx que já entrou e expirou volta tx_too_late; ver `ehTxTooLate`), e erro sem result_codes (timeout, 5xx, rede) é incerto.
+ */
+function rejeicaoDefinitivaDaRede(err: unknown): boolean {
+  const rc = (err as { response?: { data?: { extras?: { result_codes?: { transaction?: unknown } } } } })?.response?.data?.extras?.result_codes;
+  if (!rc || typeof rc !== 'object') return false;
+  return rc.transaction !== 'tx_too_late' && rc.transaction !== 'tx_bad_seq';
 }
 
 /** Passos 3 e 4: memo do fundamento + (evento executado, saldoEsperado e holding) numa transação, idempotente por evento. */

@@ -27,7 +27,9 @@ export function ClawbackForm({
   // o servidor diz que o clawback já foi à rede e falta só o registro (reenviar o MESMO pedido conclui sem repetir).
   const [pedidoId, setPedidoId] = useState(() => crypto.randomUUID());
   useEffect(() => {
-    if (state && state.code !== 'REGISTRO_PENDENTE') setPedidoId(crypto.randomUUID());
+    // Mantém a chave quando o resultado é pendente ou incerto: reenviar o MESMO pedido nunca duplica (recarregar a tela gera outro).
+    const manter = ['REGISTRO_PENDENTE', 'EXECUCAO_INCERTA', 'PEDIDO_EM_ANDAMENTO'];
+    if (state && !manter.includes(state.code ?? '')) setPedidoId(crypto.randomUUID());
   }, [state]);
 
   return (

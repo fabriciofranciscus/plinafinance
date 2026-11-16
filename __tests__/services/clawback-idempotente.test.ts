@@ -75,19 +75,54 @@ describe('idempotência por pedido', () => {
   });
 
   it('pedido já TENTADO e sem conclusão (attempting) → PEDIDO_EM_ANDAMENTO fixo, nunca uma 2ª execução', async () => {
-    m.eventos.push({ id: 'ev_x', acao: 'CLAWBACK_EXECUTADO', investidorId: 'inv_1', payloadJson: { pedidoId: IN.pedidoId, amount: '100', status: 'attempting' } });
+    m.eventos.push({ id: 'ev_x', acao: 'CLAWBACK_EXECUTADO', investidorId: 'inv_1', motivoClawback: IN.motivo, fundamentoUrl: IN.fundamentoUrl, payloadJson: { pedidoId: IN.pedidoId, amount: '100', status: 'attempting' } });
     await expect(executarClawback(IN)).rejects.toMatchObject({ code: 'PEDIDO_EM_ANDAMENTO' });
     expect(m.executeClawback).not.toHaveBeenCalled();
   });
 
-  it('falha on-chain: marca o pedido como falhou, erro fixo EXECUCAO_FALHOU e o mesmo pedido NÃO reexecuta (PEDIDO_FALHOU)', async () => {
-    m.executeClawback.mockRejectedValueOnce(new Error('horizon: segredo xyz e ana@exemplo.test'));
+  const rejeicaoDaRede = (transaction: string) =>
+    Object.assign(new Error('horizon: segredo xyz e ana@exemplo.test'), { response: { data: { extras: { result_codes: { transaction, operations: ['op_no_trust'] } } } } });
+
+  it('R2: REJEIÇÃO DEFINITIVA da rede (result_codes) → marca failed, erro fixo EXECUCAO_FALHOU; o mesmo pedido NÃO reexecuta (PEDIDO_FALHOU)', async () => {
+    m.executeClawback.mockRejectedValueOnce(rejeicaoDaRede('tx_failed'));
     const e1 = await executarClawback(IN).catch((e) => e);
     expect(e1).toBeInstanceOf(ClawbackError);
     expect(e1.code).toBe('EXECUCAO_FALHOU');
     expect(e1.message).not.toMatch(/xyz|exemplo\.test|horizon/);
     expect(m.eventos[0]!.payloadJson.status).toBe('failed');
     await expect(executarClawback(IN)).rejects.toMatchObject({ code: 'PEDIDO_FALHOU' });
+    expect(m.executeClawback).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['timeout/queda de conexão (sem result_codes)', () => new Error('ETIMEDOUT: segredo xyz')],
+    ['5xx do Horizon (sem result_codes)', () => Object.assign(new Error('502'), { response: { status: 502, data: { status: 502 } } })],
+    ['tx_too_late (não prova que não entrou)', () => rejeicaoDaRede('tx_too_late')],
+    ['tx_bad_seq (idem)', () => rejeicaoDaRede('tx_bad_seq')],
+  ])('R2: %s → pedido fica INCERTO (nunca "failed"), mensagem "pode ter entrado na rede; NÃO crie outro pedido", e o mesmo pedido recusa sem reexecutar', async (_n, erro) => {
+    m.executeClawback.mockRejectedValueOnce(erro());
+    const e1 = await executarClawback(IN).catch((e) => e);
+    expect(e1.code).toBe('EXECUCAO_INCERTA');
+    expect(e1.message).toMatch(/pode ter entrado na rede/);
+    expect(e1.message).toMatch(/NÃO crie outro pedido/);
+    expect(e1.message).not.toMatch(/xyz|ETIMEDOUT/);
+    expect(m.eventos[0]!.payloadJson.status).toBe('incerto');
+    const e2 = await executarClawback(IN).catch((e) => e);
+    expect(e2.code).toBe('EXECUCAO_INCERTA');
+    expect(m.executeClawback).toHaveBeenCalledTimes(1);
+    expect(m.decrementar).not.toHaveBeenCalled();
+  });
+
+  it('R1: reenvio do MESMO pedido com outra URL de fundamento ou outro motivo → PEDIDO_INVALIDO e NADA é ancorado com a URL nova (nem na retomada)', async () => {
+    m.registerOnChainHash.mockRejectedValueOnce(new Error('memo caiu')); // deixa o pedido em `onchain` (retomável)
+    await executarClawback(IN).catch(() => undefined);
+    m.registerOnChainHash.mockClear();
+    await expect(executarClawback({ ...IN, fundamentoUrl: 'https://outro.test/falso.pdf' })).rejects.toMatchObject({ code: 'PEDIDO_INVALIDO' });
+    await expect(executarClawback({ ...IN, motivo: 'FRAUDE_DOCUMENTAL' as never })).rejects.toMatchObject({ code: 'PEDIDO_INVALIDO' });
+    expect(m.registerOnChainHash).not.toHaveBeenCalled();
+    // com os dados IGUAIS a retomada segue e ancora o fundamento do REGISTRO
+    await executarClawback(IN);
+    expect(m.registerOnChainHash.mock.calls[0]![0]).toMatchObject({ fundamentoUrl: 'https://x.test/decisao.pdf', motivo: 'ERRO_OPERACIONAL' });
     expect(m.executeClawback).toHaveBeenCalledTimes(1);
   });
 
