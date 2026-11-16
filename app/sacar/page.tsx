@@ -420,7 +420,7 @@ export default function SacarPage() {
             {step === 'done' && terminalRuim && resultado
               ? resultado.texto
               : step === 'done'
-              ? 'Burn confirmado on-chain. Etherfuse moveu o off-ramp pra `processing`. Em produção, PIX cai na sua conta nos próximos minutos. Sandbox PIX/BRL não settla pra banco real (constraint upstream).'
+              ? SACAR.aguardando.textoPagamento
               : 'Polling status da off-ramp a cada 3s. Etherfuse precisa indexar o burn (~10s).'}
           </p>
           <div className="mt-8 border-y border-base/15">

@@ -43,7 +43,7 @@ const COPY: Record<
   cessao: {
     subject: 'Cessão registrada — Plina',
     titulo: 'Cessão assinada e registrada',
-    corpo: 'Sua cessão foi registrada e o hash do documento foi gravado on-chain como prova pública. O Pix será executado em seguida.',
+    corpo: 'Sua cessão foi registrada na rede de testes. O pagamento segue as próximas etapas; avisaremos por e-mail nos principais avanços.',
   },
   pix: {
     subject: 'Pix executado — Plina',

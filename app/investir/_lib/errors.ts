@@ -15,7 +15,7 @@ export function humanizeError(raw: string): { message: string; technical: string
   }
   if (t.includes('etherfuse') && t.includes('limit')) {
     return {
-      message: 'Limite do sandbox Etherfuse atingido. Em produção, o tíquete é definido pelo seu compromisso institucional.',
+      message: 'Limite de teste atingido. Tente de novo mais tarde ou fale com a equipe em contato@plina.finance.',
       technical: raw,
     };
   }
