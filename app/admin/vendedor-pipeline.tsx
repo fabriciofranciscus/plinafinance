@@ -790,7 +790,7 @@ function NovaOfertaForm({
         <input
           name="valorCarta"
           type="number"
-          step="1000"
+          step="1"
           required
           placeholder="150000"
           className={inputCls + ' font-mono'}
