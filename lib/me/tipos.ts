@@ -1,3 +1,5 @@
+import type { FaseOrdemPendente } from '../services/ordem-pendente';
+
 /**
  * Contrato de GET /api/me/resumo e GET /api/me/historico (item 12, Bento):
  * contratos/2026-11-15-me-resumo-historico.md. Respostas diretas, sem envelope.
@@ -34,6 +36,8 @@ export interface OperacaoPendente {
   tipo: 'entrada' | 'saida';
   valor: string;
   situacao: 'em_conferencia' | 'aguardando_assinatura';
+  /** Só nas entradas (compra): em que passo a compra parou (A-07). Aditivo; ausente = comportamento antigo. */
+  fase?: FaseOrdemPendente;
   /** Rota onde a pessoa continua. */
   continuarEm: '/investir' | '/sacar';
 }

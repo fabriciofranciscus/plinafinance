@@ -30,6 +30,30 @@ describe('/inicio (spec de UX §2)', () => {
     expect(html).toContain('href="/sacar"');
   });
 
+  it('A-07: compra liquidada sem swap → próxima ação "Concluir a compra" (antes: "Nenhuma ação pendente") e o passo certo em "Em andamento"', () => {
+    const html = ok(sem({
+      solicitacoes: [],
+      operacoesPendentes: [{ tipo: 'entrada', valor: 'R$ 300,00', situacao: 'aguardando_assinatura', fase: 'concluir_swap', continuarEm: '/investir' }],
+    }));
+    expect(html).toContain('Concluir a compra');
+    expect(html).toContain('Concluir compra');
+    expect(html).toContain('href="/investir"');
+    expect(html).toContain('Em rede de testes, o pagamento é simulado.');
+    expect(html).not.toContain('Nenhuma ação pendente');
+    expect(html).toContain('Falta concluir a compra (pagamento simulado)');
+    expect(html).not.toContain('Aguardando sua assinatura');
+  });
+
+  it('A-07: compra em conferência não é ação do usuário: "Nenhuma ação sua agora", sem botão de continuar na próxima ação', () => {
+    const html = ok(sem({
+      solicitacoes: [],
+      operacoesPendentes: [{ tipo: 'entrada', valor: 'R$ 300,00', situacao: 'em_conferencia', fase: 'em_conferencia', continuarEm: '/investir' }],
+    }));
+    expect(html).toContain('Nenhuma ação sua agora');
+    expect(html).toContain('Não refaça a compra.');
+    expect(html).toContain('Em conferência (pagamento simulado)');
+  });
+
   it('conta nova: só "Escolha por onde começar" com dois botões; sem Posição nem Em andamento; Atalhos presentes', () => {
     const html = ok(RESUMO_CONTA_NOVA_EXEMPLO);
     expect(html).toContain('Sua conta');

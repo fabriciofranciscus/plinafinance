@@ -68,9 +68,37 @@ describe.skipIf(!PG)('me — consultas reais no Postgres', () => {
     const pend = r.operacoesPendentes;
     expect(pend).toContainEqual({ tipo: 'saida', valor: '100.00', situacao: 'aguardando_assinatura', continuarEm: '/sacar' });
     // cotação q2: ordem de entrada concluída + vigente + não consumida; a q1 (consumida) NÃO é pendência
-    expect(pend).toContainEqual({ tipo: 'entrada', valor: '90.50', situacao: 'aguardando_assinatura', continuarEm: '/investir' });
+    expect(pend).toContainEqual({ tipo: 'entrada', valor: '90.50', situacao: 'aguardando_assinatura', fase: 'concluir_swap', continuarEm: '/investir' });
     expect(pend.filter((p) => p.tipo === 'entrada')).toHaveLength(1);
     expect(JSON.stringify(r)).not.toMatch(/999|pB|leadpB/); // nada da pessoa B
+  });
+
+  it('A-07 (Postgres real): ordem liquidada com a COTAÇÃO EXPIRADA há horas segue pendente, e cada fase da compra aparece (era: sumia e o /inicio dizia "Nenhuma ação pendente")', async () => {
+    await db.pessoa.create({ data: { id: 'pC', privyId: 'did:pC', email: 'pC@exemplo.test', nome: 'pC', publicKey: 'GpC', kycAprovado: true } });
+    await db.investidor.create({ data: { id: 'invpC', pessoaId: 'pC', nome: 'pC', email: 'pC@exemplo.test', publicKey: 'GpC', status: 'AUTORIZADO' } });
+    await db.quote.create({ data: { id: 'qC', investidorId: 'invpC', fromCurrency: 'BRL', fromAmount: '300', toCurrency: 'TESOURO', toAmount: '307.1234567', exchangeRate: '1', fee: '0', expiresAt: new Date(Date.now() - 6 * 3600_000), plinarfAmount: '307.1234567', navPorTokenNaCotacao: '1' } });
+    const fasePara = async (data: Record<string, unknown>, submit?: string | null) => {
+      await db.onRampOrder.upsert({
+        where: { id: 'orC' },
+        create: { id: 'orC', quoteId: 'qC', investidorId: 'invpC', status: 'pending', ...data } as never,
+        update: data as never,
+      });
+      await db.quote.update({ where: { id: 'qC' }, data: { submitXdrHash: submit ?? null } });
+      return (await montarResumo(user('pC'))).operacoesPendentes.filter((o) => o.tipo === 'entrada');
+    };
+    // o caso do achado: liquidada, claim feito, cotação vencida há 6 h
+    const concluir = await fasePara({ status: 'completed', stellarClaimableBalanceId: 'cb', claimTxHash: 'claimtx' });
+    expect(concluir).toEqual([{ tipo: 'entrada', valor: '300.00', situacao: 'aguardando_assinatura', fase: 'concluir_swap', continuarEm: '/investir' }]);
+    expect((await fasePara({ status: 'pending', stellarClaimableBalanceId: null, claimTxHash: null }))[0]?.fase).toBe('aguardando_pagamento');
+    expect((await fasePara({ status: 'processing' }))[0]?.fase).toBe('liquidando');
+    expect((await fasePara({ status: 'processing', stellarClaimableBalanceId: 'cb' }))[0]?.fase).toBe('resgatar_tesouro');
+    const conf = await fasePara({ status: 'completed', claimTxHash: 'claimtx' }, 'a'.repeat(64));
+    expect(conf[0]).toMatchObject({ fase: 'em_conferencia', situacao: 'em_conferencia' });
+    expect(await fasePara({ status: 'failed' })).toEqual([]); // ordem morta nunca é pendência
+    await db.onRampOrder.update({ where: { id: 'orC' }, data: { status: 'completed' } });
+    await db.quote.update({ where: { id: 'qC' }, data: { submitXdrHash: null, consumedAt: new Date() } });
+    expect((await montarResumo(user('pC'))).operacoesPendentes).toEqual([]); // swap concluído: nada pendente
+    expect((await montarResumo(user('pA'))).operacoesPendentes.filter((o) => o.tipo === 'entrada')).toHaveLength(1); // e nada vaza entre pessoas
   });
 
   it('resumo da pessoa B não vê nada da A', async () => {

@@ -11,6 +11,8 @@ import { isSorobanWaterfallEnabled } from '../env/feature-gates';
 import { lerSupplyDoNav, NavIndisponivelError } from './nav-supply';
 import { navPorTokenAsDecimal } from './pool';
 import { caixaParaNav } from './razao-fundo';
+import { buscarOrdemPendente } from './ordem-pendente-db';
+import type { FaseOrdemPendente } from './ordem-pendente';
 import { etapaDoStatus } from '../vender/etapas';
 import { nomeDoCedente } from '../vender/nome';
 import type { AuthedPessoa } from '../wallet/pessoa-auth';
@@ -47,6 +49,8 @@ export interface ResumoDaConta {
     tipo: 'entrada' | 'saida';
     valor: string;
     situacao: 'em_conferencia' | 'aguardando_assinatura';
+    /** Só nas entradas (compra): em que passo a compra parou. Aditivo. */
+    fase?: FaseOrdemPendente;
     continuarEm: '/investir' | '/sacar';
   }>;
   bloqueio: null | { motivo: 'kyc_pendente' | 'conta_suspensa' };
@@ -97,28 +101,26 @@ async function posicaoDoInvestidor(investidorId: string): Promise<PosicaoResumo>
 
 async function pendenciasDoInvestidor(investidorId: string): Promise<ResumoDaConta['operacoesPendentes']> {
   const agora = new Date();
-  const [swaps, resgates] = await Promise.all([
-    db.quote.findMany({
-      where: {
-        investidorId,
-        consumedAt: null,
-        plinarfAmount: { not: null },
-        OR: [{ submitXdrHash: { not: null } }, { expiresAt: { gt: agora }, onRampOrder: { is: { status: 'completed' } } }],
-      },
-      select: { fromAmount: true, submitXdrHash: true },
-    }),
+  const [pendente, resgates] = await Promise.all([
+    // A compra não concluída vem da MESMA leitura da rota do /investir (A-07): sem filtro de validade da cotação.
+    buscarOrdemPendente(investidorId),
     db.resgateCotacao.findMany({
       where: { investidorId, consumedAt: null, OR: [{ submitXdrHash: { not: null } }, { expiresAt: { gt: agora } }] },
       select: { brlEquivalente: true, submitXdrHash: true },
     }),
   ]);
   return [
-    ...swaps.map((q) => ({
-      tipo: 'entrada' as const,
-      valor: D(q.fromAmount).toFixed(2),
-      situacao: q.submitXdrHash ? ('em_conferencia' as const) : ('aguardando_assinatura' as const),
-      continuarEm: '/investir' as const,
-    })),
+    ...(pendente
+      ? [
+          {
+            tipo: 'entrada' as const,
+            valor: D(pendente.ordem.quote.fromAmount).toFixed(2),
+            situacao: pendente.fase === 'em_conferencia' ? ('em_conferencia' as const) : ('aguardando_assinatura' as const),
+            fase: pendente.fase,
+            continuarEm: '/investir' as const,
+          },
+        ]
+      : []),
     ...resgates.map((r) => ({
       tipo: 'saida' as const,
       valor: D(r.brlEquivalente).toFixed(2),

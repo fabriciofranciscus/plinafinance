@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { linhaAndamento, proximaAcao } from '@/lib/me/proxima-acao';
 import type { PosicaoResumo, ResumoDaConta, SolicitacaoResumo } from '@/lib/me/tipos';
+import type { FaseOrdemPendente } from '@/lib/services/ordem-pendente';
+import { TEXTO_RETOMADA } from '@/lib/investir/texto-retomada';
 
 const sol = (over: Partial<SolicitacaoResumo> = {}): SolicitacaoResumo => ({
   id: 'cmlead0000a1b2c3', status: 'NOVO', etapa: 2, tipoBem: 'IMOVEL', valorCarta: '150000.00',
@@ -34,6 +36,45 @@ describe('proximaAcao (spec §2.3): uma ação, a primeira que valer', () => {
     expect(a).toMatchObject({ caso: 4, titulo: 'Concluir a saída do pool', href: '/sacar' });
     expect((a as { apoio: string }).apoio).toContain('Pagamento simulado, rede de testes');
   });
+  describe('4 por fase da compra (A-07): o /inicio mostra o passo certo da MESMA compra que o /investir retoma', () => {
+    const op = (fase: FaseOrdemPendente) => ({ tipo: 'entrada' as const, valor: 'R$ 300,00', situacao: 'aguardando_assinatura' as const, fase, continuarEm: '/investir' as const });
+    it('concluir_swap: "Concluir a compra" com o botão do cartão, leva a /investir e diz que o pagamento é simulado', () => {
+      const a = proximaAcao(resumo({ operacoesPendentes: [op('concluir_swap')], posicao: posicao('39.8') }));
+      expect(a).toMatchObject({ caso: 4, titulo: 'Concluir a compra', botao: 'Concluir compra', href: '/investir', escuro: true });
+      expect((a as { apoio: string }).apoio).toContain('TESOURO já está com você');
+      expect((a as { apoio: string }).apoio).toContain('Em rede de testes, o pagamento é simulado.');
+    });
+    it.each([
+      ['aguardando_pagamento', 'Concluir o pagamento da compra', 'Continuar compra'],
+      ['liquidando', 'Acompanhar a compra', 'Acompanhar compra'],
+      ['resgatar_tesouro', 'Receber o TESOURO', 'Receber TESOURO'],
+    ] as const)('%s: título "%s", botão "%s", vai a /investir', (fase, titulo, botao) => {
+      const a = proximaAcao(resumo({ operacoesPendentes: [op(fase)] }));
+      expect(a).toMatchObject({ caso: 4, titulo, botao, href: '/investir' });
+    });
+    it('os botões e o apoio vêm do MESMO texto do cartão (uma fonte): nada de vocabulário divergente entre /inicio e /investir', () => {
+      for (const fase of ['aguardando_pagamento', 'liquidando', 'resgatar_tesouro', 'concluir_swap'] as const) {
+        const a = proximaAcao(resumo({ operacoesPendentes: [op(fase)] })) as { apoio: string; botao: string };
+        expect(a.botao).toBe(TEXTO_RETOMADA[fase].botao);
+        expect(a.apoio).toBe(TEXTO_RETOMADA[fase].texto);
+      }
+    });
+    it('em_conferencia NÃO é ação do usuário: "Nenhuma ação sua agora", sem botão, não manda refazer', () => {
+      const a = proximaAcao(resumo({ operacoesPendentes: [{ ...op('em_conferencia'), situacao: 'em_conferencia' }] }));
+      expect(a).toMatchObject({ caso: 5, titulo: 'Nenhuma ação sua agora' });
+      expect('botao' in a).toBe(false);
+      expect((a as { apoio: string }).apoio).toContain('Não refaça a compra.');
+    });
+    it('sem fase (operação antiga ou saída), o comportamento de sempre', () => {
+      const a = proximaAcao(resumo({ operacoesPendentes: [{ tipo: 'entrada', valor: 'R$ 1,00', situacao: 'aguardando_assinatura', continuarEm: '/investir' }] }));
+      expect(a).toMatchObject({ caso: 4, titulo: 'Concluir a entrada no pool' });
+    });
+    it('a compra pendente NÃO esconde a proposta do cedente (prioridade 1 continua)', () => {
+      const a = proximaAcao(resumo({ operacoesPendentes: [op('concluir_swap')], solicitacoes: [sol({ id: 'x0000aaaaaa', status: 'OFERTA_ENVIADA', etapa: 3 })] }));
+      expect(a.caso).toBe(1);
+    });
+  });
+
   it('prioridade: proposta antes de assinatura antes de documentos antes de operação', () => {
     const r = resumo({
       solicitacoes: [sol({ id: 'd', status: 'DOCS_SOLICITADOS' }), sol({ id: 'a', status: 'OFERTA_ACEITA', etapa: 4, cessaoStatus: 'ENVIADA_DOCUSIGN' })],

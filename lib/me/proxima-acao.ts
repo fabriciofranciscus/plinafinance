@@ -4,6 +4,8 @@
  */
 
 import { EM_REDE_DE_TESTES } from '../rede-de-testes';
+import { TEXTO_RETOMADA } from '../investir/texto-retomada';
+import type { FaseOrdemPendente } from '../services/ordem-pendente';
 import { NOME_ETAPA, STATUS_ABERTOS, TOTAL_ETAPAS } from './vocabulario';
 import type { ResumoDaConta, SolicitacaoResumo } from './tipos';
 
@@ -18,6 +20,14 @@ export type ProximaAcao =
   | { caso: 'suspensa'; titulo: string; apoio: string; escuro: false };
 
 const acompanhar = (id: string) => `/vender/acompanhar/${id}`;
+
+/** Títulos imperativos da próxima ação por fase da compra (A-07); o texto de apoio e o botão vêm de `TEXTO_RETOMADA`. */
+const TITULO_PROXIMA_ACAO: Record<Exclude<FaseOrdemPendente, 'em_conferencia'>, string> = {
+  aguardando_pagamento: 'Concluir o pagamento da compra',
+  liquidando: 'Acompanhar a compra',
+  resgatar_tesouro: 'Receber o TESOURO',
+  concluir_swap: 'Concluir a compra',
+};
 
 function fmtValidade(iso: string | null): string {
   if (!iso) return '';
@@ -88,6 +98,15 @@ export function proximaAcao(r: ResumoDaConta): ProximaAcao {
     };
   }
   const op = r.operacoesPendentes[0];
+  // A-07: a compra não concluída mostra o passo certo, com as MESMAS palavras do cartão do /investir (texto-retomada).
+  if (op?.tipo === 'entrada' && op.fase) {
+    const t = TEXTO_RETOMADA[op.fase];
+    if (op.fase === 'em_conferencia') {
+      // Nada a fazer: refazer dobraria a compra. Não é ação do usuário.
+      return { caso: 5, titulo: 'Nenhuma ação sua agora', apoio: t.texto, href: null, escuro: false };
+    }
+    return { caso: 4, titulo: TITULO_PROXIMA_ACAO[op.fase], apoio: t.texto, botao: t.botao ?? 'Continuar', href: op.continuarEm, escuro: true };
+  }
   if (op) {
     const entrada = op.tipo === 'entrada';
     return {

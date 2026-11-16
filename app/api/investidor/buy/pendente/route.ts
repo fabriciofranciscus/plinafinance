@@ -6,13 +6,12 @@
  * `lib/services/ordem-pendente.ts`). Sem ordem pendente: `{ pendente: null }`. Não consulta o anchor, não escreve nada,
  * não cria caminho novo de dinheiro: quem retoma usa o build/submit do swap de sempre. Sem PII; mensagem de erro fixa.
  */
-import { db } from '@/lib/db';
 import { withApi } from '@/lib/api/with-api';
 import { ok } from '@/lib/api/response';
 import { ApiError } from '@/lib/api/errors';
 import { requireInvestidor } from '@/lib/wallet/auth-guard';
 import { clientIp, publicLimiter } from '@/lib/rate-limit/config';
-import { faseDaOrdem, STATUS_ORDEM_ENCERRADA } from '@/lib/services/ordem-pendente';
+import { buscarOrdemPendente } from '@/lib/services/ordem-pendente-db';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,17 +21,9 @@ export const GET = withApi(async (req, { requestId }) => {
     throw new ApiError('RATE_LIMITED', 429, 'muitas requisições; tente de novo em instantes');
   }
 
-  const ordem = await db.onRampOrder.findFirst({
-    where: {
-      investidorId: user.investidorId,
-      status: { notIn: [...STATUS_ORDEM_ENCERRADA] },
-      quote: { consumedAt: null },
-    },
-    orderBy: { criadoEm: 'desc' },
-    include: { quote: true },
-  });
-  const fase = ordem ? faseDaOrdem(ordem) : null;
-  if (!ordem || !fase) return ok({ pendente: null }, { requestId });
+  const achada = await buscarOrdemPendente(user.investidorId);
+  if (!achada) return ok({ pendente: null }, { requestId });
+  const { ordem, fase } = achada;
 
   const q = ordem.quote;
   const instrucoes = ordem.paymentInstructionsJson as (Record<string, unknown> & { __mock?: boolean }) | null;
