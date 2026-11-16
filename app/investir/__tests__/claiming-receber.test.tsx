@@ -45,4 +45,12 @@ describe('tela de claim do /investir usa "receber"', () => {
     expect(CLAIM_XDR_EXPIRADO_MESSAGE).toBe('A transação de recebimento expirou. Tente novamente para gerar uma nova.');
     expect(SCREENS.find((s) => s.id === 'claiming')?.label).toBe('Recebimento');
   });
+
+  it('bloco de flags: sem "cross-border" nem "resgates" e sem a lista de casos do clawback (Norma, 16/11)', () => {
+    const { container } = montar();
+    const pre = container.querySelector('pre')?.textContent ?? '';
+    expect(pre).toContain('Claimable Balances     ✓  liquidação atômica em recebimentos');
+    expect(pre).toContain('AUTH_CLAWBACK_ENABLED');
+    expect(pre).not.toMatch(/cross-border|resgates|OFAC|reversão judicial|erro operacional/);
+  });
 });

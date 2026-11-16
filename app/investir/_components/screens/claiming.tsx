@@ -98,10 +98,10 @@ export function ClaimingScreen({
           className="overflow-x-auto border border-light-hairline bg-document-grey/40 p-4 font-mono text-xs text-base/80 leading-relaxed whitespace-pre focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-deep"
         >
 {`PLINA-RF asset flags:
-  AUTH_CLAWBACK_ENABLED  ✓  reversão judicial / OFAC / fraude / erro operacional
+  AUTH_CLAWBACK_ENABLED  ✓
   AUTH_REQUIRED          ✓  trustline exige KYC aprovado pela Plina
   AUTH_REVOCABLE         ✓  status de compliance revisável
-  Claimable Balances     ✓  liquidação atômica em resgates e cross-border`}
+  Claimable Balances     ✓  liquidação atômica em recebimentos`}
         </pre>
         <p className="md:hidden font-details text-[10px] tracking-[0.2em] uppercase text-base/65 mt-2" data-testid="flags-dica-rolagem">
           Role para o lado para ver as linhas inteiras
