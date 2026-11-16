@@ -176,6 +176,18 @@ describe('detalhe: só a etapa "Agora" tem controles', () => {
     expect(screen.getByText(/Preencher o prazo aumenta o deságio da proposta/)).toBeTruthy();
   });
 
+  it('cota 2: o campo "Valor carta" aceita qualquer valor inteiro (R$ 8), não só múltiplos de 1000', () => {
+    montar([lead({ oferta: null, lead: { status: 'DOCS_RECEBIDOS' } })]);
+    abrir();
+    const el = document.querySelector('[name="valorCarta"]') as HTMLInputElement;
+    expect(el.step).toBe('1');
+    for (const v of ['8', '20', '1000', '150000']) {
+      fireEvent.change(el, { target: { value: v } });
+      expect(el.validity.stepMismatch, `valor ${v}`).toBe(false);
+      expect(el.checkValidity(), `valor ${v}`).toBe(true);
+    }
+  });
+
   const formularioDaProposta = () => {
     montar([lead({ oferta: null, lead: { status: 'DOCS_RECEBIDOS' } })]);
     abrir();
