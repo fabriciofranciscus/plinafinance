@@ -105,7 +105,11 @@ vi.mock('@/lib/stellar/trustline', async (orig) => ({
   exigirEmissoesParaTrustlineAutorizada: exigirTrustline,
 }));
 vi.mock('@/lib/stellar/signer', () => ({ issuerSigner: () => ({ id: 'issuer' }) }));
-vi.mock('@/lib/stellar/fee', () => ({ getDynamicFee: vi.fn().mockResolvedValue('100') }));
+vi.mock('@/lib/stellar/fee', () => ({
+  getDynamicFee: vi.fn().mockResolvedValue('100'),
+  // fix/swap-fee-surge: a régua do N1-S1(c) passa a ser a taxa base da rede (last_ledger_base_fee).
+  getTaxaBaseDaRede: vi.fn().mockResolvedValue('100'),
+}));
 vi.mock('@/lib/services/emissao', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/services/emissao')>();
   return { ...actual, revalidarNavDaCotacao: revalidarNav };
@@ -718,6 +722,28 @@ describe('POST /api/investidor/buy/swap/submit', () => {
       quoteFindUnique.mockResolvedValueOnce(baseQuote());
       const r = await POST(req({ quoteId: 'q_1', signedXdr: txCom({ fee: '100' }) }));
       expect(r.status).toBe(200);
+    });
+
+    it('surto da testnet (p70 alto): fee na taxa base da rede passa — a régua é last_ledger_base_fee × ops', async () => {
+      const fee = await import('@/lib/stellar/fee');
+      vi.mocked(fee.getDynamicFee).mockResolvedValue('22100'); // p70 em surto (achado 2 da Vera, E2 15/11)
+      try {
+        quoteFindUnique.mockResolvedValueOnce(baseQuote());
+        const r = await POST(req({ quoteId: 'q_1', signedXdr: txCom({ fee: '100' }) }));
+        expect(r.status).toBe(200);
+      } finally {
+        vi.mocked(fee.getDynamicFee).mockResolvedValue('100');
+      }
+    });
+
+    it('régua acima da oferta (taxa base 250) → 400, sem reservar nem assinar', async () => {
+      const fee = await import('@/lib/stellar/fee');
+      vi.mocked(fee.getTaxaBaseDaRede).mockResolvedValueOnce('250');
+      quoteFindUnique.mockResolvedValueOnce(baseQuote());
+      const r = await POST(req({ quoteId: 'q_1', signedXdr: txCom({ fee: '100' }) }));
+      expect(r.status).toBe(400);
+      expect(quoteUpdateMany).not.toHaveBeenCalled();
+      expect(submitWithPrivySignature).not.toHaveBeenCalled();
     });
   });
 });

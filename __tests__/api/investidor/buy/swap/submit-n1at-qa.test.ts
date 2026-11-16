@@ -98,7 +98,11 @@ vi.mock('@/lib/stellar/transactions', () => ({
   fetchTransactionByHash,
 }));
 vi.mock('@/lib/stellar/signer', () => ({ issuerSigner: () => ({ id: 'issuer' }) }));
-vi.mock('@/lib/stellar/fee', () => ({ getDynamicFee: vi.fn().mockResolvedValue('100') }));
+vi.mock('@/lib/stellar/fee', () => ({
+  getDynamicFee: vi.fn().mockResolvedValue('100'),
+  getTaxaBaseDaRede: vi.fn().mockResolvedValue('100'), // harness (fix/swap-fee-surge)
+  getFeeOfertaInvestidor: vi.fn().mockResolvedValue('100'),
+}));
 vi.mock('@/lib/services/emissao', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/services/emissao')>();
   return { ...actual, revalidarNavDaCotacao: revalidarNav };

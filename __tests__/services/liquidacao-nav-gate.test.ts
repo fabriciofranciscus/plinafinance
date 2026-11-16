@@ -15,7 +15,7 @@ vi.mock('@/lib/db', () => ({
 // liquidacao.ts importa módulos com efeitos de rede/assinatura; só calcularValorLiquidacao é exercitado.
 vi.mock('@/lib/stellar/account', () => ({ buildAsset: vi.fn(), horizon: {} }));
 vi.mock('@/lib/stellar/signer', () => ({ distributorSigner: vi.fn() }));
-vi.mock('@/lib/stellar/fee', () => ({ getDynamicFee: vi.fn() }));
+vi.mock('@/lib/stellar/fee', () => ({ getDynamicFee: vi.fn(), getFeeOfertaInvestidor: vi.fn(), getTaxaBaseDaRede: vi.fn() })); // harness (fix/swap-fee-surge)
 vi.mock('@/lib/wallet/privy', () => ({ privySignatureToBase64: vi.fn() }));
 vi.mock('@/lib/stellar/audit', () => ({ buildAuditPayload: vi.fn(), registerOnChainHash: vi.fn() }));
 vi.mock('@/lib/services/holdings', () => ({ decrementarHolding: vi.fn() }));

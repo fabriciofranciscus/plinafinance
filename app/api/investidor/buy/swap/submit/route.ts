@@ -30,7 +30,7 @@ import {
 } from '@/lib/stellar/transactions';
 import { TrustlineNaoAutorizadaError, exigirEmissoesParaTrustlineAutorizada } from '@/lib/stellar/trustline';
 import { issuerSigner } from '@/lib/stellar/signer';
-import { getDynamicFee } from '@/lib/stellar/fee';
+import { getTaxaBaseDaRede } from '@/lib/stellar/fee';
 import { NavMudouError, revalidarNavDaCotacao } from '@/lib/services/emissao';
 import { assertClasseDisponivel } from '@/lib/services/regras-swap';
 import { escriturarSwap, liberarReservaDoSwap } from '@/lib/services/swap-escrituracao';
@@ -217,7 +217,9 @@ export const POST = withAuth(async (req, { user }) => {
     // no ledger com o fee de antes e precisa ser reconciliada, não recusada.
     const txRecebida = new Transaction(signedXdr, networkPassphrase);
     if (!quote.submitXdrHash) {
-      const feeMinimo = BigInt(await getDynamicFee()) * BigInt(txRecebida.operations.length);
+      // Régua = taxa base da rede (last_ledger_base_fee), não o p70 móvel: em surto o p70 salta entre o build e o
+      // submit e recusava tx que a rede aceitaria (achado 2 da Vera no E2; decisão do Atlas, 15/11).
+      const feeMinimo = BigInt(await getTaxaBaseDaRede()) * BigInt(txRecebida.operations.length);
       if (BigInt(txRecebida.fee) < feeMinimo) {
         return NextResponse.json(
           { error: 'fee abaixo do mínimo da rede — refaça o swap (rebuild)' },
