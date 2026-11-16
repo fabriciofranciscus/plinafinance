@@ -48,7 +48,26 @@ describe('rodapé com aviso de fase de testes (A-06)', () => {
   it.each(kinds)('%s: na mainnet NÃO leva o aviso', (kind) => {
     rede.atual = 'PUBLIC';
     const r = renderCedenteEmail(kind, { leadId: 'l1', nome: 'Ana' });
-    expect(`${r.text}${r.html}`).not.toMatch(/fase de testes|demonstração/);
+    // só o AVISO do rodapé some na mainnet; "pool de demonstração" é texto aprovado do corpo do e-mail "concluído".
+    expect(`${r.text}${r.html}`).not.toMatch(/fase de testes|Mensagem de demonstração/);
+    rede.atual = 'TESTNET';
+  });
+});
+
+describe('e-mails do cedente: texto aprovado (Norma/Consuelo; P0 de compliance)', () => {
+  const kinds = ['oferta', 'cessao', 'pix', 'concluido'] as const;
+
+  it('o e-mail "concluído" diz "pool de demonstração" e "vender sua cota"', () => {
+    const r = renderCedenteEmail('concluido', { leadId: 'l1', nome: 'Ana' });
+    expect(r.text).toContain('Sua cota foi incorporada ao pool de demonstração da Plina. Obrigado por vender sua cota com a Plina.');
+  });
+
+  it.each(kinds)('%s: "pool público" / "pool tokenizado público" e "negociar" NÃO voltam (texto e HTML, testnet e mainnet); "prova pública" do hash on-chain é correto e fica', (kind) => {
+    for (const modo of ['TESTNET', 'PUBLIC'] as const) {
+      rede.atual = modo;
+      const r = renderCedenteEmail(kind, { leadId: 'l1', nome: 'Ana' });
+      expect(`${r.subject}\n${r.text}\n${r.html}`, `${kind}/${modo}`).not.toMatch(/pool\s+(tokenizado\s+)?p[úu]blico|negociar/i);
+    }
     rede.atual = 'TESTNET';
   });
 });

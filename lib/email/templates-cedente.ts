@@ -53,7 +53,7 @@ const COPY: Record<
   concluido: {
     subject: 'Cota incorporada ao pool — Plina',
     titulo: 'Operação concluída',
-    corpo: 'Sua cota foi incorporada ao pool tokenizado público da Plina. Obrigado por negociar com a gente.',
+    corpo: 'Sua cota foi incorporada ao pool de demonstração da Plina. Obrigado por vender sua cota com a Plina.',
   },
 };
 
