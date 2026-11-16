@@ -43,7 +43,7 @@ export function AppFooter({ issuerPubkey }: AppFooterProps) {
                 href="/pool"
                 className="text-lightBg/85 hover:text-primary transition-colors"
               >
-                Pool público · NAV
+                Pool de demonstração · NAV
               </a>
             </li>
             <li>
