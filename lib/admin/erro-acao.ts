@@ -15,6 +15,21 @@ export interface ErroDeAcao {
 export const TEXTO_INCERTO =
   'Não foi possível confirmar o resultado. A ação pode ter sido executada: recarregue a página e confira antes de repetir.';
 
+/**
+ * "O que fazer" (GUIA admin §4, item 3) pelo código do servidor. Só os códigos da prévia/geração de proposta, cuja
+ * condição vem da própria mensagem da API (lib/services/originacao.ts); código desconhecido: sem linha.
+ */
+const ORIENTACAO_NEUTRA = 'Revise os dados da proposta e solicite uma nova prévia.';
+// Neutra de propósito: não infere ajuste de regra financeira (Íris); Bento/Consuelo validam antes de qualquer frase específica.
+const O_QUE_FAZER: Record<string, string> = {
+  DESAGIO_TOTAL_EXCEDE: ORIENTACAO_NEUTRA,
+  DESAGIO_BASE_INVALIDO: ORIENTACAO_NEUTRA,
+  VALOR_CARTA_INVALIDO: ORIENTACAO_NEUTRA,
+};
+export function oQueFazer(codigo: string | null | undefined): string | null {
+  return (codigo && O_QUE_FAZER[codigo]) || null;
+}
+
 export function interpretarErroDeAcao(status: number, corpo: unknown, retryAfter?: string | null): ErroDeAcao {
   const j = (corpo && typeof corpo === 'object' ? corpo : {}) as { error?: unknown; code?: unknown };
   const mensagem = typeof j.error === 'string' && j.error.trim() ? j.error.trim() : null;

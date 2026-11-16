@@ -141,7 +141,7 @@ function CotaCard({
             <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/50 group-hover:text-lightBg/50">
               Prazo
             </p>
-            <p className="font-mono mt-0.5">{fmtPrazo(prazoRestanteMeses)}</p>
+            <p className="font-mono mt-0.5">{prazoRestanteMeses === 0 ? 'Quitada' : fmtPrazo(prazoRestanteMeses)}</p>
           </div>
         )}
       </div>

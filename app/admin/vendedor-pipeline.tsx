@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { NOME_EM_ANDAMENTO, etapasDoLead, ordenarSolicitacoes, type AnaliseSolicitacao, type EtapaOperador } from '@/lib/admin/etapas-operador';
-import { avisoDeResposta, interpretarErroDeAcao, TEXTO_INCERTO, type ErroDeAcao } from '@/lib/admin/erro-acao';
+import { avisoDeResposta, interpretarErroDeAcao, oQueFazer, TEXTO_INCERTO, type ErroDeAcao } from '@/lib/admin/erro-acao';
 import type { LeadAdmin } from '@/lib/admin/tipos';
 
 type PipelineLead = LeadAdmin;
@@ -367,6 +367,7 @@ function DetalheSolicitacao({
                 <div role="alert" className="mt-3">
                   <p className="font-details text-[10px] tracking-[0.2em] uppercase text-red-700">{erro.incerto ? 'Sem confirmação' : 'Não concluído'}</p>
                   <p className="font-text text-sm text-red-700 mt-1">{erro.texto}</p>
+                  {oQueFazer(erro.codigo) && <p className="font-text text-sm text-base mt-1">{oQueFazer(erro.codigo)}</p>}
                   {erro.codigo && <p className="font-mono text-[11px] text-base/70 mt-1">{erro.codigo}</p>}
                   {erro.texto.startsWith('Sessão expirada') && (
                     <p className="mt-1">
@@ -714,25 +715,68 @@ function NovaOfertaForm({
   onSubmit: (action: string, payload: Record<string, unknown>) => void;
   busy: boolean;
 }) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const [previa, setPrevia] = useState<Previa | null>(null);
+  const [erroPrevia, setErroPrevia] = useState<ErroDeAcao | null>(null);
+  const [calculando, setCalculando] = useState(false);
+
+  // O schema da rota exige number inteiro (z.number().int()) em prazoRestanteMeses; FormData devolve string.
+  // valorCarta e desagioAquisicao ficam string de propósito: a rota os valida como NumericString.
+  // 0 é válido: cota quitada, sem componente de prazo (Bento, A-01).
+  const lerCampos = (form: HTMLFormElement) => {
+    const fd = new FormData(form);
+    const prazoTxt = String(fd.get('prazoRestanteMeses') ?? '').trim();
+    return {
+      tipoBem: fd.get('tipoBem'),
+      valorCarta: fd.get('valorCarta'),
+      administradora: fd.get('administradora'),
+      desagioAquisicao: fd.get('desagioAquisicao'),
+      prazoRestanteMeses: prazoTxt ? Number(prazoTxt) : undefined,
+    };
+  };
+
+  // A-08: a prévia é a MESMA função do gerar-oferta (somente leitura, nada é gravado): o número bate.
+  async function calcularPrevia() {
+    const form = formRef.current;
+    if (!form || !form.reportValidity()) return;
+    const { tipoBem: _tipoBem, ...campos } = lerCampos(form);
+    void _tipoBem;
+    setCalculando(true);
+    setErroPrevia(null);
+    try {
+      const res = await fetch('/api/admin/originacao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-plina-admin': '1' },
+        body: JSON.stringify({ action: 'previa-oferta', ...campos }),
+      });
+      const corpo = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPrevia(null);
+        setErroPrevia(interpretarErroDeAcao(res.status, corpo, res.headers.get('retry-after')));
+        return;
+      }
+      setPrevia(corpo as Previa);
+    } catch {
+      setPrevia(null);
+      setErroPrevia(interpretarErroDeAcao(0, null));
+    } finally {
+      setCalculando(false);
+    }
+  }
+
   return (
     <form
+      ref={formRef}
+      onChange={() => {
+        // Mudou algum campo: a prévia antiga deixou de valer.
+        setPrevia(null);
+        setErroPrevia(null);
+      }}
       onSubmit={(e) => {
         e.preventDefault();
-        const fd = new FormData(e.currentTarget);
-        // O schema da rota exige number inteiro (z.number().int()) em prazoRestanteMeses; FormData devolve string.
-        // valorCarta e desagioAquisicao ficam string de propósito: a rota os valida como NumericString.
-        const prazoTxt = String(fd.get('prazoRestanteMeses') ?? '').trim();
-        onSubmit('gerar-oferta', {
-          leadVendedorId: leadId,
-          tipoBem: fd.get('tipoBem'),
-          valorCarta: fd.get('valorCarta'),
-          administradora: fd.get('administradora'),
-          desagioAquisicao: fd.get('desagioAquisicao'),
-          prazoRestanteMeses: prazoTxt ? Number(prazoTxt) : undefined,
-          validadeHoras: 48,
-        });
+        onSubmit('gerar-oferta', { leadVendedorId: leadId, ...lerCampos(e.currentTarget), validadeHoras: 48 });
       }}
-      className="bg-document-grey/40 p-3 border border-light-hairline grid grid-cols-2 md:grid-cols-6 gap-2 items-end"
+      className="bg-document-grey/40 p-3 border border-light-hairline grid grid-cols-2 gap-2 items-end"
     >
       <Field label="Tipo">
         <select name="tipoBem" defaultValue="IMOVEL" required className={inputCls}>
@@ -773,27 +817,70 @@ function NovaOfertaForm({
           className={inputCls + ' font-mono'}
         />
       </Field>
-      <Field label="Prazo (m)">
+      <Field label="Prazo restante (meses) — 0 = quitada">
         <input
           name="prazoRestanteMeses"
           type="number"
-          min="1"
+          min="0"
           max="600"
           step="1"
-          placeholder="18"
+          placeholder="0"
           className={inputCls + ' font-mono'}
         />
       </Field>
-      <button
-        type="submit"
-        disabled={busy}
-        className="col-span-full md:col-span-1 w-full min-h-[44px] bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-3 py-2 hover:bg-primary-deep transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-deep"
-      >
-        Gerar oferta
-      </button>
+      <div className="col-span-full grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => void calcularPrevia()}
+          disabled={busy || calculando}
+          className="w-full min-h-[44px] border border-base text-base font-details text-[10px] tracking-[0.2em] uppercase px-3 py-2 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-deep"
+        >
+          {calculando ? 'Calculando…' : 'Ver prévia'}
+        </button>
+        <button
+          type="submit"
+          disabled={busy}
+          className="w-full min-h-[44px] bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-3 py-2 hover:bg-primary-deep transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-deep"
+        >
+          Gerar proposta
+        </button>
+      </div>
+      <p className="col-span-full font-text text-xs text-base/70">
+        Preencher o prazo aumenta o deságio da proposta (regra de originação).
+      </p>
+      {previa && (
+        <p role="status" data-testid="previa-oferta" className="col-span-full font-mono text-xs text-base">
+          Deságio final {pctDeFracao(previa.desagioTotal)} (base {pctDeFracao(previa.desagioBase)} + anuência{' '}
+          {pctDeBps(previa.taxaAnuenciaBps)} + prazo {pctDeBps(previa.taxaPrazoBps)}) · Valor líquido ao cedente{' '}
+          {brl2(previa.valorLiquido)}
+        </p>
+      )}
+      {erroPrevia && (
+        <div role="alert" className="col-span-full">
+          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-red-700">{erroPrevia.incerto ? 'Sem confirmação' : 'Não concluído'}</p>
+          <p className="font-text text-xs text-red-700 mt-1">{erroPrevia.texto}</p>
+          {oQueFazer(erroPrevia.codigo) && <p className="font-text text-xs text-base mt-1">{oQueFazer(erroPrevia.codigo)}</p>}
+          {erroPrevia.codigo ? <p className="font-mono text-[11px] text-base/70 mt-1">{erroPrevia.codigo}</p> : null}
+        </div>
+      )}
     </form>
   );
 }
+
+/** Resposta de POST /api/admin/originacao { action: 'previa-oferta' } (Bento, A-08): strings. */
+interface Previa {
+  desagioBase: string;
+  taxaAnuenciaBps: string | number;
+  taxaPrazoBps: string | number;
+  desagioTotal: string;
+  valorLiquido: string;
+}
+
+// Só EXIBIÇÃO: o servidor calculou tudo; aqui se troca fração por % e bps por %.
+const pctDeFracao = (s: string) => `${(Number(s) * 100).toFixed(2).replace('.', ',')}%`;
+const pctDeBps = (s: string | number) => `${(Number(s) / 100).toFixed(2).replace('.', ',')}%`;
+const brl2 = (s: string) =>
+  Number.isFinite(Number(s)) ? Number(s).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : s;
 
 const inputCls =
   'w-full bg-white border border-light-hairline min-h-[44px] px-2 py-1.5 font-text text-xs focus:outline-none focus:ring-2 focus:ring-primary-deep';

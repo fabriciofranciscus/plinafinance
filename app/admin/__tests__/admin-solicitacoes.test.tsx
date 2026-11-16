@@ -167,6 +167,62 @@ describe('detalhe: só a etapa "Agora" tem controles', () => {
     expect(corpo()).not.toHaveProperty('prazoRestanteMeses');
   });
 
+  it('A-01: o campo de prazo aceita 0 a 600 inteiros e o rótulo diz que 0 = quitada; a dica do deságio aparece', () => {
+    montar([lead({ oferta: null, lead: { status: 'DOCS_RECEBIDOS' } })]);
+    abrir();
+    const el = document.querySelector('[name="prazoRestanteMeses"]') as HTMLInputElement;
+    expect([el.min, el.max, el.step]).toEqual(['0', '600', '1']);
+    expect(screen.getByText('Prazo restante (meses) — 0 = quitada')).toBeTruthy();
+    expect(screen.getByText(/Preencher o prazo aumenta o deságio da proposta/)).toBeTruthy();
+  });
+
+  const formularioDaProposta = () => {
+    montar([lead({ oferta: null, lead: { status: 'DOCS_RECEBIDOS' } })]);
+    abrir();
+    const f = document.querySelector('[data-testid="etapa-agora"] form')!;
+    const set = (n: string, v: string) => fireEvent.change(f.querySelector(`[name="${n}"]`)!, { target: { value: v } });
+    return set;
+  };
+
+  it('A-08: "Ver prévia" chama previa-oferta (sem tipoBem, sem gerar) e mostra deságio final e valor líquido; mexer num campo limpa a prévia', async () => {
+    fetchMock.mockResolvedValueOnce(resposta({ desagioBase: '0.2000', taxaAnuenciaBps: '150', taxaPrazoBps: 200, desagioTotal: '0.2350', valorLiquido: '114750.00' }));
+    const set = formularioDaProposta();
+    set('valorCarta', '150000'); set('administradora', 'Caixa'); set('desagioAquisicao', '0.20'); set('prazoRestanteMeses', '18');
+    fireEvent.click(screen.getByRole('button', { name: 'Ver prévia' }));
+    const previa = await screen.findByTestId('previa-oferta');
+    expect(previa.textContent?.replace(/\u00a0/g, ' ')).toBe('Deságio final 23,50% (base 20,00% + anuência 1,50% + prazo 2,00%) · Valor líquido ao cedente R$ 114.750,00');
+    expect(corpo()).toEqual({ action: 'previa-oferta', valorCarta: '150000', administradora: 'Caixa', desagioAquisicao: '0.20', prazoRestanteMeses: 18 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    set('valorCarta', '160000');
+    await waitFor(() => expect(screen.queryByTestId('previa-oferta')).toBeNull());
+  });
+
+  it('A-08: erro da prévia aparece como mensagem fixa da API + código; nada é gerado', async () => {
+    fetchMock.mockResolvedValueOnce(resposta({ error: 'Parâmetros inválidos.', code: 'ENTRADA_INVALIDA' }, 400));
+    const set = formularioDaProposta();
+    set('valorCarta', '150000'); set('administradora', 'Caixa'); set('desagioAquisicao', '0.20');
+    fireEvent.click(screen.getByRole('button', { name: 'Ver prévia' }));
+    const alerta = await screen.findByRole('alert');
+    expect(alerta.textContent).toBe('Não concluídoParâmetros inválidos.ENTRADA_INVALIDA');
+    expect(screen.queryByTestId('previa-oferta')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(corpo().action).toBe('previa-oferta');
+  });
+
+  it('A-08: DESAGIO_TOTAL_EXCEDE mostra rótulo, mensagem do servidor, "O que fazer" e o código; o botão se chama "Gerar proposta"', async () => {
+    fetchMock.mockResolvedValueOnce(resposta({ error: 'O deságio total (base + anuência + prazo) excede 100%: reduza o deságio base ou o prazo restante.', code: 'DESAGIO_TOTAL_EXCEDE' }, 422));
+    const set = formularioDaProposta();
+    set('valorCarta', '150000'); set('administradora', 'Caixa'); set('desagioAquisicao', '0.99'); set('prazoRestanteMeses', '18');
+    expect(within(screen.getByTestId('etapa-agora')).getByRole('button', { name: 'Gerar proposta' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Gerar oferta' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver prévia' }));
+    const alerta = await screen.findByRole('alert');
+    expect(alerta.textContent).toContain('Não concluído');
+    expect(alerta.textContent).toContain('excede 100%');
+    expect(alerta.textContent).toContain('Revise os dados da proposta e solicite uma nova prévia.');
+    expect(alerta.textContent).toContain('DESAGIO_TOTAL_EXCEDE');
+  });
+
   it('2 aceite do cedente: sem botão, só o texto com a validade', () => {
     montar([lead({ oferta: { status: 'ENVIADA' }, lead: { status: 'OFERTA_ENVIADA' } })]);
     abrir();

@@ -13,6 +13,7 @@
 import type { Metadata } from 'next';
 import WizardHeader from '@/components/vender/WizardHeader';
 import AcompanharPrivado from '@/components/vender/AcompanharPrivado';
+import AvisoSolicitacao from '@/components/vender/AvisoSolicitacao';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,15 +24,18 @@ export const metadata: Metadata = {
 
 interface PageProps {
   params: Promise<{ leadId: string }>;
+  searchParams?: Promise<{ aviso?: string }>;
 }
 
-export default async function AcompanharPage({ params }: PageProps) {
+export default async function AcompanharPage({ params, searchParams }: PageProps) {
   const { leadId } = await params;
+  const { aviso } = (await searchParams) ?? {};
 
   return (
     <div className="min-h-screen bg-sheet-white text-base">
       <WizardHeader active="cotistas" />
       <div className="mx-auto max-w-3xl px-6 py-12 md:py-16">
+        <AvisoSolicitacao aviso={aviso} />
         <header className="border-b border-light-hairline pb-8 mb-10">
           <p className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">Acompanhamento · solicitação de venda</p>
           <h1 className="font-title text-3xl md:text-4xl font-semibold tracking-tight mt-3">Acompanhe sua solicitação</h1>
