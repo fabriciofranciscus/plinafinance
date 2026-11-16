@@ -52,3 +52,28 @@ describe('rodapé com aviso de fase de testes (A-06)', () => {
     rede.atual = 'TESTNET';
   });
 });
+
+describe('e-mails do cedente: texto aprovado (Norma/Consuelo; P0 de compliance)', () => {
+  const kinds = ['oferta', 'cessao', 'pix', 'concluido'] as const;
+
+  it('"concluído" por rede: TESTNET diz "pool de demonstração"; MAINNET diz "pool da Plina" SEM "demonstração" (texto da Norma); ambas "vender sua cota"', () => {
+    rede.atual = 'TESTNET';
+    const t = renderCedenteEmail('concluido', { leadId: 'l1', nome: 'Ana' });
+    expect(t.text).toContain('Sua cota foi incorporada ao pool de demonstração da Plina. Obrigado por vender sua cota com a Plina.');
+    expect(t.html).toContain('pool de demonstração da Plina');
+    rede.atual = 'PUBLIC';
+    const p = renderCedenteEmail('concluido', { leadId: 'l1', nome: 'Ana' });
+    expect(p.text).toContain('Sua cota foi incorporada ao pool da Plina. Obrigado por vender sua cota com a Plina.');
+    expect(`${p.subject}${p.text}${p.html}`).not.toMatch(/demonstra/i);
+    rede.atual = 'TESTNET';
+  });
+
+  it.each(kinds)('%s: "pool público" / "pool tokenizado público" e "negociar" NÃO voltam (texto e HTML, testnet e mainnet); "prova pública" do hash on-chain é correto e fica', (kind) => {
+    for (const modo of ['TESTNET', 'PUBLIC'] as const) {
+      rede.atual = modo;
+      const r = renderCedenteEmail(kind, { leadId: 'l1', nome: 'Ana' });
+      expect(`${r.subject}\n${r.text}\n${r.html}`, `${kind}/${modo}`).not.toMatch(/pool\s+(tokenizado\s+)?p[úu]blico|negociar/i);
+    }
+    rede.atual = 'TESTNET';
+  });
+});

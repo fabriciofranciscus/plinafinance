@@ -545,7 +545,7 @@ export default function MinhaPosicaoPage() {
                 label="Verificar transparência"
                 description="Composição do pool de demonstração, valor por token e hashes de emissão. Verificável no Stellar Expert."
                 href="/pool"
-                cta="Pool público"
+                cta="Pool de demonstração"
               />
               <NextStep
                 label="Política de clawback"
