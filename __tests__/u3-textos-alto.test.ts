@@ -10,9 +10,15 @@ describe('U3 ALTO 1: /sacar não promete prazo nem usa jargão interno', () => {
   it('a página não contém "nos próximos minutos", "Sandbox PIX/BRL não settla", "constraint upstream" nem "Burn confirmado"', () => {
     expect(src).not.toMatch(/nos próximos minutos|Sandbox PIX\/BRL não settla|constraint upstream|Burn confirmado/);
   });
-  it('o estado concluído usa a mensagem de espera aprovada do microcopy', () => {
-    expect(src).toContain('SACAR.aguardando.texto');
-    expect(SACAR.aguardando.texto).toBe('Estamos aguardando a confirmação. Pode levar alguns instantes; esta página se atualiza sozinha.');
+  it('o estado concluído usa o texto do gate da Norma (16/11), vindo do microcopy', () => {
+    expect(src).toContain('SACAR.aguardando.textoPagamento');
+    expect(SACAR.aguardando.textoPagamento).toBe(
+      'Estamos aguardando a confirmação do pagamento. Esta página se atualiza sozinha. Em rede de testes, o Pix é simulado e não chega a nenhuma conta.',
+    );
+  });
+  it('o microcopy de espera não indica prazo ("Pode levar alguns instantes" saiu)', () => {
+    expect(SACAR.aguardando.texto).toBe('Estamos aguardando a confirmação. Esta página se atualiza sozinha.');
+    expect(JSON.stringify(SACAR.aguardando)).not.toMatch(/Pode levar|instantes/);
   });
 });
 

@@ -59,8 +59,10 @@ export const SACAR = {
   },
   aguardando: {
     titulo: 'Confirmando na rede…',
-    texto:
-      'Estamos aguardando a confirmação. Pode levar alguns instantes; esta página se atualiza sozinha.',
+    texto: 'Estamos aguardando a confirmação. Esta página se atualiza sozinha.',
+    /** Estado concluído do saque (gate da Norma, 16/11): sem prazo e dizendo a verdade da rede de testes. */
+    textoPagamento:
+      'Estamos aguardando a confirmação do pagamento. Esta página se atualiza sozinha. Em rede de testes, o Pix é simulado e não chega a nenhuma conta.',
   },
   /** E2-6, provisório: confirmar com o contrato do E2-6 antes de usar. */
   passo: {
