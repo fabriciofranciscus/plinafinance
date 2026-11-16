@@ -176,15 +176,34 @@ describe('detalhe: só a etapa "Agora" tem controles', () => {
     expect(screen.getByText(/Preencher o prazo aumenta o deságio da proposta/)).toBeTruthy();
   });
 
-  it('cota 2: o campo "Valor carta" aceita qualquer valor inteiro (R$ 8), não só múltiplos de 1000', () => {
+  it('cota 2: o campo "Valor carta" aceita qualquer valor > 0 com centavos (R$ 8, R$ 1.234,56), não só múltiplos de 1000', () => {
     montar([lead({ oferta: null, lead: { status: 'DOCS_RECEBIDOS' } })]);
     abrir();
     const el = document.querySelector('[name="valorCarta"]') as HTMLInputElement;
-    expect(el.step).toBe('1');
-    for (const v of ['8', '20', '1000', '150000']) {
+    expect([el.min, el.step]).toEqual(['0.01', '0.01']); // valorCarta é Decimal(15,2) e o servidor exige > 0
+    for (const v of ['0.01', '8', '20', '1000', '1234.5', '1234.56', '150000']) {
       fireEvent.change(el, { target: { value: v } });
       expect(el.validity.stepMismatch, `valor ${v}`).toBe(false);
       expect(el.checkValidity(), `valor ${v}`).toBe(true);
+    }
+    for (const v of ['0', '-1']) {
+      fireEvent.change(el, { target: { value: v } });
+      expect(el.checkValidity(), `valor ${v}`).toBe(false);
+    }
+  });
+
+  it('auditoria de inputs: o campo "Deságio" aceita 4 casas (Decimal(5,4)) entre 0 e 1', () => {
+    montar([lead({ oferta: null, lead: { status: 'DOCS_RECEBIDOS' } })]);
+    abrir();
+    const el = document.querySelector('[name="desagioAquisicao"]') as HTMLInputElement;
+    expect([el.min, el.max, el.step]).toEqual(['0', '1', '0.0001']);
+    for (const v of ['0', '0.2', '0.205', '0.2345', '0.9999', '1']) {
+      fireEvent.change(el, { target: { value: v } });
+      expect(el.checkValidity(), `deságio ${v}`).toBe(true);
+    }
+    for (const v of ['-0.1', '1.0001', '0.23456']) {
+      fireEvent.change(el, { target: { value: v } });
+      expect(el.checkValidity(), `deságio ${v}`).toBe(false);
     }
   });
 

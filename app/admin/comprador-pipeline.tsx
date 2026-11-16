@@ -244,8 +244,8 @@ function ExecutarCaminhoAForm({
         <input
           name="valorRealizado"
           type="number"
-          step="100"
-          min="1"
+          step="0.01"
+          min="0.01"
           defaultValue={valorRevendaSugerido}
           required
           className="bg-white border border-light-hairline px-2 py-1.5 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-primary w-40"
