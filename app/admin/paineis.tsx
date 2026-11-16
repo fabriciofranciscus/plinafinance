@@ -36,7 +36,9 @@ export function PaineisAdmin({ paineis }: { paineis: PainelAdmin[] }) {
   useEffect(() => {
     if (!focar.current) return;
     focar.current = false;
-    const titulo = raiz.current?.querySelector<HTMLElement>(`[data-painel="${ativo}"] h2`);
+    // O título do painel é o h2; em Avulsas é o <summary> do <details> (não há h2).
+    const painel = raiz.current?.querySelector(`[data-painel="${ativo}"]`);
+    const titulo = painel?.querySelector<HTMLElement>('h2') ?? painel?.querySelector<HTMLElement>('summary') ?? null;
     if (titulo) {
       titulo.setAttribute('tabindex', '-1');
       titulo.focus();

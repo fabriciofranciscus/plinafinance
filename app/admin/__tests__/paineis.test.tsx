@@ -12,13 +12,21 @@ const ROTULOS: Record<IdPainel, string> = {
 const paineis = PAINEIS_ORDEM.map((id) => ({
   id,
   rotulo: ROTULOS[id],
-  conteudo: (
-    <section id={id}>
-      <h2>{`Título ${id}`}</h2>
-      <input aria-label={`campo ${id}`} defaultValue="" />
-      <button type="button">{`ação ${id}`}</button>
-    </section>
-  ),
+  conteudo:
+    id === 'incorporar' ? (
+      // Avulsas: o título do painel é o <summary> do <details>, não um h2 (como na página real).
+      <details id={id}>
+        <summary>Operações avulsas</summary>
+        <input aria-label={`campo ${id}`} defaultValue="" />
+        <button type="button">{`ação ${id}`}</button>
+      </details>
+    ) : (
+      <section id={id}>
+        <h2>{`Título ${id}`}</h2>
+        <input aria-label={`campo ${id}`} defaultValue="" />
+        <button type="button">{`ação ${id}`}</button>
+      </section>
+    ),
 }));
 const montar = () => render(<PaineisAdmin paineis={paineis} />);
 const visivel = () => PAINEIS_ORDEM.filter((id) => !document.querySelector(`[data-painel="${id}"]`)!.hasAttribute('hidden'));
@@ -51,6 +59,14 @@ describe('AP-3: um painel por vez', () => {
     await waitFor(() => expect(visivel()).toEqual(['compradores']));
     await waitFor(() => expect(document.activeElement?.textContent).toBe('Título compradores'));
     expect(within(nav).getByRole('link', { name: 'Compradores (2)' }).getAttribute('aria-current')).toBe('true');
+  });
+
+  it('Avulsas (sem h2): o foco vai para o <summary> do painel, não se perde no body (Vera)', async () => {
+    montar();
+    window.location.hash = '#incorporar';
+    await waitFor(() => expect(visivel()).toEqual(['incorporar']));
+    await waitFor(() => expect(document.activeElement?.tagName).toBe('SUMMARY'));
+    expect(document.activeElement?.textContent).toBe('Operações avulsas');
   });
 
   it('seletor do celular: rótulo "Seção", sete opções, valor atual e troca de painel', async () => {
