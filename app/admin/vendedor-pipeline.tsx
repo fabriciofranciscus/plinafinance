@@ -90,15 +90,20 @@ export function VendedorPipeline({ leads, redePublica = false }: { leads: Pipeli
   const [filtro, setFiltro] = useState<Filtro>('abertas');
   const [selecionado, setSelecionado] = useState<string | null>(null);
 
-  // `#lead-<id>` na URL abre o detalhe daquele lead.
+  // `#lead-<id>` na URL abre o detalhe daquele lead: na carga e quando o hash muda com a página aberta (AP-3).
   useEffect(() => {
-    const m = /^#lead-(.+)$/.exec(window.location.hash);
-    if (m && leads.some((l) => l.id === m[1])) {
-      setSelecionado(m[1]!);
-      const l = leads.find((x) => x.id === m[1])!;
-      const est = etapasDoLead(l, { redePublica }).estado;
-      setFiltro(est === 'concluida' ? 'concluidas' : est === 'encerrada' ? 'encerradas' : 'abertas');
-    }
+    const abrirDoHash = () => {
+      const m = /^#lead-(.+)$/.exec(window.location.hash);
+      if (m && leads.some((l) => l.id === m[1])) {
+        setSelecionado(m[1]!);
+        const l = leads.find((x) => x.id === m[1])!;
+        const est = etapasDoLead(l, { redePublica }).estado;
+        setFiltro(est === 'concluida' ? 'concluidas' : est === 'encerrada' ? 'encerradas' : 'abertas');
+      }
+    };
+    abrirDoHash();
+    window.addEventListener('hashchange', abrirDoHash);
+    return () => window.removeEventListener('hashchange', abrirDoHash);
   }, [leads, redePublica]);
 
   const todas = ordenarSolicitacoes(leads, { redePublica }).map((l) => ({ lead: l, analise: etapasDoLead(l, { redePublica }) }));
