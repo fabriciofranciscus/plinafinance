@@ -790,7 +790,8 @@ function NovaOfertaForm({
         <input
           name="valorCarta"
           type="number"
-          step="1"
+          step="0.01"
+          min="0.01"
           required
           placeholder="150000"
           className={inputCls + ' font-mono'}
@@ -809,7 +810,7 @@ function NovaOfertaForm({
         <input
           name="desagioAquisicao"
           type="number"
-          step="0.001"
+          step="0.0001"
           min="0"
           max="1"
           required
