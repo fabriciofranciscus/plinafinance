@@ -90,5 +90,10 @@ export function useQuote({
     setQuote(null);
   }, []);
 
-  return { amountBrl, setAmountBrl, quote, quoteLoading, resetQuote };
+  // Retomada (U2 A-02): devolve ao hook a cotação de uma compra já em andamento, lida do servidor.
+  const restoreQuote = useCallback((q: QuoteData) => {
+    setQuote(q);
+  }, []);
+
+  return { amountBrl, setAmountBrl, quote, quoteLoading, resetQuote, restoreQuote };
 }

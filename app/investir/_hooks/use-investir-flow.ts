@@ -24,6 +24,8 @@ import { useQuote } from './use-quote';
 import { useOnRamp } from './use-onramp';
 import { useClaim } from './use-claim';
 import { useSwap } from './use-swap';
+import { usePendente } from './use-pendente';
+import { useRetomar } from './use-retomar';
 
 export function useInvestirFlow() {
   const privy = usePrivy();
@@ -120,6 +122,21 @@ export function useInvestirFlow() {
     onNextScreen,
   });
 
+  // U2 A-02: compra que ficou pela metade (lida do servidor) e a retomada, que só acontece por clique do usuário.
+  const pendingHook = usePendente({ enabled: privy.ready && privy.authenticated, getAccessToken });
+  const retomarHook = useRetomar({
+    pendente: pendingHook.pendente,
+    onboard: onboardHook.onboard,
+    quote: quoteHook.quote,
+    onRamp: onRampHook.onRamp,
+    runOnboard: onboardHook.runOnboard,
+    restoreQuote: quoteHook.restoreQuote,
+    restoreOnRamp: onRampHook.restoreOnRamp,
+    setScreen,
+    goToConfirm: swapHook.goToConfirm,
+    onRetomada: pendingHook.limpar,
+  });
+
   const goBack = useCallback(() => {
     const currentIdx = SCREENS.findIndex((s) => s.id === screen);
     const prev = SCREENS[Math.max(0, currentIdx - 1)];
@@ -212,5 +229,8 @@ export function useInvestirFlow() {
     onRamp: onRampHook,
     claim: claimHook,
     swap: swapHook,
+    pendente: pendingHook.pendente,
+    retomando: retomarHook.retomando,
+    retomar: retomarHook.retomar,
   };
 }

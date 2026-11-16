@@ -125,6 +125,11 @@ export function useOnRamp({
     setOnRamp(null);
   }, []);
 
+  // Retomada (U2 A-02): devolve ao hook a ordem de uma compra já em andamento, lida do servidor.
+  const restoreOnRamp = useCallback((o: OnRampData) => {
+    setOnRamp(o);
+  }, []);
+
   return {
     onRamp,
     onRampLoading,
@@ -133,5 +138,6 @@ export function useOnRamp({
     sandboxPay,
     applyClaimTxHash,
     resetOnRamp,
+    restoreOnRamp,
   };
 }
