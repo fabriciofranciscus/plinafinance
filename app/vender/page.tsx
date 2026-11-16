@@ -1228,8 +1228,8 @@ function PassoEnvioCota(props: {
         <Field label="Valor da carta">
           <input
             type="number"
-            min="1000"
-            step="1000"
+            min="0.01"
+            step="0.01"
             value={props.valorCarta}
             onChange={(e) => props.setValorCarta(e.target.value)}
             className={inputClass + ' font-mono'}
