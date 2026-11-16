@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { executarClawbackAction, type ActionResult } from './actions';
 
 const motivoOptions = [
@@ -23,10 +23,19 @@ export function ClawbackForm({
     executarClawbackAction,
     null,
   );
+  // Chave de idempotência do PEDIDO (U1-11): o mesmo valor em reenvios/duplo clique; renova depois de cada resposta, exceto quando
+  // o servidor diz que o clawback já foi à rede e falta só o registro (reenviar o MESMO pedido conclui sem repetir).
+  const [pedidoId, setPedidoId] = useState(() => crypto.randomUUID());
+  useEffect(() => {
+    // Mantém a chave quando o resultado é pendente ou incerto: reenviar o MESMO pedido nunca duplica (recarregar a tela gera outro).
+    const manter = ['REGISTRO_PENDENTE', 'EXECUCAO_INCERTA', 'PEDIDO_EM_ANDAMENTO'];
+    if (state && !manter.includes(state.code ?? '')) setPedidoId(crypto.randomUUID());
+  }, [state]);
 
   return (
     <form action={formAction} className="space-y-3 bg-lightBg/40 p-4 border border-light-hairline">
       <input type="hidden" name="investidorId" value={investidorId} />
+      <input type="hidden" name="pedidoId" value={pedidoId} />
       <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
         Clawback · política pública 4 hipóteses
       </p>

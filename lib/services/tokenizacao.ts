@@ -38,6 +38,7 @@ import { calcularPrecoDeEmissao } from './emissao';
 import { registrarMovimentoFundo } from './razao-fundo';
 import { getStellarPlinaPositionPublic } from '../env/ops';
 import { logStellarError } from '../stellar/log-error';
+import { causaSegura } from '../api/causa-segura';
 import { STELLAR_NETWORK, assetCode } from '../stellar/config';
 import { assetCodeForClasse, classeFromAssetCode } from '../stellar/classes';
 import { decrementarHolding } from './holdings';
@@ -741,6 +742,11 @@ export interface ExecutarClawbackInput {
   motivo: MotivoClawback;
   fundamentoUrl: string;
   operador: string;
+  /**
+   * Chave de IDEMPOTÊNCIA do pedido (U1-11; Atlas/Argus): o admin gera um id por pedido; o mesmo `pedidoId` nunca executa duas
+   * vezes. 16 a 64 caracteres de [A-Za-z0-9_-].
+   */
+  pedidoId: string;
 }
 
 export interface ExecutarClawbackResult {
@@ -750,112 +756,249 @@ export interface ExecutarClawbackResult {
   fundamentoTxHash: string;
   /** SHA-256 do payload `{motivo, fundamentoUrl, ...}` gravado on-chain. */
   payloadHash: string;
+  /** `true` quando o pedido já tinha sido executado (ou concluído de uma retomada): nenhuma nova execução on-chain. */
+  idempotente?: boolean;
 }
+
+export type ClawbackErrorCode =
+  | 'PEDIDO_INVALIDO'
+  | 'FUNDAMENTO_INVALIDO'
+  | 'VALOR_INVALIDO'
+  | 'EMISSOR_NAO_CONFIGURADO'
+  | 'INVESTIDOR_NAO_ENCONTRADO'
+  | 'PEDIDO_EM_ANDAMENTO'
+  | 'PEDIDO_FALHOU'
+  | 'EXECUCAO_FALHOU'
+  | 'EXECUCAO_INCERTA'
+  | 'REGISTRO_PENDENTE';
+
+/** Mensagens FIXAS (sem nome de variável, id, valor nem texto de terceiros): é o que o operador vê na tela. */
+const MENSAGENS_CLAWBACK: Record<ClawbackErrorCode, string> = {
+  PEDIDO_INVALIDO: 'Pedido de clawback inválido ou já usado com outros dados. Recarregue a tela e envie de novo.',
+  FUNDAMENTO_INVALIDO: 'Informe a URL do fundamento (documento público, http ou https).',
+  VALOR_INVALIDO: 'Informe uma quantidade maior que zero.',
+  EMISSOR_NAO_CONFIGURADO: 'A execução do clawback não está configurada neste ambiente.',
+  INVESTIDOR_NAO_ENCONTRADO: 'Investidor não encontrado.',
+  PEDIDO_EM_ANDAMENTO: 'Este pedido já foi enviado e está em andamento ou foi interrompido. Nada foi executado de novo. O clawback pode ter entrado na rede: NÃO crie outro pedido antes de conferir o saldo on-chain e o histórico.',
+  PEDIDO_FALHOU: 'Este pedido já falhou antes e não será repetido. Confira o saldo e o histórico; se precisar, crie um novo pedido.',
+  EXECUCAO_FALHOU: 'A rede recusou o clawback e ele não foi executado. Confira o saldo e o histórico; se precisar, crie um novo pedido.',
+  EXECUCAO_INCERTA: 'O resultado do clawback é incerto: ele pode ter entrado na rede. NÃO crie outro pedido; confira o saldo on-chain e o histórico.',
+  REGISTRO_PENDENTE: 'O clawback JÁ foi executado na rede, mas o registro não foi concluído. NÃO crie outro pedido: reenvie este mesmo para concluir o registro.',
+};
+
+export class ClawbackError extends Error {
+  /** Só em REGISTRO_PENDENTE: o hash do clawback que já está na rede. */
+  readonly txHash?: string;
+  constructor(readonly code: ClawbackErrorCode, txHash?: string) {
+    super(MENSAGENS_CLAWBACK[code]);
+    this.name = 'ClawbackError';
+    this.txHash = txHash;
+  }
+}
+
+type PayloadClawback = {
+  pedidoId?: string;
+  amount?: string;
+  targetPubkey?: string;
+  status?: 'attempting' | 'onchain' | 'executed' | 'failed' | 'incerto';
+  clawbackTxHash?: string;
+  fundamentoTxHash?: string;
+  causa?: unknown;
+};
 
 /**
  * Executa clawback. Whitepaper §6.5: 4 hipóteses exclusivas (enum força).
- * Audit log GRAVADO ANTES da execução on-chain — assim mesmo se Stellar
- * falhar, fica registro da tentativa pra auditoria.
+ * Audit log GRAVADO ANTES da execução on-chain — assim mesmo se Stellar falhar, fica registro da tentativa pra auditoria.
+ *
+ * IDEMPOTENTE por `pedidoId` (U1-11): o claim do pedido é uma transação curta sob `pg_advisory_xact_lock` que procura o evento do
+ * pedido e, se não há, grava a tentativa (`attempting`). Só quem grava a tentativa executa. Estados do evento:
+ *   attempting → onchain (clawback na rede, hash guardado) → executed (memo + saldo + holding, numa transação).
+ * O mesmo pedido: `executed` devolve o resultado do 1º (sem nova execução); `onchain` RETOMA o registro (sem reexecutar o clawback
+ * nem decrementar duas vezes); `attempting` e `failed` recusam (fail-closed): uma tentativa ambígua pode ter entrado na rede, e
+ * repetir seria clawback em dobro.
  */
 export async function executarClawback(
   input: ExecutarClawbackInput,
 ): Promise<ExecutarClawbackResult> {
-  if (!input.fundamentoUrl || !/^https?:\/\//.test(input.fundamentoUrl)) {
-    throw new Error('fundamentoUrl obrigatória (URL pública do documento).');
+  if (!/^[A-Za-z0-9_-]{16,64}$/.test(input.pedidoId ?? '')) throw new ClawbackError('PEDIDO_INVALIDO');
+  if (!input.fundamentoUrl || !/^https?:\/\//.test(input.fundamentoUrl)) throw new ClawbackError('FUNDAMENTO_INVALIDO');
+  let valor: Prisma.Decimal;
+  try {
+    valor = new Prisma.Decimal(input.amount);
+  } catch {
+    throw new ClawbackError('VALOR_INVALIDO');
   }
-  const amountNum = Number(input.amount);
-  if (!isFinite(amountNum) || amountNum <= 0) {
-    throw new Error('amount deve ser > 0.');
-  }
+  if (!valor.isFinite() || valor.lte(0)) throw new ClawbackError('VALOR_INVALIDO');
 
-  const issuerSecret = process.env.STELLAR_ISSUER_SECRET;
-  if (!issuerSecret) {
-    throw new Error('STELLAR_ISSUER_SECRET obrigatório.');
-  }
+  if (!process.env.STELLAR_ISSUER_SECRET) throw new ClawbackError('EMISSOR_NAO_CONFIGURADO');
 
-  const investidor = await db.investidor.findUnique({
-    where: { id: input.investidorId },
-  });
-  if (!investidor) throw new Error(`Investidor ${input.investidorId} não encontrado.`);
+  const investidor = await db.investidor.findUnique({ where: { id: input.investidorId } });
+  if (!investidor) throw new ClawbackError('INVESTIDOR_NAO_ENCONTRADO');
 
-  // 1) Audit log da tentativa (antes do on-chain) — auditável mesmo em falha.
-  const auditPre = await db.eventoAudit.create({
-    data: {
-      acao: 'CLAWBACK_EXECUTADO',
-      operador: input.operador,
-      investidorId: input.investidorId,
-      motivoClawback: input.motivo,
-      fundamentoUrl: input.fundamentoUrl,
-      payloadJson: {
-        amount: input.amount,
-        targetPubkey: investidor.publicKey,
-        status: 'attempting',
-      } as Prisma.InputJsonValue,
-    },
-  });
+  const chaveLock = `plina:clawback:${input.pedidoId}`;
+  const filtroPedido = { acao: 'CLAWBACK_EXECUTADO' as const, payloadJson: { path: ['pedidoId'], equals: input.pedidoId } };
 
-  // 2) On-chain (clawback).
-  const clawbackRes = await executeClawback(
-    issuerSigner(),
-    investidor.publicKey,
-    input.amount,
-  );
-
-  // 3) Memo.hash do fundamento (whitepaper §3.2: "fundamento jurídico
-  //    vinculado, visível em Stellar Expert"). Self-payment do issuer
-  //    com SHA-256 do payload — Stellar Expert decodifica e qualquer
-  //    auditor cross-verifica `fundamentoUrl` off-chain contra o hash.
-  const fundamentoPayload = buildAuditPayload(
-    'clawback_fundamento',
-    input.investidorId,
-    {
-      motivo: input.motivo,
-      fundamentoUrl: input.fundamentoUrl,
-      targetPubkey: investidor.publicKey,
-      amount: input.amount,
-      clawbackTxHash: clawbackRes.hash,
-    },
-  );
-  const fundamentoOnChain = await registerOnChainHash(fundamentoPayload);
-
-  // 4) Atualiza audit log + saldoEsperado.
-  await db.$transaction(async (tx) => {
-    await tx.eventoAudit.update({
-      where: { id: auditPre.id },
+  // 1) Claim do pedido (curto; sem rede dentro da transação).
+  const claim = await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${chaveLock}))`;
+    const existente = await tx.eventoAudit.findFirst({ where: filtroPedido });
+    if (existente) return { novo: false as const, evento: existente };
+    const pre = await tx.eventoAudit.create({
       data: {
-        stellarTxHash: clawbackRes.hash,
-        payloadHash: fundamentoOnChain.payloadHash,
+        acao: 'CLAWBACK_EXECUTADO',
+        operador: input.operador,
+        investidorId: input.investidorId,
+        motivoClawback: input.motivo,
+        fundamentoUrl: input.fundamentoUrl,
         payloadJson: {
+          pedidoId: input.pedidoId,
           amount: input.amount,
           targetPubkey: investidor.publicKey,
-          status: 'executed',
-          fundamentoTxHash: fundamentoOnChain.txHash,
+          status: 'attempting',
         } as Prisma.InputJsonValue,
       },
     });
-    await tx.investidor.update({
-      where: { id: input.investidorId },
-      data: {
-        saldoEsperado: {
-          decrement: new Prisma.Decimal(input.amount),
-        },
-      },
-    });
-    // Mantém o ledger por-classe coerente com o saldoEsperado (PRD §M3).
-    // Clawback é SENIOR-only: executeClawback usa o `code` default (assetCode).
-    await decrementarHolding(tx, {
-      investidorId: input.investidorId,
-      classe: classeFromAssetCode(assetCode),
-      amount: input.amount,
-      txHash: clawbackRes.hash,
-    });
+    return { novo: true as const, evento: pre };
   });
 
-  return {
-    txHash: clawbackRes.hash,
-    fundamentoTxHash: fundamentoOnChain.txHash,
-    payloadHash: fundamentoOnChain.payloadHash,
-  };
+  const eventoId = claim.evento.id;
+  const guardado = (claim.evento.payloadJson ?? {}) as PayloadClawback;
+
+  if (!claim.novo) {
+    // O pedido só vale para os MESMOS dados (investidor e valor): outra combinação com a mesma chave é recusada.
+    // R1 (Argus): também o motivo e o fundamento: o memo ancorado na retomada tem de ser o do REGISTRO, nunca o de um reenvio com outra URL.
+    if (
+      claim.evento.investidorId !== input.investidorId ||
+      guardado.amount !== input.amount ||
+      claim.evento.motivoClawback !== input.motivo ||
+      claim.evento.fundamentoUrl !== input.fundamentoUrl
+    ) {
+      throw new ClawbackError('PEDIDO_INVALIDO');
+    }
+    if (guardado.status === 'executed') {
+      return {
+        txHash: claim.evento.stellarTxHash ?? guardado.clawbackTxHash ?? '',
+        fundamentoTxHash: guardado.fundamentoTxHash ?? '',
+        payloadHash: claim.evento.payloadHash ?? '',
+        idempotente: true,
+      };
+    }
+    if (guardado.status === 'onchain' && guardado.clawbackTxHash) {
+      return concluirRegistroDoClawback({ eventoId, chaveLock, input, publicKey: investidor.publicKey, clawbackTxHash: guardado.clawbackTxHash, retomada: true });
+    }
+    throw new ClawbackError(guardado.status === 'failed' ? 'PEDIDO_FALHOU' : guardado.status === 'incerto' ? 'EXECUCAO_INCERTA' : 'PEDIDO_EM_ANDAMENTO');
+  }
+
+  // 2) On-chain (clawback). Só quem gravou a tentativa chega aqui.
+  let clawbackTxHash: string;
+  try {
+    clawbackTxHash = (await executeClawback(issuerSigner(), investidor.publicKey, input.amount)).hash;
+  } catch (err) {
+    console.error('[clawback] execução falhou', causaSegura(err));
+    // R2 (Argus): só a REJEIÇÃO DEFINITIVA da rede (result_codes) prova que a tx não entrou. Timeout, 5xx, queda de conexão e
+    // tx_too_late/tx_bad_seq podem ter deixado a tx entrar: ficam `incerto` (o pedido recusa, sem orientar um 2º clawback).
+    const definitiva = rejeicaoDefinitivaDaRede(err);
+    await db.eventoAudit
+      .update({
+        where: { id: eventoId },
+        data: { payloadJson: { ...guardado, status: definitiva ? 'failed' : 'incerto', causa: causaSegura(err) } as unknown as Prisma.InputJsonValue },
+      })
+      .catch(() => undefined);
+    throw new ClawbackError(definitiva ? 'EXECUCAO_FALHOU' : 'EXECUCAO_INCERTA');
+  }
+
+  // Guarda o hash IMEDIATAMENTE: se algo cair daqui em diante, o mesmo pedido retoma o registro sem reexecutar o clawback.
+  await db.eventoAudit.update({
+    where: { id: eventoId },
+    data: {
+      stellarTxHash: clawbackTxHash,
+      payloadJson: { ...guardado, status: 'onchain', clawbackTxHash } as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  return concluirRegistroDoClawback({ eventoId, chaveLock, input, publicKey: investidor.publicKey, clawbackTxHash, retomada: false });
+}
+
+/**
+ * `true` só quando o Horizon devolveu `result_codes` (a rede REJEITOU a tx: ela não entrou). `tx_too_late` e `tx_bad_seq` não provam
+ * isso (reenviar uma tx que já entrou e expirou volta tx_too_late; ver `ehTxTooLate`), e erro sem result_codes (timeout, 5xx, rede) é incerto.
+ */
+function rejeicaoDefinitivaDaRede(err: unknown): boolean {
+  const rc = (err as { response?: { data?: { extras?: { result_codes?: { transaction?: unknown } } } } })?.response?.data?.extras?.result_codes;
+  if (!rc || typeof rc !== 'object') return false;
+  return rc.transaction !== 'tx_too_late' && rc.transaction !== 'tx_bad_seq';
+}
+
+/** Passos 3 e 4: memo do fundamento + (evento executado, saldoEsperado e holding) numa transação, idempotente por evento. */
+async function concluirRegistroDoClawback(a: {
+  eventoId: string;
+  chaveLock: string;
+  input: ExecutarClawbackInput;
+  publicKey: string;
+  clawbackTxHash: string;
+  retomada: boolean;
+}): Promise<ExecutarClawbackResult> {
+  const { input } = a;
+  let fundamentoOnChain: { txHash: string; payloadHash: string };
+  try {
+    // Memo.hash do fundamento (whitepaper §3.2: "fundamento jurídico vinculado, visível em Stellar Expert"): self-payment do issuer
+    // com SHA-256 do payload; qualquer auditor cross-verifica `fundamentoUrl` off-chain contra o hash.
+    const payload = buildAuditPayload('clawback_fundamento', input.investidorId, {
+      motivo: input.motivo,
+      fundamentoUrl: input.fundamentoUrl,
+      targetPubkey: a.publicKey,
+      amount: input.amount,
+      clawbackTxHash: a.clawbackTxHash,
+    });
+    fundamentoOnChain = await registerOnChainHash(payload);
+  } catch (err) {
+    console.error('[clawback] registro do fundamento falhou', causaSegura(err));
+    throw new ClawbackError('REGISTRO_PENDENTE', a.clawbackTxHash);
+  }
+
+  try {
+    const jaConcluido = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${a.chaveLock}))`;
+      const atual = await tx.eventoAudit.findFirst({ where: { id: a.eventoId } });
+      if ((atual?.payloadJson as PayloadClawback | null)?.status === 'executed') return true;
+      await tx.eventoAudit.update({
+        where: { id: a.eventoId },
+        data: {
+          stellarTxHash: a.clawbackTxHash,
+          payloadHash: fundamentoOnChain.payloadHash,
+          payloadJson: {
+            pedidoId: input.pedidoId,
+            amount: input.amount,
+            targetPubkey: a.publicKey,
+            status: 'executed',
+            clawbackTxHash: a.clawbackTxHash,
+            fundamentoTxHash: fundamentoOnChain.txHash,
+          } as Prisma.InputJsonValue,
+        },
+      });
+      await tx.investidor.update({
+        where: { id: input.investidorId },
+        data: { saldoEsperado: { decrement: new Prisma.Decimal(input.amount) } },
+      });
+      // Mantém o ledger por-classe coerente com o saldoEsperado (PRD §M3). Clawback é SENIOR-only.
+      await decrementarHolding(tx, {
+        investidorId: input.investidorId,
+        classe: classeFromAssetCode(assetCode),
+        amount: input.amount,
+        txHash: a.clawbackTxHash,
+      });
+      return false;
+    });
+    return {
+      txHash: a.clawbackTxHash,
+      fundamentoTxHash: fundamentoOnChain.txHash,
+      payloadHash: fundamentoOnChain.payloadHash,
+      ...(a.retomada || jaConcluido ? { idempotente: true } : {}),
+    };
+  } catch (err) {
+    console.error('[clawback] conclusão do registro falhou', causaSegura(err));
+    throw new ClawbackError('REGISTRO_PENDENTE', a.clawbackTxHash);
+  }
 }
 
 export interface AtualizarStatusCotaInput {
