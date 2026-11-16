@@ -18,7 +18,7 @@ import { Asset, Memo, Operation, Transaction, TransactionBuilder } from '@stella
 import { buildAsset, horizon } from './account';
 import { STELLAR_TX_TIMEOUT_SEC, networkPassphrase } from './config';
 import { assetCodeForClasse } from './classes';
-import { getDynamicFee } from './fee';
+import { getFeeOfertaInvestidor } from './fee';
 import { assertDentroDoQuote, assertJanelaDeValidade, assertSemPrecondicoesV2 } from './parse-swap-xdr';
 import { exigirTrustlineAutorizada } from './trustline';
 
@@ -88,7 +88,7 @@ export async function buildResgateXdr(input: {
   );
 
   const builder = new TransactionBuilder(account, {
-    fee: await getDynamicFee(),
+    fee: await getFeeOfertaInvestidor(), // assinado pelo investidor: oferta p99 (fee.ts)
     networkPassphrase,
   })
     .addOperation(

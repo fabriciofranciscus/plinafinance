@@ -51,6 +51,7 @@ vi.mock('@/lib/stellar/account', async () => {
 // verdade (rede + timeout intermitente sob carga). Mock explícito, sem importActual.
 vi.mock('@/lib/stellar/fee', () => ({
   getDynamicFee: vi.fn(async () => '100'),
+  getFeeOfertaInvestidor: vi.fn(async () => '100'), // harness (fix/swap-fee-surge)
   _resetFeeCacheForTests: vi.fn(),
 }));
 

@@ -25,7 +25,7 @@ import {
   assetCode,
   networkPassphrase,
 } from './config';
-import { getDynamicFee } from './fee';
+import { getDynamicFee, getFeeOfertaInvestidor } from './fee';
 import { privySignatureToBase64 } from '../wallet/privy';
 import {
   exigirEmissoesParaTrustlineAutorizada,
@@ -91,7 +91,7 @@ export async function buildSwapBridgeForPlinarfXdr(input: {
   );
 
   const builder = new TransactionBuilder(account, {
-    fee: await getDynamicFee(),
+    fee: await getFeeOfertaInvestidor(),
     networkPassphrase,
   })
     .addOperation(
@@ -137,7 +137,7 @@ export async function buildClaimClaimableBalanceXdr(input: {
 }): Promise<{ xdr: string; hashHex: string }> {
   const account = await horizon.loadAccount(input.investorPubkey);
   const builder = new TransactionBuilder(account, {
-    fee: await getDynamicFee(),
+    fee: await getFeeOfertaInvestidor(),
     networkPassphrase,
   });
   if (input.trustAsset) {
