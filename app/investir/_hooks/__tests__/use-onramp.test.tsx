@@ -308,4 +308,78 @@ describe('useOnRamp — sandboxPay & misc', () => {
     act(() => result.current.resetOnRamp());
     expect(result.current.onRamp).toBeNull();
   });
+
+  describe('cadência do polling', () => {
+    const envelope = (data: unknown) => jsonResponse({ data, error: null });
+    /** Resposta de status que devolve um objeto NOVO a cada vez; a partir de `teto` chamadas a consulta fica pendurada (o teste não trava num laço). */
+    function mockStatus(teto: number) {
+      let n = 0;
+      fetchMock.mockImplementation(async (url: string) => {
+        if (!String(url).includes('/status')) return jsonResponse(createdOnRamp);
+        n += 1;
+        if (n > teto) return new Promise<Response>(() => undefined);
+        return envelope({ status: 'processing', stellarTxHash: null, stellarClaimableBalanceId: null, mock: false });
+      });
+    }
+    const chamadasDeStatus = () => fetchMock.mock.calls.filter((c) => String(c[0]).includes('/status')).length;
+
+    it('na tela settling consulta 1× ao entrar e depois 1× a cada 3 s: a resposta NÃO dispara outra consulta imediata (sem laço)', async () => {
+      vi.useFakeTimers();
+      try {
+        mockStatus(50);
+        const { result, rerender } = setup({ screen: 'quote', quote, onRampLoading: false });
+        await act(async () => { await result.current.goToOnramp(); });
+        rerender({ screen: 'settling', quote, onRampLoading: false });
+        await flushAsync();
+        expect(chamadasDeStatus()).toBe(1); // só a consulta ao entrar
+        await act(async () => { await vi.advanceTimersByTimeAsync(9_000); });
+        await flushAsync();
+        expect(chamadasDeStatus()).toBe(4); // 1 ao entrar + 3 ticks (3 s, 6 s, 9 s)
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('para de consultar quando a ordem chega a completed (e recomeça sozinha só se voltar a esperar)', async () => {
+      vi.useFakeTimers();
+      try {
+        let n = 0;
+        fetchMock.mockImplementation(async (url: string) => {
+          if (!String(url).includes('/status')) return jsonResponse(createdOnRamp);
+          n += 1;
+          return envelope({ status: n >= 2 ? 'completed' : 'processing', stellarTxHash: 'tx', stellarClaimableBalanceId: null, mock: false });
+        });
+        const { result, rerender } = setup({ screen: 'quote', quote, onRampLoading: false });
+        await act(async () => { await result.current.goToOnramp(); });
+        rerender({ screen: 'settling', quote, onRampLoading: false });
+        await flushAsync();
+        await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+        await flushAsync();
+        expect(result.current.onRamp?.status).toBe('completed');
+        const aposCompleta = chamadasDeStatus();
+        await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+        await flushAsync();
+        expect(chamadasDeStatus()).toBe(aposCompleta); // completed: nenhuma consulta nova
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('um getAccessToken que muda de identidade a cada render não reinicia o polling', async () => {
+      vi.useFakeTimers();
+      try {
+        mockStatus(50);
+        const { result, rerender } = setup({ screen: 'quote', quote, onRampLoading: false });
+        await act(async () => { await result.current.goToOnramp(); });
+        rerender({ screen: 'settling', quote, onRampLoading: false });
+        await flushAsync();
+        for (let i = 0; i < 5; i++) rerender({ screen: 'settling', quote, onRampLoading: false });
+        await flushAsync();
+        expect(chamadasDeStatus()).toBe(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });
+
