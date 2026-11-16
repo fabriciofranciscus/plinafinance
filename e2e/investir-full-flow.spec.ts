@@ -104,7 +104,7 @@ test('full /investir flow: BRL → TESOURO → claim CB → swap PLINA-RF', asyn
 
   // Claiming: se CB existe (PLINA-MOD-007 path), clica reclamar.
   const claimBtn = page.getByRole('button', {
-    name: /assinar e reclamar tesouro/i,
+    name: /assinar e receber tesouro/i,
   });
   if (await claimBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
     await claimBtn.click();
