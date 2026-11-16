@@ -68,6 +68,8 @@ describe.skipIf(!PG)('listarOperacoesTravadas — Postgres real, só leitura', (
     // emissão, snapshot, clawback
     const em = { txHash: 'x', envelopeXdr: 'AAAA', valorBrl: D('1'), quantidade: D('1'), navPorToken: D('1') };
     await db.tentativaEmissao.create({ data: { memoHash: 'memo_pend', maxTime: min(30), status: 'PENDENTE', ...em } as never });
+    await db.tentativaEmissao.create({ data: { memoHash: 'memo_exp', maxTime: min(40), status: 'EXPIRADA', ...em } as never });
+    await db.tentativaEmissao.create({ data: { memoHash: 'memo_fail', maxTime: min(35), status: 'FALHOU', ...em } as never });
     await db.tentativaEmissao.create({ data: { memoHash: 'memo_ok', maxTime: min(30), status: 'CONFIRMADA', ...em } as never });
     await db.snapshotNav.create({ data: { data: '2026-11-10', status: 'PUBLICANDO', conteudo: '{}', sha256: 'a'.repeat(64), navPorToken: D('1'), ledger: 1, travaAte: min(30), criadoEm: min(90) } as never });
     await db.snapshotNav.create({ data: { data: '2026-11-11', status: 'PUBLICADO', conteudo: '{}', sha256: 'b'.repeat(64), navPorToken: D('1'), ledger: 2 } as never });
@@ -89,6 +91,8 @@ describe.skipIf(!PG)('listarOperacoesTravadas — Postgres real, só leitura', (
       ['PIX_SAIDA', 'pix_incerto', 'INCERTO', ['RECONSULTAR']],
       ['PIX_SAIDA', 'pix_orfa', 'COMPROVADA_SEM_PAGAMENTO', []],
       ['INCORPORACAO', 'memo_pend', 'EMISSAO_PENDENTE', ['RETOMAR']],
+      ['INCORPORACAO', 'memo_exp', 'EMISSAO_EXPIRADA', ['RETOMAR']],
+      ['INCORPORACAO', 'memo_fail', 'EMISSAO_FALHOU', ['RETOMAR']],
       ['SNAPSHOT_NAV', '2026-11-10', 'PUBLICANDO_PRESO', ['RETOMAR']],
       ['CLAWBACK', 'cb_incerto', 'INCERTO', ['CONSULTAR_REDE']],
       ['CLAWBACK', 'cb_onchain', 'NA_REDE_SEM_REGISTRO', []],
