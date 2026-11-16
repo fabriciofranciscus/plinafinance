@@ -30,12 +30,12 @@ export function ClaimingScreen({
     <div>
       <TestnetBanner />
       <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
-        06 // Resgate · ClaimableBalance → trustline
+        06 // Recebimento do TESOURO
       </p>
       <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">
         {claimed
           ? 'TESOURO na sua trustline — prossiga'
-          : 'Assine pra resgatar o TESOURO emitido'}
+          : 'Assine para receber o TESOURO'}
       </h1>
       {/* Instrução de antes da assinatura: some quando o resgate já foi feito. */}
       {!claimed && (
@@ -118,7 +118,7 @@ export function ClaimingScreen({
           data-testid="claim-regenerado"
           className="mt-8 font-text text-sm text-base/80"
         >
-          A transação de resgate venceu e foi gerada de novo. Confirme a nova
+          A transação de recebimento venceu e foi gerada de novo. Confirme a nova
           assinatura.
         </p>
       )}
@@ -133,7 +133,7 @@ export function ClaimingScreen({
             {claiming && (
               <span className="w-2 h-2 bg-primary rounded-full animate-pulse" aria-hidden />
             )}
-            {claiming ? 'Assinando claim…' : regenerated ? 'Assinar o novo resgate' : 'Assinar e reclamar TESOURO'}
+            {claiming ? 'Assinando claim…' : regenerated ? 'Assinar o novo recebimento' : 'Assinar e receber TESOURO'}
           </button>
         )}
         {claimed && (

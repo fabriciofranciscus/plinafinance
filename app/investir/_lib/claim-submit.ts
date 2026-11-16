@@ -7,7 +7,7 @@
 import { unwrapEnvelope } from '@/lib/http/client';
 
 export const CLAIM_XDR_EXPIRADO_MESSAGE =
-  'A transação de resgate expirou. Tente novamente para gerar uma nova.';
+  'A transação de recebimento expirou. Tente novamente para gerar uma nova.';
 
 export class ClaimXdrExpiradoError extends Error {
   constructor() {
