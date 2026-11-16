@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FlowError, OnRampData, QuoteData, Screen } from '../_types';
 import { asFlowError } from '../_lib/errors';
 import { postJson, unwrapEnvelope } from '@/lib/http/client';
@@ -78,14 +78,21 @@ export function useOnRamp({
   }, [onRamp, getAccessToken, onError, clearError, onSandboxPaid]);
 
   // Polling do status da onramp no settling screen — para quando completed.
+  // As dependências são PRIMITIVAS (id da ordem e "ainda esperando"), não o objeto `onRamp`: cada resposta cria um objeto novo
+  // (`{ ...prev, ...data }`), e com ele como dependência o efeito reiniciava e consultava de novo NA HORA, num laço sem pausa
+  // (martelava a rota de status, que consulta o anchor). `getAccessToken` fica em ref pelo mesmo motivo: em alguns provedores
+  // a identidade dele muda a cada render.
+  const tokenRef = useRef(getAccessToken);
+  tokenRef.current = getAccessToken;
+  const orderIdEmEspera = onRamp && onRamp.status !== 'completed' ? onRamp.orderId : null;
   useEffect(() => {
-    if (screen !== 'settling' || !onRamp || onRamp.status === 'completed') return;
+    if (screen !== 'settling' || !orderIdEmEspera) return;
     let cancelled = false;
     const tick = async () => {
       try {
-        const token = await getAccessToken();
+        const token = await tokenRef.current();
         const res = await fetch(
-          `/api/investidor/buy/onramp/status?orderId=${encodeURIComponent(onRamp.orderId)}`,
+          `/api/investidor/buy/onramp/status?orderId=${encodeURIComponent(orderIdEmEspera)}`,
           { headers: token ? { Authorization: `Bearer ${token}` } : {} },
         );
         // Desembrulha o envelope `{ data, error }` (rota migrada pro withApi).
@@ -108,7 +115,7 @@ export function useOnRamp({
       cancelled = true;
       clearInterval(id);
     };
-  }, [screen, onRamp, getAccessToken]);
+  }, [screen, orderIdEmEspera]);
 
   const applyClaimTxHash = useCallback((claimTxHash: string) => {
     setOnRamp((prev) => (prev ? { ...prev, claimTxHash } : prev));

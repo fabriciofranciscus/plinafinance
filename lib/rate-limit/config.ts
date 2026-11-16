@@ -33,4 +33,10 @@ export const sensitiveAuthLimiter = makeLimiter('sensitive', 10, 60_000);
 /** Login admin (C-05). 5 tentativas / 15 min por IP. */
 export const adminLoginLimiter = makeLimiter('admin-login', 5, 15 * 60_000);
 
+/**
+ * Polling de status do on-ramp: 40/min POR INVESTIDOR (chave = investidorId da sessão, nunca IP). A cadência legítima da tela é
+ * 20/min + "Atualizar agora". Acima disso a rota não devolve 429: responde com o estado do banco, sem consultar a Etherfuse.
+ */
+export const onrampStatusLimiter = makeLimiter('onramp-status', 40, 60_000);
+
 export { clientIp };
