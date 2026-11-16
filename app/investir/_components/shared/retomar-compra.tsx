@@ -19,7 +19,7 @@ export const TEXTO_RETOMADA: Record<FaseOrdemPendente, { titulo: string; texto: 
   },
   liquidando: {
     titulo: 'Seu pagamento está sendo confirmado',
-    texto: 'Recebemos a sua ordem e falta a confirmação do pagamento. Dá para acompanhar de onde parou.',
+    texto: `Recebemos a sua ordem e falta a confirmação do pagamento. Dá para acompanhar de onde parou. ${AVISO_PAGAMENTO_SIMULADO}`,
     botao: 'Acompanhar compra',
   },
   resgatar_tesouro: {

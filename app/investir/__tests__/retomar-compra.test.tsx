@@ -44,10 +44,16 @@ describe('RetomarCompra (U2 A-02)', () => {
     expect(onRetomar).not.toHaveBeenCalled();
   });
 
-  it('Norma (16/11): as fases de pagamento dizem que em rede de testes o pagamento é simulado', () => {
+  it('Norma (16/11): TODA fase que fala de pagamento diz que em rede de testes o pagamento é simulado', () => {
     expect(AVISO_PAGAMENTO_SIMULADO).toBe('Em rede de testes, o pagamento é simulado.');
-    for (const fase of ['aguardando_pagamento', 'resgatar_tesouro', 'concluir_swap'] as const) {
+    for (const fase of ['aguardando_pagamento', 'liquidando', 'resgatar_tesouro', 'concluir_swap'] as const) {
       expect(TEXTO_RETOMADA[fase].texto).toContain(AVISO_PAGAMENTO_SIMULADO);
+    }
+    // regra geral, não lista: qualquer fase (hoje ou futura) cujo título ou texto mencione pagamento leva o aviso
+    for (const [fase, t] of Object.entries(TEXTO_RETOMADA)) {
+      if (/pagamento/i.test(`${t.titulo} ${t.texto.replace(AVISO_PAGAMENTO_SIMULADO, '')}`)) {
+        expect(t.texto, fase).toContain(AVISO_PAGAMENTO_SIMULADO);
+      }
     }
   });
   it('Norma (16/11): "Pix" vira "pagamento" na fase de espera; o claim é "Receber TESOURO" (resgate fica só para a saída de tokens)', () => {
