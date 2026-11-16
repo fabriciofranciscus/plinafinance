@@ -41,7 +41,7 @@ export const dynamic = 'force-dynamic';
 /** 409 fixo: o XDR não é o claim desta ordem (nada submetido, nenhum evento). */
 function naoConfere(): NextResponse {
   return NextResponse.json(
-    { error: 'A transação enviada não é o resgate desta compra. Nada foi registrado.', code: 'XDR_NAO_CONFERE' },
+    { error: 'A transação enviada não é o recebimento desta compra. Nada foi registrado.', code: 'XDR_NAO_CONFERE' },
     { status: 409 },
   );
 }
@@ -81,7 +81,7 @@ export const POST = withAuth(async (req, { user }) => {
     const balanceId = order.stellarClaimableBalanceId;
     if (!balanceId) {
       return NextResponse.json(
-        { error: 'A compra ainda não tem saldo a resgatar.', code: 'CB_AUSENTE' },
+        { error: 'A compra ainda não tem saldo a receber.', code: 'CB_AUSENTE' },
         { status: 409 },
       );
     }
@@ -106,7 +106,7 @@ export const POST = withAuth(async (req, { user }) => {
       const ativo = await ativoDoClaimableBalance(balanceId);
       if (!ativo) {
         return NextResponse.json(
-          { error: 'O saldo a resgatar não está mais disponível.', code: 'CB_NOT_FOUND' },
+          { error: 'O saldo a receber não está mais disponível.', code: 'CB_NOT_FOUND' },
           { status: 409 },
         );
       }
