@@ -20,8 +20,10 @@ import {
   setAdminCookie,
 } from '@/lib/auth/admin';
 import { adminLoginLimiter } from '@/lib/rate-limit/config';
+import { causaSegura } from '@/lib/api/causa-segura';
 import {
   atualizarStatusCota,
+  ClawbackError,
   executarClawback,
   incorporarCota,
 } from '@/lib/services/tokenizacao';
@@ -32,6 +34,9 @@ export interface ActionResult {
   ok: boolean;
   error?: string;
   txHash?: string;
+  /** Só no clawback (U1-11): código fixo do erro (PEDIDO_EM_ANDAMENTO, REGISTRO_PENDENTE…) e `true` quando o pedido já tinha sido executado. */
+  code?: string;
+  idempotente?: boolean;
 }
 
 // ─── Auth ───────────────────────────────────────────────────────────────────
@@ -126,13 +131,21 @@ export async function executarClawbackAction(
       amount: String(formData.get('amount') ?? ''),
       motivo: formData.get('motivo') as MotivoClawback,
       fundamentoUrl: String(formData.get('fundamentoUrl') ?? '').trim(),
+      // Chave de idempotência do PEDIDO (gerada pela tela): o mesmo pedido nunca executa duas vezes (U1-11).
+      pedidoId: String(formData.get('pedidoId') ?? ''),
       operador: 'admin-panel',
     });
     revalidatePath('/admin');
     revalidatePath('/pool');
-    return { ok: true, txHash: result.txHash };
+    return { ok: true, txHash: result.txHash, ...(result.idempotente ? { idempotente: true } : {}) };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'unknown' };
+    // Erro FIXO (nunca err.message cru: Prisma/Stellar ecoam valores, ids e nomes de variável). REGISTRO_PENDENTE leva o txHash
+    // que já está na rede.
+    if (err instanceof ClawbackError) {
+      return { ok: false, error: err.message, code: err.code, ...(err.txHash ? { txHash: err.txHash } : {}) };
+    }
+    console.error('[admin/clawback] erro interno', causaSegura(err));
+    return { ok: false, error: 'erro interno' };
   }
 }
 
