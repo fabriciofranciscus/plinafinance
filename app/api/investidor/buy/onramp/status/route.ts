@@ -15,10 +15,41 @@ import { requireInvestidor } from '@/lib/wallet/auth-guard';
 import { withApi } from '@/lib/api/with-api';
 import { ok } from '@/lib/api/response';
 import { ApiError } from '@/lib/api/errors';
+import { onrampStatusLimiter } from '@/lib/rate-limit/config';
 
 export const dynamic = 'force-dynamic';
 
 const TERMINAL = new Set(['completed', 'failed', 'expired', 'cancelled', 'refunded']);
+
+/**
+ * Cache curto (best-effort, em memória da instância) do status remoto por ordem: no máximo 1 consulta à Etherfuse a cada 5 s por
+ * ordem e por instância. Só guarda estado NÃO terminal (o terminal sempre é lido de novo e gravado no banco). Só é lido depois da
+ * checagem de dono e do limite, então não vira oráculo de ordem alheia.
+ */
+const STATUS_CACHE_TTL_MS = 5_000;
+const STATUS_CACHE_MAX = 500;
+type RemotoDoCache = Awaited<ReturnType<EtherfuseClient['getOnRampTransaction']>>;
+const statusCache = new Map<string, { em: number; remote: RemotoDoCache }>();
+
+function lerCache(orderId: string): { remote: RemotoDoCache } | null {
+  const e = statusCache.get(orderId);
+  if (!e) return null;
+  if (Date.now() - e.em >= STATUS_CACHE_TTL_MS) {
+    statusCache.delete(orderId);
+    return null;
+  }
+  return { remote: e.remote };
+}
+
+function guardarCache(orderId: string, remote: RemotoDoCache): void {
+  if (remote && TERMINAL.has(remote.status)) return;
+  if (statusCache.size >= STATUS_CACHE_MAX) {
+    const agora = Date.now();
+    for (const [k, v] of statusCache) if (agora - v.em >= STATUS_CACHE_TTL_MS) statusCache.delete(k);
+    if (statusCache.size >= STATUS_CACHE_MAX) statusCache.clear();
+  }
+  statusCache.set(orderId, { em: Date.now(), remote });
+}
 
 export const GET = withApi(async (req, { requestId }) => {
   const user = await requireInvestidor(req);
@@ -61,7 +92,30 @@ export const GET = withApi(async (req, { requestId }) => {
     );
   }
 
-  // Real: pull no Etherfuse + atualiza DB se mudou.
+  // Limite por investidor (depois do dono e do terminal/mock). Acima do limite, ou com o limiter fora do ar, degrada para leitura:
+  // devolve o estado guardado no banco, sem consultar a Etherfuse e sem 429 (falha fechada para o anchor).
+  let dentroDoLimite = false;
+  try {
+    dentroDoLimite = (await onrampStatusLimiter.consume(user.investidorId)) === true;
+  } catch {
+    dentroDoLimite = false;
+  }
+  if (!dentroDoLimite) {
+    return ok(
+      {
+        orderId: order.id,
+        status: order.status,
+        stellarTxHash: order.stellarTxHash,
+        stellarClaimableBalanceId: order.stellarClaimableBalanceId,
+        claimTxHash: order.claimTxHash,
+        mock: false,
+        paymentInstructions: instructions,
+      },
+      { requestId },
+    );
+  }
+
+  // Real: pull no Etherfuse (com cache de 5 s) + atualiza DB se mudou.
   const apiKey = process.env.ETHERFUSE_API_KEY;
   if (!apiKey) {
     // env ausente: erro interno, vira INTERNAL genérico (não surfacia).
@@ -73,7 +127,14 @@ export const GET = withApi(async (req, { requestId }) => {
       process.env.ETHERFUSE_BASE_URL ?? 'https://api.sand.etherfuse.com',
   });
 
-  const remote = await anchor.getOnRampTransaction(orderId);
+  const emCache = lerCache(orderId);
+  let remote: RemotoDoCache;
+  if (emCache) {
+    remote = emCache.remote;
+  } else {
+    remote = await anchor.getOnRampTransaction(orderId);
+    guardarCache(orderId, remote);
+  }
   if (!remote) {
     // Etherfuse ainda indexando (PLINA-MOD-004) — devolve o que temos.
     return ok(
