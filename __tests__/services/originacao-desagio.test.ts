@@ -174,7 +174,9 @@ describe('prazo 0 = cota QUITADA (A-01) e a composição pura do deságio (A-08)
     expect((v as OfertaInvalidaError).code).toBe('VALOR_CARTA_INVALIDO');
     expect((d as OfertaInvalidaError).code).toBe('DESAGIO_BASE_INVALIDO');
     expect((t as OfertaInvalidaError).code).toBe('DESAGIO_TOTAL_EXCEDE');
-    expect((t as OfertaInvalidaError).message).toMatch(/reduza o deságio base ou o prazo restante/);
+    expect((t as OfertaInvalidaError).message).toBe('O deságio total (base + anuência + prazo) excede 100%. Revise os dados da proposta.');
+    // neutra: não orienta a alterar prazo nem deságio para passar na validação
+    expect((t as OfertaInvalidaError).message).not.toMatch(/reduza|prazo restante/i);
   });
 });
 

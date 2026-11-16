@@ -259,7 +259,7 @@ export function comporDesagioDaOferta(input: {
   if (desagioTotal.greaterThan(1)) {
     throw new OfertaInvalidaError(
       'DESAGIO_TOTAL_EXCEDE',
-      'O deságio total (base + anuência + prazo) excede 100%: reduza o deságio base ou o prazo restante.',
+      'O deságio total (base + anuência + prazo) excede 100%. Revise os dados da proposta.',
     );
   }
 
