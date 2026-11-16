@@ -42,7 +42,7 @@ Estado consolidado em 2026-11-11. Este checklist prepara a decisão; não autori
 - [ ] Neon: migrations aditivas/idempotentes ensaiadas em branch dev; `prisma migrate deploy` de produção fica para a Thais.
 - [ ] Antes do merge dos workflows agendados, avisar a Thais: eles passam a existir nos dois repositórios, mas só o repositório de produção pode executar os jobs.
 - [ ] No repositório de produção `ThaisFReis/Plina`, a Thais configura `OPS_CRON_SECRET` como Actions secret; o mesmo segredo vai para Vercel Production sensitive. Nenhum agente lê o valor.
-- [ ] A Thais só define `OPS_SCHEDULE_ENABLED=true` depois do ponto (c), quando os deploys das três rotas `/api/ops/emissao-pendente`, `/api/ops/reconciliar-subscricoes` e `/api/ops/pix-saida` estiverem `READY` em produção. Antes disso, a variável fica ausente: qualquer rota em 404 faria o job falhar a cada 10 minutos.
+- [ ] A Thais só define `OPS_SCHEDULE_ENABLED=true` depois do ponto (c), quando os deploys das três rotas `/api/ops/reconciliar-subscricoes`, `/api/ops/pix-saida` e `/api/ops/snapshot-nav` estiverem `READY` em produção. Antes disso, a variável fica ausente: qualquer rota em 404 faria o job falhar a cada 10 minutos.
 - [ ] Em `fabriciofranciscus/plinafinance`, `OPS_SCHEDULE_ENABLED` fica ausente ou diferente de `true`; assim o repositório-fonte não duplica chamadas nem gera falhas por segredo ausente.
 - [ ] `OPS_CRON_SECRET`: 64 hex gerados fora do repositório; existência conferida por nome no repositório de produção depois da configuração.
 

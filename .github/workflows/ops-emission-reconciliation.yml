@@ -13,6 +13,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  schedule-status:
+    # Makes the opt-in gate visible: without this the sweep job is silently "skipped".
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    env:
+      OPS_SCHEDULE_ENABLED: ${{ vars.OPS_SCHEDULE_ENABLED }}
+    steps:
+      - name: Report schedule gate
+        run: |
+          if [ "$OPS_SCHEDULE_ENABLED" = "true" ]; then
+            echo "Ops schedule: enabled" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Ops schedule: DISABLED (OPS_SCHEDULE_ENABLED is not exactly 'true')" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=Ops alarms are OFF::OPS_SCHEDULE_ENABLED is not 'true'; no operational alarm is running from this repository"
+          fi
+
   sweep:
     if: vars.OPS_SCHEDULE_ENABLED == 'true'
     runs-on: ubuntu-latest
@@ -26,15 +42,7 @@ jobs:
         with:
           node-version: 24
 
-      - name: Check pending issuance
-        env:
-          OPS_CRON_SECRET: ${{ secrets.OPS_CRON_SECRET }}
-          OPS_ROUTE_LABEL: pending issuance
-          OPS_ROUTE_PATH: /api/ops/emissao-pendente
-        run: node .github/scripts/call-ops-route.mjs
-
       - name: Reconcile orphan subscriptions
-        if: always()
         env:
           OPS_CRON_SECRET: ${{ secrets.OPS_CRON_SECRET }}
           OPS_ROUTE_LABEL: orphan subscription reconciliation
