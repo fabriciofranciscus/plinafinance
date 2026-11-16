@@ -47,6 +47,8 @@ function is404(err: unknown): boolean {
   return (err as { response?: { status?: number } })?.response?.status === 404 || (err as { name?: string })?.name === 'NotFoundError';
 }
 
+const HASH_TX = /^[0-9a-f]{64}$/;
+
 function ativoCanonico(a: Asset): string {
   return `${a.getCode()}:${a.getIssuer()}`;
 }
@@ -96,6 +98,7 @@ async function porClaimableBalance(o: OrdemRecebimento, balanceId: string): Prom
   }
   // CB sumiu: só vale com o claim DA ORDEM conferido pelos efeitos.
   if (!o.claimTxHash) return { status: 'INDETERMINADO', motivo: 'o saldo da ordem não existe mais e não há claim registrado' };
+  if (!HASH_TX.test(o.claimTxHash)) return { status: 'INDETERMINADO', motivo: 'hash do claim malformado' };
   let records: Array<Record<string, unknown>>;
   try {
     ({ records } = (await horizon.effects().forTransaction(o.claimTxHash).limit(50).call()) as unknown as {
@@ -120,6 +123,10 @@ async function porClaimableBalance(o: OrdemRecebimento, balanceId: string): Prom
 /** TESOURO entregue para a ordem. Ver o cabeçalho do módulo para os estados. */
 export async function tesouroRecebidoDaOrdem(o: OrdemRecebimento): Promise<Recebimento> {
   if (o.stellarClaimableBalanceId) return porClaimableBalance(o, o.stellarClaimableBalanceId);
-  if (o.stellarTxHash) return porEntregaDireta(o, o.stellarTxHash);
+  if (o.stellarTxHash) {
+    // Gate da Vera: hash malformado vira estado, sem ir ao Horizon (que responderia 400 e a função lançaria).
+    if (!HASH_TX.test(o.stellarTxHash)) return { status: 'NAO_CONFERE', motivo: 'hash de entrega malformado' };
+    return porEntregaDireta(o, o.stellarTxHash);
+  }
   return { status: 'NAO_CHEGOU' };
 }

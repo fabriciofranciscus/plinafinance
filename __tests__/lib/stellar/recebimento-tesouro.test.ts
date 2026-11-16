@@ -125,6 +125,26 @@ describe('claimable balance', () => {
   });
 });
 
+describe('gate da Vera (def9c75): lacunas de teste', () => {
+  it('claim de OUTRO balance_id → INDETERMINADO (a mutação sem a checagem de balance_id sobrevivia)', async () => {
+    efeitos[CLAIM] = [
+      { type: 'claimable_balance_claimed', account: INV, balance_id: '00000000' + 'ab'.repeat(32), asset: `TESOURO:${TESOURO.getIssuer()}`, amount: '85.4925290' },
+    ];
+    expect((await tesouroRecebidoDaOrdem({ investorPubkey: INV, ativo: TESOURO, stellarClaimableBalanceId: CB, claimTxHash: CLAIM })).status).toBe('INDETERMINADO');
+  });
+
+  it('hash malformado → estado, sem chamar o Horizon', async () => {
+    const opsSpy = vi.spyOn(horizon, 'operations');
+    for (const h of ['xyz', 'A'.repeat(64), '0'.repeat(63), "5b13c3cf' or 1=1"]) {
+      expect(await tesouroRecebidoDaOrdem({ investorPubkey: INV, ativo: TESOURO, stellarTxHash: h })).toEqual({
+        status: 'NAO_CONFERE', motivo: 'hash de entrega malformado',
+      });
+    }
+    expect((await tesouroRecebidoDaOrdem({ investorPubkey: INV, ativo: TESOURO, stellarClaimableBalanceId: CB, claimTxHash: 'nao-hex' })).status).toBe('INDETERMINADO');
+    expect(opsSpy).not.toHaveBeenCalled();
+  });
+});
+
 it('ordem sem CB nem hash de entrega → NAO_CHEGOU', async () => {
   expect(await tesouroRecebidoDaOrdem({ investorPubkey: INV, ativo: TESOURO })).toEqual({ status: 'NAO_CHEGOU' });
 });
