@@ -1,3 +1,5 @@
+import type { FaseOrdemPendente } from '@/lib/services/ordem-pendente';
+
 export type Screen =
   | 'identity'
   | 'banking'
@@ -86,6 +88,17 @@ export interface OnRampData {
   stellarTxHash?: string | null;
   stellarClaimableBalanceId?: string | null;
   claimTxHash?: string | null;
+}
+
+/**
+ * Compra que o investidor não terminou (U2 A-02), como a rota GET /api/investidor/buy/pendente a devolve: a cotação e a ordem
+ * já nos formatos usados pelos hooks, mais a `fase` em que parou (derivada no servidor, `lib/services/ordem-pendente.ts`).
+ */
+export interface OrdemPendente {
+  fase: FaseOrdemPendente;
+  criadoEm: string;
+  quote: QuoteData;
+  onRamp: OnRampData;
 }
 
 export interface BankRegistered {

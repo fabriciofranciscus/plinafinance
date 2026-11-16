@@ -25,6 +25,7 @@ import { quoteComBuild } from './_lib/quote-tokens';
 import { OnRampScreen } from './_components/screens/onramp';
 import { SettlingScreen } from './_components/screens/settling';
 import { ClaimingScreen } from './_components/screens/claiming';
+import { RetomarCompra } from './_components/shared/retomar-compra';
 import { ConfirmScreen } from './_components/screens/confirm';
 import { ReceiptScreen } from './_components/screens/receipt';
 
@@ -99,6 +100,10 @@ export default function InvestirPage() {
               >
                 ← Voltar
               </button>
+            )}
+
+            {flow.pendente && ['identity', 'banking', 'classe', 'quote'].includes(screen) && (
+              <RetomarCompra pendente={flow.pendente} retomando={flow.retomando} onRetomar={flow.retomar} />
             )}
 
             <ScreenFader key={screen}>
