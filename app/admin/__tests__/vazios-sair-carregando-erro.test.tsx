@@ -46,11 +46,13 @@ describe('carregando o painel', () => {
 describe('falha ao carregar o painel', () => {
   const erro = Object.assign(new Error('SEGREDO interno: select * from "Investidor"'), { digest: 'dg-12345' });
 
-  it('título, orientação e código (digest); nunca a mensagem do erro', () => {
+  it('título, orientação sem garantia de resultado e código de referência (digest); nunca a mensagem do erro', () => {
     const retry = vi.fn();
     const { container } = render(<ErroDoPainel error={erro} unstable_retry={retry} />);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Não foi possível carregar o painel.');
-    expect(container.textContent).toContain('Nenhuma ação foi enviada. Tente de novo; se continuar, avise a equipe técnica com o código abaixo.');
+    expect(container.textContent).toContain('Tente carregar o painel novamente. Se você havia enviado uma ação, consulte o resultado antes de repeti-la.');
+    expect(container.textContent).not.toMatch(/Nenhuma ação foi enviada/);
+    expect(container.textContent).toContain('Código de referência');
     expect(container.textContent).toContain('dg-12345');
     expect(container.textContent).not.toMatch(/SEGREDO|select \*/);
     expect(screen.getByRole('alert')).toBeTruthy();
@@ -63,8 +65,9 @@ describe('falha ao carregar o painel', () => {
     expect(retry).toHaveBeenCalledTimes(1);
   });
 
-  it('sem digest: diz "sem código"', () => {
+  it('sem digest: não pede um código que não existe', () => {
     const { container } = render(<ErroDoPainel error={new Error('x')} unstable_retry={() => {}} />);
-    expect(container.textContent).toContain('sem código');
+    expect(container.textContent).not.toMatch(/sem código|Código de referência/);
+    expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeTruthy();
   });
 });

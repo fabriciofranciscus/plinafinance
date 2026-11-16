@@ -4,7 +4,8 @@ import { useEffect } from 'react';
 
 /**
  * Falha ao carregar o painel (GUIA-PARTE-2 §12). Mostra só o `digest` do Next (identificador que a equipe casa com o
- * log do servidor); a mensagem do erro nunca vai para a tela. Nada foi enviado: é leitura.
+ * log do servidor); a mensagem do erro nunca vai para a tela. O texto não garante que nenhuma ação anterior foi
+ * enviada (um erro de renderização não prova isso, parecer da Íris) e "Tentar de novo" só recarrega a leitura.
  */
 export default function ErroDoPainel({
   error,
@@ -23,9 +24,13 @@ export default function ErroDoPainel({
       <div role="alert" className="max-w-2xl border border-light-hairline bg-sheet-white p-6">
         <h1 className="font-title text-2xl font-semibold tracking-tight">Não foi possível carregar o painel.</h1>
         <p className="font-text text-sm text-base/80 mt-3 leading-relaxed">
-          Nenhuma ação foi enviada. Tente de novo; se continuar, avise a equipe técnica com o código abaixo.
+          Tente carregar o painel novamente. Se você havia enviado uma ação, consulte o resultado antes de repeti-la.
         </p>
-        <p className="font-mono text-[11px] text-base/70 mt-3 break-all">{error.digest ?? 'sem código'}</p>
+        {error.digest && (
+          <p className="font-text text-[11px] text-base/70 mt-3">
+            Código de referência: <span className="font-mono break-all">{error.digest}</span>
+          </p>
+        )}
         <button
           type="button"
           onClick={() => unstable_retry()}
