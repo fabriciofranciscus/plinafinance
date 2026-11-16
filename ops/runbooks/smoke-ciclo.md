@@ -5,7 +5,7 @@ link do Stellar Expert de cada passo on-chain. Leva uns 3 minutos.
 
 ## O que precisa
 
-- Node 22+ e `pnpm install` (o `postinstall` gera o Prisma Client).
+- Node 20.9+ (exigência do Next.js 16; testado no Node 24) e `pnpm install` (o `postinstall` gera o Prisma Client).
 - **Docker** (o smoke sobe um Postgres 17 descartável e o remove no fim). Sem Docker: suba um Postgres local **vazio** e passe
   `SMOKE_CICLO_PG_URL=postgresql://usuario:senha@127.0.0.1:PORTA/banco` (só host local é aceito).
 - Internet (friendbot e Horizon da **testnet**).
@@ -28,23 +28,24 @@ pnpm smoke:ciclo
 
 | # | Perna | O que acontece | On-chain (link impresso) |
 |---|---|---|---|
-| 1 | Originar | cedente com KYC aprovado → lead → oferta → cessão → laudo → anuência (declarada pendente, só testnet) → titular atestado → Pix SIMULADO | lead, cessão, laudo, âncora do comprovante |
+| 1 | Originar | cedente com KYC aprovado → lead → oferta → cessão → laudo → anuência (declarada pendente, só testnet) → envio e assinatura da cessão (DocuSign simulado) → titular atestado → Pix SIMULADO | lead, laudo, âncora do PDF da cessão, âncora do comprovante |
 | 2 | Emitir | incorpora a cota; o issuer emite PLINARF à posição da Plina | emissão |
 | 3 | Recuperar | 2ª cessão: a emissão entra na rede e o banco **falha** ao gravar a cota (falha injetada por trigger no banco descartável); a reexecução acha a tx pelo memo e **não emite de novo** | emissão recuperada |
 | 4 | Investir | swap atômico TESOURO → PLINARF pelas rotas reais `swap/build` e `swap/submit` (investidor assina, issuer co-assina) | swap |
-| 5 | Resgatar | investidor devolve metade do PLINARF ao distributor (BRL simulado no MVP testnet) | pagamento e auditoria ancorada |
+| 5 | Resgatar | resgate E2-6, pela cotação persistida: **1 transação com 2 pagamentos**. O investidor queima metade do seu PLINARF no issuer e recebe TESOURO do distributor; o smoke confere que o supply na rede caiu exatamente o que foi queimado | o resgate (queima + TESOURO na mesma tx) |
 | 6 | Realizar | comprador reserva a cota e a realização (Caminho A) entra no razão | lead, reserva, realização |
-| 7 | Reconciliar | supply do PLINARF na rede = tokens das 2 cotas + subscrição; posição do investidor no banco = rede | — |
+| 7 | Reconciliar | supply do PLINARF na rede = tokens das 2 cotas + subscrição − o que o resgate queimou; posição do investidor no banco = rede | — |
 
 **Idempotência por perna:** cada perna é executada de novo e o smoke confere que nada duplica — pagamento (1 âncora, 1
-`TransferenciaPix`), emissão (1 cota, supply igual), swap (mesma tx, `idempotent`), resgate (mesma tx, 1 auditoria) e
+`TransferenciaPix`), emissão (1 cota, supply igual), swap (mesma tx, `idempotent`), resgate (mesma tx, supply igual, 1 cotação consumida, 1 movimento `RESGATE_PAGO`) e
 realização (1 realização, 1 movimento do razão).
 
 ## O que NÃO é real (dito sem rodeio)
 
 - **TESOURO** é um ativo descartável da testnet no lugar do ativo-ponte da Etherfuse (que exige chave e o sandbox do anchor).
   O swap, a validação do envelope e a escrituração são o código real.
-- **Pix** SIMULADO; o BRL do resgate é cálculo, não transferência.
+- **Pix** SIMULADO. O resgate paga TESOURO descartável da testnet; o equivalente em BRL é cálculo, não transferência.
+- **DocuSign** simulado dentro do processo (só as 4 chamadas de rede). O claim do envio, os bytes guardados, o SHA-256, a âncora do PDF e a passagem a ASSINADA são o código real.
 - **Vercel Blob** é trocado por uma memória local só neste processo; o comprovante que vale é o do banco, com o hash ancorado.
 - **Anuência** declarada pendente (só vale fora da mainnet) e **CPF sintético**: nada disso passa em produção.
 
