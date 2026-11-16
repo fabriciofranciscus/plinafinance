@@ -514,8 +514,8 @@ function PainelPix({
         )}
 
         {ilustrativo && (
-          <p className="font-mono text-[11px] text-base/55 mt-4">
-            Exemplo ilustrativo — confirmado quando a mesa executar o Pix.
+          <p className="font-mono text-[11px] text-base/70 mt-4">
+            Exemplo ilustrativo (simulação em rede de testes).
           </p>
         )}
       </div>

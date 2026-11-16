@@ -43,3 +43,12 @@ describe('N7: solicitação encerrada', () => {
     expect(c.descricao).not.toMatch(/responda|último e-mail/i);
   });
 });
+
+describe('painel do Pix sem Pix confirmado (mesmo critério do N1, Norma 16/11)', () => {
+  const semPix: AcompanharData = { ...semProposta, status: 'PIX_EXECUTADO', etapaAtual: 5 };
+  const html = renderToStaticMarkup(<AcompanharView data={semPix} />);
+  it('o exemplo é rotulado como ilustrativo de rede de testes, sem prometer o passo futuro', () => {
+    expect(html).toContain('Exemplo ilustrativo (simulação em rede de testes).');
+    expect(html).not.toMatch(/confirmado quando a mesa executar o Pix/);
+  });
+});
