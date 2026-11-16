@@ -25,6 +25,8 @@ import {
   atualizarStatusCota,
   ClawbackError,
   executarClawback,
+  IncorporacaoBloqueadaError,
+  IncorporacaoEmissaoError,
   incorporarCota,
 } from '@/lib/services/tokenizacao';
 import { registrarValidacaoLegal } from '@/lib/services/originacao';
@@ -34,8 +36,9 @@ export interface ActionResult {
   ok: boolean;
   error?: string;
   txHash?: string;
-  /** Só no clawback (U1-11): código fixo do erro (PEDIDO_EM_ANDAMENTO, REGISTRO_PENDENTE…) e `true` quando o pedido já tinha sido executado. */
+  /** Código fixo do erro: do clawback (PEDIDO_EM_ANDAMENTO, REGISTRO_PENDENTE…) ou de domínio (LAUDO_AUSENTE, EMISSAO_FALHOU…), quando houver. */
   code?: string;
+  /** Só no clawback (U1-11): `true` quando o pedido já tinha sido executado. */
   idempotente?: boolean;
 }
 
@@ -84,6 +87,19 @@ export async function logoutAction() {
 
 // ─── Operação ───────────────────────────────────────────────────────────────
 
+/**
+ * Erro FIXO para a tela (nunca `err.message` cru: Prisma ecoa valores, Stellar/anchor ecoam o que foi enviado, `Error` simples cita
+ * ids e nomes de variável). Só as classes de domínio, que têm mensagem escrita por nós e sem dado de ninguém, devolvem a mensagem
+ * (+ `code`); qualquer outra coisa vira 'erro interno' e a causa vai ao log sem mensagem.
+ */
+function erroFixoDeAcao(err: unknown, tag: string): ActionResult {
+  if (err instanceof IncorporacaoBloqueadaError || err instanceof IncorporacaoEmissaoError) {
+    return { ok: false, error: err.message, code: err.code };
+  }
+  console.error(`[admin/${tag}] erro interno`, causaSegura(err));
+  return { ok: false, error: 'erro interno' };
+}
+
 async function ensureAuth() {
   if (!(await isAdminAuthenticated())) {
     throw new Error('Não autorizado.');
@@ -124,7 +140,7 @@ export async function incorporarCotaAction(
     revalidatePath('/pool');
     return { ok: true, txHash: result.txHash };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'unknown' };
+    return erroFixoDeAcao(err, 'incorporar-cota');
   }
 }
 
@@ -162,17 +178,21 @@ export async function registrarValidacaoLegalAction(
   formData: FormData,
 ): Promise<ActionResult> {
   await ensureAuth();
+  const laudoUrl = String(formData.get('laudoUrl') ?? '').trim();
+  if (!/^https?:\/\//.test(laudoUrl)) {
+    return { ok: false, error: 'laudoUrl obrigatória (URL pública do documento).' };
+  }
   try {
     const result = await registrarValidacaoLegal({
       cotaId: String(formData.get('cotaId') ?? ''),
-      laudoUrl: String(formData.get('laudoUrl') ?? '').trim(),
+      laudoUrl,
       operador: 'admin-panel',
     });
     revalidatePath('/admin');
     revalidatePath('/pool');
     return { ok: true, txHash: result.txHash };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'unknown' };
+    return erroFixoDeAcao(err, 'validacao-legal');
   }
 }
 
@@ -181,6 +201,9 @@ export async function atualizarStatusCotaAction(
   formData: FormData,
 ): Promise<ActionResult> {
   await ensureAuth();
+  if (formData.get('status') === StatusCota.EMISSAO_PENDENTE) {
+    return { ok: false, error: 'Status EMISSAO_PENDENTE só muda pela incorporação/reconciliação.' };
+  }
   try {
     await atualizarStatusCota({
       cotaId: String(formData.get('cotaId') ?? ''),
@@ -191,6 +214,6 @@ export async function atualizarStatusCotaAction(
     revalidatePath('/pool');
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'unknown' };
+    return erroFixoDeAcao(err, 'status-cota');
   }
 }
