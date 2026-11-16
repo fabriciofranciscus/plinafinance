@@ -266,10 +266,15 @@ function PainelOferta({
   return (
     <div className="mt-6 border-t border-light-hairline pt-6">
       {ilustrativo && (
-        <p className="font-mono text-[11px] text-base/55 mb-4">
-          Exemplo ilustrativo — sua proposta aparece aqui quando a mesa
-          concluir a validação (simulação em rede de testes).
-        </p>
+        <>
+          {/* N1 (Norma, 16/11): o estado real vem primeiro e sem promessa de chegada; o exemplo fica rotulado. */}
+          <p role="status" className="font-text text-sm text-base/80 mb-2">
+            Ainda não há proposta para esta solicitação.
+          </p>
+          <p className="font-mono text-[11px] text-base/70 mb-4">
+            Exemplo ilustrativo (simulação em rede de testes).
+          </p>
+        </>
       )}
 
       <div className="border border-primary/30">
