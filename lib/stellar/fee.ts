@@ -14,6 +14,8 @@ import { horizon } from './account';
 import { logStellarError } from './log-error';
 
 const MAX_FEE_STROOPS = 100_000;
+/** Teto de fee por op (stroops): o da oferta do investidor e o do swap/submit (C2 do Argus, 15/11). */
+export const FEE_MAXIMO_POR_OP_STROOPS = MAX_FEE_STROOPS;
 const CACHE_TTL_MS = 5_000;
 
 let cache: { value: string; expiresAt: number } | null = null;

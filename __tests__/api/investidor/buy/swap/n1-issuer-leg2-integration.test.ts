@@ -39,6 +39,7 @@ vi.mock('@/lib/stellar/fee', () => ({
   getDynamicFee: async () => '100',
   getFeeOfertaInvestidor: async () => '100', // harness (fix/swap-fee-surge)
   getTaxaBaseDaRede: async () => '100',
+  FEE_MAXIMO_POR_OP_STROOPS: 100_000,
 }));
 vi.mock('@/lib/stellar/transactions', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/stellar/transactions')>();

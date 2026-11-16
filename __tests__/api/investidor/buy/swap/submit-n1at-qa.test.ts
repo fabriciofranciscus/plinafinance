@@ -101,6 +101,7 @@ vi.mock('@/lib/stellar/signer', () => ({ issuerSigner: () => ({ id: 'issuer' }) 
 vi.mock('@/lib/stellar/fee', () => ({
   getDynamicFee: vi.fn().mockResolvedValue('100'),
   getTaxaBaseDaRede: vi.fn().mockResolvedValue('100'), // harness (fix/swap-fee-surge)
+  FEE_MAXIMO_POR_OP_STROOPS: 100_000,
   getFeeOfertaInvestidor: vi.fn().mockResolvedValue('100'),
 }));
 vi.mock('@/lib/services/emissao', async (importOriginal) => {

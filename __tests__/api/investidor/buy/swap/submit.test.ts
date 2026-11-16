@@ -109,6 +109,7 @@ vi.mock('@/lib/stellar/fee', () => ({
   getDynamicFee: vi.fn().mockResolvedValue('100'),
   // fix/swap-fee-surge: a régua do N1-S1(c) passa a ser a taxa base da rede (last_ledger_base_fee).
   getTaxaBaseDaRede: vi.fn().mockResolvedValue('100'),
+  FEE_MAXIMO_POR_OP_STROOPS: 100_000,
 }));
 vi.mock('@/lib/services/emissao', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/services/emissao')>();
@@ -734,6 +735,23 @@ describe('POST /api/investidor/buy/swap/submit', () => {
       } finally {
         vi.mocked(fee.getDynamicFee).mockResolvedValue('100');
       }
+    });
+
+    it('C2 (Argus): fee acima do teto (100.000 × ops) → 409 fixo, sem reservar nem assinar', async () => {
+      quoteFindUnique.mockResolvedValueOnce(baseQuote());
+      const r = await POST(req({ quoteId: 'q_1', signedXdr: txCom({ fee: '100001' }) })); // 1 op
+      expect(r.status).toBe(409);
+      const j = await r.json();
+      expect(j.code).toBe('FEE_ACIMA_DO_TETO');
+      expect(j.error).not.toMatch(/Error|stack/);
+      expect(quoteUpdateMany).not.toHaveBeenCalled();
+      expect(submitWithPrivySignature).not.toHaveBeenCalled();
+    });
+
+    it('C2: fee exatamente no teto passa', async () => {
+      quoteFindUnique.mockResolvedValueOnce(baseQuote());
+      const r = await POST(req({ quoteId: 'q_1', signedXdr: txCom({ fee: '100000' }) }));
+      expect(r.status).toBe(200);
     });
 
     it('régua acima da oferta (taxa base 250) → 400, sem reservar nem assinar', async () => {
