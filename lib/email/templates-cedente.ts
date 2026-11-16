@@ -27,6 +27,13 @@ const BASE_URL = process.env.APP_BASE_URL ?? 'https://plina.finance';
 const AVISO_TESTES = 'Mensagem de demonstração (projeto em fase de testes, rede de testes): sem efeito jurídico nem financeiro.';
 const emTestes = () => STELLAR_NETWORK !== 'PUBLIC';
 
+/**
+ * Corpo do e-mail "cota incorporada" por rede (Atlas/Norma): na rede de testes o pool é de demonstração; na mainnet o e-mail NÃO
+ * pode dizer "demonstração" (mesma checagem de rede do rodapé). A versão da mainnet é validada pela Norma.
+ */
+const CORPO_CONCLUIDO_TESTNET = 'Sua cota foi incorporada ao pool de demonstração da Plina. Obrigado por vender sua cota com a Plina.';
+const CORPO_CONCLUIDO_MAINNET = 'Sua cota foi incorporada ao pool da Plina. Obrigado por vender sua cota com a Plina.';
+
 function acompanharUrl(leadId: string): string {
   return `${BASE_URL}/vender/acompanhar/${leadId}`;
 }
@@ -53,7 +60,7 @@ const COPY: Record<
   concluido: {
     subject: 'Cota incorporada ao pool — Plina',
     titulo: 'Operação concluída',
-    corpo: 'Sua cota foi incorporada ao pool de demonstração da Plina. Obrigado por vender sua cota com a Plina.',
+    corpo: CORPO_CONCLUIDO_TESTNET, // na mainnet, renderCedenteEmail troca por CORPO_CONCLUIDO_MAINNET
   },
 };
 
@@ -62,6 +69,7 @@ export function renderCedenteEmail(
   data: CedenteEmailData,
 ): { subject: string; text: string; html: string } {
   const c = COPY[kind];
+  const corpo = kind === 'concluido' && !emTestes() ? CORPO_CONCLUIDO_MAINNET : c.corpo;
   const url = acompanharUrl(data.leadId);
   // Nunca e-mail (nem o marcador de 'sem nome') como nome: saudação neutra (pós-cota 15/11).
   const nome = nomeDoCedente(data.nome);
@@ -77,7 +85,7 @@ export function renderCedenteEmail(
   const text = [
     saudacao,
     '',
-    c.corpo,
+    corpo,
     '',
     ...linhas,
     '',
@@ -102,7 +110,7 @@ export function renderCedenteEmail(
     </td></tr>
     <tr><td style="padding:8px 28px 0;">
       <p style="margin:0 0 12px;font-size:14px;color:#132728;">${escapeHtml(saudacao)}</p>
-      <p style="margin:0 0 16px;font-size:14px;color:#132728;line-height:1.5;">${escapeHtml(c.corpo)}</p>
+      <p style="margin:0 0 16px;font-size:14px;color:#132728;line-height:1.5;">${escapeHtml(corpo)}</p>
       ${detalhesHtml}
     </td></tr>
     <tr><td style="padding:20px 28px 28px;">
