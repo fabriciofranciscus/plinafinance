@@ -33,7 +33,6 @@ import { Concentracao } from './concentracao';
 import { ValidacaoForm } from './validacao-form';
 import { VendedorPipeline } from './vendedor-pipeline';
 import { CompradorPipeline } from './comprador-pipeline';
-import { logoutAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 // incorporarCotaAction (usada nesta página) pode segurar uma $transaction de até
@@ -171,14 +170,6 @@ export default async function AdminPage() {
             Painel Plina
           </h1>
         </div>
-        <form action={logoutAction}>
-          <button
-            type="submit"
-            className="font-details text-[10px] tracking-[0.2em] uppercase border border-light-hairline px-4 py-2 hover:bg-base hover:text-lightBg transition-colors"
-          >
-            Sair
-          </button>
-        </form>
       </header>
 
       <nav className="sticky top-14 z-30 -mx-6 px-6 mb-10 bg-lightBg/95 backdrop-blur border-b border-light-hairline">
@@ -416,6 +407,7 @@ export default async function AdminPage() {
                 <tr>
                   <td colSpan={9} className="text-center py-8 text-base/60">
                     Nenhuma cota no pool.
+                    <span className="block mt-1 text-base/70">Cotas entram pela etapa 10 de uma solicitação.</span>
                   </td>
                 </tr>
               )}
@@ -439,9 +431,8 @@ export default async function AdminPage() {
         </h2>
         {investidores.length === 0 ? (
           <p className="font-text text-sm text-base/70">
-            Nenhum investidor onboarded ainda. Quando alguém usar{' '}
-            <code className="font-mono text-xs">/investir</code> e concluir
-            KYC, aparece aqui com opção de clawback.
+            Nenhum investidor ainda.
+            <span className="block mt-1">Quem concluir o cadastro em Investir aparece aqui.</span>
           </p>
         ) : (
           <div className="space-y-4">
@@ -544,7 +535,7 @@ export default async function AdminPage() {
               {eventos.length === 0 && (
                 <tr>
                   <td colSpan={7} className="text-center py-8 text-base/60">
-                    Sem eventos.
+                    Nenhum evento registrado.
                   </td>
                 </tr>
               )}
