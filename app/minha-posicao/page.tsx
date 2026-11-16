@@ -21,6 +21,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { StrKey } from '@stellar/stellar-sdk';
 import { ResgateSection } from './_components/ResgateSection';
 import type { UseResgateArgs } from './_hooks/use-resgate';
+import { emitidoNoLedger, participacaoPct } from './_lib/emitido-ledger';
 
 interface BalanceRow {
   asset_code?: string;
@@ -46,6 +47,8 @@ interface PoolSummary {
   distributorPubkey: string;
   navTotal: number;
   tokensVivos: number;
+  /** Supply do LEDGER (mesma fonte do /pool); o "emitido" e a participação usam este, não tokensVivos. */
+  supply?: { totalEmitido: string } | null;
   navPorToken: number;
   caixaRealizado: number;
   spreadRealizadoAcumulado: number;
@@ -207,8 +210,8 @@ export default function MinhaPosicaoPage() {
   const xlmBal = balances?.find((b) => b.asset_type === 'native');
   const xlmQty = Number(xlmBal?.balance ?? 0);
 
-  const ownershipPct =
-    pool && pool.tokensVivos > 0 ? (plinarfQty / pool.tokensVivos) * 100 : 0;
+  const ownershipPct = participacaoPct(plinarfQty, pool);
+  const emitido = emitidoNoLedger(pool);
   const navUnit = pool?.navPorToken ?? 1;
   const navEquivalent = plinarfQty * navUnit;
 
@@ -447,7 +450,7 @@ export default function MinhaPosicaoPage() {
                 <Metric label="NAV total do pool" value={BRL.format(pool.navTotal)} />
                 <Metric
                   label="PLINA-RF emitido"
-                  value={NUMBER_INT.format(pool.tokensVivos)}
+                  value={emitido !== null ? NUMBER_INT.format(emitido) : '—'}
                 />
                 <Metric
                   label="Cotas ativas"
