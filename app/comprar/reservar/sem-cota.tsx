@@ -6,7 +6,7 @@ export function SemCotaEscolhida() {
     <div className="mx-auto max-w-2xl px-6 py-16">
       <h1 className="font-title text-3xl md:text-4xl font-semibold tracking-tight text-base">Escolha uma cota primeiro</h1>
       <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
-        Você chegou aqui sem escolher uma cota. Veja as cotas disponíveis e selecione uma para continuar.
+        Você chegou aqui sem escolher uma cota. Veja as cotas listadas e selecione uma para continuar.
       </p>
       <Link
         href="/cotas"

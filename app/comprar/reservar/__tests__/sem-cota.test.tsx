@@ -8,7 +8,7 @@ describe('A-26: /comprar/reservar sem cota escolhida', () => {
   const html = renderToStaticMarkup(<SemCotaEscolhida />);
   it('tem h1, texto em PT e não mostra "cotaId"', () => {
     expect(html).toMatch(/<h1[^>]*>Escolha uma cota primeiro<\/h1>/);
-    expect(html).toContain('Você chegou aqui sem escolher uma cota. Veja as cotas disponíveis e selecione uma para continuar.');
+    expect(html).toContain('Você chegou aqui sem escolher uma cota. Veja as cotas listadas e selecione uma para continuar.');
     expect(html).not.toMatch(/cotaId/i);
   });
   it('link para /cotas', () => {
