@@ -27,17 +27,17 @@ export function CessaoScreen({
         04 // Cessão digital · assinatura
       </p>
       <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">
-        Contrato de cessão de direitos creditórios.
+        Modelo de contrato de cessão (demonstração).
       </h1>
       <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
-        Assinatura com e-CPF · hash do documento registrado on-chain. Plina
+        Simulação na rede de testes: nenhum contrato real é assinado. Plina
         Finance → {pessoa.nome ?? 'comprador'}.
       </p>
 
       <div className="mt-8 border border-light-hairline bg-lightBg/40 p-6">
         <p className={labelCls}>Documento</p>
         <p className="mt-2 font-title text-lg font-semibold text-base">
-          Contrato de Cessão de Direitos Creditórios
+          Modelo de contrato de cessão (demonstração)
         </p>
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field k="Nome" v={pessoa.nome ?? '—'} />
@@ -62,7 +62,7 @@ export function CessaoScreen({
         disabled={signing}
         className="mt-8 bg-base text-white px-8 py-4 font-details text-[11px] uppercase tracking-[0.2em] font-bold hover:bg-primary-deep transition-colors disabled:opacity-60 disabled:cursor-wait"
       >
-        {signing ? 'Assinando…' : 'Assinar com e-CPF →'}
+        {signing ? 'Simulando…' : 'Simular assinatura →'}
       </button>
     </div>
   );

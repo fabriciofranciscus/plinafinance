@@ -321,7 +321,7 @@ function EntityOnboarding({
       <p className="font-text text-sm text-base/70 mt-1">
         {isBR
           ? 'Cadastro da entidade brasileira (simulação em rede de testes). Esta tela não classifica o investidor.'
-          : 'KYC via anchor regulada na sua jurisdição (MoneyGram · Settle · anchors europeias SEP-compliant).'}
+          : 'Cadastro para investidores fora do Brasil: em desenvolvimento, ainda não disponível.'}
       </p>
 
       <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -387,7 +387,7 @@ function EntityOnboarding({
       <div className="mt-4 flex flex-wrap gap-2">
         {(isBR
           ? ['Cadastro BR', 'Simulação em testnet']
-          : ['SEP-24 · onboarding hosted', 'SEP-12 · KYC reutilizável']
+          : ['Em desenvolvimento', 'Sem oferta']
         ).map((c) => (
           <span
             key={c}
