@@ -39,3 +39,35 @@ export function faseDaOrdem(o: OrdemParaFase): FaseOrdemPendente | null {
   if (o.status === 'pending') return 'aguardando_pagamento';
   return null;
 }
+
+/**
+ * U2 A-09: a ordem que o anchor não confirma. Depois do Pix pago a ordem fica `processing` até o anchor entregar o TESOURO
+ * (claimable balance). No sandbox, 2 de 6 ordens ficaram nesse estado para sempre e a tela esperava sem limite nem saída.
+ * Esta regra única diz quando a espera passou do normal (medido no sandbox: 30–100 s): `processing`, SEM claimable balance,
+ * há mais de 180 s. `pending` (a pessoa ainda não pagou) nunca é atraso; com claimable balance a tela já segue para o claim.
+ * O `atualizadoEm` marca desde quando está em `processing` porque a rota de status só grava quando o status MUDA. Só informa:
+ * não cancela nem altera a ordem (cancelar é do anchor e da operação).
+ */
+export const LIMITE_CONFIRMACAO_ONRAMP_S = 180;
+
+export interface OrdemParaAtraso {
+  status: string;
+  stellarClaimableBalanceId: string | null;
+  atualizadoEm: Date;
+}
+
+export function onrampAtrasado(o: OrdemParaAtraso, agora: Date = new Date()): boolean {
+  if (o.status !== 'processing' || o.stellarClaimableBalanceId) return false;
+  return agora.getTime() - o.atualizadoEm.getTime() > LIMITE_CONFIRMACAO_ONRAMP_S * 1000;
+}
+
+/** Os campos aditivos que as rotas devolvem. `desde` só existe enquanto a ordem espera a confirmação do anchor. */
+export function infoConfirmacao(o: OrdemParaAtraso, agora: Date = new Date()) {
+  const esperando = o.status === 'processing' && !o.stellarClaimableBalanceId && o.atualizadoEm instanceof Date;
+  return {
+    desde: esperando ? o.atualizadoEm.toISOString() : null,
+    atrasada: o.atualizadoEm instanceof Date ? onrampAtrasado(o, agora) : false,
+    limiteSegundos: LIMITE_CONFIRMACAO_ONRAMP_S,
+  };
+}
+

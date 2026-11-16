@@ -105,6 +105,19 @@ describe('GET /api/investidor/buy/pendente', () => {
     expect(data.pendente.quote.navPorTokenNaCotacao).toBeNull();
   });
 
+  it('A-09: fase liquidando atrasada (processing sem claimable há 10 min) → pendente.atrasada true, com desde; fora disso false', async () => {
+    const velha = new Date(Date.now() - 600_000);
+    m.find.mockResolvedValue(ordem({ status: 'processing', stellarClaimableBalanceId: null, claimTxHash: null, atualizadoEm: velha }));
+    const { data } = await (await GET(req())).json();
+    expect(data.pendente.fase).toBe('liquidando');
+    expect(data.pendente.atrasada).toBe(true);
+    expect(data.pendente.desde).toBe(velha.toISOString());
+    m.find.mockResolvedValue(ordem({ status: 'processing', stellarClaimableBalanceId: null, claimTxHash: null, atualizadoEm: new Date() }));
+    expect((await (await GET(req())).json()).data.pendente.atrasada).toBe(false);
+    m.find.mockResolvedValue(ordem({ atualizadoEm: new Date(Date.now() - 600_000) })); // completed com claim: nunca
+    expect((await (await GET(req())).json()).data.pendente.atrasada).toBe(false);
+  });
+
   it('sem sessão → 401 e o banco não é consultado', async () => {
     const { AuthError } = await import('@/lib/wallet/auth-guard');
     m.auth.mockRejectedValue(new AuthError('token Privy ausente', 401));

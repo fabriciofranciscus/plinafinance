@@ -88,6 +88,10 @@ export interface OnRampData {
   stellarTxHash?: string | null;
   stellarClaimableBalanceId?: string | null;
   claimTxHash?: string | null;
+  /** U2 A-09 (aditivos, vêm do servidor): desde quando a ordem espera a confirmação, se já passou do limite e qual é o limite. */
+  desde?: string | null;
+  atrasada?: boolean;
+  limiteSegundos?: number;
 }
 
 /**

@@ -77,24 +77,19 @@ export function useOnRamp({
     }
   }, [onRamp, getAccessToken, onError, clearError, onSandboxPaid]);
 
-  // Polling do status da onramp no settling screen — para quando completed.
-  // As dependências são PRIMITIVAS (id da ordem e "ainda esperando"), não o objeto `onRamp`: cada resposta cria um objeto novo
-  // (`{ ...prev, ...data }`), e com ele como dependência o efeito reiniciava e consultava de novo NA HORA, num laço sem pausa
-  // (martelava a rota de status, que consulta o anchor). `getAccessToken` fica em ref pelo mesmo motivo: em alguns provedores
-  // a identidade dele muda a cada render.
+  // Consulta o status da ordem e junta o resultado na ordem do estado. Usada pelo polling do settling screen e pelo
+  // "Atualizar agora" (U2 A-09). Falha de rede é ignorada: o próximo tick (ou clique) retenta.
+  const [atualizando, setAtualizando] = useState(false);
+  // `getAccessToken` em ref: em alguns provedores a identidade dele muda a cada render e, como dependência, reiniciaria o polling.
   const tokenRef = useRef(getAccessToken);
   tokenRef.current = getAccessToken;
-  const orderIdEmEspera = onRamp && onRamp.status !== 'completed' ? onRamp.orderId : null;
-  useEffect(() => {
-    if (screen !== 'settling' || !orderIdEmEspera) return;
-    let cancelled = false;
-    const tick = async () => {
+  const consultar = useCallback(
+    async (orderId: string, cancelado: () => boolean = () => false) => {
       try {
         const token = await tokenRef.current();
-        const res = await fetch(
-          `/api/investidor/buy/onramp/status?orderId=${encodeURIComponent(orderIdEmEspera)}`,
-          { headers: token ? { Authorization: `Bearer ${token}` } : {} },
-        );
+        const res = await fetch(`/api/investidor/buy/onramp/status?orderId=${encodeURIComponent(orderId)}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         // Desembrulha o envelope `{ data, error }` (rota migrada pro withApi).
         const data = await unwrapEnvelope<{
           status: string;
@@ -102,20 +97,44 @@ export function useOnRamp({
           stellarClaimableBalanceId?: string | null;
           claimTxHash?: string | null;
           mock: boolean;
+          desde?: string | null;
+          atrasada?: boolean;
+          limiteSegundos?: number;
         }>(res);
-        if (cancelled) return;
+        if (cancelado()) return;
         setOnRamp((prev) => (prev ? { ...prev, ...data } : prev));
       } catch {
         // ignora — próximo tick retenta
       }
-    };
-    void tick();
-    const id = setInterval(tick, 3_000);
+    },
+    [],
+  );
+
+  // Polling do status da onramp no settling screen — para quando completed. As dependências são PRIMITIVAS (id da ordem e "ainda
+  // esperando"), não o objeto `onRamp`: cada resposta cria um objeto novo, e com ele como dependência o efeito reiniciava e
+  // consultava de novo na hora, num laço sem pausa (martelava a rota de status, que consulta o anchor). U2 A-09.
+  const orderIdEmEspera = onRamp && onRamp.status !== 'completed' ? onRamp.orderId : null;
+  useEffect(() => {
+    if (screen !== 'settling' || !orderIdEmEspera) return;
+    let cancelled = false;
+    void consultar(orderIdEmEspera, () => cancelled);
+    const id = setInterval(() => void consultar(orderIdEmEspera, () => cancelled), 3_000);
     return () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [screen, orderIdEmEspera]);
+  }, [screen, orderIdEmEspera, consultar]);
+
+  // "Atualizar agora" (U2 A-09): consulta já, sem esperar o próximo tick.
+  const atualizarAgora = useCallback(async () => {
+    if (!onRamp) return;
+    setAtualizando(true);
+    try {
+      await consultar(onRamp.orderId);
+    } finally {
+      setAtualizando(false);
+    }
+  }, [onRamp, consultar]);
 
   const applyClaimTxHash = useCallback((claimTxHash: string) => {
     setOnRamp((prev) => (prev ? { ...prev, claimTxHash } : prev));
@@ -134,6 +153,8 @@ export function useOnRamp({
     onRamp,
     onRampLoading,
     paying,
+    atualizando,
+    atualizarAgora,
     goToOnramp,
     sandboxPay,
     applyClaimTxHash,

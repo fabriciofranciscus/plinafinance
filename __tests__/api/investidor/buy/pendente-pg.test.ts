@@ -29,7 +29,7 @@ let n = 0;
 const investidor = (x: 'A' | 'B') =>
   db.investidor.create({ data: { id: `inv-${x}`, nome: `Investidor ${x}`, email: `${x}@exemplo.test`, publicKey: `G${x}`.padEnd(56, 'A') } });
 /** Cria Quote + OnRampOrder; `quando` ordena por criadoEm. */
-async function compra(inv: 'A' | 'B', o: { status?: string; consumido?: boolean; submit?: string; cb?: string; claim?: string; quando: number }) {
+async function compra(inv: 'A' | 'B', o: { status?: string; consumido?: boolean; submit?: string; cb?: string; claim?: string; quando: number; atualizado?: Date }) {
   n += 1;
   await db.quote.create({
     data: {
@@ -42,6 +42,7 @@ async function compra(inv: 'A' | 'B', o: { status?: string; consumido?: boolean;
     data: {
       id: `or-${inv}-${n}`, quoteId: `q-${inv}-${n}`, investidorId: `inv-${inv}`, status: o.status ?? 'pending',
       stellarClaimableBalanceId: o.cb ?? null, claimTxHash: o.claim ?? null, criadoEm: new Date(Date.UTC(2026, 10, 16, 10, 0, o.quando)),
+      ...(o.atualizado ? { atualizadoEm: o.atualizado } : {}),
     },
   });
 }
@@ -49,7 +50,7 @@ const pendente = async (quem: 'A' | 'B') => {
   auth.quem = quem;
   const r = await GET(new Request('http://x/api/investidor/buy/pendente', { headers: { authorization: 'Bearer t' } }));
   expect(r.status).toBe(200);
-  return (await r.json()).data.pendente as null | { fase: string; onRamp: { orderId: string }; quote: { quoteId: string } };
+  return (await r.json()).data.pendente as null | { fase: string; atrasada: boolean; desde: string | null; limiteSegundos: number; onRamp: { orderId: string }; quote: { quoteId: string } };
 };
 
 describe.skipIf(!PG)('/api/investidor/buy/pendente (Postgres real)', () => {
@@ -113,4 +114,24 @@ describe.skipIf(!PG)('/api/investidor/buy/pendente (Postgres real)', () => {
     await compra('A', { ...o, quando: 1 });
     expect((await pendente('A'))?.fase).toBe(fase);
   });
+
+  it('A-09 (Postgres real): processing sem claimable há 10 min → atrasada, com desde = atualizadoEm; há 1 min → não; pending antiga → nunca', async () => {
+    const velho = new Date(Date.now() - 600_000);
+    await compra('A', { status: 'processing', quando: 1, atualizado: velho });
+    const atrasada = await pendente('A');
+    expect(atrasada).toMatchObject({ fase: 'liquidando', atrasada: true, limiteSegundos: 180, desde: velho.toISOString() });
+
+    await db.onRampOrder.updateMany({ where: { investidorId: 'inv-A' }, data: { atualizadoEm: new Date(Date.now() - 60_000) } });
+    expect((await pendente('A'))?.atrasada).toBe(false);
+
+    await db.onRampOrder.updateMany({ where: { investidorId: 'inv-A' }, data: { status: 'pending', atualizadoEm: new Date(Date.now() - 6 * 3600_000) } });
+    const p = await pendente('A');
+    expect(p).toMatchObject({ fase: 'aguardando_pagamento', atrasada: false, desde: null });
+  });
+
+  it('A-09: o claimable balance emitido tira a ordem do atraso (a tela segue para o claim)', async () => {
+    await compra('A', { status: 'processing', cb: 'cb', quando: 1, atualizado: new Date(Date.now() - 6 * 3600_000) });
+    expect(await pendente('A')).toMatchObject({ fase: 'resgatar_tesouro', atrasada: false, desde: null });
+  });
 });
+

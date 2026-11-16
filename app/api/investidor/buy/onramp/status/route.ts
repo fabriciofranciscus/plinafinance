@@ -5,7 +5,8 @@
  * Etherfuse e atualiza o DB (status + stellarTxHash quando completed).
  * Cliente faz polling enquanto status != completed.
  *
- * Returns: { orderId, status, stellarTxHash, mock, paymentInstructions }
+ * Returns: { orderId, status, stellarTxHash, mock, paymentInstructions, desde, atrasada, limiteSegundos } (os 3 últimos: U2 A-09,
+ * aditivos; `atrasada` = processing sem claimable balance há mais de 180 s, ver lib/services/ordem-pendente.ts)
  */
 
 import { Prisma } from '@prisma/client';
@@ -16,6 +17,7 @@ import { withApi } from '@/lib/api/with-api';
 import { ok } from '@/lib/api/response';
 import { ApiError } from '@/lib/api/errors';
 import { onrampStatusLimiter } from '@/lib/rate-limit/config';
+import { infoConfirmacao } from '@/lib/services/ordem-pendente';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,6 +89,7 @@ export const GET = withApi(async (req, { requestId }) => {
         claimTxHash: order.claimTxHash,
         mock,
         paymentInstructions: instructions,
+        ...infoConfirmacao(order),
       },
       { requestId },
     );
@@ -110,6 +113,9 @@ export const GET = withApi(async (req, { requestId }) => {
         claimTxHash: order.claimTxHash,
         mock: false,
         paymentInstructions: instructions,
+        // Mesmo formato da resposta normal: o aviso de atraso (U2 A-09) vem do banco, não da Etherfuse, e é justamente
+        // quando o investidor mais espera (muitas consultas) que ele não pode sumir.
+        ...infoConfirmacao(order),
       },
       { requestId },
     );
@@ -145,6 +151,7 @@ export const GET = withApi(async (req, { requestId }) => {
         mock,
         paymentInstructions: instructions,
         indexing: true,
+        ...infoConfirmacao(order),
       },
       { requestId },
     );
@@ -197,6 +204,12 @@ export const GET = withApi(async (req, { requestId }) => {
       claimTxHash: order.claimTxHash,
       mock: false,
       paymentInstructions: instructions,
+      // Se o status mudou agora, o `atualizadoEm` lido é o do status ANTERIOR: a espera começa neste instante.
+      ...infoConfirmacao({
+        status: newStatus,
+        stellarClaimableBalanceId: newCbId,
+        atualizadoEm: changed ? new Date() : order.atualizadoEm,
+      }),
     },
     { requestId },
   );

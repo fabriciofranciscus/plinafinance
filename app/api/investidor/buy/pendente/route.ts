@@ -12,6 +12,7 @@ import { ApiError } from '@/lib/api/errors';
 import { requireInvestidor } from '@/lib/wallet/auth-guard';
 import { clientIp, publicLimiter } from '@/lib/rate-limit/config';
 import { buscarOrdemPendente } from '@/lib/services/ordem-pendente-db';
+import { infoConfirmacao } from '@/lib/services/ordem-pendente';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,8 @@ export const GET = withApi(async (req, { requestId }) => {
       pendente: {
         fase,
         criadoEm: ordem.criadoEm.toISOString(),
+        // U2 A-09: o cartão da fase `liquidando` diz a mesma coisa que a tela de liquidação (desde quando espera, se já passou do limite).
+        ...infoConfirmacao(ordem),
         quote: {
           quoteId: q.id,
           fromAmount: q.fromAmount.toString(),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { faseDaOrdem, STATUS_ORDEM_ENCERRADA, type OrdemParaFase } from '@/lib/services/ordem-pendente';
+import { faseDaOrdem, LIMITE_CONFIRMACAO_ONRAMP_S, onrampAtrasado, STATUS_ORDEM_ENCERRADA, type OrdemParaFase } from '@/lib/services/ordem-pendente';
 
 const base = (o: Partial<Omit<OrdemParaFase, 'quote'>> & { quote?: Partial<OrdemParaFase['quote']> } = {}): OrdemParaFase => ({
   status: 'pending',
@@ -46,3 +46,37 @@ describe('faseDaOrdem (U2 A-02): em que passo a compra parou', () => {
     expect(f).not.toBe('concluir_swap');
   });
 });
+
+describe('onrampAtrasado (U2 A-09): a ordem paga que o anchor não confirma', () => {
+  const AGORA = new Date('2026-11-16T12:00:00Z');
+  const ha = (seg: number) => new Date(AGORA.getTime() - seg * 1000);
+  const o = (over: Partial<{ status: string; cb: string | null; seg: number }> = {}) => ({
+    status: over.status ?? 'processing',
+    stellarClaimableBalanceId: over.cb === undefined ? null : over.cb,
+    atualizadoEm: ha(over.seg ?? 0),
+  });
+
+  it('o limite é de 180 s', () => {
+    expect(LIMITE_CONFIRMACAO_ONRAMP_S).toBe(180);
+  });
+  it('fronteira: 180 s ainda NÃO é atraso; 181 s é', () => {
+    expect(onrampAtrasado(o({ seg: 180 }), AGORA)).toBe(false);
+    expect(onrampAtrasado(o({ seg: 181 }), AGORA)).toBe(true);
+  });
+  it('processing sem claimable balance há horas → atrasada', () => {
+    expect(onrampAtrasado(o({ seg: 6 * 3600 }), AGORA)).toBe(true);
+  });
+  it('pending (a pessoa ainda não pagou) NUNCA é atraso, por mais antiga que seja', () => {
+    expect(onrampAtrasado(o({ status: 'pending', seg: 6 * 3600 }), AGORA)).toBe(false);
+  });
+  it('processing COM claimable balance (o anchor já entregou o TESOURO) não é atraso', () => {
+    expect(onrampAtrasado(o({ cb: 'cb1', seg: 6 * 3600 }), AGORA)).toBe(false);
+  });
+  it.each(['completed', 'failed', 'expired', 'cancelled', 'refunded', 'status-novo'])('status %s nunca é atraso', (status) => {
+    expect(onrampAtrasado(o({ status, seg: 6 * 3600 }), AGORA)).toBe(false);
+  });
+  it('relógio à frente (atualizadoEm no futuro) não vira atraso', () => {
+    expect(onrampAtrasado({ status: 'processing', stellarClaimableBalanceId: null, atualizadoEm: new Date(AGORA.getTime() + 60_000) }, AGORA)).toBe(false);
+  });
+});
+

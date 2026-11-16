@@ -178,6 +178,8 @@ export default function InvestirPage() {
                   quote={quote}
                   swapLoading={flow.swap.swapLoading}
                   onContinue={flow.swap.goToConfirm}
+                  onAtualizar={flow.onRamp.atualizarAgora}
+                  atualizando={flow.onRamp.atualizando}
                 />
               )}
               {screen === 'claiming' && onboard && onRamp && (
