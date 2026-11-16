@@ -54,7 +54,7 @@ const TIPO_BEM_LABEL: Record<TipoBem, string> = {
 };
 
 const inputClass =
-  'mt-2 w-full bg-white border border-light-hairline px-4 py-2.5 font-text text-sm focus:outline-none focus:ring-2 focus:ring-primary';
+  'mt-2 w-full bg-white border border-light-hairline px-4 py-2.5 font-text text-sm focus:outline-none focus:ring-2 focus:ring-primary max-md:min-h-[44px]';
 
 // Espelha ETHERFUSE_ENV do servidor (lib/env/etherfuse.ts) — decide se a UI
 // mostra os campos opcionais de KYC (só produção, já que em sandbox são

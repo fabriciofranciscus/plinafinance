@@ -14,7 +14,7 @@ const STELLAR_EXPERT_TESTNET = 'https://stellar.expert/explorer/testnet';
 
 export function AppFooter({ issuerPubkey }: AppFooterProps) {
   return (
-    <footer className="bg-base text-lightBg mt-16">
+    <footer className="bg-base text-lightBg mt-16 max-md:[&_a]:inline-flex max-md:[&_a]:min-h-[44px] max-md:[&_a]:items-center">
       <div className="mx-auto max-w-6xl px-6 py-10 grid grid-cols-1 md:grid-cols-3 gap-8 text-sm font-text">
         <div>
           {/* `text-base` é a COR de fundo do rodapé (--color-base) e também tamanho: a marca ficava invisível. */}

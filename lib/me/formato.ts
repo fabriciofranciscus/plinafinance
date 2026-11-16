@@ -17,6 +17,10 @@ export const fmtTokens = (s: string | null | undefined) => (num(s) === null ? '�
 export const fmtBrl = (s: string | null | undefined) => (num(s) === null ? '—' : BRL2.format(num(s)!));
 /** Reais sem centavos (valor da carta). */
 export const fmtBrlInteiro = (s: string | null | undefined) => (num(s) === null ? '—' : BRL0.format(num(s)!));
+/** Percentual em pt-BR: 2 casas, vírgula e símbolo colado ("0,03%"). Só exibição. */
+const PCT2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export const fmtPct = (n: number) => (Number.isFinite(n) ? `${PCT2.format(n)}%` : '—');
+
 /** NAV por token: 4 casas. */
 export const fmtNavToken = (s: string | null | undefined) => (num(s) === null ? '—' : BRL4.format(num(s)!));
 

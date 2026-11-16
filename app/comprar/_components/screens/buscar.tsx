@@ -48,7 +48,7 @@ export function BuscarScreen({
           <select
             value={tipo}
             onChange={(e) => setTipo(e.target.value)}
-            className="mt-2 w-full bg-white border border-light-hairline px-3 py-2.5 font-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            className="mt-2 w-full bg-white border border-light-hairline px-3 py-2.5 font-text text-sm focus:outline-none focus:ring-2 focus:ring-primary max-md:min-h-[44px]"
           >
             <option value="TODOS">Todos</option>
             {Object.keys(TIPO_LABEL).map((t) => (
@@ -63,7 +63,7 @@ export function BuscarScreen({
           <select
             value={descontoMin}
             onChange={(e) => setDescontoMin(Number(e.target.value))}
-            className="mt-2 w-full bg-white border border-light-hairline px-3 py-2.5 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            className="mt-2 w-full bg-white border border-light-hairline px-3 py-2.5 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary max-md:min-h-[44px]"
           >
             <option value={0}>Qualquer</option>
             <option value={0.1}>10%+</option>
@@ -136,7 +136,7 @@ function CotaCard({ cota, onSelect }: { cota: CotaResumo; onSelect: () => void }
 
       <button
         onClick={onSelect}
-        className="mt-5 w-full bg-base text-white py-3 font-details text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-primary-deep transition-colors"
+        className="mt-5 w-full bg-base text-white py-3 font-details text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-primary-deep transition-colors max-md:min-h-[44px]"
       >
         Selecionar cota →
       </button>
