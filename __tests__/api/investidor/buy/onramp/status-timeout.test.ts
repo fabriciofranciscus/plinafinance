@@ -17,7 +17,7 @@ vi.mock('@/lib/db', () => ({
   },
 }));
 vi.mock('@/lib/anchors/etherfuse', () => ({ EtherfuseClient: class { getOnRampTransaction = getOnRampTransaction; } }));
-vi.mock('@/lib/services/onramp-status-reserva', () => ({ reservarConsultaDeStatus: reservar }));
+vi.mock('@/lib/services/onramp-status-reserva', async (orig) => ({ ...(await orig<typeof import('@/lib/services/onramp-status-reserva')>()), reservarConsultaDeStatus: reservar }));
 vi.mock('@/lib/rate-limit/config', () => ({ onrampStatusLimiter: { consume, reset: vi.fn() } }));
 process.env.ETHERFUSE_API_KEY = 'test';
 
