@@ -16,6 +16,14 @@ describe('quantidade do resgate (até 7 casas)', () => {
     for (const v of ['1.234,5', '1,234.5', '1.234.567,8901234']) expect(quantidadeValida(v, 1e9), v).toBe(true);
   });
 
+  it('dois separadores diferentes com milhar mal formado NÃO são "consertados": voltam como vieram e são recusados', () => {
+    // Sem a checagem de grupos de 3 no caso dos dois separadores, "12.34,5" leria 1234.5 (10 a 100 vezes maior).
+    for (const v of ['12.34,5', '1,23.4', '123.4567,8']) {
+      expect(normalizarQuantidade(v)).toBe(v);
+      expect(quantidadeValida(v, 1e12)).toBe(false);
+    }
+  });
+
   it('o que não tem milhar continua como era: um só ponto é decimal ("1.234" = 1,234), uma só vírgula vira ponto', () => {
     expect(normalizarQuantidade('1.234')).toBe('1.234');
     expect(normalizarQuantidade('139.6')).toBe('139.6');
