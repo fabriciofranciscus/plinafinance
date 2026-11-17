@@ -11,7 +11,7 @@ import { DiligenciaScreen } from '../_components/screens/diligencia';
 import { CessaoScreen } from '../_components/screens/cessao';
 import { ConfirmacaoScreen } from '../_components/screens/confirmacao';
 import { useFocoNoTitulo } from '../_hooks/use-foco-titulo';
-import { explorerTx } from '../_lib/glossary';
+import { explorerTx, subtelaDaFase } from '../_lib/glossary';
 import type { CessaoData, CotaResumo, DiligenciaData, ReservaData } from '../_types';
 
 // AP-5 /comprar, PR 3 (Íris, comprar-composicao/SPEC.md C5, C8, C9, C10): foco no h1, contraste e aria-current, links de
@@ -180,5 +180,19 @@ describe('foco no h1 a cada troca de tela (C9)', () => {
   it('a página usa o hook com a tela e o estado da confirmação, não com dados recarregados', () => {
     const page = src('page.tsx');
     expect(page).toMatch(/useFocoNoTitulo\(`\$\{screen\}:\$\{flow\.cessao\.confirmacao\?\.status \?\? ''\}`/);
+  });
+});
+
+describe('cabeçalho do celular: subtela só em fase com mais de uma tela (C11)', () => {
+  it('fases de uma tela não mostram subtela', () => {
+    for (const s of ['buscar', 'diligencia', 'proposta', 'confirmacao'] as const) expect(subtelaDaFase(s)).toBeNull();
+  });
+  it('"Cessão digital" mostra o rótulo existente da subtela', () => {
+    expect(subtelaDaFase('kyc')).toBe('KYC');
+    expect(subtelaDaFase('cessao')).toBe('Assinatura');
+  });
+  it('a página usa essa regra no cabeçalho (sem repetir a condição)', () => {
+    expect(src('page.tsx')).toContain('subtelaDaFase(screen)');
+    expect(src('page.tsx')).not.toMatch(/phase\.screens\.length > 1/);
   });
 });

@@ -12,7 +12,7 @@
 import { useRef } from 'react';
 import { useAppLogout as useLogout } from '@/lib/hooks/privy';
 import { useRequireAuth } from '@/lib/hooks/use-require-auth';
-import { PHASES, phaseForScreen, screenLabel } from './_lib/glossary';
+import { PHASES, phaseForScreen, subtelaDaFase } from './_lib/glossary';
 import { useComprarFlow } from './_hooks/use-comprar-flow';
 import { useFocoNoTitulo } from './_hooks/use-foco-titulo';
 import { Rail } from './_components/shell/rail';
@@ -63,7 +63,7 @@ export default function ComprarPage() {
             </span>
             <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base">
               {phase?.label}
-              {phase && phase.screens.length > 1 && <> · {screenLabel(screen)}</>}
+              {subtelaDaFase(screen) && <> · {subtelaDaFase(screen)}</>}
             </span>
           </div>
           <button
