@@ -22,6 +22,7 @@ import { StrKey } from '@stellar/stellar-sdk';
 import { ResgateSection } from './_components/ResgateSection';
 import type { UseResgateArgs } from './_hooks/use-resgate';
 import { emitidoNoLedger, participacaoPct } from './_lib/emitido-ledger';
+import { fmtPct } from '@/lib/me/formato';
 
 interface BalanceRow {
   asset_code?: string;
@@ -192,7 +193,7 @@ export default function MinhaPosicaoPage() {
           </p>
           <button
             onClick={() => login()}
-            className="mt-8 bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors"
+            className="mt-8 bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors max-md:min-h-[44px]"
           >
             Entrar com e-mail
           </button>
@@ -246,7 +247,7 @@ export default function MinhaPosicaoPage() {
             <button
               onClick={refresh}
               disabled={loading}
-              className="border border-light-hairline px-3 py-2 hover:bg-base hover:text-lightBg transition-colors disabled:opacity-50"
+              className="border border-light-hairline px-3 py-2 hover:bg-base hover:text-lightBg transition-colors disabled:opacity-50 max-md:min-h-[44px]"
             >
               {loading ? 'Atualizando…' : 'Atualizar'}
             </button>
@@ -299,7 +300,7 @@ export default function MinhaPosicaoPage() {
                       Posição no pool
                     </p>
                     <p className="font-mono text-xl mt-1">
-                      {ownershipPct.toFixed(2)}%
+                      {fmtPct(ownershipPct)}
                     </p>
                   </div>
                 </div>
@@ -356,7 +357,7 @@ export default function MinhaPosicaoPage() {
                       href={explorerAccount(stellarAddress)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-mono text-xs break-all underline mt-1 inline-block hover:text-primary-deep"
+                      className="font-mono text-xs break-all underline mt-1 inline-block hover:text-primary-deep max-md:inline-flex max-md:min-h-[44px] max-md:items-center"
                     >
                       {stellarAddress}
                     </a>
@@ -383,7 +384,7 @@ export default function MinhaPosicaoPage() {
                 </p>
                 <a
                   href="/investir"
-                  className="mt-4 inline-block bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-5 py-2.5 hover:bg-primary-deep transition-colors"
+                  className="mt-4 inline-block bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-5 py-2.5 hover:bg-primary-deep transition-colors max-md:inline-flex max-md:min-h-[44px] max-md:items-center"
                 >
                   Acessar oferta →
                 </a>
@@ -440,7 +441,7 @@ export default function MinhaPosicaoPage() {
                 </p>
                 <a
                   href="/pool"
-                  className="font-details text-[10px] tracking-[0.2em] uppercase underline text-base/70 hover:text-primary-deep"
+                  className="font-details text-[10px] tracking-[0.2em] uppercase underline text-base/70 hover:text-primary-deep max-md:inline-flex max-md:min-h-[44px] max-md:items-center"
                 >
                   Ver pool completo →
                 </a>
@@ -672,7 +673,7 @@ function EventRow({ event }: { event: EventRow }) {
           href={explorerTx(event.stellarTxHash)}
           target="_blank"
           rel="noopener noreferrer"
-          className="font-mono text-[10px] text-base/60 hover:text-primary-deep md:text-right md:self-start break-all md:whitespace-nowrap"
+          className="font-mono text-[10px] text-base/60 hover:text-primary-deep md:text-right md:self-start break-all md:whitespace-nowrap max-md:inline-flex max-md:min-h-[44px] max-md:items-center"
         >
           {event.stellarTxHash.slice(0, 12)}… ↗
         </a>

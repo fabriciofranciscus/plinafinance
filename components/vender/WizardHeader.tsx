@@ -35,7 +35,7 @@ export default function WizardHeader({ active }: { active: Caminho }) {
       <div className="mx-auto max-w-6xl px-6 h-16 flex items-center justify-between gap-6">
         <Link
           href="/"
-          className="font-title font-semibold text-2xl tracking-tight text-base focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary rounded-sm"
+          className="font-title font-semibold text-2xl tracking-tight text-base focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary rounded-sm max-md:inline-flex max-md:min-h-[44px] max-md:min-w-[44px] max-md:items-center"
           aria-label="Plina · Início"
         >
           Plina<span className="text-primary-deep">.</span>

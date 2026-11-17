@@ -52,6 +52,9 @@ body {
   background: #132728;
   color: #ffffff;
   padding: 12px 24px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
   border-radius: 9999px;
   font-family: 'Geist', sans-serif;
   font-size: 0.75rem;

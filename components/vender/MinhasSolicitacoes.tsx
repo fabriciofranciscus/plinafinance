@@ -99,18 +99,20 @@ export default function MinhasSolicitacoes({ variante = 'pagina' }: { variante?:
   }, [ready, authenticated, carregar]);
 
   const compacto = variante === 'compacto';
+  // A página própria (/vender/minhas) precisa de um h1 (A-16); no topo do /vender o h1 é o da própria tela.
+  const Titulo = compacto ? 'h2' : 'h1';
   if (compacto && (estado.tipo !== 'ok' || estado.itens.length === 0)) return null;
 
   const itens = estado.tipo === 'ok' ? (compacto ? estado.itens.slice(0, 3) : estado.itens) : [];
 
   return (
     <section aria-labelledby="minhas-solicitacoes-titulo" id="minhas-solicitacoes">
-      <h2
+      <Titulo
         id="minhas-solicitacoes-titulo"
         className={`font-title font-semibold tracking-tight ${compacto ? 'text-xl' : 'text-3xl md:text-4xl'}`}
       >
         Minhas solicitações
-      </h2>
+      </Titulo>
 
       {estado.tipo === 'carregando' && (
         <p role="status" className="font-text text-sm text-base/70 mt-4">

@@ -83,7 +83,7 @@ export default function InvestirPage() {
           {authenticated && (
             <button
               onClick={() => logout()}
-              className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 hover:text-base"
+              className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 hover:text-base max-md:inline-flex max-md:min-h-[44px] max-md:min-w-[44px] max-md:items-center"
             >
               Sair
             </button>

@@ -275,7 +275,7 @@ const ENTITY_TYPES: { v: EntityType; label: string }[] = [
 ];
 
 const fieldCls =
-  'mt-2 block w-full bg-white border border-base/20 px-3 py-2.5 font-text text-sm text-base focus:outline-none focus:border-base transition-colors';
+  'mt-2 block w-full bg-white border border-base/20 px-3 py-2.5 font-text text-sm text-base focus:outline-none focus:border-base transition-colors max-md:min-h-[44px]';
 
 /**
  * Entidade preenchida o suficiente pra avançar? BR exige razão social + CNPJ
