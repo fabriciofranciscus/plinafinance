@@ -351,8 +351,8 @@ export default function SacarPage() {
             </span>
             <input
               type="number"
-              min="0.01"
-              step="0.01"
+              min="0.0000001"
+              step="0.0000001"
               value={amountTesouro}
               onChange={(e) => setAmountTesouro(e.target.value)}
               className="mt-3 w-full bg-transparent border-b border-base/30 pb-3 font-mono text-2xl text-base focus:outline-none focus:border-base"
