@@ -11,6 +11,7 @@
  */
 
 import { fmtPrazo } from '@/lib/format/prazo';
+import { brl, tokenFmt } from '@/lib/format/pool';
 import { db } from '@/lib/db';
 import {
   caixaRealizado,
@@ -42,14 +43,6 @@ const STATUS_ESTOQUE_LABEL: Record<string, string> = {
   BAIXA: 'Mais de 90 dias',
 };
 
-function brl(value: number): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
 /**
  * Valor POR TOKEN: precisa de casas decimais. O `brl` acima arredonda para inteiro, e um valor
  * de 0,1524 aparecia como "R$ 0" (bug de exibição em produção, 13/11). 4 casas, sem truncar.
@@ -61,10 +54,6 @@ function brlPorToken(value: number): string {
     minimumFractionDigits: 4,
     maximumFractionDigits: 4,
   }).format(value);
-}
-
-function tokenFmt(value: number): string {
-  return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 }).format(value);
 }
 
 function pct(value: number): string {
