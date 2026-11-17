@@ -5,7 +5,7 @@ import type { CotaResumo } from '../../_types';
 import { BRL, TIPO_LABEL, valorRevenda } from '../../_lib/glossary';
 
 const labelCls =
-  'font-details text-[10px] tracking-[0.2em] uppercase text-base/60';
+  'font-details text-[10px] tracking-[0.2em] uppercase text-base/65';
 
 export function BuscarScreen({
   cotas,
@@ -111,7 +111,7 @@ function CotaCard({ cota, onSelect }: { cota: CotaResumo; onSelect: () => void }
 
   return (
     <li className="bg-sheet-white p-5 flex flex-col">
-      <p id={idTipo} className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
+      <p id={idTipo} className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65">
         {TIPO_LABEL[cota.tipoBem] ?? cota.tipoBem}
         {cota.localizacaoAprox ? ` · ${cota.localizacaoAprox}` : ''}
       </p>
@@ -120,14 +120,14 @@ function CotaCard({ cota, onSelect }: { cota: CotaResumo; onSelect: () => void }
       </div>
 
       <div className="mt-5">
-        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/50">
+        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65">
           Valor de face
         </p>
         <p id={idValor} className="font-mono text-lg text-base">{BRL.format(cota.valorCarta)}</p>
       </div>
 
       <div className="mt-3 border border-primary-deep/30 bg-primary-deep/5 p-3">
-        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/50">
+        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65">
           Entrada (−{descontoPct}% sobre o valor de face)
         </p>
         <p className="font-mono text-2xl font-bold text-primary-deep">
@@ -139,7 +139,7 @@ function CotaCard({ cota, onSelect }: { cota: CotaResumo; onSelect: () => void }
       </div>
 
       {cota.prazoRestanteMeses != null && (
-        <p className="mt-3 font-mono text-[11px] text-base/55">
+        <p className="mt-3 font-mono text-[11px] text-base/65">
           Prazo restante: {cota.prazoRestanteMeses}m
         </p>
       )}

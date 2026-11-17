@@ -116,7 +116,8 @@ describe('cessão sem aparência de campo (C6)', () => {
 
   it('a linha da reserva mantém o mesmo texto', () => {
     render(<CessaoScreen pessoa={pessoa} cota={cota} reserva={reserva} cessao={null} signing={false} onAssinar={() => {}} />);
-    expect(screen.getByText(/Reserva res-12345678… · prova on-chain aaaaaaaa…/)).toBeTruthy();
+    // o tx agora é link (C5), então o texto é conferido pelo parágrafo inteiro
+    expect(screen.getByTestId('documento-cessao').textContent).toContain('Reserva res-12345678… · prova on-chain aaaaaaaa…');
   });
 });
 

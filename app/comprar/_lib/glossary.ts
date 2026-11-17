@@ -57,3 +57,8 @@ export function valorRevenda(valorCarta: number, desagioRevenda: number | null):
 export function screenLabel(screen: Screen): string {
   return SCREENS.find((s) => s.id === screen)?.label ?? '';
 }
+
+/** Link da transação no explorer (testnet), com o hash COMPLETO. */
+export function explorerTx(hash: string): string {
+  return `https://stellar.expert/explorer/testnet/tx/${hash}`;
+}
