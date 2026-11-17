@@ -48,6 +48,20 @@ describe('variantes do AppFooter', () => {
     expect(issuer.getAttribute('rel')).toBe('noopener noreferrer');
   });
 
+  it('os destinos dos links de prova estão certos em cada variante (nenhum "#" nem destino trocado)', () => {
+    const hrefs = (v: 'completo' | 'compacto' | 'operacao') => {
+      const { unmount } = render(<AppFooter issuerPubkey={ISSUER} variante={v} />);
+      const h = within(screen.getByRole('contentinfo')).getAllByRole('link').map((a) => a.getAttribute('href'));
+      unmount();
+      return h;
+    };
+    const asset = `https://stellar.expert/explorer/testnet/asset/PLINARF-${ISSUER}`;
+    expect(hrefs('operacao')).toEqual(['https://stellar.expert/explorer/testnet/account/' + ISSUER, '/.well-known/stellar.toml', asset, '/politica-clawback']);
+    expect(hrefs('compacto')).toEqual(['/pool', '/politica-clawback', 'mailto:contato@plina.finance']);
+    expect(hrefs('completo')).toEqual(expect.arrayContaining(['/pool', '/politica-clawback', '/.well-known/stellar.toml', asset]));
+    for (const v of ['completo', 'compacto', 'operacao'] as const) expect(hrefs(v), v).not.toContain('#');
+  });
+
   it('links com alvo de 44 px no celular em todas as variantes', () => {
     for (const v of ['completo', 'compacto', 'operacao'] as const) {
       const { unmount } = render(<AppFooter issuerPubkey={ISSUER} variante={v} />);
