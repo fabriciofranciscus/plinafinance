@@ -20,21 +20,21 @@ export default function ErroDoPainel({
   }, [error]);
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-12">
-      <div role="alert" className="max-w-2xl border border-light-hairline bg-sheet-white p-6">
-        <h1 className="font-title text-2xl font-semibold tracking-tight">Não foi possível carregar o painel.</h1>
-        <p className="font-text text-sm text-base/80 mt-3 leading-relaxed">
+    <div className="plina-product mx-auto max-w-[var(--workspace-max)] px-[var(--spacing-gutter-ui)] py-8 md:py-12">
+      <div role="alert" className="max-w-2xl rounded-panel border border-light-hairline bg-sheet-white p-4 md:p-6">
+        <h1 className="font-title text-page-title">Não foi possível carregar o painel.</h1>
+        <p className="font-text text-body-ui text-base/80 mt-3">
           Tente carregar o painel novamente. Se você havia enviado uma ação, consulte o resultado antes de repeti-la.
         </p>
         {error.digest && (
-          <p className="font-text text-[11px] text-base/70 mt-3">
+          <p className="font-text text-body-small text-base/70 mt-3">
             Código de referência: <span className="font-mono break-all">{error.digest}</span>
           </p>
         )}
         <button
           type="button"
           onClick={() => unstable_retry()}
-          className="mt-5 min-h-[44px] bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-5 py-2 hover:bg-primary-deep transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-deep"
+          className="mt-5 inline-flex min-h-[44px] items-center rounded-full bg-base text-lightBg font-details text-label-ui px-6 hover:bg-signal-700 transition-colors duration-[var(--duration-fast)] ease-terminal focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-signal-700"
         >
           Tentar de novo
         </button>

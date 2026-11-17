@@ -163,13 +163,13 @@ export default async function AdminPage() {
   const rotuloDe = (id: string) => sections.find((x) => x.id === id)?.label ?? id;
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-12">
+    <div className="plina-product mx-auto max-w-[var(--workspace-max)] px-[var(--spacing-gutter-ui)] py-8 md:py-12">
       <header id="overview" className="mb-8 flex items-start justify-between scroll-mt-24">
         <div>
-          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+          <p className="font-details text-label-ui text-base/70">
             Operação · acesso restrito · {parametros?.network ?? 'sem pool'}
           </p>
-          <h1 className="font-title mt-2 text-3xl font-semibold tracking-tight">
+          <h1 className="font-title text-page-title mt-2">
             Painel Plina
           </h1>
         </div>
@@ -183,7 +183,7 @@ export default async function AdminPage() {
             conteudo: (
               <>
       <section id="vendedores" className="mb-16 scroll-mt-32">
-        <h2 className="font-title text-2xl font-semibold mb-2 tracking-tight">
+        <h2 className="font-title text-section-title mb-2">
           Solicitações de venda ({leadsVendedor.length})
         </h2>
         <p className="font-text text-sm text-base/70 mb-6 max-w-2xl">
@@ -252,7 +252,7 @@ export default async function AdminPage() {
             conteudo: (
               <>
       <section id="compradores" className="mb-16 scroll-mt-32">
-        <h2 className="font-title text-2xl font-semibold mb-2 tracking-tight">
+        <h2 className="font-title text-section-title mb-2">
           Funil comprador-usuário ({leadsComprador.length})
         </h2>
         <p className="font-text text-sm text-base/70 mb-6 max-w-2xl">
@@ -296,10 +296,10 @@ export default async function AdminPage() {
             conteudo: (
               <>
       <section id="cotas" className="mb-16 scroll-mt-32">
-        <h2 className="font-title text-2xl font-semibold mb-4 tracking-tight">
+        <h2 className="font-title text-section-title mb-4">
           Cotas ({cotas.length})
         </h2>
-        <div className="border border-light-hairline overflow-x-auto">
+        <div className="rounded-panel border border-light-hairline overflow-x-auto">
           <table className="w-full font-text text-sm">
             <thead className="bg-base text-lightBg">
               <tr>
@@ -331,7 +331,7 @@ export default async function AdminPage() {
                     <Td mono>{brl(nav)}</Td>
                     <Td mono>{tokenFmt(c.tokensEmitidos)}</Td>
                     <Td>
-                      <span className="font-details text-[10px] tracking-[0.15em] uppercase">
+                      <span className="font-mono text-xs">
                         {STATUS_COTA_LABEL[c.status] ?? c.status}
                       </span>
                     </Td>
@@ -341,7 +341,7 @@ export default async function AdminPage() {
                           href={txExplorerUrl(c.emissaoTxHash)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="font-mono text-[10px] underline"
+                          className="font-mono text-xs underline"
                         >
                           {c.emissaoTxHash.slice(0, 8)}…
                         </a>
@@ -355,7 +355,7 @@ export default async function AdminPage() {
                           href={txExplorerUrl(c.validacaoTxHash)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="font-mono text-[10px] underline text-primary-deep"
+                          className="font-mono text-xs underline text-signal-700"
                           title={c.hashValidacao ?? ''}
                         >
                           ✓ {c.validacaoTxHash.slice(0, 8)}…
@@ -372,7 +372,7 @@ export default async function AdminPage() {
               })}
               {cotas.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="text-center py-8 text-base/60">
+                  <td colSpan={9} className="text-center py-8 text-base/70">
                     Nenhuma cota no pool.
                     <span className="block mt-1 text-base/70">Cotas entram pela etapa 10 de uma solicitação.</span>
                   </td>
@@ -401,7 +401,7 @@ export default async function AdminPage() {
             conteudo: (
               <>
       <section id="investidores" className="mb-16 scroll-mt-32">
-        <h2 className="font-title text-2xl font-semibold mb-4 tracking-tight">
+        <h2 className="font-title text-section-title mb-4">
           Investidores ({investidores.length})
         </h2>
         {investidores.length === 0 ? (
@@ -431,10 +431,10 @@ export default async function AdminPage() {
             rotulo: rotuloDe('overview'),
             conteudo: (
               <>
-                <h2 className="font-title text-2xl font-semibold mb-4 tracking-tight">{rotuloDe('overview')}</h2>
+                <h2 className="font-title text-section-title mb-4">{rotuloDe('overview')}</h2>
       {parametros && (
         <>
-          <section className="mb-2 grid grid-cols-1 md:grid-cols-4 gap-px bg-base/15 border border-light-hairline">
+          <section className="mb-2 grid grid-cols-1 md:grid-cols-4 gap-px bg-base/15 border border-light-hairline rounded-panel overflow-hidden">
             <Metric label="NAV total (ativo + caixa)" value={brl(navTotal)} />
             <Metric
               label={`${parametros.assetCode} vivos`}
@@ -446,7 +446,7 @@ export default async function AdminPage() {
               value={String(investidores.length)}
             />
           </section>
-          <section className="mb-12 grid grid-cols-1 md:grid-cols-4 gap-px bg-base/15 border border-light-hairline">
+          <section className="mb-12 grid grid-cols-1 md:grid-cols-4 gap-px bg-base/15 border border-light-hairline rounded-panel overflow-hidden">
             <Metric label="NAV / token" value={navUnitLabel} />
             <Metric
               label="Supply circulante (ledger)"
@@ -485,10 +485,10 @@ export default async function AdminPage() {
             conteudo: (
               <>
       <section id="audit" className="scroll-mt-32">
-        <h2 className="font-title text-2xl font-semibold mb-4 tracking-tight">
+        <h2 className="font-title text-section-title mb-4">
           Audit log (últimos 20)
         </h2>
-        <div className="border border-light-hairline overflow-x-auto">
+        <div className="rounded-panel border border-light-hairline overflow-x-auto">
           <table className="w-full font-text text-sm">
             <thead className="bg-base text-lightBg">
               <tr>
@@ -510,7 +510,7 @@ export default async function AdminPage() {
                     })}
                   </Td>
                   <Td>
-                    <span className="font-details text-[10px] tracking-[0.15em] uppercase">
+                    <span className="font-mono text-xs">
                       {e.acao}
                     </span>
                   </Td>
@@ -524,7 +524,7 @@ export default async function AdminPage() {
                         href={txExplorerUrl(e.stellarTxHash)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-mono text-[10px] underline"
+                        className="font-mono text-xs underline"
                       >
                         {e.stellarTxHash.slice(0, 8)}…
                       </a>
@@ -536,7 +536,7 @@ export default async function AdminPage() {
               ))}
               {eventos.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="text-center py-8 text-base/60">
+                  <td colSpan={7} className="text-center py-8 text-base/70">
                     Nenhum evento registrado.
                   </td>
                 </tr>
@@ -554,14 +554,14 @@ export default async function AdminPage() {
             rotulo: rotuloDe('incorporar'),
             conteudo: (
               <>
-      <details id="incorporar" className="mt-16 scroll-mt-32 border border-light-hairline p-4">
-        <summary className="min-h-[44px] flex items-center cursor-pointer font-title text-xl font-semibold tracking-tight">
+      <details id="incorporar" className="mt-16 scroll-mt-32 rounded-panel border border-light-hairline p-4 md:p-6">
+        <summary className="min-h-[44px] flex items-center cursor-pointer font-title text-section-title">
           Operações avulsas
         </summary>
         <p className="font-text text-sm text-base/70 mt-2 mb-6 max-w-2xl">
           Uso excepcional. O caminho normal é pela solicitação, na seção de vendedores.
         </p>
-        <h3 className="font-title text-lg font-semibold mb-2 tracking-tight">Incorporar nova cota</h3>
+        <h3 className="font-details text-label-ui text-base mb-2">Incorporar nova cota</h3>
         <p className="font-text text-sm text-base/70 mb-6 max-w-2xl">
           Emite PLINA-RF on-chain (issuer → distributor) e persiste a cota no pool. Operação real na testnet — irreversível.
         </p>
@@ -579,10 +579,10 @@ export default async function AdminPage() {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-lightBg px-5 py-6">
-      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+      <p className="font-details text-label-ui text-base/70">
         {label}
       </p>
-      <p className="font-title text-2xl font-semibold mt-2 tracking-tight">{value}</p>
+      <p className="font-mono text-value-primary mt-2">{value}</p>
     </div>
   );
 }
@@ -598,14 +598,14 @@ function KvPubkey({
 }) {
   return (
     <div>
-      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 mb-1">
+      <p className="font-details text-label-ui text-base/70 mb-1">
         {label}
       </p>
       <a
         href={accountExplorerUrl(pubkey)}
         target="_blank"
         rel="noopener noreferrer"
-        className="font-mono text-[10px] break-all underline decoration-base/30 hover:decoration-primary"
+        className="font-mono text-xs break-all underline decoration-base/30 hover:decoration-primary"
       >
         {pubkey}
       </a>
@@ -615,7 +615,7 @@ function KvPubkey({
             href={extraLink.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[10px] underline"
+            className="text-xs underline"
           >
             {extraLink.label}
           </a>
@@ -627,7 +627,7 @@ function KvPubkey({
 
 function Th({ children }: { children: React.ReactNode }) {
   return (
-    <th className="px-3 py-2 text-left font-details text-[10px] tracking-[0.15em] uppercase font-semibold">
+    <th className="px-3 py-2 text-left font-details text-label-ui">
       {children}
     </th>
   );

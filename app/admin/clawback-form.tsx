@@ -34,18 +34,18 @@ export function ClawbackForm({
   }, [state]);
 
   return (
-    <form action={formAction} className="space-y-3 bg-lightBg/40 p-4 border border-light-hairline">
+    <form action={formAction} className="space-y-4 pt-4">
       <input type="hidden" name="investidorId" value={investidorId} />
       <input type="hidden" name="pedidoId" value={pedidoId} />
-      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+      <p className="font-details text-label-ui text-base/70">
         Clawback · política pública 4 hipóteses
       </p>
-      <p className="font-text text-xs text-base/70">
+      <p className="font-text text-body-small text-base/70">
         Alvo: {investidorEmail} · Saldo esperado: <span className="font-mono">{saldoEsperado}</span>
       </p>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-4">
         <label className="block">
-          <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+          <span className="font-details text-label-ui text-base/70">
             Quantidade
           </span>
           <input
@@ -60,7 +60,7 @@ export function ClawbackForm({
           />
         </label>
         <label className="block">
-          <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+          <span className="font-details text-label-ui text-base/70">
             Motivo
           </span>
           <select name="motivo" required defaultValue="" className={inputClass}>
@@ -75,7 +75,7 @@ export function ClawbackForm({
           </select>
         </label>
         <label className="block">
-          <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
+          <span className="font-details text-label-ui text-base/70">
             URL fundamento
           </span>
           <input
@@ -83,16 +83,16 @@ export function ClawbackForm({
             name="fundamentoUrl"
             required
             placeholder="https://…/decisao.pdf"
-            className={inputClass + ' font-mono text-xs'}
+            className={inputClass + ' font-mono'}
           />
         </label>
       </div>
 
       {state?.error && (
-        <p className="font-text text-sm text-red-700">{state.error}</p>
+        <p className="font-text text-body-small text-danger">{state.error}</p>
       )}
       {state?.ok && state.txHash && (
-        <p className="font-text text-sm text-base/80">
+        <p className="font-text text-body-small text-base/80">
           ✓ Clawback executado. Tx:{' '}
           <a
             href={`https://stellar.expert/explorer/testnet/tx/${state.txHash}`}
@@ -108,7 +108,7 @@ export function ClawbackForm({
       <button
         type="submit"
         disabled={pending}
-        className="bg-base text-lightBg font-details text-xs tracking-[0.2em] uppercase px-4 py-2 hover:bg-primary-deep transition-colors disabled:opacity-50"
+        className="inline-flex min-h-[44px] items-center rounded-full bg-base text-lightBg font-details text-label-ui px-6 hover:bg-signal-700 transition-colors duration-[var(--duration-fast)] ease-terminal disabled:opacity-50"
       >
         {pending ? 'Executando…' : 'Executar clawback'}
       </button>
@@ -117,4 +117,4 @@ export function ClawbackForm({
 }
 
 const inputClass =
-  'mt-2 w-full bg-white border border-light-hairline px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary';
+  'mt-2 block w-full min-h-[44px] rounded-full bg-white border border-base/40 px-4 py-2 text-base focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-700 focus-visible:ring-offset-2';

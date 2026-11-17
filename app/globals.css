@@ -21,6 +21,9 @@
      permitido como texto e anel de foco sobre fundo claro: 5,99:1 no branco) */
   --color-signal-500: #0EA7C7;
   --color-signal-700: #046C88;
+  --color-signal-600: #057A99;
+  --color-danger: #B3261E;
+  --color-danger-on-dark: #F2B8B5;
 
   /* Chillax/Satoshi (ITF) só existem se os arquivos estiverem em
      public/fonts/itf/ (fora do Git); sem eles, cai para Geist. */
@@ -28,6 +31,50 @@
   --font-text: 'Satoshi', var(--font-geist), 'Geist', system-ui, sans-serif;
   --font-details: var(--font-geist), 'Geist', system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), 'Geist Mono', ui-monospace, monospace;
+
+  /* ---- Design system v1.2 (design-system/tailwind-v4.css): raio por função, elevação, papéis de produto, movimento. ---- */
+  --radius-none: 0px;
+  --radius-full: 9999px;
+  --radius-card: 12px;
+  --radius-panel: 16px;
+  --ease-terminal: cubic-bezier(0.16, 1, 0.3, 1);
+  --shadow-cta: 0 4px 16px -4px rgba(19, 39, 40, 0.12);
+  --shadow-raised: 0px 4px 16px -4px rgba(19, 39, 40, 0.12);
+  --shadow-overlay: 0px 16px 40px -8px rgba(19, 39, 40, 0.18);
+  --shadow-none: none;
+  --spacing-compact: 24px;
+  --spacing-gutter-ui: clamp(16px, 3vw, 48px);
+  --workspace-max: 1440px;
+  --form-max: 640px;
+  --target-min: 44px;
+  --text-page-title: clamp(1.75rem, 2.5vw, 2.25rem);
+  --text-page-title--line-height: 1.15;
+  --text-page-title--font-weight: 600;
+  --text-page-title--letter-spacing: -0.02em;
+  --text-section-title: 1.25rem;
+  --text-section-title--line-height: 1.3;
+  --text-section-title--font-weight: 600;
+  --text-section-title--letter-spacing: -0.01em;
+  --text-body-ui: 1rem;
+  --text-body-ui--line-height: 1.5;
+  --text-body-ui--font-weight: 400;
+  --text-body-ui--letter-spacing: 0;
+  --text-label-ui: 0.875rem;
+  --text-label-ui--line-height: 1.4;
+  --text-label-ui--font-weight: 500;
+  --text-label-ui--letter-spacing: 0;
+  --text-value-primary: clamp(1.5rem, 2.5vw, 2rem);
+  --text-value-primary--line-height: 1.2;
+  --text-value-primary--font-weight: 500;
+  --text-value-primary--letter-spacing: 0;
+  --icon-inline: 16px;
+  --icon-default: 20px;
+  --icon-navigation: 24px;
+  --duration-instant: 120ms;
+  --duration-fast: 160ms;
+  --duration-base: 220ms;
+  --duration-slow: 280ms;
+  --duration-reveal: 320ms;
 }
 
 body {
@@ -202,4 +249,12 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* v1.2 §9: no produto o conteúdo nunca depende de movimento. `.plina-product` marca a raiz de uma tela já migrada. */
+@media (prefers-reduced-motion: reduce) {
+  .plina-product *, .plina-product *::before, .plina-product *::after {
+    animation: none !important; transition: none !important; scroll-behavior: auto !important;
+  }
+  .plina-reveal { opacity: 1 !important; transform: none !important; }
 }

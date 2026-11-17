@@ -17,11 +17,11 @@ export interface ItemConcentracao {
 export function Concentracao({ itens }: { itens: ItemConcentracao[] }) {
   if (itens.length === 0) return null;
   return (
-    <div className="mt-8 min-w-0 border border-light-hairline" data-testid="concentracao">
-      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 px-4 py-3 border-b border-light-hairline">
+    <div className="mt-8 min-w-0 max-w-4xl rounded-panel border border-light-hairline overflow-hidden" data-testid="concentracao">
+      <p className="font-details text-label-ui text-base/70 px-4 py-3 border-b border-light-hairline">
         Concentração por administradora · alerta &gt; 40%
       </p>
-      <ul className="divide-y divide-light-hairline">
+      <ul className="divide-y divide-base/12">
         {itens.map((c) => (
           <li
             key={c.administradora}
@@ -39,8 +39,8 @@ export function Concentracao({ itens }: { itens: ItemConcentracao[] }) {
               </span>
             </span>
             <span
-              className={`font-details text-[10px] tracking-[0.15em] uppercase text-left md:text-right ${
-                c.alerta ? 'text-amber-700' : 'text-primary-deep'
+              className={`font-mono text-xs text-left md:text-right ${
+                c.alerta ? 'font-semibold text-base' : 'text-base/70'
               }`}
             >
               {c.alerta ? 'concentrado' : 'ok'}

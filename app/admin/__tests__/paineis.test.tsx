@@ -128,12 +128,14 @@ describe('AP-3: a página do admin usa os painéis', () => {
     const src = readFileSync('app/admin/investidores-painel.tsx', 'utf8');
     const i = src.indexOf('<ClawbackForm');
     expect(i).toBeGreaterThan(-1);
-    const antes = src.slice(Math.max(0, i - 600), i);
-    expect(antes).toMatch(/<details[^>]*>\s*<summary[^>]*min-h-\[44px\][^>]*>\s*Clawback\s*<\/summary>/);
+    const antes = src.slice(Math.max(0, i - 1200), i);
+    // v1.2: o summary ganhou o indicador + / − (span decorativo) antes do texto; a regra (fechado, 44 px, texto "Clawback") é a mesma.
+    expect(antes).toMatch(/<details[^>]*>\s*<summary[^>]*min-h-\[44px\][^>]*>[\s\S]*?Clawback\s*<\/summary>/);
     expect(antes).not.toMatch(/<details[^>]*\bopen\b/);
   });
   it('Resumo: oito métricas em dois grupos de quatro (sem célula vazia)', () => {
-    expect(src).not.toMatch(/md:grid-cols-3 gap-px bg-base\/15 border border-light-hairline">\s*<Metric label="NAV \/ token"/);
-    expect(src).toMatch(/md:grid-cols-4 gap-px bg-base\/15 border border-light-hairline">\s*<Metric label="NAV \/ token"/);
+    // v1.2: a grade ganhou a moldura de 16 px (rounded-panel), então a classe termina diferente; a regra é a mesma: 4 colunas.
+    expect(src).not.toMatch(/md:grid-cols-3 gap-px bg-base\/15 [^"]*">\s*<Metric label="NAV \/ token"/);
+    expect(src).toMatch(/md:grid-cols-4 gap-px bg-base\/15 [^"]*">\s*<Metric label="NAV \/ token"/);
   });
 });

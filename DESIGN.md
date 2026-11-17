@@ -266,3 +266,6 @@ Esta é **a assinatura visual do sistema**. Reuse antes de inventar layouts novo
 - **Don't** usar emoji, exclamação, ou imperativo agressivo em CTA. Registro consultivo: "Solicitar Prospecto", "Submeter Aplicação", "Agendar Roadshow".
 - **Don't** usar em-dash (—) em código ou em copy nova; usar vírgula, dois-pontos ou ponto. (Exceção: copy já produzido no PDF/brand guidelines mantém o estilo original.)
 - **Don't** introduzir uma quarta superfície de cor (azul claro, off-white, etc). Sandwich é três tons exatos.
+
+
+> Revisão de 17/11/2026: este documento é histórico. Para aparência vigente, seguir `design-system/plina-design-system.md` v1.2 e `tokens.json`. Raio binário, sombra única e uppercase universal aqui descritos foram substituídos. As três correções de contraste estão no §11 do sistema.
