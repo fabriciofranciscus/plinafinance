@@ -747,6 +747,12 @@ export interface ExecutarClawbackInput {
    * vezes. 16 a 64 caracteres de [A-Za-z0-9_-].
    */
   pedidoId: string;
+  /**
+   * Carteira (publicKey) que o operador VIU na revisão. Se vier e divergir da carteira lida do investidor no envio, o pedido é
+   * recusado (`CARTEIRA_DIVERGENTE`) ANTES de gravar a tentativa e de qualquer envio. Ausente = comportamento anterior (a tela atual
+   * não tem revisão da carteira); o PR 3 do U1-11 deve enviar sempre, e torná-la obrigatória é recusar aqui quando faltar.
+   */
+  carteiraRevisada?: string;
 }
 
 export interface ExecutarClawbackResult {
@@ -766,6 +772,7 @@ export type ClawbackErrorCode =
   | 'VALOR_INVALIDO'
   | 'EMISSOR_NAO_CONFIGURADO'
   | 'INVESTIDOR_NAO_ENCONTRADO'
+  | 'CARTEIRA_DIVERGENTE'
   | 'PEDIDO_EM_ANDAMENTO'
   | 'PEDIDO_FALHOU'
   | 'EXECUCAO_FALHOU'
@@ -779,6 +786,7 @@ const MENSAGENS_CLAWBACK: Record<ClawbackErrorCode, string> = {
   VALOR_INVALIDO: 'Informe uma quantidade maior que zero, só com dígitos e ponto decimal (até 12 inteiros e 7 casas).',
   EMISSOR_NAO_CONFIGURADO: 'A execução do clawback não está configurada neste ambiente.',
   INVESTIDOR_NAO_ENCONTRADO: 'Investidor não encontrado.',
+  CARTEIRA_DIVERGENTE: 'A carteira do investidor não é a que você revisou. Nada foi executado nem registrado. Recarregue a tela, confira a carteira atual e envie de novo.',
   PEDIDO_EM_ANDAMENTO: 'Este pedido já foi enviado e está em andamento ou foi interrompido. Nada foi executado de novo. O clawback pode ter entrado na rede: NÃO crie outro pedido antes de conferir o saldo on-chain e o histórico.',
   PEDIDO_FALHOU: 'Este pedido já falhou antes e não será repetido. Confira o saldo e o histórico; se precisar, crie um novo pedido.',
   EXECUCAO_FALHOU: 'A rede recusou o clawback e ele não foi executado. Confira o saldo e o histórico; se precisar, crie um novo pedido.',
@@ -833,6 +841,10 @@ export async function executarClawback(
 
   const investidor = await db.investidor.findUnique({ where: { id: input.investidorId } });
   if (!investidor) throw new ClawbackError('INVESTIDOR_NAO_ENCONTRADO');
+  // Trava da carteira NO SERVIDOR: a revisada tem de ser a lida agora; antes de gravar a tentativa (o pedidoId não é consumido).
+  if (input.carteiraRevisada !== undefined && input.carteiraRevisada.trim() !== investidor.publicKey) {
+    throw new ClawbackError('CARTEIRA_DIVERGENTE');
+  }
 
   const chaveLock = `plina:clawback:${input.pedidoId}`;
   const filtroPedido = { acao: 'CLAWBACK_EXECUTADO' as const, payloadJson: { path: ['pedidoId'], equals: input.pedidoId } };

@@ -171,6 +171,48 @@ describe('erros fixos e validações (antes de qualquer registro ou execução)'
     expect(m.executeClawback.mock.calls[0]![2]).toBe(amount);
   });
 
+  // Trava da carteira (Argus 22:05; backlog pós-tag): a carteira mostrada na revisão tem de ser a lida AGORA no envio. Divergiu →
+  // CARTEIRA_DIVERGENTE antes de gravar a tentativa e de qualquer envio (o pedidoId não é consumido).
+  describe('carteira revisada', () => {
+    it('igual à carteira lida no envio: executa para essa carteira', async () => {
+      await executarClawback({ ...IN, carteiraRevisada: 'GABC' });
+      expect(m.executeClawback).toHaveBeenCalledTimes(1);
+      expect(m.executeClawback.mock.calls[0]![1]).toBe('GABC');
+    });
+    it('espaços ao redor são ignorados na comparação', async () => {
+      await executarClawback({ ...IN, carteiraRevisada: '  GABC  ' });
+      expect(m.executeClawback).toHaveBeenCalledTimes(1);
+    });
+    it.each([['outra chave', 'GXYZ'], ['minúscula', 'gabc'], ['prefixo', 'GAB'], ['sufixo', 'GABCD']])('%s → CARTEIRA_DIVERGENTE, nada executado nem gravado', async (_n, revisada) => {
+      await expect(executarClawback({ ...IN, carteiraRevisada: revisada })).rejects.toMatchObject({ code: 'CARTEIRA_DIVERGENTE' });
+      expect(m.executeClawback).not.toHaveBeenCalled();
+      expect(m.eventos).toHaveLength(0);
+    });
+    it('a carteira do investidor mudou DEPOIS da revisão: recusa, e o mesmo pedidoId segue livre para um novo envio com a carteira nova', async () => {
+      m.investidor = { id: 'inv_1', publicKey: 'GNOVA', saldoEsperado: '1000' };
+      await expect(executarClawback({ ...IN, carteiraRevisada: 'GABC' })).rejects.toMatchObject({ code: 'CARTEIRA_DIVERGENTE' });
+      expect(m.eventos).toHaveLength(0);
+      await executarClawback({ ...IN, carteiraRevisada: 'GNOVA' });
+      expect(m.executeClawback).toHaveBeenCalledTimes(1);
+      expect(m.executeClawback.mock.calls[0]![1]).toBe('GNOVA');
+    });
+    it('a mensagem é fixa e não cita nenhuma das duas carteiras', async () => {
+      const err = await executarClawback({ ...IN, carteiraRevisada: 'GXYZSEGREDO' }).catch((e) => e);
+      expect(err).toBeInstanceOf(ClawbackError);
+      expect(err.message).not.toMatch(/GXYZ|GABC|SEGREDO/);
+    });
+    it('a divergência vem antes da leitura do pedido: pedido já executado + carteira divergente também recusa (sem devolver o resultado do 1º)', async () => {
+      await executarClawback({ ...IN, carteiraRevisada: 'GABC' });
+      await expect(executarClawback({ ...IN, carteiraRevisada: 'GXYZ' })).rejects.toMatchObject({ code: 'CARTEIRA_DIVERGENTE' });
+    });
+    // Compatibilidade até o PR 3 do U1-11 (a tela atual não tem revisão da carteira): sem o campo, o comportamento é o de antes.
+    // O PR 3 DEVE enviar sempre; torná-lo obrigatório é recusar aqui (decisão do Argus/Atlas).
+    it('sem carteiraRevisada (tela atual): comportamento anterior, executa', async () => {
+      await executarClawback(IN);
+      expect(m.executeClawback).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('sem a chave do emissor: EMISSOR_NAO_CONFIGURADO com mensagem que NÃO cita o nome da variável', async () => {
     delete process.env.STELLAR_ISSUER_SECRET;
     const e = await executarClawback(IN).catch((x) => x);

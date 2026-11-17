@@ -133,6 +133,8 @@ export async function executarClawbackAction(
       fundamentoUrl: String(formData.get('fundamentoUrl') ?? '').trim(),
       // Chave de idempotência do PEDIDO (gerada pela tela): o mesmo pedido nunca executa duas vezes (U1-11).
       pedidoId: String(formData.get('pedidoId') ?? ''),
+      // Carteira que o operador viu na revisão: o serviço recusa se divergir da lida agora (em branco = não enviada).
+      carteiraRevisada: String(formData.get('carteiraRevisada') ?? '').trim() || undefined,
       operador: 'admin-panel',
     });
     revalidatePath('/admin');
