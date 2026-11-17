@@ -7,7 +7,7 @@ export const SCREENS: { id: Screen; label: string }[] = [
   { id: 'quote', label: 'Cotação' },
   { id: 'onramp', label: 'Pagamento' },
   { id: 'settling', label: 'Liquidação' },
-  { id: 'claiming', label: 'Resgate' },
+  { id: 'claiming', label: 'Recebimento' },
   { id: 'confirm', label: 'Revisão' },
   { id: 'receipt', label: 'Confirmação' },
 ];

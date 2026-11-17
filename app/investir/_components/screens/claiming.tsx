@@ -30,12 +30,12 @@ export function ClaimingScreen({
     <div>
       <TestnetBanner />
       <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
-        06 // Resgate · ClaimableBalance → trustline
+        06 // Recebimento do TESOURO
       </p>
       <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">
         {claimed
           ? 'TESOURO na sua trustline — prossiga'
-          : 'Assine pra resgatar o TESOURO emitido'}
+          : 'Assine para receber o TESOURO'}
       </h1>
       {/* Instrução de antes da assinatura: some quando o resgate já foi feito. */}
       {!claimed && (
@@ -98,10 +98,10 @@ export function ClaimingScreen({
           className="overflow-x-auto border border-light-hairline bg-document-grey/40 p-4 font-mono text-xs text-base/80 leading-relaxed whitespace-pre focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-deep"
         >
 {`PLINA-RF asset flags:
-  AUTH_CLAWBACK_ENABLED  ✓  reversão judicial / OFAC / fraude / erro operacional
+  AUTH_CLAWBACK_ENABLED  ✓
   AUTH_REQUIRED          ✓  trustline exige KYC aprovado pela Plina
   AUTH_REVOCABLE         ✓  status de compliance revisável
-  Claimable Balances     ✓  liquidação atômica em resgates e cross-border`}
+  Claimable Balances     ✓  liquidação atômica em recebimentos`}
         </pre>
         <p className="md:hidden font-details text-[10px] tracking-[0.2em] uppercase text-base/65 mt-2" data-testid="flags-dica-rolagem">
           Role para o lado para ver as linhas inteiras
@@ -118,7 +118,7 @@ export function ClaimingScreen({
           data-testid="claim-regenerado"
           className="mt-8 font-text text-sm text-base/80"
         >
-          A transação de resgate venceu e foi gerada de novo. Confirme a nova
+          A transação de recebimento venceu e foi gerada de novo. Confirme a nova
           assinatura.
         </p>
       )}
@@ -133,7 +133,7 @@ export function ClaimingScreen({
             {claiming && (
               <span className="w-2 h-2 bg-primary rounded-full animate-pulse" aria-hidden />
             )}
-            {claiming ? 'Assinando claim…' : regenerated ? 'Assinar o novo resgate' : 'Assinar e reclamar TESOURO'}
+            {claiming ? 'Assinando claim…' : regenerated ? 'Assinar o novo recebimento' : 'Assinar e receber TESOURO'}
           </button>
         )}
         {claimed && (

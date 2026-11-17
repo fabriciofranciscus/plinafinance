@@ -16,7 +16,7 @@ describe('ClaimingScreen: bloco de flags do ativo', () => {
     expect(regiao.className).toContain('overflow-x-auto');
     expect(regiao.className).toContain('focus-visible:outline-primary-deep');
     expect(regiao.textContent).toContain('AUTH_CLAWBACK_ENABLED');
-    expect(regiao.textContent).toContain('liquidação atômica em resgates e cross-border');
+    expect(regiao.textContent).toContain('liquidação atômica em recebimentos');
   });
 
   it('dica de rolagem só no mobile (md:hidden)', () => {

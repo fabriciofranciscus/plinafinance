@@ -39,8 +39,8 @@ export type ClaimErrorCode =
 
 const MENSAGENS: Record<ClaimErrorCode, string> = {
   CB_NOT_FOUND:
-    'Claimable balance não encontrado no ledger (pode já ter sido reclamado).',
-  NOT_CLAIMANT: 'A carteira não é claimant deste claimable balance.',
+    'O saldo a receber não foi encontrado na rede (pode já ter sido recebido).',
+  NOT_CLAIMANT: 'Esta carteira não pode receber este saldo.',
   ACCOUNT_MISSING: 'A carteira ainda não existe no ledger.',
   RESERVA_INSUFICIENTE:
     'A carteira não tem XLM para a reserva da trustline; é preciso aporte.',
