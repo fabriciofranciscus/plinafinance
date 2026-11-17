@@ -39,7 +39,7 @@ import { registrarMovimentoFundo } from './razao-fundo';
 import { getStellarPlinaPositionPublic } from '../env/ops';
 import { logStellarError } from '../stellar/log-error';
 import { causaSegura } from '../api/causa-segura';
-import { STELLAR_NETWORK, assetCode } from '../stellar/config';
+import { STELLAR_NETWORK, STELLAR_TX_TIMEOUT_SEC, assetCode } from '../stellar/config';
 import { assetCodeForClasse, classeFromAssetCode } from '../stellar/classes';
 import { decrementarHolding } from './holdings';
 import { buildAuditPayload, registerOnChainHash } from '../stellar/audit';
@@ -816,8 +816,11 @@ type PayloadClawback = {
   causa?: unknown;
 };
 
-/** Prazo de quem conclui o registro: o memo do fundamento tem timeout de rede bem menor. Depois dele, outro reenvio pode assumir (queda no meio). */
-export const PRAZO_CONCLUSAO_CLAWBACK_MS = 2 * 60_000;
+/**
+ * Prazo de quem conclui o registro. A tx do memo do fundamento nasce DEPOIS de tomar o prazo e pode ainda entrar na rede até o seu
+ * timeout (STELLAR_TX_TIMEOUT_SEC); por isso o prazo é esse timeout MAIS uma folga: só depois disso um outro reenvio pode assumir.
+ */
+export const PRAZO_CONCLUSAO_CLAWBACK_MS = (STELLAR_TX_TIMEOUT_SEC + 60) * 1000;
 
 /**
  * Executa clawback. Whitepaper §6.5: 4 hipóteses exclusivas (enum força).
@@ -981,7 +984,7 @@ async function tomarConclusaoDoClawback(eventoId: string, chaveLock: string) {
   });
 }
 
-/** Solta o prazo quando a conclusão falhou (REGISTRO_PENDENTE): o reenvio seguinte do operador não espera o prazo vencer. Melhor esforço. */
+/** Solta o prazo quando o memo foi REJEITADO de forma definitiva pela rede: o reenvio seguinte do operador não espera o prazo vencer. Melhor esforço. */
 async function soltarConclusaoDoClawback(eventoId: string, chaveLock: string): Promise<void> {
   await db
     .$transaction(async (tx) => {
@@ -1019,7 +1022,10 @@ async function concluirRegistroDoClawback(a: {
     fundamentoOnChain = await registerOnChainHash(payload);
   } catch (err) {
     console.error('[clawback] registro do fundamento falhou', causaSegura(err));
-    await soltarConclusaoDoClawback(a.eventoId, a.chaveLock);
+    // Só a REJEIÇÃO DEFINITIVA da rede (result_codes) prova que o memo não entrou: aí o reenvio seguinte pode refazê-lo na hora. Timeout,
+    // 5xx e queda de conexão deixam o prazo VENCER: o payload leva `_at`, então cada tentativa gera um hash novo e nada impediria um
+    // 2º memo enquanto o 1º ainda pode entrar.
+    if (rejeicaoDefinitivaDaRede(err)) await soltarConclusaoDoClawback(a.eventoId, a.chaveLock);
     throw new ClawbackError('REGISTRO_PENDENTE', a.clawbackTxHash);
   }
 
@@ -1063,8 +1069,8 @@ async function concluirRegistroDoClawback(a: {
       ...(a.retomada || jaConcluido ? { idempotente: true } : {}),
     };
   } catch (err) {
+    // Aqui o memo do fundamento JÁ foi à rede: não se solta o prazo (outro reenvio mandaria um 2º memo); ele vence sozinho.
     console.error('[clawback] conclusão do registro falhou', causaSegura(err));
-    await soltarConclusaoDoClawback(a.eventoId, a.chaveLock);
     throw new ClawbackError('REGISTRO_PENDENTE', a.clawbackTxHash);
   }
 }
