@@ -129,7 +129,7 @@ pnpm dev                           # http://localhost:3000
 
 Requisitos: Node 20.9+ (requisito do Next.js 16), pnpm 10 e, para `smoke:ciclo` e para os testes com banco real, Docker ou um Postgres local vazio.
 
-`.env.example` documenta cada variável. Os grupos que o app local precisa:
+`.env.example` lista as principais variáveis; as opcionais de URL (`STELLAR_HORIZON_URL`, `ETHERFUSE_BASE_URL`) ficam **comentadas** de propósito (vazias, quebram o app). Os grupos que o app local precisa:
 
 | Grupo | Variáveis (nomes) | Observação |
 |---|---|---|
@@ -177,7 +177,7 @@ Requisitos: Node 20.9+ (requisito do Next.js 16), pnpm 10 e, para `smoke:ciclo` 
 |---|---|---|
 | `/` | Público | Apresentação e captação de contatos |
 | `/pool` | Público | NAV e supply de PLINA-RF lidos do Horizon, com link do Stellar Expert |
-| `/cotas`, `/cessao/[id]` | Público | Cotas disponíveis e comprovante de cessão |
+| `/cotas`, `/cessao/[id]/comprovante` | Público | Cotas listadas e comprovante de cessão |
 | `/politica-clawback`, `/privacidade` | Público | Hipóteses de clawback (linkadas no stellar.toml) e política de privacidade |
 | `/entrar`, `/painel` | Todos | Login (Privy) e hub pessoal depois do login |
 | `/inicio` | Investidor | Próxima ação do investidor depois do login |
