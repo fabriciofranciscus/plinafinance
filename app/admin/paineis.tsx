@@ -49,10 +49,10 @@ export function PaineisAdmin({ paineis }: { paineis: PainelAdmin[] }) {
 
   return (
     <div ref={raiz}>
-      <div className="sticky top-14 z-30 -mx-6 px-6 mb-10 bg-lightBg/95 backdrop-blur border-b border-light-hairline">
+      <div className="sticky top-14 z-30 -mx-[var(--spacing-gutter-ui)] px-[var(--spacing-gutter-ui)] mb-8 bg-lightBg/95 backdrop-blur border-b border-light-hairline">
         {/* Celular e tablet (< 1024): seletor nativo com o valor atual. */}
         <div className="lg:hidden py-2">
-          <label htmlFor="admin-secao" className="block font-details text-[10px] tracking-[0.2em] uppercase text-base/70 mb-1">
+          <label htmlFor="admin-secao" className="block font-details text-label-ui text-base/70 mb-1">
             Seção
           </label>
           <select
@@ -61,7 +61,7 @@ export function PaineisAdmin({ paineis }: { paineis: PainelAdmin[] }) {
             onChange={(e) => {
               window.location.hash = e.target.value;
             }}
-            className="w-full min-h-[44px] bg-white border border-light-hairline px-3 font-text text-sm focus:outline-none focus:ring-2 focus:ring-primary-deep"
+            className="w-full min-h-[44px] bg-white border border-light-hairline px-4 font-text text-base focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-700 focus-visible:ring-offset-2"
           >
             {ordenados.map((p) => (
               <option key={p.id} value={p.id}>
@@ -78,7 +78,7 @@ export function PaineisAdmin({ paineis }: { paineis: PainelAdmin[] }) {
                 <a
                   href={`#${p.id}`}
                   aria-current={p.id === ativo ? 'true' : undefined}
-                  className={`inline-flex min-h-[44px] items-center whitespace-nowrap font-details text-[10px] tracking-[0.2em] uppercase font-bold px-3 border-b-2 hover:text-base focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-deep ${
+                  className={`inline-flex min-h-[44px] items-center whitespace-nowrap font-details text-label-ui px-3 border-b-2 hover:text-base transition-colors duration-[var(--duration-fast)] ease-terminal focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-signal-700 ${
                     p.id === ativo ? 'border-base text-base' : 'border-transparent text-base/70'
                   }`}
                 >

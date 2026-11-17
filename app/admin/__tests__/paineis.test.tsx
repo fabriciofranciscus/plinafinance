@@ -133,7 +133,8 @@ describe('AP-3: a página do admin usa os painéis', () => {
     expect(antes).not.toMatch(/<details[^>]*\bopen\b/);
   });
   it('Resumo: oito métricas em dois grupos de quatro (sem célula vazia)', () => {
-    expect(src).not.toMatch(/md:grid-cols-3 gap-px bg-base\/15 border border-light-hairline">\s*<Metric label="NAV \/ token"/);
-    expect(src).toMatch(/md:grid-cols-4 gap-px bg-base\/15 border border-light-hairline">\s*<Metric label="NAV \/ token"/);
+    // v1.2: a grade ganhou a moldura de 16 px (rounded-panel), então a classe termina diferente; a regra é a mesma: 4 colunas.
+    expect(src).not.toMatch(/md:grid-cols-3 gap-px bg-base\/15 [^"]*">\s*<Metric label="NAV \/ token"/);
+    expect(src).toMatch(/md:grid-cols-4 gap-px bg-base\/15 [^"]*">\s*<Metric label="NAV \/ token"/);
   });
 });

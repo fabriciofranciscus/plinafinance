@@ -15,7 +15,7 @@ export interface InvestidorAdmin {
   status: string;
 }
 
-const ROTULO = 'font-details text-[10px] tracking-[0.2em] uppercase text-base/70';
+const ROTULO = 'font-details text-label-ui text-base/70';
 const abreviar = (chave: string) => (chave.length > 12 ? `${chave.slice(0, 5)}…${chave.slice(-4)}` : chave);
 
 /**
@@ -67,7 +67,7 @@ export function InvestidoresPainel({ investidores }: { investidores: InvestidorA
               <th scope="col" className={`${ROTULO} py-2 font-normal`}>Saldo esperado</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-light-hairline">
+          <tbody className="divide-y divide-base/12">
             {investidores.map((inv) => (
               <tr key={inv.id} className={`align-top ${inv.id === selecionado ? 'bg-document-grey/60' : ''}`}>
                 <td className="py-3 pr-3 break-all">
@@ -79,7 +79,7 @@ export function InvestidoresPainel({ investidores }: { investidores: InvestidorA
                       e.preventDefault();
                       selecionar(inv.id);
                     }}
-                    className={`inline-flex min-h-[44px] items-center underline text-primary-deep ${inv.id === selecionado ? 'font-semibold' : ''}`}
+                    className={`inline-flex min-h-[44px] items-center underline text-signal-700 ${inv.id === selecionado ? 'font-semibold' : ''}`}
                   >
                     {inv.email}
                   </a>
@@ -87,7 +87,7 @@ export function InvestidoresPainel({ investidores }: { investidores: InvestidorA
                 <td className="py-3 pr-3 font-mono text-xs">{abreviar(inv.publicKey)}</td>
                 <td className="py-3 font-mono">
                   {inv.saldoEsperado}
-                  <span className="block font-details text-[10px] tracking-[0.15em] uppercase text-base/70">{inv.status}</span>
+                  <span className="block font-mono text-xs text-base/70">{inv.status}</span>
                 </td>
               </tr>
             ))}
@@ -95,7 +95,7 @@ export function InvestidoresPainel({ investidores }: { investidores: InvestidorA
         </table>
 
         {/* Celular e tablet: alvo de 72 px por investidor */}
-        <ul data-testid="lista-mobile" className="lg:hidden divide-y divide-light-hairline border border-light-hairline bg-white">
+        <ul data-testid="lista-mobile" className="lg:hidden divide-y divide-base/12 border border-light-hairline rounded-panel overflow-hidden bg-white">
           {investidores.map((inv) => (
             <li key={inv.id}>
               <button
@@ -108,7 +108,7 @@ export function InvestidoresPainel({ investidores }: { investidores: InvestidorA
                 <span className="block font-mono text-xs text-base/70 mt-1">
                   {abreviar(inv.publicKey)} · {inv.saldoEsperado}
                 </span>
-                <span className="block font-details text-[10px] tracking-[0.15em] uppercase text-base/70 mt-1">{inv.status}</span>
+                <span className="block font-mono text-xs text-base/70 mt-1">{inv.status}</span>
               </button>
             </li>
           ))}
@@ -116,16 +116,16 @@ export function InvestidoresPainel({ investidores }: { investidores: InvestidorA
       </div>
 
       <div className={`lg:col-span-5 ${selecionado ? '' : 'hidden lg:block'}`}>
-        {selecionado === null && <p className="font-text text-sm text-base/70">Escolha um investidor na lista.</p>}
+        {selecionado === null && <p className="font-text text-body-small text-base/70">Escolha um investidor na lista.</p>}
         {investidores.map((inv) => (
-          <div key={inv.id} data-detalhe={inv.id} hidden={inv.id !== selecionado} className="border border-light-hairline p-4 space-y-4">
+          <div key={inv.id} data-detalhe={inv.id} hidden={inv.id !== selecionado} className="rounded-panel border border-light-hairline bg-white p-4 md:p-6 space-y-4 shadow-raised">
             <button type="button" onClick={voltar} className={`lg:hidden min-h-[44px] -ml-1 ${ROTULO} underline underline-offset-4`}>
               ← Investidores
             </button>
-            <h3 tabIndex={-1} className="font-title text-lg font-semibold tracking-tight break-all">
+            <h3 tabIndex={-1} className="font-title text-section-title break-all">
               {inv.email}
             </h3>
-            <dl className="space-y-3 font-text text-sm">
+            <dl className="space-y-3 font-text text-body-ui">
               <div>
                 <dt className={ROTULO}>Public key</dt>
                 <dd>
@@ -142,11 +142,11 @@ export function InvestidoresPainel({ investidores }: { investidores: InvestidorA
               <div>
                 <dt className={ROTULO}>Saldo esperado</dt>
                 <dd className="font-mono">{inv.saldoEsperado}</dd>
-                <dd className="font-details text-[10px] tracking-[0.15em] uppercase text-base/70">{inv.status}</dd>
+                <dd className="font-mono text-xs text-base/70">{inv.status}</dd>
               </div>
             </dl>
             <details className="border-t border-light-hairline pt-3">
-              <summary className="min-h-[44px] flex items-center cursor-pointer font-details text-[10px] tracking-[0.2em] uppercase font-bold">
+              <summary className="min-h-[44px] flex items-center cursor-pointer font-details text-label-ui">
                 Clawback
               </summary>
               <ClawbackForm investidorId={inv.id} investidorEmail={inv.email} saldoEsperado={inv.saldoEsperado} />
