@@ -26,6 +26,7 @@ vi.mock('@/lib/stellar/audit', () => ({
 
 import { db } from '@/lib/db';
 import { registerOnChainHash } from '@/lib/stellar/audit';
+import { STELLAR_TX_TIMEOUT_SEC } from '@/lib/stellar/config';
 import { executarClawback, PRAZO_CONCLUSAO_CLAWBACK_MS } from '@/lib/services/tokenizacao';
 
 const IN = { investidorId: 'inv_cb', amount: '100', motivo: 'ERRO_OPERACIONAL' as never, fundamentoUrl: 'https://x.test/d.pdf', operador: 'admin-panel', pedidoId: 'pedido-pg-0123456789abcd' };
@@ -122,6 +123,13 @@ describe.skipIf(!PG)('clawback — idempotência sob concorrência real no Postg
 
   it('quem já conclui o registro (prazo vigente) segura os outros reenvios: recusados, sem memo na rede e sem baixar o saldo', async () => {
     await deixarOnchain(10_000); // alguém tomou a vez há 10 s
+    await expect(executarClawback(IN)).rejects.toMatchObject({ code: 'PEDIDO_EM_ANDAMENTO' });
+    expect(vi.mocked(registerOnChainHash)).not.toHaveBeenCalled();
+    expect(await saldo()).toBe(1000);
+  });
+
+  it('janela com idade logo ACIMA do timeout da tx do memo ainda segura o reenvio (o memo ainda pode entrar); só depois da folga outro assume', async () => {
+    await deixarOnchain(STELLAR_TX_TIMEOUT_SEC * 1000 + 5_000);
     await expect(executarClawback(IN)).rejects.toMatchObject({ code: 'PEDIDO_EM_ANDAMENTO' });
     expect(vi.mocked(registerOnChainHash)).not.toHaveBeenCalled();
     expect(await saldo()).toBe(1000);

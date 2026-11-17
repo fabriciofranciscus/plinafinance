@@ -34,7 +34,8 @@ vi.mock('@/lib/db', () => {
   return { db: { ...tx, investidor: { findUnique: async () => m.investidor, update: async () => ({}) }, $transaction: async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx) } };
 });
 
-import { ClawbackError, executarClawback } from '@/lib/services/tokenizacao';
+import { ClawbackError, PRAZO_CONCLUSAO_CLAWBACK_MS, executarClawback } from '@/lib/services/tokenizacao';
+import { STELLAR_TX_TIMEOUT_SEC } from '@/lib/stellar/config';
 
 /** Memo do fundamento REJEITADO pela rede (result_codes): prova que ele não entrou, então o reenvio pode refazê-lo na hora. */
 const memoRejeitado = () => Object.assign(new Error('memo caiu'), { response: { data: { extras: { result_codes: { transaction: 'tx_failed' } } } } });
@@ -50,6 +51,12 @@ beforeEach(() => {
   m.decrementar.mockResolvedValue(undefined);
   process.env.STELLAR_ISSUER_SECRET = 'SXXXX';
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
+});
+
+describe('janela de conclusão do registro (Argus)', () => {
+  it('é no mínimo o timeout da tx do memo MAIS 60 s: antes disso outro reenvio não pode assumir (a tx ainda pode entrar)', () => {
+    expect(PRAZO_CONCLUSAO_CLAWBACK_MS).toBeGreaterThanOrEqual((STELLAR_TX_TIMEOUT_SEC + 60) * 1000);
+  });
 });
 
 describe('idempotência por pedido', () => {
