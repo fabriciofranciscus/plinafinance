@@ -9,10 +9,12 @@ export function PropostaScreen({
   cota,
   loading,
   onAceitar,
+  erro,
 }: {
   cota: CotaResumo | null;
   loading: boolean;
   onAceitar: () => void;
+  erro?: React.ReactNode;
 }) {
   const [aceito, setAceito] = useState(false);
   if (!cota) return null;
@@ -68,6 +70,7 @@ export function PropostaScreen({
       >
         {loading ? 'Reservando…' : 'Aceitar proposta e reservar →'}
       </button>
+      {erro}
     </div>
   );
 }
