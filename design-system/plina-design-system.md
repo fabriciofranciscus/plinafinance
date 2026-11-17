@@ -1,526 +1,201 @@
-# Plina Finance — Design System v1.1
+# Plina Finance — Design System v1.2
 
-> **Machine-readable companion:** `tokens.json` (W3C DTCG). **Drop-in CSS:** `tokens.css`.
-> **Compact version for tight context windows:** `PROMPT.md`.
-> **Source of authority:** `docs/brand_guidelines.html` (Identity & Visual Guidelines v1.0).
->
-> This file is written to be pasted whole into an LLM (Claude, ChatGPT, Cursor, v0, Lovable,
-> Bolt) as project knowledge. It is self-contained: an agent that has only this file should be
-> able to produce on-brand Plina UI in any stack without asking follow-up questions.
+Regulated Terminal · revisão visual de 17/11/2026, a partir do briefing do Atlas e do feedback da Thais.
+Documento autoritativo de aparência; valores em `tokens.json`, exportações em `tokens.css` e `tailwind-v4.css`, resumo em `PROMPT.md`.
 
----
+## 0. Como usar
 
-## 0. How to use this document
+Esta versão substitui a v1.1. As regras antigas de raio binário, sombra única e uppercase obrigatório em todo label deixam de valer. A atualização é de apresentação: não autoriza mudar APIs, autorização, cálculos, texto aprovado ou estados de negócio.
 
-**If you are an LLM generating UI for Plina:** treat every rule marked **MUST** / **NEVER** as
-non-negotiable. When a request conflicts with a MUST, satisfy the request in a way that keeps the
-rule, and say which rule constrained you. When a decision is not covered here, choose the option
-that a regulated financial institution would ship, not the option a SaaS landing page would ship.
+Precedência visual: este documento → valores de `tokens.json` → guidelines históricos → `DESIGN.md`. Instruções atuais da Thais prevalecem. Produto, fase regulatória e invariantes vêm dos documentos de domínio; a identidade visual não prova enquadramento, disponibilidade ou aprovação jurídica.
 
-**Precedence when sources disagree:** this file → `tokens.json` → `docs/brand_guidelines.html` →
-`DESIGN.md`. Section 11 lists the conflicts that were resolved and how.
+## 1. Direção e públicos
 
----
+Autoridade técnica, precisão e auditabilidade, com leitura leve e hierarquia explícita. Chillax assina os títulos; números em Geist Mono; superfícies neutras e ciano raro. A fluidez aparece nos contornos e nas transições, sem tornar o app uma fintech de varejo.
 
-## 1. Who Plina is
+- Institucional: composição editorial, documentação e provas em destaque.
+- Admin: informação comparável, ações contextualizadas, espaço para trabalhar.
+- Cedente e comprador: uma decisão por etapa, baixa fricção e contexto persistente.
+- Investidor: valores e estado real antes das ações; condições e evidências junto da decisão.
 
-Plina is an **institutional tokenizer of Brazilian consortium credit rights**. It is not a wallet,
-not a peer-to-peer marketplace, not a neobank. It is the financial instrument itself — structured
-as a **FIDC under CVM 175** and represented on-chain as a **Stellar** asset.
+Não transformar intenções do roadmap em fatos de interface. Reutilizar a copy aprovada da tela; N2–N6 e demais pendências jurídicas continuam bloqueadas.
 
-- **Mission.** Connect global institutional capital to the Brazilian credit-rights market through
-  regulated Stellar infrastructure.
-- **Vision.** Establish **PLINA-RF** as the institutional standard for tokenizing contemplated
-  consortium quotas inside a FIDC.
-- **Tagline.** *"Conectando o capital global ao mercado brasileiro de direito creditório."*
-- **Product.** PLINA-RF — a tokenized pool of contemplated consortium quotas. 1 PLINA-RF = R$ 1.00
-  of credit rights, marked daily to NAV. Senior and subordinated classes absorb losses in order.
-- **On-chain compliance.** `AUTH_REQUIRED` · `AUTH_REVOCABLE` · `AUTH_CLAWBACK_ENABLED`.
-- **Settlement.** USDC · EURC · BRZ · BRLA.
+## 2. Oito leis
 
-### The reader you are designing for
+1. **Um sinal.** Ciano em até 10% do viewport e até três pontos de destaque. Foco visível nunca é suprimido para cumprir esse orçamento.
+2. **Superfícies por função.** Branco para ler/agir, cinza para agrupar, petróleo para contraste editorial ou navegação. Uma tela pode usar só duas; não alternar fundos mecanicamente.
+3. **Contraste por superfície.** Escolher ciano e foco conforme §3. Hierarquia nunca depende de tornar texto ilegível.
+4. **Flat em repouso, elevação com propósito.** Três níveis no §6; sombra não enfeita todo bloco.
+5. **Contorno por função.** 0 em dados tabulares, 12 px em cartões, 16 px em painéis/imagens, pill nos controles de uma linha.
+6. **Números em mono.** Valores, prazos, quantidades, identificadores e provas têm leitura estável e alinhamento comparável.
+7. **Hierarquia antes da cor.** Título, valor decisivo, conteúdo e metadados têm papéis diferentes. Não aumentar todos ao mesmo tempo.
+8. **Movimento explica uma mudança.** Resposta ao gesto, abertura e transição de conteúdo; sem atrasar uma ação ou sugerir sucesso não confirmado.
 
-A **family-office risk desk in Miami, Singapore or London, at 2pm.** They must understand within
-30 seconds that this is a formal regulated vehicle — not "digital fixed income" repackaged, and not
-crypto-degen RWA with a press release. Four personas consume the product:
+## 3. Cor e contraste
 
-| Persona | Need | Scale |
+Paleta preservada. Não há nova cor de marca nem quarto fundo de conteúdo.
+
+| Papel | Token / valor | Regra |
 |---|---|---|
-| Vendedor (contemplated holder) | Liquidity, Pix in 48h | Individual |
-| Comprador-usuário do bem | Discounted quota for a real asset (property, vehicle, equipment) | Individual |
-| Investidor institucional BR | Senior/subordinated exposure | R$ 500k–10M |
-| Investidor internacional | LATAM credit exposure via USDC/EURC | US$ 100k–5M |
+| Conteúdo | `surface.sheet-white` #ffffff | Leitura e formulários |
+| Agrupamento | `surface.document-grey` #e4e4e4 | Canvas ou faixa contextual |
+| Petróleo | `surface.deep-petrol` #132728 | Texto principal claro e fundo escuro |
+| Cenário decorativo | `backdrop.abyss` #080f10 | Apenas arte escura |
+| Ciano escuro | `signal.500` #0EA7C7 | Texto sobre petróleo: 5,47:1; nunca sobre branco/cinza |
+| Ciano branco | `signal.600` #057A99 | Só sobre branco: 4,94:1; cinza reprova |
+| Ciano claro seguro | `signal.700` #046C88 | Branco 5,99:1; cinza 4,71:1 |
+| Texto sobre ciano 500 | `ink.on-signal` #132728 | 5,47:1; branco reprova |
+| Secundário claro | `ink.on-light-muted` rgba(19,39,40,.7) | Não reduzir alpha nem aplicar opacity no contêiner |
+| Texto escuro | `ink.on-dark` #e4e4e4 | Sobre petróleo |
+| Secundário escuro | `ink.on-dark-muted` #A0CFE7 | Só em fundo escuro |
+| Erro | `state.danger` #B3261E | Em claro, acompanhado de texto |
+| Erro escuro | `state.danger-on-dark` #F2B8B5 | Só em escuro |
 
-### Creative north star: **"The Regulated Terminal"**
+Hairlines de 1 px: petróleo/12% em claro, branco/10% em escuro. São divisores decorativos; não bastam sozinhos para identificar um campo, seleção ou foco. Limite de campo que dependa da borda usa `ink.on-light-muted` ou `ink.on-dark-muted` com contraste verificado.
 
-The register of an institutional financial terminal — *not* the trader terminal (Bloomberg, neon on
-black), but the **regulated** terminal: hairlines as structural mesh, mono numerals carrying the data
-that matters, editorial Chillax signing each section anchor, and a single auditable cyan that appears
-rarely as **signal**, never as decoration. The one softness allowed is the ambient light-blob motif
-(§7), and it lives only in the dark.
+Texto normal ≥4,5:1, texto grande ≥3:1; indicador funcional ≥3:1. Validar o composto real no navegador. `ink.on-light-faint` (20%) é só decoração, nunca etapa futura, botão secundário, label ou dado legível. Não reduzir opacidade de todo um painel.
 
----
+Foco: anel de 2 px, offset 4 px, `signal.700` em claro e `signal.500` em escuro. Não recortar o anel com overflow. Erro e seleção incluem texto/semântica; cor sozinha não informa.
 
-## 2. The seven laws
+## 4. Lei de hierarquia tipográfica
 
-These are the rules that make output recognisably Plina. If you remember nothing else, remember these.
+Famílias mantidas: Chillax, Satoshi, Geist e Geist Mono. Os tokens editoriais da v1.1 continuam para landing; produto usa os papéis abaixo.
 
-1. **The One Voice Rule.** Cyan occupies **≤10% of any viewport**. More than three visible cyan
-   points on a screen means it is wrong. The signal's power is its rarity.
-2. **The Three-Surface Sandwich.** Every page alternates between exactly three surfaces —
-   Sheet White, Document Grey, Deep Petrol. **NEVER** a fourth content surface.
-3. **The Surface-Aware Cyan Rule.** Cyan changes step depending on what it sits on. §3 has the table.
-   Getting this wrong is an accessibility failure, not a taste failure.
-4. **Flat by Doctrine.** No drop shadows on surfaces at rest. Depth is tonal and hairline-based.
-   Exactly one shadow exists in the whole system (§6).
-5. **Borders are 0 or 9999px.** Cards, tiles and panels are sharp. Buttons, chips and inputs are pills.
-   **NEVER** anything in between in product UI.
-6. **The Mono-For-Data Rule.** Every number carrying regulatory, financial or technical meaning is
-   Geist Mono. This is the visual signature of the system.
-7. **The Eyebrow-Headline Pair.** Every section opens with an uppercase cyan eyebrow label
-   immediately followed by a Chillax display. **NEVER** a display heading alone.
-
----
-
-## 3. Colour
-
-### The palette
-
-| Token | Hex | Brand name | Role |
+| Papel de produto | Token | Tamanho / peso / entrelinha | Uso |
 |---|---|---|---|
-| `surface.sheet-white` | `#ffffff` | Sheet White | Primary light surface |
-| `surface.document-grey` | `#e4e4e4` | Off-White | Alternate light surface; input and chip fill |
-| `surface.deep-petrol` | `#132728` | Base Plina | Dark surface **and** the dominant text colour on light |
-| `backdrop.abyss` | `#080f10` | — | Décor canvas for the blob motif. Not a content surface (§7) |
-| `signal.500` | `#0EA7C7` | Action Cyan | The signal. Dark surfaces and fills only |
-| `signal.600` | `#057A99` | — | Cyan ink on Sheet White only |
-| `signal.700` | `#046C88` | — | Cyan ink safe on **both** light surfaces |
-| `support.stellar-mid` | `#4A9ED4` | Support Blue | Hover of heavy numerals, dark only |
-| `support.glacier-tint` | `#A0CFE7` | Detail Mist | Secondary copy and title hover, dark only |
+| Título da página | `typography.page-title` | 28–36 px / 600 / 1,15 | Um h1, sem competir com cada seção |
+| Título de seção | `typography.section-title` | 20 px / 600 / 1,3 | h2 de grupo funcional |
+| Valor decisivo | `typography.value-primary` | 24–32 px / 500 / 1,2 | Um valor principal por região de decisão |
+| Texto de trabalho | `typography.body-ui` | 16 px / 400 / 1,5 | Instrução, campos, corpo de produto |
+| Label funcional | `typography.label-ui` | 14 px / 500 / 1,4 | Navegação, botão e label; caixa de frase |
+| Apoio | `typography.body-small` | 14 px / 400 / 1,6 | Legendas, condições, ajuda local |
+| Dado tabular | `typography.data` | 14 px / 500 / 1,4 | Mono, algarismos tabulares |
 
-The palette is cold and deep — it communicates institutional stability, punctuated by the vibrant
-cyan that marks opportunity and technical execution.
+Título e conteúdo primário usam tinta principal; apoio usa tinta secundária. A hierarquia combina tamanho, peso e espaço, não só opacidade. Uma ressalva que muda a decisão fica com texto normal, antes da ação; não vai para nota miúda.
 
-### Contrast table — the part that is most often got wrong
+Eyebrow editorial é opcional, no máximo um por seção importante. Nunca exigir eyebrow em cada painel, nem ciano em todo título. Labels e botões de produto usam caixa de frase e tracking 0; o uppercase espaçado fica no registro editorial. Não alterar as palavras da copy para aplicar estilo.
 
-All ratios measured. **MUST** pick from this table rather than eyeballing.
+Corpo editorial: Satoshi 300 em 18 px, linha 1,6, máximo 70ch. Peso 300 nunca abaixo de 16 px. Formulários: 16 px, peso 400. Metadados técnicos podem usar 12 px em mono; não usar esse tamanho para condição, CTA, navegação ou estado.
 
-| Foreground | on Sheet White | on Document Grey | on Deep Petrol | on Abyss |
-|---|---|---|---|---|
-| Deep Petrol `#132728` | **15.57** ✅ | **12.25** ✅ | — | 1.24 ❌ |
-| Off-White `#e4e4e4` | 1.27 ❌ | — | **12.25** ✅ | **15.21** ✅ |
-| Action Cyan `#0EA7C7` | 2.85 ❌ | 2.24 ❌ | **5.47** ✅ | **6.79** ✅ |
-| Cyan 600 `#057A99` | **4.94** ✅ | 3.89 ❌ | 3.15 ⚠️ large | 3.91 ⚠️ large |
-| Cyan 700 `#046C88` | **5.99** ✅ | **4.71** ✅ | 2.60 ❌ | 2.72 ❌ |
-| Support Blue `#4A9ED4` | 2.94 ❌ | 2.32 ❌ | **5.29** ✅ | **6.57** ✅ |
-| Detail Mist `#A0CFE7` | 1.67 ❌ | 1.31 ❌ | **9.32** ✅ | **11.58** ✅ |
+Moedas, percentuais, saldos, prazos, NAV, hashes, endereços, ticker e identificadores em mono. Não animar a contagem de dinheiro. Linhas comparáveis usam a mesma escala; o valor principal pode sobressair fora da tabela. Hash completo quebra dentro da coluna sem alargar o viewport.
 
-**Text on an Action Cyan fill MUST be Deep Petrol (5.47:1). White on cyan is 2.85:1 and is
-forbidden** — this includes the announcement TopBar, cyan badges, and cyan buttons.
+## 5. Marca e forma
 
-### Decision rule for cyan ink
+Wordmark `Plina.` em Chillax 600; ponto ciano adequado ao fundo, estático. Área livre mínima: altura do P. Sem sombra, distorção ou caixa ao redor da marca.
 
-```
-Is the cyan on a dark surface (deep-petrol or abyss)?
-  → signal.500 #0EA7C7
-Is it on sheet-white, and you are certain the surface will never change?
-  → signal.600 #057A99
-Anything else on light — document-grey, unknown surface, themeable component?
-  → signal.700 #046C88     ← safe default
-Is it text sitting ON a cyan fill?
-  → surface.deep-petrol #132728, always
-Is it a focus ring?
-  → same rule: signal.500 on dark, signal.700 on light (see below)
-```
-
-**Focus rings are surface-aware too.** WCAG 2.2 SC 1.4.11 requires 3:1 for non-text indicators.
-Action Cyan is only 2.85:1 on Sheet White and 2.24:1 on Document Grey, so it **MUST NOT** be the
-focus ring on a light surface. Use `signal.700 #046C88` on light (5.99:1 / 4.71:1) and
-`signal.500 #0EA7C7` on dark (5.47:1 / 6.79:1).
-
-### Ink tokens
-
-| Context | Colour |
-|---|---|
-| Body on light | Deep Petrol |
-| Secondary on light | `rgba(19,39,40,0.7)` — do not go below 0.6 for readable text |
-| Decorative numerals on light | `rgba(19,39,40,0.2)` — rest state only, never readable text |
-| Body on dark | Off-White `#e4e4e4` (preferred over pure white for long copy) |
-| Secondary on dark | Detail Mist `#A0CFE7` |
-| On a cyan fill | Deep Petrol |
-
-### Hairlines
-
-The **only** structural separator. `1px rgba(19,39,40,0.12)` on light, `1px rgba(255,255,255,0.10)`
-on dark, `1px rgba(160,207,231,0.10)` for outer frames of dark panels. **NEVER** a coloured border
-for separation.
-
-### Where cyan is allowed to appear
-
-Active underlines · the logotype period (`Plina.`) · numbered markers (`01 //`) · eyebrow labels ·
-the animated hover bar · TopBar fill · CTA hover fill · focus rings (surface-aware step) ·
-the ambient blob motif.
-**NEVER** as a large surface fill, as body text, or as a second decorative colour.
-
----
-
-## 4. Typography
-
-| Role | Family | Source |
+| Token | Valor | Aplicação |
 |---|---|---|
-| Display / headline / title / logotype | **Chillax** (fallback Satoshi) | Fontshare |
-| Body | **Satoshi** | Fontshare |
-| Labels, eyebrows, buttons | **Geist** | Google Fonts |
-| Data | **Geist Mono** | Google Fonts |
+| `radius.none` | 0 | Linhas/células de tabela e divisores |
+| `radius.card` | 12 px | Cartão independente, bloco de revisão, textarea |
+| `radius.panel` | 16 px | Painel principal, diálogo, drawer e imagem |
+| `radius.full` | 9999 px | Botão, chip, campo de uma linha e avatar |
+| `radius.deck` | 24 px | Apresentações, não produto |
 
-```html
-<link href="https://api.fontshare.com/v2/css?f[]=chillax@400,500,600,700&f[]=satoshi@300,400,500,700&display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@300;400;500&display=swap" rel="stylesheet">
-```
+Não colocar cada linha dentro de um cartão. Uma tabela pode ter moldura externa de 16 px e células internas retas. Preservar rolagem e foco; raio não exige `overflow:hidden` no ancestral de menus. Não aninhar cartões com molduras/sombras: usar espaço e divisores internos.
 
-Chillax signs the editorial anchors at weight 600 with tight leading — the institutional voice.
-Satoshi carries long reading at weight 300, a deliberate contrast against the display weight.
-Geist Mono is where the data lives. This pairing avoids the category reflex (Inter/Söhne everywhere)
-in favour of an editorial-financial register.
+## 6. Elevação e profundidade
 
-### Scale
-
-| Style | Font | Weight | Size | Leading | Tracking | Use |
-|---|---|---|---|---|---|---|
-| `display` | Chillax | 600 | `clamp(2rem, 5vw, 3.75rem)` | 1.05 | −0.02em | Hero H1, section anchors |
-| `headline` | Chillax | 600 | `clamp(1.875rem, 3.5vw, 3rem)` | 1.1 | −0.015em | Titles inside a section |
-| `title` | Chillax | 600 | 1.5rem | 1.2 | −0.01em | List items, tile titles |
-| `body-lead` | Satoshi | 300 | 1.25rem | 1.6 | 0 | Opening paragraph |
-| `body` | Satoshi | 300 | 1.125rem | 1.6 | 0 | Institutional copy |
-| `body-small` | Satoshi | 400 | 0.875rem | 1.6 | 0 | Captions, table cells |
-| `eyebrow` | Geist | 700 | 0.625rem | 1.4 | 0.2em UPPER | Section opener, in cyan |
-| `eyebrow-wide` | Geist | 700 | 0.625rem | 1.4 | 0.4em UPPER | Hero and cover variant |
-| `label` | Geist | 700 | 0.6875rem | 1.4 | 0.2em UPPER | Nav, buttons, chips, footer |
-| `data` | Geist Mono | 500 | 0.875rem | 1.4 | 0.05em | Numbers that mean something |
-| `data-micro` | Geist Mono | 400 | 0.75rem | 1.4 | 0.2em UPPER | Chrome: page markers, counters |
-
-### Typography rules
-
-- **The Light-Body Rule.** Body copy is Satoshi **300**. Weights 400+ in long copy read as heavy SaaS.
-  The system breathes because body is light and display is medium-heavy.
-- **The Mono-For-Data Rule.** Mono is **mandatory** for: target mixes (`40-60%`), durations
-  (`30-90 dias`), percentages, NAV figures, AUM thresholds, SEP identifiers (`SEP-24`, `SEP-38`),
-  Stellar flags (`AUTH_CLAWBACK_ENABLED`), on-chain hashes and addresses, ticker `PLINA-RF`,
-  and `contato@plina.finance`. **NEVER** set these in Satoshi.
-- **Measure.** Body copy caps at 70ch, hard limit 75ch.
-- **Uppercase is a rule for every label.** No sentence-case labels.
-
----
-
-## 5. Logotype
-
-The wordmark is **`Plina`** in Chillax 600 with a **period in cyan**. The period is the mark — it
-signifies the end of bureaucracy. It is never omitted, never a different colour, never animated.
-
-```html
-<!-- on dark -->
-<span class="font-display font-semibold text-[#e4e4e4]">Plina<span class="text-[#0EA7C7]">.</span></span>
-<!-- on light -->
-<span class="font-display font-semibold text-[#132728]">Plina<span class="text-[#046C88]">.</span></span>
-```
-
-- On light surfaces the body of the wordmark takes **Base Plina `#132728`**, and the period takes the
-  surface-appropriate cyan step (§3).
-- The product ticker is written **`PLINA-RF`** in Geist Mono, uppercase, never in Chillax.
-- Clear space around the wordmark: at least the cap-height of the `P` on every side.
-- **NEVER** place the wordmark on a cyan fill, inside a box, on a photograph without a Deep Petrol
-  scrim, or with a drop shadow.
-
----
-
-## 6. Elevation and depth
-
-Flat by doctrine. Depth comes from exactly three mechanisms, none of which is a shadow:
-
-1. **Tonal sandwich** — alternation between Sheet White / Document Grey / Deep Petrol across sections.
-2. **Hairlines** — `gap-px` over a hairline background, or a 1px hairline border.
-3. **Colour reveal on hover** — a 1px × 100% cyan bar pinned left that scales `scale-y-0 → scale-y-100`
-   from `origin-top`. Vertical only: no `translate-y`, no shadow spread, no scale on the card.
-
-**The single shadow exception.** The one primary lead-capture CTA per page may take
-`0 20px 25px -5px rgba(14,167,199,0.2)` **on hover only**. Nothing else in the system casts a shadow.
-
-**No glassmorphism**, with one exception: the sticky navbar once it passes the hero, which may use
-`backdrop-blur` for legibility over moving content. Never on content cards.
-
----
-
-## 7. The visual motif: Ambient Light Blobs
-
-> *Organic, diffuse forms of cyan luminosity emerging from darkness — no edges, no rigidity. The
-> visual metaphor for liquidity and capital in continuous motion.*
-> **Orgânico. Difuso. Sempre em fluxo.**
-
-This is the brand's one piece of softness and its most recognisable art direction. It is **décor**.
-
-### Where it is legal
-
-✅ Hero panels · cover slides · full-bleed dark section backdrops · the closing panel.
-❌ Light surfaces · behind or inside a content card · behind body copy at strength · anything
-interactive · anything that would push cyan past the 10% viewport budget.
-
-### The recipe
-
-Layer three to four absolutely-positioned ellipses on an Abyss `#080f10` or Deep Petrol canvas,
-each `border-radius: 50%`, blurred, at descending opacity, anchored off the panel edges.
-
-```css
-.blob        { position: absolute; border-radius: 50%; pointer-events: none; z-index: 1; }
-.blob-primary   { width: 480px; height: 480px; filter: blur(40px);
-  background: radial-gradient(ellipse at center, rgba(14,167,199,.22) 0%, rgba(14,167,199,.06) 45%, transparent 70%); }
-.blob-secondary { width: 320px; height: 520px; filter: blur(50px);
-  background: radial-gradient(ellipse at center, rgba(14,167,199,.13) 0%, transparent 65%); }
-.blob-support   { width: 200px; height: 380px; filter: blur(45px);
-  background: radial-gradient(ellipse at center, rgba(74,158,212,.10) 0%, transparent 60%); }
-.blob-whisper   { width: 160px; height: 300px; filter: blur(55px);
-  background: radial-gradient(ellipse at center, rgba(14,167,199,.07) 0%, transparent 60%); }
-```
-
-Composition guidance: cluster the two strongest blobs toward one corner, let one bleed off-canvas,
-and keep the fourth as a distant whisper on the opposite side. Asymmetry is the point — never a
-symmetric pair, never centred behind a headline.
-
-### Fractal glass overlay
-
-A ribbed-glass texture for cover art and full-bleed hero imagery only.
-
-```css
-.fractal-overlay {
-  position: absolute; inset: 0; z-index: 5; pointer-events: none;
-  backdrop-filter: blur(24px);
-  background-image: repeating-linear-gradient(90deg,
-    rgba(0,0,0,.3) 0px, rgba(255,255,255,.02) 1px,
-    rgba(255,255,255,.005) 12px, rgba(0,0,0,.3) 13px);
-  mix-blend-mode: overlay;
-}
-```
-
-**NEVER** run this over readable text at full strength, and never on a content card.
-
-### Legacy glow orb
-
-A single solid cyan circle at `opacity: .15`, `filter: blur(100px)`, 500–800px, anchored off a panel
-corner. Maximum **one** per viewport. Prefer the blob set above for new work.
-
----
-
-## 8. Components
-
-### Buttons
-
-Full-radius pill, uppercase Geist 700 label with wide tracking. The feel is a wealth manager's
-button, not a SaaS landing button.
-
-| Variant | Rest | Hover | Padding |
+| Nível | Token | Sombra CSS | Quando usar |
 |---|---|---|---|
-| **Primary** | `bg` Deep Petrol · `text` Sheet White | `bg` Action Cyan · `text` **Deep Petrol** | `20px 40px` |
-| **Ghost** | `bg` Sheet White · `text` Deep Petrol | `bg` Document Grey | `10px 20px` |
-| **Quiet (on dark)** | transparent · 1px dark hairline · `text` Off-White | `border` Action Cyan · `text` Action Cyan | `10px 20px` |
+| Repouso | `elevation.none` | none | Tabelas, listas, formulários, cartões comuns |
+| Destaque | `elevation.raised` | 0 4px 16px -4px rgba(19,39,40,.12) | Um bloco de decisão/detalhe selecionado por região |
+| Sobreposição | `elevation.overlay` | 0 16px 40px -8px rgba(19,39,40,.18) | Menu, diálogo ou drawer acima do conteúdo |
 
-Transition: `300ms cubic-bezier(0.16,1,0.3,1)` on colour only. **NEVER** scale, translate or shadow
-on hover (except the single lead-capture CTA, §6). Focus: 2px ring at `outline-offset: 4px`, in
-`#046C88` on light surfaces and `#0EA7C7` on dark.
+`elevation.cta` é alias depreciado de `raised`. A sombra ciano antiga sai. Em fundo escuro, manter hairline legível: sombra não substitui borda ou foco. Seleção exige indicador textual/semântico, não apenas elevação. Sem escala ou salto do cartão no hover. Glassmorphism continua restrito à navbar editorial sobre conteúdo; não usar em formulário.
 
-```html
-<!-- on a light surface -->
-<button class="rounded-full bg-[#132728] px-10 py-5 font-label text-[0.625rem] uppercase tracking-[0.2em]
-               text-white transition-colors duration-300 ease-[cubic-bezier(.16,1,.3,1)]
-               hover:bg-[#0EA7C7] hover:text-[#132728]
-               focus-visible:outline-2 focus-visible:outline-[#046C88] focus-visible:outline-offset-4">
-  Solicitar Prospecto
-</button>
-```
+## 7. Imagem e motivo ambiente
 
-### Inputs and fields
+Blobs escuros existentes continuam: elipses difusas, assimétricas e decorativas, fora da área de leitura, usando os tokens `motif`. Nunca atrás de dado, formulário, aviso ou CTA. Não converter arte em promessa de retorno ou validação.
 
-Pill (`9999px`), padding `16px 28px`, fill `rgba(228,228,228,0.2)`, 1px hairline border, Satoshi 400
-at 1rem. Label sits **above** the field in Geist 700 uppercase `0.625rem` tracking `0.2em`, indented
-`16px` to align with the pill's optical edge. Focus changes the border to Action Cyan — no glow, no
-outline ring on the field itself. Error state: border and helper text in `#B3261E`, helper text in
-Geist Mono `0.75rem`; **never** communicate error by colour alone — always include the helper text.
+**Decisão para superfície clara:** não levar blobs ao fundo de trabalho nesta versão. Fluidez ali vem de raios, espaço e microinterações; evita contraste dependente do quadro animado. Uma imagem aprovada pode ocupar uma região editorial separada com raio de 16 px.
 
-### Chips
+Arte em movimento só na região editorial: entrada única de até 320 ms; sem loop ambiente nesta entrega. Não animar o ponto da marca. Se futuramente houver vídeo contínuo, ele exige controle de pausa e alternativa estática. Não criar parallax.
 
-Pill, `bg` Document Grey, `text` Deep Petrol at 60% alpha, Geist 700 `0.625rem` uppercase tracking
-`0.2em`, padding `8px 16px`, hairline border. For **metadata only** ("Fluxo B2B Integrado",
-"CVM 175 Compliant"). **NEVER** use chips for navigation or selection.
+## 8. Componentes e ícones
 
-### Cards and tiles
+### Componentes
 
-- **Radius `0`.** Sharp. This is doctrine against the SaaS aesthetic.
-- **Background** Sheet White over a Document Grey section, or vice versa.
-- **Separation** via `gap-px` over a hairline background — the grid reveals the hairline beneath.
-  Not an outer border on each card.
-- **Padding** `32px`.
-- **Shadow** none. **Hover** a fill transition over `500ms`; no translate, no scale.
-- Cards are **never nested**.
+- Botões: pill, altura mínima 44 px, label funcional 14 px; principal petróleo/branco em claro, hover ciano/petróleo. Secundário com texto e borda contrastantes. Um principal por decisão. Sem sombra ciano.
+- Campos: label acima, texto 16 px, padding horizontal 16–24 px; altura mínima 44 px. Multilinha usa raio 12 px. Foco por superfície; mensagem junto do campo ou da ação. Borda decorativa não é o único contorno do campo.
+- Painéis: raio 16 px, padding 24 px desktop/16 px celular. Cartões: raio 12 px, mesma lógica de padding. Lista densa usa divisores; não uma coleção de cartões iguais.
+- Dados: label secundário → valor principal → condição/prova. Valor e condição mantidos juntos no reflow. Sem ícone em cada métrica.
+- Navegação: item selecionado tem `aria-current` no elemento interativo e identificação além da cor. Seletor nativo continua válido no celular.
+- Footer: ao fim do conteúdo, nunca fixo cobrindo uma ação. Usar links e texto já aprovados; não inventar credenciais regulatórias. Especificação do footer segue com Flora em paralelo.
 
-### Data tile
+### Iconografia: Phosphor
 
-The institutional stat block. Label in Geist uppercase, value in **Geist Mono**, optional caption in
-Satoshi 300. No icon, no coloured background, no trend arrow unless the number is genuinely a series.
+Família única escolhida: **Phosphor**, pacote `@phosphor-icons/react`. A documentação oficial confirma pesos e configuração por tamanho/cor; a seleção abaixo é decisão do design system, não recomendação do fornecedor. [Documentação oficial](https://github.com/phosphor-icons/react).
 
-```html
-<div class="bg-white p-8">
-  <span class="font-label text-[0.625rem] uppercase tracking-[0.2em] text-[#046C88]">Duration alvo</span>
-  <p class="mt-3 font-mono text-3xl font-medium tracking-[0.05em] text-[#132728]">30-90 dias</p>
-  <p class="mt-2 max-w-[65ch] text-sm font-light text-[#132728]/70">Prazo médio ponderado da carteira.</p>
-</div>
-```
+Padrão **regular**, 20 px, `currentColor`; 16 px para indicador junto a texto, 24 px em navegação. Preservar o traço nativo, sem sobrescrever `stroke-width`. `bold` apenas em estado selecionado acompanhado de label/semântica. Não usar `thin` em controles pequenos: o traço perde presença. `duotone` só em ilustração editorial de 32 px ou mais; não necessário para implementar esta versão.
 
-### Navigation
+Mapa semântico: seta para navegar/voltar, caret para expandir, lupa para busca, filtro para filtrar, copiar para copiar hash, seta externa para explorer, documento para documento, aviso para erro. Não usar escudo/check como selo de validação jurídica. A instalação da dependência segue a revisão de deps normal; este pacote não altera `package.json`.
 
-- **TopBar** — Action Cyan fill, Deep Petrol uppercase Geist label (never white text on cyan).
-- **Navbar** — transparent over the hero, transitioning to `Deep Petrol/95` + `backdrop-blur-md`
-  once scrolled past it. Items in Geist `0.6875rem` uppercase `tracking-[0.2em]`, `text-white/80` at
-  rest → `text-white` on hover. No underline, no border-bottom.
-- **Mobile** — hamburger + full-bleed Deep Petrol drawer, labels at `text-sm`.
+Ícone junto de label é decorativo (`aria-hidden`, não focável). Botão só de ícone precisa de nome acessível explícito, alvo 44×44 e indicação visual compreensível; tooltip não substitui nome. Ícone funcional ≥3:1 contra o fundo. Não misturar bibliotecas novas; migrar ícones existentes na tela alterada sem refazer logotipos de parceiros.
 
-### Chrome (decks, full-bleed panels)
+## 9. Espaço e movimento
 
-- **Brand tag** — the logotype at 18px, pinned top-left at the gutter.
-- **Page marker** — Geist Mono `12px`, `tracking-[0.2em]`, `rgba(160,207,231,0.4)`, pinned
-  bottom-right: `01 // COVER`, `03 // PRODUCT`.
+### Densidade por tarefa
 
-### Numbered list item — **the signature pattern**
+Escala: 8, 16, 24, 32, 64, 128 e 160 px. Em produto: 8 entre label/valor, 16 entre campos, 24 entre grupos, 32 entre seções. Não aplicar o `py-32` editorial a cada painel operacional.
 
-Reuse this before inventing a card grid. Recurring in Princípios, Tese and Equipe.
+Admin/listas: container máximo 1440 px (`size.workspace-max`), gutter `clamp(16px,3vw,48px)`; aproveitar largura com lista+detalhe 7/12–5/12 a partir de 1024 px quando ambos couberem. Abaixo disso, uma coluna. Contexto com quatro dados usa 2×2 se a largura útil ficar abaixo de 640 px; uma coluna abaixo de 360 px. Não forçar quatro colunas estreitas para cumprir um wireframe anterior.
 
-```html
-<div class="group relative border-b border-[rgba(19,39,40,0.12)] py-16">
-  <span class="absolute left-0 top-0 h-full w-px origin-top scale-y-0 bg-[#0EA7C7]
-               transition-transform duration-700 ease-[cubic-bezier(.16,1,.3,1)] group-hover:scale-y-100"></span>
-  <div class="grid grid-cols-[auto_1fr] gap-8 pl-8">
-    <span class="font-mono text-2xl font-light text-[#132728]/20 transition-colors duration-300
-                 ease-[cubic-bezier(.16,1,.3,1)] group-hover:text-[#046C88]">01</span>
-    <div>
-      <h3 class="font-display text-2xl font-semibold text-[#132728]">Clawback nativo</h3>
-      <p class="mt-3 max-w-[70ch] text-lg font-light leading-relaxed text-[#132728]/70">
-        Cada token PLINA-RF carrega <span class="font-mono text-sm tracking-[0.05em]">AUTH_CLAWBACK_ENABLED</span>
-        no emissor Stellar.
-      </p>
-    </div>
-  </div>
-</div>
-```
+Formulário: máximo 640 px; texto corrido máximo 70ch. Em desktop, espaço lateral serve para contexto relacionado, sem esticar campos indefinidamente. Editorial mantém container 1280 px, gutter próprio e ritmo amplo. Em celular, 16 px nas bordas; padding 16 px, alvos ≥44 px, lista com altura mínima de 56 px e crescimento livre por conteúdo. Não truncar condição ou valor.
 
----
+### Movimento
 
-## 9. Layout and motion
+Easing único: `cubic-bezier(0.16,1,0.3,1)`. Animar apenas propriedades necessárias, nunca `transition: all`.
 
-### Spacing scale
+| Token | Duração | Uso |
+|---|---|---|
+| `instant` | 120 ms | Press: deslocamento opcional de 1 px no botão, sem mover o layout |
+| `fast` | 160 ms | Hover, cor de link/botão, caret ao abrir |
+| `base` | 220 ms | Entrada de painel/dialog; fade e até 8 px de deslocamento |
+| `slow` | 280 ms | Barra vertical decorativa da lista editorial |
+| `reveal` | 320 ms | Entrada editorial única, opacity + translateY até 8 px |
 
-`1px` hairline · `8px` · `16px` · `32px` (card padding) · `64px` · `128px` (section rhythm) ·
-`160px` (lead capture, closing). Horizontal gutter `clamp(24px, 8vw, 120px)`.
-Content container `1280px`.
+Produto: troca de etapa mostra conteúdo/foco imediatamente; não esperar animação para habilitar controles. Movimento opcional no contêiner não pode deslocar o foco para fora da viewport. Disclosures funcionam por teclado com e sem animação; não animar `height:auto` por truques que recortem conteúdo. Não remontar formulário para animar, perder rascunho ou reenviar ação. Refetch não dispara entrada ou reposiciona foco.
 
-### Section rhythm
+Reveal no scroll só em seções editoriais não críticas, uma vez, sem cascata. Conteúdo nasce visível sem JS; nenhum saldo, erro, condição ou botão fica esperando scroll para aparecer. Loading usa texto estático acessível; shimmer/pulso não são necessários.
 
-```html
-<main>
-  <section class="bg-[#080f10] py-32">   <!-- Hero: blobs live here -->
-  <section class="bg-white py-32">        <!-- Produto -->
-  <section class="bg-[#e4e4e4] py-32">    <!-- Tese: numbered list -->
-  <section class="bg-[#132728] py-32">    <!-- Infraestrutura -->
-  <section class="bg-white py-40">        <!-- Lead capture -->
-</main>
-```
+`prefers-reduced-motion: reduce`: duração 0, transform none, scroll automático sem animação; conteúdo totalmente visível. O estado funcional continua mudando. Hover tem equivalente por foco e não revela informação indispensável exclusivamente no mouse.
 
-Density is **high in content, low in decoration**. Generous whitespace is not empty space — it is
-what makes dense regulatory information readable.
+## 10. Voz e estados
 
-### Motion
+Copy de domínio permanece com Consuelo/Norma; a v1.2 não aprova texto novo. Sem promessa de retorno, titularidade antecipada, selo jurídico ou equivalência monetária inventada. Regra regulatória não vai para o footer para liberar espaço.
 
-**One easing for everything: `cubic-bezier(0.16, 1, 0.3, 1)`** (ease-out-quart).
+Todo componente composto prevê: vazio sem inventar dados; carregando com status; erro junto da região/ação; bloqueado com motivo aprovado e sem ação habilitada; sucesso somente com confirmação do estado real. Erro de lista não vira filtro vazio. Fechar uma mensagem não pode deixar uma região sem estado compreensível. Provas existentes continuam acessíveis por link; animação e ícone não substituem evidência.
 
-| Duration | Use |
-|---|---|
-| 150ms | Colour/opacity on small controls |
-| 300ms | Button and link states |
-| 500ms | Surface fill on hover |
-| 700ms | The signature cyan bar scale-y |
-| 900ms | Scroll reveal and hero entrance |
+## 11. Reconciliação e migração
 
-Reveals are **opacity + a small `translateY(20px)`** only. No scale-in, no rotation, no stagger
-beyond ~80ms steps. Every animation **MUST** be disabled under `prefers-reduced-motion: reduce`.
+- Raio binário da v1.1 foi substituído pelo mapa 0/12/16/pill; deck 24 continua só em apresentações.
+- Sombra única foi substituída por níveis 0/1/2; alias `cta` aponta para `raised`.
+- Três superfícies continuam, sem alternância compulsória nem grandes faixas escuras em todo painel.
+- Corpo editorial 300 permanece; produto tem corpo 400 e labels 500 em caixa de frase.
+- Eyebrow deixou de ser obrigatório; números em mono permanecem.
+- Durações antigas 300–900 ms foram reduzidas conforme §9; nenhum loop novo.
+- As correções de acessibilidade da v1.1 permanecem: `signal.600` falha no cinza; branco falha no ciano 500; foco ciano 500 falha em superfície clara.
+- `DESIGN.md` é legado. Seu raio binário e sombra única não devem orientar telas novas; consultar este documento.
 
-### Accessibility floor
+Aplicação: admin primeiro, depois investidor/cedente/comprador, por PR de tela. Preservar APIs, copy aprovada, dados, estados, hashes, foco e rascunhos. O PR compara antes/depois na mesma fixture. Esta entrega não aplica CSS no app e não declara produção atualizada.
 
-- Body text meets WCAG AA (4.5:1); use §3's table, do not estimate.
-- Focus is always visible: 2px ring at `outline-offset: 4px`, colour picked per surface (§3). Never
-  `outline: none` without a replacement.
-- Colour is never the only carrier of meaning — pair with a label, an icon or mono text.
-- Target size ≥ 44×44px.
-- A skip link is required on every page.
-- The 300-weight body must not be used below 1rem; at small sizes step up to weight 400.
+## 12. Proibições
 
----
+Neon, gradiente de texto/borda, sombras coloridas, glass em conteúdo, card ícone+título+texto repetido como solução universal, números em fonte proporcional, múltiplos CTAs primários concorrentes, uppercase longo, texto secundário sem contraste, confete, contador de dinheiro animado, blob em formulário, layout que corta dados ou foco, evidência substituída por um check.
 
-## 10. Voice and copy
+## 13. Self-check e aceite
 
-Three pillars, taken directly from the brand guidelines:
+1. Sinal ciano limitado e pares corretos para cada fundo; foco preservado.
+2. Texto legível ≥4,5:1 e indicadores funcionais ≥3:1, medidos no composto real.
+3. Um h1; h2 por grupo; valor principal distinto dos labels; condição junto da ação.
+4. Raio corresponde ao papel; nenhum cartão dentro de cartão com moldura própria.
+5. Nível 0 por padrão, 1 com função explícita, 2 só sobreposição.
+6. Números em mono/tabular, hash completo e sem overflow da página.
+7. Produto usa labels 14 px e corpo 16 px; uppercase editorial não domina o fluxo.
+8. Phosphor consistente; ícones decorativos silenciosos; controles com nome e alvo ≥44 px.
+9. Movimento nos tempos definidos, conteúdo visível sem JS, modo reduzido sem deslocamentos.
+10. Tab, Enter, Espaço, Escape quando aplicável e restauração do foco funcionam; foco não é roubado por refetch.
+11. Conferir 390 e 1440 px, 320 px para reflow, zoom 200%, textos longos, vazio/carregando/erro/bloqueado/sucesso.
+12. Copy e comportamento financeiro intactos; revisão visual de Íris, gate de Vera e revisão final do Atlas na implementação.
 
-- **Autoridade Técnica.** Full institutional vocabulary: FIDC, CVM 175, senior/subordinated classes,
-  NAV, duration, yield. No simplification for the investor — institutional demands depth.
-- **Precisão Regulatória.** Cite the framing explicitly: CVM 175, Lei 11.795/2008, BACEN, AML/KYC,
-  LGPD. Clawback, `AUTH_REQUIRED` and SEPs are differentiators, not jargon.
-- **Auditabilidade.** Everything verifiable: registered service providers, big-four audit, on-chain
-  hash via Stellar Expert. Transparency replaces marketing.
-
-**CTA register is consultative:** "Solicitar Prospecto", "Submeter Aplicação", "Agendar Roadshow",
-"Solicitar Documentação Confidencial".
-
-**Forbidden copy:** "Renda Fixa Digital" · "ganho rápido" · "rentabilidade garantida" · any Brazilian
-retail-fintech framing (Nubank / Inter / C6 / Mercado Bitcoin register) · emoji · exclamation marks ·
-aggressive imperatives · dumbing down technical terms. Avoid em-dashes in new copy; use a comma,
-colon or full stop. (Copy already produced in the PDF brand guidelines keeps its original style.)
-
----
-
-## 11. Reconciliations — conflicts already resolved
-
-These arose between `docs/brand_guidelines.html` and `DESIGN.md`. Do not re-litigate them.
-
-| Conflict | Resolution |
-|---|---|
-| Guidelines show `rounded-3xl` / `2rem` cards; DESIGN.md mandates 0 or 9999px | The 24px radius is **presentation-only** (`radius.deck`). Product UI stays binary: 0 or full. |
-| Guidelines celebrate glow orbs and blobs; DESIGN.md forbids gradients and decoration | The blob motif is **legal décor on dark surfaces only** (§7). The no-gradient rule still holds absolutely for text, borders, and light-surface backgrounds. |
-| Guidelines use `#080f10`; DESIGN.md forbids a fourth surface | Abyss is a **décor backdrop**, not a content surface. It carries the blob motif and nothing else. The sandwich remains three tones. |
-| DESIGN.md sends cyan-deep `#057A99` to all light surfaces | **Corrected.** `#057A99` fails AA on Document Grey (3.89:1). `signal.700 #046C88` was added and passes on both light surfaces. |
-| Guidelines render the TopBar as white on Action Cyan | **Corrected.** White on cyan is 2.85:1. Text on a cyan fill is always Deep Petrol (5.47:1). |
-| DESIGN.md and `globals.css` set the focus ring to Action Cyan on every surface | **Corrected.** 2.85:1 / 2.24:1 on the light surfaces fails WCAG 2.2 SC 1.4.11 (3:1 non-text). The ring is now surface-aware: `signal.700` on light, `signal.500` on dark. |
-| Guidelines list only Geist Mono for metadata | Geist (sans) carries uppercase labels, Geist Mono carries data. Both ship. |
-
----
-
-## 12. Hard NO list
-
-Gradient in text, section background or border (the blob motif in §7 is the sole exception, and it is
-décor on dark only) · decorative drop shadows · coloured side-stripe borders wider than 1px at rest ·
-the hero-metric template (big number + label + supporting stats + gradient accent) · repeated
-icon + title + text card grids — use the numbered list instead · glassmorphism on content cards ·
-a fourth content surface · nested cards · Inter/Söhne fintech defaults · white text on cyan ·
-cyan as body text on light · emoji · Satoshi for meaningful numbers · any easing other than
-`cubic-bezier(0.16, 1, 0.3, 1)`.
-
----
-
-## 13. Self-check before returning generated UI
-
-1. Count the cyan. More than three visible points, or more than ~10% of the viewport? Cut it.
-2. Every cyan foreground — did you pick the step from §3's table for that exact surface?
-3. Any text on a cyan fill — is it Deep Petrol? Any focus ring on a light surface — is it `#046C88`?
-4. Any shadow? Only the single lead-capture CTA on hover is allowed.
-5. Every radius — is it exactly `0` or `9999px`?
-6. Every meaningful number — is it Geist Mono?
-7. Every section — does it open with an eyebrow before the display heading?
-8. Every transition — is it `cubic-bezier(0.16,1,0.3,1)`, and does it stop under reduced motion?
-9. Body copy — Satoshi 300, capped at 70ch?
-10. Did you reach for a card grid where the numbered list item was the right pattern?
-11. Is the blob motif anywhere near a light surface or a content card? Remove it.
-12. Does any copy use retail-fintech language, an exclamation mark, or an emoji?
+Na entrega da doutrina: validar JSON, aliases e correspondência dos exports; executar `node design-system/check-contrast.mjs`. Isso não substitui medição em tela, leitor de tela ou gate do app.
