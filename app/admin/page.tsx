@@ -28,7 +28,7 @@ import {
 import { fetchSupplyOnChainFromEnv } from '@/lib/stellar/supply';
 import { LoginForm } from './login-form';
 import { IncorporarCotaForm } from './incorporar-cota-form';
-import { ClawbackForm } from './clawback-form';
+import { InvestidoresPainel } from './investidores-painel';
 import { PaineisAdmin } from './paineis';
 import { Concentracao } from './concentracao';
 import { ValidacaoForm } from './validacao-form';
@@ -410,55 +410,16 @@ export default async function AdminPage() {
             <span className="block mt-1">Quem concluir o cadastro em Investir aparece aqui.</span>
           </p>
         ) : (
-          <div className="space-y-4">
-            {investidores.map((inv) => (
-              <div
-                key={inv.id}
-                className="border border-light-hairline p-4 space-y-3"
-              >
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm font-text">
-                  <div>
-                    <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-                      Email
-                    </p>
-                    <p>{inv.email}</p>
-                  </div>
-                  <div>
-                    <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-                      Public key
-                    </p>
-                    <a
-                      href={accountExplorerUrl(inv.publicKey)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-xs break-all underline"
-                    >
-                      {inv.publicKey}
-                    </a>
-                  </div>
-                  <div>
-                    <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
-                      Saldo esperado
-                    </p>
-                    <p className="font-mono">{tokenFmt(inv.saldoEsperado)}</p>
-                    <p className="font-details text-[10px] tracking-[0.15em] uppercase text-base/60">
-                      {inv.status}
-                    </p>
-                  </div>
-                </div>
-                <details className="border-t border-light-hairline pt-3">
-                  <summary className="min-h-[44px] flex items-center cursor-pointer font-details text-[10px] tracking-[0.2em] uppercase font-bold">
-                    Clawback
-                  </summary>
-                  <ClawbackForm
-                  investidorId={inv.id}
-                  investidorEmail={inv.email}
-                  saldoEsperado={tokenFmt(inv.saldoEsperado)}
-                />
-                </details>
-              </div>
-            ))}
-          </div>
+          <InvestidoresPainel
+            investidores={investidores.map((inv) => ({
+              id: inv.id,
+              email: inv.email,
+              publicKey: inv.publicKey,
+              explorerUrl: accountExplorerUrl(inv.publicKey),
+              saldoEsperado: tokenFmt(inv.saldoEsperado),
+              status: String(inv.status),
+            }))}
+          />
         )}
       </section>
 

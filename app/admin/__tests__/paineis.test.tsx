@@ -124,7 +124,8 @@ describe('AP-3: a página do admin usa os painéis', () => {
     expect(src).toContain('<PaineisAdmin');
     expect(src).not.toMatch(/<nav className="sticky top-14/);
   });
-  it('o clawback de cada investidor nasce fechado, num <details> com summary de 44 px', () => {
+  it('o clawback de cada investidor nasce fechado, num <details> com summary de 44 px (o formulário agora vive em investidores-painel.tsx)', () => {
+    const src = readFileSync('app/admin/investidores-painel.tsx', 'utf8');
     const i = src.indexOf('<ClawbackForm');
     expect(i).toBeGreaterThan(-1);
     const antes = src.slice(Math.max(0, i - 600), i);
