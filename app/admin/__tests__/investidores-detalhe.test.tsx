@@ -118,3 +118,23 @@ describe('a página usa o painel', () => {
     expect(src).not.toContain('<ClawbackForm');
   });
 });
+
+describe('conferência do alvo dentro de cada detalhe (gate da Vera)', () => {
+  // "Alvo: <email> · Saldo esperado: <saldo>" é a única conferência humana antes de um clawback sem confirmação:
+  // cada detalhe tem de mostrar os dados do PRÓPRIO investidor (e-mails e saldos diferentes entre si).
+  it('cada detalhe mostra o e-mail e o saldo esperado do próprio investidor no texto "Alvo"', () => {
+    montar();
+    const alvo = (id: string) => within(detalhe(id)).getByText(/^Alvo:/).textContent?.replace(/\s+/g, ' ').trim();
+    expect(alvo('inv-a')).toBe('Alvo: a@exemplo.test · Saldo esperado: 139,6');
+    expect(alvo('inv-b')).toBe('Alvo: b@exemplo.test · Saldo esperado: 0');
+    expect(alvo('inv-c')).toBe('Alvo: c@exemplo.test · Saldo esperado: 12');
+  });
+
+  it('o "Alvo" de um detalhe não contém dados de outro investidor', () => {
+    montar();
+    for (const inv of lista) {
+      const texto = within(detalhe(inv.id)).getByText(/^Alvo:/).textContent ?? '';
+      for (const outro of lista.filter((o) => o.id !== inv.id)) expect(texto).not.toContain(outro.email);
+    }
+  });
+});
