@@ -178,7 +178,8 @@ function LeadInner() {
           >
             <input
               type="text"
-              value={documento}
+              maxLength={40}
+            value={documento}
               onChange={(e) => setDocumento(e.target.value)}
               className={inputCls + ' font-mono'}
             />
@@ -189,6 +190,7 @@ function LeadInner() {
           <input
             type="text"
             required
+            maxLength={200}
             value={nome}
             onChange={(e) => setNome(e.target.value)}
             className={inputCls}
@@ -200,6 +202,7 @@ function LeadInner() {
             <input
               type="email"
               required
+              maxLength={254}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className={inputCls}
@@ -208,6 +211,7 @@ function LeadInner() {
           <Field label="Telefone / WhatsApp">
             <input
               type="tel"
+              maxLength={40}
               value={telefone}
               onChange={(e) => setTelefone(e.target.value)}
               className={inputCls}
@@ -218,6 +222,7 @@ function LeadInner() {
         <Field label="O que você quer comprar?">
           <input
             type="text"
+            maxLength={500}
             value={intencaoBem}
             onChange={(e) => setIntencaoBem(e.target.value)}
             placeholder="Ex: apartamento em São Paulo · caminhão tractor · maquinário"
