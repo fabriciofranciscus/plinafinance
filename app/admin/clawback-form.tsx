@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from 'react';
 import { executarClawbackAction, type ActionResult } from './actions';
+import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
 
 const motivoOptions = [
   { value: 'DECISAO_JUDICIAL', label: 'Decisão judicial' },
@@ -49,6 +50,7 @@ export function ClawbackForm({
           </span>
           <input
             type="number"
+            onKeyDown={semNotacaoCientifica}
             name="amount"
             step="0.0000001"
             min="0.0000001"

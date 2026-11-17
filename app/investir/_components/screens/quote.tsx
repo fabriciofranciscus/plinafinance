@@ -9,6 +9,7 @@ import { Term } from '../shared/term';
 import { QuoteCell } from '../shared/quote-cell';
 import { useExpiresIn } from '../shared/use-expires-in';
 import { tokensDaCotacao } from '../../_lib/quote-tokens';
+import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
 
 // BRL é a moeda funcional real (on-ramp Pix → TESOURO). As demais são da trilha
 // internacional (M4) — renderizam desabilitadas salvo NEXT_PUBLIC_INTL_INVESTOR_FLOW.
@@ -90,6 +91,7 @@ export function QuoteScreen({
             <span className="font-mono text-2xl text-base/45">R$</span>
             <input
               type="number"
+              onKeyDown={semNotacaoCientifica}
               min="10"
               max="430"
               step="10"

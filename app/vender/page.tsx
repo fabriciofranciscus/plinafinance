@@ -30,6 +30,7 @@ import { withTimeout } from '@/lib/http/client';
 import { isMaiorDeIdade, dataMaximaNascimentoISO } from '@/lib/format/idade';
 import { parseCpf } from '@/lib/format/parse-cpf';
 import { isUfValida } from '@/lib/format/uf';
+import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
 
 type TipoBem = 'IMOVEL' | 'VEICULO' | 'EQUIPAMENTO' | 'SERVICO';
 
@@ -1228,6 +1229,7 @@ function PassoEnvioCota(props: {
         <Field label="Valor da carta">
           <input
             type="number"
+            onKeyDown={semNotacaoCientifica}
             min="0.01"
             step="0.01"
             value={props.valorCarta}
@@ -1250,6 +1252,7 @@ function PassoEnvioCota(props: {
         <Field label="Prazo restante (meses, opcional)">
           <input
             type="number"
+            onKeyDown={semNotacaoCientifica}
             min="1"
             max="600"
             step="1"
