@@ -22,6 +22,7 @@ const NOVOS = [
   '--icon-inline', '--icon-default', '--icon-navigation',
   '--duration-instant', '--duration-fast', '--duration-base', '--duration-slow', '--duration-reveal',
   '--ease-terminal',
+  '--color-signal-600', '--color-signal-700', '--color-danger', '--color-danger-on-dark',
 ];
 const SUB = ['line-height', 'font-weight', 'letter-spacing'];
 

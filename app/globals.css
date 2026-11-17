@@ -21,6 +21,9 @@
      permitido como texto e anel de foco sobre fundo claro: 5,99:1 no branco) */
   --color-signal-500: #0EA7C7;
   --color-signal-700: #046C88;
+  --color-signal-600: #057A99;
+  --color-danger: #B3261E;
+  --color-danger-on-dark: #F2B8B5;
 
   /* Chillax/Satoshi (ITF) só existem se os arquivos estiverem em
      public/fonts/itf/ (fora do Git); sem eles, cai para Geist. */
