@@ -109,12 +109,12 @@ describe('proposta: oferta real', () => {
   it('ordem de leitura: valores → validade → ressalva → aceite (data e ressalva ANTES do botão)', () => {
     render(<AcompanharView data={base} />);
     const validade = screen.getByText('Validade da proposta');
-    const ressalva = screen.getByText(/Deságio simulado a partir do prazo/);
+    const ressalva = screen.getByText(/Deságio simulado a partir da base da oferta/);
     const aceitar = screen.getByRole('button', { name: /Aceitar proposta/ });
     expect(antes(validade, ressalva)).toBe(true);
     expect(antes(ressalva, aceitar)).toBe(true);
     // a ressalva aparece uma vez só
-    expect(screen.getAllByText(/Deságio simulado a partir do prazo/)).toHaveLength(1);
+    expect(screen.getAllByText(/Deságio simulado a partir da base da oferta/)).toHaveLength(1);
   });
   it('sem exemplo ilustrativo e sem <details> quando a oferta é real', () => {
     render(<AcompanharView data={base} />);
@@ -225,5 +225,35 @@ describe('ajustes da revisão visual', () => {
     render(<AcompanharView data={{ ...c, aguardandoAssinatura: true }} />);
     // o contexto real já traz a frase da DocuSign; o bloco de aviso do painel também precede o documento
     expect(antes(screen.getByTestId('aguardando-assinatura'), screen.getByText('Documento'))).toBe(true);
+  });
+});
+
+// Domínio (Consuelo, com ✓ da Norma relatado por ela, 17/11): 4 textos do acompanhamento. Só o que aparece na tela.
+describe('textos de domínio do acompanhamento', () => {
+  const ressalva = 'Deságio simulado a partir da base da oferta e do prazo restante da cota. Nenhum valor é proposta firme.';
+  const proibidos = [/curva de precifica/i, /AML\/KYC/, /DocuSign/, /Direitos? [Cc]reditórios?/, /Direito creditório/];
+
+  it('ressalva da oferta sem "administradora" nem "curva"; texto aprovado antes do aceite', () => {
+    render(<AcompanharView data={base} />);
+    expect(screen.getByText(ressalva)).toBeTruthy();
+  });
+
+  it('descrições da prévia: etapa 1 sem "AML/KYC"; etapa 4 sem "administradora" nem "curva de precificação"', () => {
+    render(<AcompanharView data={{ ...base, etapaAtual: 2, status: 'CONTATADO' }} />);
+    fireEvent.click(passo('Cadastro'));
+    expect(screen.getByText(/^Verificação de identidade concluída/)).toBeTruthy();
+    fireEvent.click(passo('Proposta de preço'));
+    const painel = screen.getByTestId('painel-consultado');
+    expect(painel.textContent).toContain('Proposta calculada sobre a base da oferta e o prazo restante da cota (simulação em rede de testes).');
+    expect(painel.textContent).not.toMatch(/administradora|curva de precifica/i);
+  });
+
+  it('cessão: nome do termo e objeto sem "direitos creditórios"; sem "DocuSign" na tela (aguardando e instrução)', () => {
+    const c = { ...base, status: 'OFERTA_ACEITA', etapaAtual: 4, cessaoId: 'ces-1', aguardandoAssinatura: true, contextoDescricao: 'O termo de cessão foi enviado para a sua assinatura.' } as AcompanharData;
+    const { container } = render(<AcompanharView data={c} />);
+    expect(screen.getByText('Termo de Cessão da Cota')).toBeTruthy();
+    expect(screen.getByText('Objeto: cota contemplada de consórcio')).toBeTruthy();
+    expect(screen.getByTestId('aguardando-assinatura').textContent).toContain('Enviado para sua assinatura por e-mail. Nenhum pagamento é feito antes da sua assinatura.');
+    for (const re of proibidos) expect(container.textContent).not.toMatch(re);
   });
 });

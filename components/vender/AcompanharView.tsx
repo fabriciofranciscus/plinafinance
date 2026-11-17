@@ -59,10 +59,10 @@ const ULTIMO = ETAPAS_VENDER.length - 1; // 5
 // Descrições por etapa (índice) para o modo preview. Quando o passo em foco é o
 // real (view === etapaAtual), usamos o texto preciso do status (contextoDescricao).
 const DESCRICAO_ETAPA = [
-  'Verificação AML/KYC concluída — feita uma única vez, vale para venda e investimento.',
+  'Verificação de identidade concluída — feita uma única vez, vale para venda e investimento.',
   'Sua cota foi enviada e entrou na fila da nossa mesa.',
   'Nossa mesa valida a titularidade e a situação da cota junto à administradora.',
-  'Proposta calculada sobre o prazo, a administradora e a curva de precificação da Plina (simulação em rede de testes).',
+  'Proposta calculada sobre a base da oferta e o prazo restante da cota (simulação em rede de testes).',
   'Cessão da cota assinada. A transferência depende da anuência da administradora; o hash do documento fica registrado em rede de testes.',
   'Pix do valor líquido, previsto após a assinatura (simulado em rede de testes; sem prazo definido).',
 ] as const;
@@ -355,7 +355,7 @@ function PainelOferta({
   );
 }
 
-const RESSALVA_OFERTA = 'Deságio simulado a partir do prazo, da administradora e da curva de precificação da Plina; nenhum valor é proposta firme.';
+const RESSALVA_OFERTA = 'Deságio simulado a partir da base da oferta e do prazo restante da cota. Nenhum valor é proposta firme.';
 
 /** Valores do exemplo ilustrativo; só aparecem dentro do disclosure, nunca como resumo real. */
 const EXEMPLO_OFERTA = { valorCarta: 120000, desagioPct: '18.5', valorLiquido: 97800, prazoRestanteMeses: null as number | null, validade: null as string | null };
@@ -444,7 +444,7 @@ function PainelCessao({
           <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 block mb-1">
             Aguardando assinatura
           </span>
-          Enviado por DocuSign. Nenhum pagamento é feito antes da sua assinatura.
+          Enviado para sua assinatura por e-mail. Nenhum pagamento é feito antes da sua assinatura.
         </p>
       ) : assinada ? null : (
         <p data-testid="assinatura-por-email" className="mb-4 font-text text-sm text-base/80">
@@ -458,12 +458,12 @@ function PainelCessao({
           Documento
         </p>
         <p className="font-text text-lg font-semibold text-base mt-2">
-          Termo de Cessão de Direitos Creditórios
+          Termo de Cessão da Cota
         </p>
         <div className="mt-4 space-y-1 font-mono text-xs text-base/70">
           <div>Cedente: {cedenteNome ?? '—'}</div>
           <div>Cessionária: Plina Finance (projeto em fase de testes, empresa em constituição)</div>
-          <div>Objeto: Direito creditório da cota cedida</div>
+          <div>Objeto: cota contemplada de consórcio</div>
         </div>
       </div>
 
