@@ -630,6 +630,41 @@ describe('incorporarCota — emissão recusada (nada vai à chain)', () => {
   it('Pix diferente do custo', () => recusa({ ...base, pixValorBrl: '390.00' }, 'PIX_DIVERGE_DO_CUSTO'));
   it('custo não positivo', () => recusa({ ...base, desagioAquisicao: '1' }, 'CUSTO_INVALIDO'));
 
+  // Invariante (Argus/I3): deságio em [0, 1] e NAV ≤ valorCarta. Antes, deságio NEGATIVO passava e o custo (logo os PLINARF emitidos)
+  // ficava ACIMA da carta.
+  for (const d of ['-0.1', '-0.0001', '-1', '1.0001', '2', 'abc', '', '1e3']) {
+    it(`deságio ${JSON.stringify(d)} fora de [0, 1] ou ilegível é recusado, sem emitir`, async () => {
+      await recusa({ ...base, desagioAquisicao: d }, 'DESAGIO_INVALIDO');
+      expect(emissoes()).toBe(0);
+      expect(st.cotas.size).toBe(0);
+    });
+  }
+  for (const d of ['0', '0.0001', '0.5', '0.9999']) {
+    it(`deságio ${d} (dentro de [0, 1]) não é recusado por DESAGIO_INVALIDO`, async () => {
+      const e = await incorporarCota({ ...base, desagioAquisicao: d }).then(() => null, (x) => x);
+      expect(e?.code).not.toBe('DESAGIO_INVALIDO');
+    });
+  }
+  // desagioRevenda (Argus, sobre o c0971e8): a faixa vale NO SERVIÇO, nos dois caminhos (rota admin e formulário/funil). Vazio = sem revenda.
+  for (const d of ['-0.0001', '-0.1', '1.0001', '2', 'abc', '1e3']) {
+    it(`desagioRevenda ${JSON.stringify(d)} fora de [0, 1] ou ilegível é recusado (DESAGIO_INVALIDO), sem emitir`, async () => {
+      await recusa({ ...base, desagioRevenda: d }, 'DESAGIO_INVALIDO');
+      expect(emissoes()).toBe(0);
+      expect(st.cotas.size).toBe(0);
+    });
+  }
+  for (const d of [undefined, '', '0', '0.0001', '0.37', '1']) {
+    it(`desagioRevenda ${JSON.stringify(d)} (ausente/vazio ou dentro de [0, 1]) não é recusado por DESAGIO_INVALIDO`, async () => {
+      const e = await incorporarCota({ ...base, desagioRevenda: d }).then(() => null, (x) => x);
+      expect(e?.code).not.toBe('DESAGIO_INVALIDO');
+    });
+  }
+  it('a mensagem de DESAGIO_INVALIDO é fixa (sem eco do valor enviado)', async () => {
+    const err = await incorporarCota({ ...base, desagioAquisicao: '-7.77' }).catch((e) => e);
+    expect(err.code).toBe('DESAGIO_INVALIDO');
+    expect(err.message).not.toMatch(/7\.77/);
+  });
+
   it('declarada pendente em testnet é aceita e fica registrada na cota', async () => {
     await incorporarCota(base);
     expect([...st.cotas.values()][0].anuenciaStatus).toBe('DECLARADA_PENDENTE');

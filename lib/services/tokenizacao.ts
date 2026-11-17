@@ -81,6 +81,7 @@ export type IncorporacaoBloqueioCodigo =
   | 'ANUENCIA_PENDENTE_EM_MAINNET'
   | 'POSICAO_PLINA_AUSENTE'
   | 'CUSTO_INVALIDO'
+  | 'DESAGIO_INVALIDO'
   | 'PIX_DIVERGE_DO_CUSTO'
   | 'VALOR_DIVERGE_DA_TENTATIVA'
   | 'ANCORA_INCORPORACAO_FALHOU';
@@ -95,6 +96,7 @@ const BLOQUEIO_MENSAGEM: Record<IncorporacaoBloqueioCodigo, string> = {
   POSICAO_PLINA_AUSENTE:
     'Emissão recusada: conta de posição da Plina não configurada.',
   CUSTO_INVALIDO: 'Emissão recusada: custo de aquisição não positivo.',
+  DESAGIO_INVALIDO: 'Emissão recusada: o deságio precisa ser uma fração entre 0 e 1 (ex.: 0.20 para 20%).',
   PIX_DIVERGE_DO_CUSTO: 'Emissão recusada: valor do Pix difere do custo de aquisição.',
   VALOR_DIVERGE_DA_TENTATIVA:
     'Emissão recusada: já existe uma emissão em andamento ou confirmada para esta incorporação com outro valor de aporte. Restaure o valor original; o operador decide.',
@@ -559,6 +561,22 @@ export async function incorporarCota(
     posicaoPlina = getStellarPlinaPositionPublic();
   } catch {
     throw new IncorporacaoBloqueadaError('POSICAO_PLINA_AUSENTE');
+  }
+
+  // Invariante: deságio em [0, 1] (logo NAV ≤ valorCarta). Deságio negativo faria o custo, e os PLINARF emitidos a partir dele,
+  // ficarem ACIMA da carta; o limite é o mesmo do gerar-oferta (comporDesagioDaOferta). Ilegível também é recusado.
+  // O mesmo vale para o deságio de revenda, quando informado (vazio/ausente = sem revenda): a faixa fica NO SERVIÇO, nos dois caminhos.
+  const desagioEmFaixa = (v: string): boolean => {
+    try {
+      const d = new Prisma.Decimal(v);
+      return d.isFinite() && d.gte(0) && d.lte(1);
+    } catch {
+      return false;
+    }
+  };
+  if (!desagioEmFaixa(input.desagioAquisicao)) throw new IncorporacaoBloqueadaError('DESAGIO_INVALIDO');
+  if (input.desagioRevenda !== undefined && input.desagioRevenda !== '' && !desagioEmFaixa(input.desagioRevenda)) {
+    throw new IncorporacaoBloqueadaError('DESAGIO_INVALIDO');
   }
 
   const pre = await verificarPreCondicoesDeEmissao(input.hashValidacao);
