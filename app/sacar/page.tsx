@@ -19,6 +19,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { unwrapEnvelope } from '@/lib/http/client';
 import { SACAR, resultadoSaque } from '@/lib/sacar/microcopy';
+import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
 
 // Estados em que a Etherfuse não vai mais avançar o pedido (além de processing/completed).
 const STATUS_TERMINAL_RUIM = ['failed', 'cancelled', 'canceled', 'refunded'];
@@ -351,8 +352,9 @@ export default function SacarPage() {
             </span>
             <input
               type="number"
-              min="0.01"
-              step="0.01"
+              onKeyDown={semNotacaoCientifica}
+              min="0.0000001"
+              step="0.0000001"
               value={amountTesouro}
               onChange={(e) => setAmountTesouro(e.target.value)}
               className="mt-3 w-full bg-transparent border-b border-base/30 pb-3 font-mono text-2xl text-base focus:outline-none focus:border-base"

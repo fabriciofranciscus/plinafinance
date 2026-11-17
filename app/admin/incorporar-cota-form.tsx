@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import { incorporarCotaAction, type ActionResult } from './actions';
+import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
 
 const tipoBemOptions = [
   { value: 'IMOVEL', label: 'Imóvel' },
@@ -68,6 +69,7 @@ export function IncorporarCotaForm() {
         <Field label="Valor da carta (BRL)">
           <input
             type="number"
+            onKeyDown={semNotacaoCientifica}
             name="valorCarta"
             step="0.01"
             min="0"
@@ -79,6 +81,7 @@ export function IncorporarCotaForm() {
         <Field label="Deságio aquisição (0–1)">
           <input
             type="number"
+            onKeyDown={semNotacaoCientifica}
             name="desagioAquisicao"
             step="0.0001"
             min="0"
@@ -91,6 +94,7 @@ export function IncorporarCotaForm() {
         <Field label="Deságio revenda (opcional)">
           <input
             type="number"
+            onKeyDown={semNotacaoCientifica}
             name="desagioRevenda"
             step="0.0001"
             min="0"
@@ -102,6 +106,7 @@ export function IncorporarCotaForm() {
         <Field label="Prazo restante (meses)">
           <input
             type="number"
+            onKeyDown={semNotacaoCientifica}
             name="prazoRestanteMeses"
             min="0"
             placeholder="18"

@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
 
 interface PipelineComprador {
   id: string;
@@ -241,6 +242,7 @@ function ExecutarCaminhoAForm({
         <input
           name="valorRealizado"
           type="number"
+          onKeyDown={semNotacaoCientifica}
           step="0.01"
           min="0.01"
           defaultValue={valorRevendaSugerido}

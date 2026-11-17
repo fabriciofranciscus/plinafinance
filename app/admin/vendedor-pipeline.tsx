@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation';
 import { NOME_EM_ANDAMENTO, etapasDoLead, ordenarSolicitacoes, type AnaliseSolicitacao, type EtapaOperador } from '@/lib/admin/etapas-operador';
 import { avisoDeResposta, interpretarErroDeAcao, oQueFazer, TEXTO_INCERTO, type ErroDeAcao } from '@/lib/admin/erro-acao';
 import type { LeadAdmin } from '@/lib/admin/tipos';
+import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
 
 type PipelineLead = LeadAdmin;
 
@@ -795,6 +796,7 @@ function NovaOfertaForm({
         <input
           name="valorCarta"
           type="number"
+          onKeyDown={semNotacaoCientifica}
           step="0.01"
           min="0.01"
           required
@@ -815,6 +817,7 @@ function NovaOfertaForm({
         <input
           name="desagioAquisicao"
           type="number"
+          onKeyDown={semNotacaoCientifica}
           step="0.0001"
           min="0"
           max="1"
@@ -827,6 +830,7 @@ function NovaOfertaForm({
         <input
           name="prazoRestanteMeses"
           type="number"
+          onKeyDown={semNotacaoCientifica}
           min="0"
           max="600"
           step="1"
