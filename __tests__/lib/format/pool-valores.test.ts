@@ -42,6 +42,14 @@ describe('o /pool usa esses formatadores (e não os de 0 casas)', () => {
     expect(page).not.toMatch(/function tokenFmt\(/);
     expect(page).not.toMatch(/maximumFractionDigits: 0/);
   });
+  it('cada KPI do topo usa o formatador certo (nenhum cai em Math.round / String)', () => {
+    expect(page).toMatch(/value=\{brl\(navTotal\)\}/);
+    expect(page).toMatch(/value=\{tokensNoLedger === null \? '—' : tokenFmt\(tokensNoLedger\)\}/);
+    expect(page).toMatch(/value=\{brl\(caixa\)\}/);
+    expect(page).toMatch(/value=\{brl\(spreadAcumulado\)\}/);
+    expect(page).toMatch(/value=\{navUnitLabel\}/);
+    expect(page).not.toMatch(/Math\.round\(|toFixed\(0\)/);
+  });
   it('a linha da cota mostra NAV e tokens pelos mesmos formatadores', () => {
     expect(page).toMatch(/<Td mono>\{brl\(nav\)\}<\/Td>/);
     expect(page).toMatch(/<Td mono>\{tokenFmt\(Number\(c\.tokensEmitidos\)\)\}<\/Td>/);
