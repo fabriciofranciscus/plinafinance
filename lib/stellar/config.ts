@@ -61,14 +61,15 @@ export const STELLAR_FUNDER_STARTING_BALANCE =
  * manualmente após investigar). Sem default: a env é obrigatória.
  */
 export const FUNDER_DAILY_CAP: number | null = (() => {
-  // Limite de dinheiro, fail-closed (Argus + Atlas, 16/11). Só inteiro ≥ 1 vale. Vazio, ilegível ('abc', '1e3'), zero,
+  // Limite de dinheiro, fail-closed (Argus + Atlas, 16/11). Só inteiro de 1 a 999999 vale. Vazio, ilegível ('abc', '1e3'), zero,
   // negativo ou decimal → null em QUALQUER rede (antes: '' virava 0 e 'abc' virava NaN; `count >= NaN` é sempre falso,
   // ou seja, funding SEM limite). Ausente: 100 na TESTNET (ambiente de demonstração; não quebra o deploy, a env não
   // existe na Vercel) e null na PUBLIC. null → o funding recusa (account.ts).
   const raw = process.env.FUNDER_DAILY_CAP;
   if (raw === undefined) return STELLAR_NETWORK === 'PUBLIC' ? null : 100;
   const v = raw.trim();
-  return /^[1-9]\d*$/.test(v) ? Number(v) : null;
+  // Até 6 dígitos (1..999999): sem teto, um valor absurdo viraria Infinity (Argus, 5ecde15).
+  return /^[1-9]\d{0,5}$/.test(v) ? Number(v) : null;
 })();
 
 /**

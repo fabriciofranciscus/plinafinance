@@ -46,12 +46,14 @@ async function capDaConfig(rede: 'TESTNET' | 'PUBLIC', cap: string | undefined) 
 }
 
 describe('FUNDER_DAILY_CAP: leitura (fronteiras do Argus + decisão do Atlas, 16/11)', () => {
-  const RECUSA = ['', '   ', 'abc', '1e3', '-1', '0', '10.5', '1.0', '0x10'];
+  // Teto de 6 dígitos (detalhe do Argus em 5ecde15): '1000000' e acima → recusa; '9'.repeat(400) viraria Infinity.
+  const RECUSA = ['', '   ', 'abc', '1e3', '-1', '0', '10.5', '1.0', '0x10', '1000000', '9'.repeat(400)];
   it.each(RECUSA.flatMap((v) => [['TESTNET', v], ['PUBLIC', v]] as const))('%s, %j → null (recusa) nas duas redes', async (rede, v) => {
     expect(await capDaConfig(rede, v)).toBeNull();
   });
   it.each([
     ['TESTNET', '1', 1], ['PUBLIC', '1', 1], ['TESTNET', '100', 100], ['PUBLIC', ' 100 ', 100],
+    ['PUBLIC', '999999', 999999],
   ] as const)('%s, %j → %d', async (rede, v, esperado) => {
     expect(await capDaConfig(rede, v)).toBe(esperado);
   });
