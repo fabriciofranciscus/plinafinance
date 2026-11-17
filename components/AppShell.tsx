@@ -46,13 +46,15 @@ export function AppShell({ children, isAdmin, issuerPubkey }: AppShellProps) {
 
   if (hideShell) return <>{children}</>;
 
-  const variante = pathname === '/admin' || pathname.startsWith('/admin/') ? 'operacao' : 'completo';
+  // /admin usa o container operacional (1440 + gutter fluido): cabeçalho e rodapé alinham com o painel.
+  const operacional = pathname === '/admin' || pathname.startsWith('/admin/');
+  const variante = operacional ? 'operacao' : 'completo';
 
   return (
     <div className="flex flex-col min-h-screen">
-      <AppHeader isAdmin={isAdmin} />
+      <AppHeader isAdmin={isAdmin} operacional={operacional} />
       <main className="flex-1">{children}</main>
-      <AppFooter issuerPubkey={issuerPubkey} variante={variante} />
+      <AppFooter issuerPubkey={issuerPubkey} variante={variante} operacional={operacional} />
     </div>
   );
 }

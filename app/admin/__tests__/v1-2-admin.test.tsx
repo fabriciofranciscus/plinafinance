@@ -8,11 +8,12 @@ vi.mock('../actions', () => ({ executarClawbackAction: vi.fn() }));
 import { InvestidoresPainel, type InvestidorAdmin } from '../investidores-painel';
 import { PaineisAdmin } from '../paineis';
 import { Concentracao } from '../concentracao';
+import { AppFooter } from '@/components/AppFooter';
 
 // Design system v1.2, fatia V1 (admin: shell, painéis, Investidores, ClawbackForm, concentração).
 // Só apresentação: os handlers, textos, ids e estados dos testes anteriores continuam valendo.
 const src = (f: string) => readFileSync(`app/admin/${f}`, 'utf8');
-const ARQUIVOS_V1 = ['page.tsx', 'paineis.tsx', 'investidores-painel.tsx', 'clawback-form.tsx', 'concentracao.tsx'];
+const ARQUIVOS_V1 = ['page.tsx', 'paineis.tsx', 'investidores-painel.tsx', 'clawback-form.tsx', 'concentracao.tsx', 'loading.tsx', 'error.tsx'];
 
 const lista: InvestidorAdmin[] = [
   { id: 'inv-a', email: 'a@exemplo.test', publicKey: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWXYZ', explorerUrl: 'https://explorer.test/a', saldoEsperado: '139,6', status: 'AUTORIZADO' },
@@ -114,5 +115,64 @@ describe('concentração (concentracao.tsx)', () => {
     expect(screen.getByText('concentrado').className).toContain('font-mono');
     expect(screen.getByText('ok')).toBeTruthy();
     expect(screen.getByText(/Concentração por administradora/).className).toContain('text-label-ui');
+  });
+});
+
+// Revisão visual da Íris (12:34): 3 ajustes antes do PR.
+describe('ajustes da revisão visual (Íris)', () => {
+  it('1. o seletor "Seção" do celular é pill, com o mesmo contorno dos campos (não só o hairline)', () => {
+    const s = src('paineis.tsx');
+    const select = s.match(/<select[\s\S]*?className="([^"]*)"/)![1]!;
+    expect(select).toContain('rounded-full');
+    expect(select).toContain('border-base/40');
+    expect(select).not.toContain('border-light-hairline');
+  });
+
+  it('2. carregando e erro usam o mesmo container da página carregada (1440 + gutter fluido), sem salto de largura', () => {
+    for (const f of ['loading.tsx', 'error.tsx']) {
+      const c = src(f);
+      expect(c, f).toContain('max-w-[var(--workspace-max)]');
+      expect(c, f).toContain('px-[var(--spacing-gutter-ui)]');
+      expect(c, f).not.toContain('max-w-6xl');
+    }
+    expect(src('loading.tsx')).toMatch(/<h1 className="[^"]*text-page-title/);
+  });
+
+  it('3. no /admin, cabeçalho e rodapé globais usam o container operacional (mesma borda esquerda do painel)', () => {
+    const shell = readFileSync('components/AppShell.tsx', 'utf8');
+    expect(shell).toMatch(/operacional/);
+    expect(shell).toMatch(/<AppHeader[^>]*operacional=\{operacional\}/);
+    expect(shell).toMatch(/<AppFooter[^>]*operacional=\{operacional\}/);
+    expect(shell).toMatch(/pathname === '\/admin' \|\| pathname\.startsWith\('\/admin\/'\)/);
+    const header = readFileSync('components/AppHeader.tsx', 'utf8');
+    expect(header).toContain('operacional');
+    expect(header).toContain('max-w-[var(--workspace-max)] px-[var(--spacing-gutter-ui)]');
+  });
+
+  it('3b. o rodapé operacional alinha com o painel; o padrão continua em 1152 px', () => {
+    const { container, unmount } = render(<AppFooter issuerPubkey="GCN34WOPABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMWLGA7E" operacional />);
+    const cont = [...container.querySelectorAll('footer > div > div, footer > div')].map((e) => e.className).join(' ');
+    expect(cont).toContain('max-w-[var(--workspace-max)]');
+    expect(cont).not.toContain('max-w-6xl');
+    unmount();
+    const padrao = render(<AppFooter issuerPubkey="GCN34WOPABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMWLGA7E" />);
+    expect(padrao.container.innerHTML).toContain('max-w-6xl');
+    expect(padrao.container.innerHTML).not.toContain('--workspace-max');
+  });
+});
+
+describe('observações da Íris adiantadas', () => {
+  it('concentração com largura limitada (rótulo e valor juntos); cabeçalho da tabela de investidores com divisor', () => {
+    expect(src('concentracao.tsx')).toContain('max-w-4xl');
+    expect(src('investidores-painel.tsx')).toMatch(/<tr className="text-left border-b border-base\/12">/);
+  });
+  it('o summary "Clawback" tem indicador + / − decorativo (aria-hidden) e o nome acessível não mudou', () => {
+    const { container } = render(<InvestidoresPainel investidores={lista} />);
+    const resumo = container.querySelector('details > summary') as HTMLElement;
+    expect(resumo.querySelector('[data-testid="indicador-clawback"][aria-hidden="true"]')).toBeTruthy();
+    expect(resumo.textContent).toBe('Clawback');
+  });
+  it('o h3 de "Incorporar nova cota" usa o papel de label, não text-lg ad hoc', () => {
+    expect(src('page.tsx')).not.toMatch(/<h3 className="[^"]*text-lg/);
   });
 });

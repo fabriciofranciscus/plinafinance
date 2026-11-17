@@ -17,7 +17,12 @@ export type VarianteFooter = 'completo' | 'compacto' | 'operacao';
 interface AppFooterProps {
   issuerPubkey: string;
   variante?: VarianteFooter;
+  /** /admin: mesma largura e gutter do painel (1440 + gutter fluido), para a borda esquerda alinhar. */
+  operacional?: boolean;
 }
+
+const contorno = (operacional: boolean) =>
+  operacional ? 'max-w-[var(--workspace-max)] px-[var(--spacing-gutter-ui)]' : 'max-w-6xl px-6';
 
 const STELLAR_EXPERT_TESTNET = 'https://stellar.expert/explorer/testnet';
 const MOBILE_ALVOS = 'max-md:[&_a]:inline-flex max-md:[&_a]:min-h-[44px] max-md:[&_a]:items-center';
@@ -44,10 +49,10 @@ function AvisoTestnet() {
   );
 }
 
-function LinhaLegal() {
+function LinhaLegal({ operacional = false }: { operacional?: boolean }) {
   return (
     <div className="border-t border-lightBg/10">
-      <div className={`mx-auto max-w-6xl px-6 py-3 ${ROTULO}`}>Testnet · sem oferta pública (Lei 11.795/2008)</div>
+      <div className={`mx-auto ${contorno(operacional)} py-3 ${ROTULO}`}>Testnet · sem oferta pública (Lei 11.795/2008)</div>
     </div>
   );
 }
@@ -73,10 +78,10 @@ function FooterCompacto() {
   );
 }
 
-function FooterOperacao({ issuerPubkey }: { issuerPubkey: string }) {
+function FooterOperacao({ issuerPubkey, operacional }: { issuerPubkey: string; operacional: boolean }) {
   return (
     <footer data-variante="operacao" className={`bg-base text-lightBg mt-12 ${MOBILE_ALVOS}`}>
-      <div className="mx-auto max-w-6xl px-6 py-5 flex flex-col gap-5 md:flex-row md:flex-wrap md:items-center md:justify-between">
+      <div className={`mx-auto ${contorno(operacional)} py-5 flex flex-col gap-5 md:flex-row md:flex-wrap md:items-center md:justify-between`}>
         <Marca />
         <dl className="flex flex-wrap gap-x-8 gap-y-3 text-xs">
           <div>
@@ -117,17 +122,17 @@ function FooterOperacao({ issuerPubkey }: { issuerPubkey: string }) {
         </ul>
         <AvisoTestnet />
       </div>
-      <LinhaLegal />
+      <LinhaLegal operacional={operacional} />
     </footer>
   );
 }
 
-export function AppFooter({ issuerPubkey, variante = 'completo' }: AppFooterProps) {
+export function AppFooter({ issuerPubkey, variante = 'completo', operacional = false }: AppFooterProps) {
   if (variante === 'compacto') return <FooterCompacto />;
-  if (variante === 'operacao') return <FooterOperacao issuerPubkey={issuerPubkey} />;
+  if (variante === 'operacao') return <FooterOperacao issuerPubkey={issuerPubkey} operacional={operacional} />;
   return (
     <footer data-variante="completo" className={`bg-base text-lightBg mt-16 ${MOBILE_ALVOS}`}>
-      <div className="mx-auto max-w-6xl px-6 py-10 grid grid-cols-1 md:grid-cols-3 gap-8 text-sm font-text">
+      <div className={`mx-auto ${contorno(operacional)} py-10 grid grid-cols-1 md:grid-cols-3 gap-8 text-sm font-text`}>
         <div>
           {/* `text-base` é a COR de fundo do rodapé (--color-base) e também tamanho: a marca ficava invisível. */}
           <p className="font-title text-lg font-semibold tracking-tight text-lightBg">
@@ -223,7 +228,7 @@ export function AppFooter({ issuerPubkey, variante = 'completo' }: AppFooterProp
       </div>
 
       <div className="border-t border-lightBg/10">
-        <div className="mx-auto max-w-6xl px-6 py-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-2 font-details text-[10px] tracking-[0.2em] uppercase text-lightBg/50">
+        <div className={`mx-auto ${contorno(operacional)} py-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-2 font-details text-[10px] tracking-[0.2em] uppercase text-lightBg/50`}>
           <span>© 2026 Plina Finance</span>
           <span>Testnet · sem oferta pública (Lei 11.795/2008)</span>
         </div>

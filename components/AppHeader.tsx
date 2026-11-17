@@ -27,6 +27,8 @@ import { usePessoa } from '@/components/PessoaProvider';
 
 interface AppHeaderProps {
   isAdmin: boolean;
+  /** /admin: mesma largura e gutter do painel, para a borda esquerda alinhar. */
+  operacional?: boolean;
 }
 
 function abbreviate(pubkey: string): string {
@@ -34,7 +36,7 @@ function abbreviate(pubkey: string): string {
   return `${pubkey.slice(0, 4)}…${pubkey.slice(-6)}`;
 }
 
-export function AppHeader({ isAdmin }: AppHeaderProps) {
+export function AppHeader({ isAdmin, operacional = false }: AppHeaderProps) {
   const { ready, authenticated, user } = usePrivy();
   const { logout } = useLogout();
   const { papeis, loading: carregandoPapeis } = usePessoa();
@@ -81,7 +83,7 @@ export function AppHeader({ isAdmin }: AppHeaderProps) {
 
   return (
     <header className="bg-white border-b border-light-hairline sticky top-0 z-40">
-      <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between">
+      <div className={`mx-auto ${operacional ? 'max-w-[var(--workspace-max)] px-[var(--spacing-gutter-ui)]' : 'max-w-6xl px-6'} h-14 flex items-center justify-between`}>
         <div className="flex items-center gap-8">
           <Link href="/" className="font-title text-lg font-semibold tracking-tight text-base max-md:inline-flex max-md:min-h-[44px] max-md:min-w-[44px] max-md:items-center">
             Plina<span className="text-primary-deep">.</span>

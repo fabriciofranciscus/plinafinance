@@ -17,7 +17,7 @@ export interface ItemConcentracao {
 export function Concentracao({ itens }: { itens: ItemConcentracao[] }) {
   if (itens.length === 0) return null;
   return (
-    <div className="mt-8 min-w-0 rounded-panel border border-light-hairline overflow-hidden" data-testid="concentracao">
+    <div className="mt-8 min-w-0 max-w-4xl rounded-panel border border-light-hairline overflow-hidden" data-testid="concentracao">
       <p className="font-details text-label-ui text-base/70 px-4 py-3 border-b border-light-hairline">
         Concentração por administradora · alerta &gt; 40%
       </p>

@@ -61,7 +61,7 @@ export function InvestidoresPainel({ investidores }: { investidores: InvestidorA
         <table data-testid="lista-tabela" className="hidden lg:table w-full table-fixed font-text text-sm">
           <caption className="sr-only">Investidores</caption>
           <thead>
-            <tr className="text-left">
+            <tr className="text-left border-b border-base/12">
               <th scope="col" className={`${ROTULO} py-2 pr-3 font-normal`}>Email</th>
               <th scope="col" className={`${ROTULO} py-2 pr-3 font-normal`}>Public key</th>
               <th scope="col" className={`${ROTULO} py-2 font-normal`}>Saldo esperado</th>
@@ -146,7 +146,13 @@ export function InvestidoresPainel({ investidores }: { investidores: InvestidorA
               </div>
             </dl>
             <details className="border-t border-light-hairline pt-3">
-              <summary className="min-h-[44px] flex items-center cursor-pointer font-details text-label-ui">
+              <summary className="group flex min-h-[44px] cursor-pointer list-none items-center gap-3 font-details text-label-ui text-base [&::-webkit-details-marker]:hidden">
+                {/* Indicador de expansão decorativo (como no AP-5): o estado vem do próprio <details>. */}
+                <span
+                  data-testid="indicador-clawback"
+                  aria-hidden="true"
+                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-base/40 text-sm leading-none before:content-['+'] group-open:before:content-['−']"
+                />
                 Clawback
               </summary>
               <ClawbackForm investidorId={inv.id} investidorEmail={inv.email} saldoEsperado={inv.saldoEsperado} />

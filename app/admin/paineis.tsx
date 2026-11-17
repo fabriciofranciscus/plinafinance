@@ -61,7 +61,7 @@ export function PaineisAdmin({ paineis }: { paineis: PainelAdmin[] }) {
             onChange={(e) => {
               window.location.hash = e.target.value;
             }}
-            className="w-full min-h-[44px] bg-white border border-light-hairline px-4 font-text text-base focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-700 focus-visible:ring-offset-2"
+            className="w-full min-h-[44px] rounded-full bg-white border border-base/40 px-4 font-text text-base focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-700 focus-visible:ring-offset-2"
           >
             {ordenados.map((p) => (
               <option key={p.id} value={p.id}>

@@ -561,7 +561,7 @@ export default async function AdminPage() {
         <p className="font-text text-sm text-base/70 mt-2 mb-6 max-w-2xl">
           Uso excepcional. O caminho normal é pela solicitação, na seção de vendedores.
         </p>
-        <h3 className="font-title text-lg font-semibold mb-2">Incorporar nova cota</h3>
+        <h3 className="font-details text-label-ui text-base mb-2">Incorporar nova cota</h3>
         <p className="font-text text-sm text-base/70 mb-6 max-w-2xl">
           Emite PLINA-RF on-chain (issuer → distributor) e persiste a cota no pool. Operação real na testnet — irreversível.
         </p>
