@@ -11,7 +11,11 @@
  * A coluna é `timestamp` sem fuso (UTC); por isso ambos os lados usam `now() AT TIME ZONE 'UTC'`, sem depender do fuso da sessão.
  * Terminal nunca é reservado. A reserva NÃO é desfeita se o anchor falhar (evita martelar um anchor fora do ar; a janela resolve).
  */
+import { Prisma } from '@prisma/client';
 import { db } from '../db';
+
+/** Status finais da ordem de onramp: FONTE ÚNICA (a rota de status e o SQL da reserva leem esta mesma lista, nunca uma cópia escrita à mão). */
+export const STATUS_TERMINAIS_ONRAMP = ['completed', 'failed', 'expired', 'cancelled', 'refunded'] as const;
 
 /** Mínimo entre duas consultas à Etherfuse para a mesma ordem (igual ao TTL do cache de 5 s da rota). */
 export const ONRAMP_CONSULTA_MIN_INTERVALO_S = 5;
@@ -22,7 +26,7 @@ export async function reservarConsultaDeStatus(orderId: string): Promise<boolean
     UPDATE "OnRampOrder"
        SET "statusConsultadoEm" = (now() AT TIME ZONE 'UTC')
      WHERE id = ${orderId}
-       AND status NOT IN ('completed', 'failed', 'expired', 'cancelled', 'refunded')
+       AND status NOT IN (${Prisma.join([...STATUS_TERMINAIS_ONRAMP])})
        AND ("statusConsultadoEm" IS NULL
             OR "statusConsultadoEm" < (now() AT TIME ZONE 'UTC') - (${ONRAMP_CONSULTA_MIN_INTERVALO_S} * interval '1 second'))`;
   return afetadas === 1;

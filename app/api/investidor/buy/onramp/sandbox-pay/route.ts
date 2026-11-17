@@ -106,8 +106,10 @@ export const POST = withAuth(async (req, { user }) => {
     }
 
     await db.$transaction(async (tx) => {
-      await tx.onRampOrder.update({
-        where: { id: order.id },
+      // Escrita CONDICIONAL (mesma regra da rota de status): só uma ordem ainda não liquidada; o evento ONRAMP_LIQUIDADA só nasce
+      // quando exatamente uma linha mudou. Duas chamadas simultâneas (ou esta e a rota de status) gravam UM evento.
+      const r = await tx.onRampOrder.updateMany({
+        where: { id: order.id, settledAt: null },
         data: {
           status: finalStatus,
           stellarTxHash: finalTxHash,
@@ -115,7 +117,7 @@ export const POST = withAuth(async (req, { user }) => {
           settledAt: finalStatus === 'completed' ? new Date() : null,
         },
       });
-      if (finalStatus === 'completed') {
+      if (finalStatus === 'completed' && r.count === 1) {
         await tx.eventoAudit.create({
           data: {
             acao: 'ONRAMP_LIQUIDADA',

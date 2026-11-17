@@ -16,7 +16,7 @@ const PG = vi.hoisted(() => {
 });
 
 import { db } from '@/lib/db';
-import { ONRAMP_CONSULTA_MIN_INTERVALO_S, reservarConsultaDeStatus } from '@/lib/services/onramp-status-reserva';
+import { ONRAMP_CONSULTA_MIN_INTERVALO_S, STATUS_TERMINAIS_ONRAMP, reservarConsultaDeStatus } from '@/lib/services/onramp-status-reserva';
 
 const N = ONRAMP_CONSULTA_MIN_INTERVALO_S;
 const mkOrdem = async (id: string, over: Record<string, unknown> = {}) => {
@@ -58,8 +58,9 @@ describe.skipIf(!PG)('onramp/status — reserva por ordem no Postgres real', () 
     expect(await reservarConsultaDeStatus('o1')).toBe(true);
   });
 
-  it('ordem terminal nunca é reservada (completed, failed, expired, cancelled, refunded)', async () => {
-    for (const s of ['completed', 'failed', 'expired', 'cancelled', 'refunded']) {
+  it('ordem terminal nunca é reservada: TODO status da lista única (a mesma que a rota usa)', async () => {
+    expect([...STATUS_TERMINAIS_ONRAMP].sort()).toEqual(['cancelled', 'completed', 'expired', 'failed', 'refunded']); // mudar a lista exige mudar aqui
+    for (const s of STATUS_TERMINAIS_ONRAMP) {
       await mkOrdem(`t_${s}`, { status: s });
       expect(await reservarConsultaDeStatus(`t_${s}`), s).toBe(false);
     }

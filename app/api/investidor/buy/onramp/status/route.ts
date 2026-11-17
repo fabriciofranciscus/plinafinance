@@ -18,11 +18,11 @@ import { ok } from '@/lib/api/response';
 import { ApiError } from '@/lib/api/errors';
 import { onrampStatusLimiter } from '@/lib/rate-limit/config';
 import { infoConfirmacao } from '@/lib/services/ordem-pendente';
-import { reservarConsultaDeStatus } from '@/lib/services/onramp-status-reserva';
+import { STATUS_TERMINAIS_ONRAMP, reservarConsultaDeStatus } from '@/lib/services/onramp-status-reserva';
 
 export const dynamic = 'force-dynamic';
 
-const TERMINAL = new Set(['completed', 'failed', 'expired', 'cancelled', 'refunded']);
+const TERMINAL = new Set<string>(STATUS_TERMINAIS_ONRAMP); // fonte única: a mesma lista do SQL da reserva
 
 /**
  * Cache curto (best-effort, em memória da instância) do status remoto por ordem: no máximo 1 consulta à Etherfuse a cada 5 s por
