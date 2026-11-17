@@ -118,4 +118,21 @@ describe.skipIf(!PG)('onramp/status — rota contra o Postgres real', () => {
     expect(o).toMatchObject({ status: 'completed', stellarTxHash: 'tx_done' });
     expect(o.stellarClaimableBalanceId).toBeNull(); // a escrita atrasada foi recusada
   });
+
+  // A-09 (aviso de espera visível) × trava: o "desde" e o "atrasada" vêm de atualizadoEm + status e têm de sair em TODA resposta,
+  // inclusive a que a trava devolve do banco (o investidor que mais consulta é justamente o que espera).
+  it('A-09 + trava: ordem processing esperando há 5 min tem desde/atrasada/limiteSegundos tanto na resposta que CONSULTOU quanto na que a trava devolveu do banco', async () => {
+    await mkOrdem('o1', { stellarClaimableBalanceId: null });
+    await db.$executeRaw`UPDATE "OnRampOrder" SET "atualizadoEm" = (now() AT TIME ZONE 'UTC') - interval '5 minutes' WHERE id = 'o1'`;
+    const velha = (await db.onRampOrder.findUniqueOrThrow({ where: { id: 'o1' } })).atualizadoEm;
+    const [A, B] = [await novaInstancia(), await novaInstancia()];
+    const ganhou = await (await A.GET(req('o1'))).json();
+    const perdeu = await (await B.GET(req('o1'))).json(); // a trava: não consulta, devolve o estado do banco
+    expect(st.consultas).toBe(1);
+    for (const d of [ganhou.data, perdeu.data]) {
+      expect(d).toMatchObject({ status: 'processing', atrasada: true, limiteSegundos: 180, desde: velha.toISOString() });
+    }
+    // e a trava não moveu o "desde": atualizadoEm continua o da espera
+    expect((await db.onRampOrder.findUniqueOrThrow({ where: { id: 'o1' } })).atualizadoEm.getTime()).toBe(velha.getTime());
+  });
 });
