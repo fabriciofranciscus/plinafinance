@@ -137,6 +137,34 @@ describe.skipIf(!PG)('claim/submit — submits simultâneos, Postgres real', () 
     expect(await eventosDoClaim()).toBe(1);
   });
 
+  it('OUTRA ordem já resgatada não interfere: a trava é da linha DESTA ordem (ressalva da Vera, mutante OR true)', async () => {
+    // Uma 2ª ordem do mesmo investidor, já com claimTxHash. Se a trava lesse outra linha, o submit da 1ª devolveria o
+    // hash alheio como idempotente e não gravaria o seu evento.
+    await db.quote.create({
+      data: {
+        id: 'q_outra', investidorId: 'inv_conc', fromCurrency: 'BRL', fromAmount: '50', toCurrency: 'TESOURO',
+        toAmount: '49.5', exchangeRate: '0.99', fee: '0.5', expiresAt: new Date(Date.now() + 3600_000),
+      } as never,
+    });
+    // A ordem alheia entra ANTES no heap: a desta compra é apagada e recriada depois dela. Assim um SELECT sem filtro
+    // por id (o mutante `OR true`) leria primeiro a linha alheia, com claimTxHash, e o teste pega.
+    await db.onRampOrder.delete({ where: { id: 'ord-conc' } });
+    await db.onRampOrder.create({
+      data: { id: 'ord-outra', quoteId: 'q_outra', investidorId: 'inv_conc', status: 'completed', stellarClaimableBalanceId: BAL, claimTxHash: 'f'.repeat(64) },
+    });
+    await db.onRampOrder.create({
+      data: { id: 'ord-conc', quoteId: 'q_conc', investidorId: 'inv_conc', status: 'completed', stellarClaimableBalanceId: BAL },
+    });
+    const r = await POST(req(xdr));
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(j.claimTxHash).toBe(txHashFromXdr(xdr));
+    expect(j.idempotent).toBeUndefined();
+    expect(await eventosDoClaim()).toBe(1);
+    expect((await db.onRampOrder.findUnique({ where: { id: 'ord-conc' } }))?.claimTxHash).toBe(txHashFromXdr(xdr));
+    expect((await db.onRampOrder.findUnique({ where: { id: 'ord-outra' } }))?.claimTxHash).toBe('f'.repeat(64));
+  });
+
   it('um submit só → 1 evento e claimTxHash gravado (caso de hoje intacto)', async () => {
     const r = await POST(req(xdr));
     expect(r.status).toBe(200);
