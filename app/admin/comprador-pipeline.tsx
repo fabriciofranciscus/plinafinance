@@ -59,11 +59,8 @@ const BRL = new Intl.NumberFormat('pt-BR', {
 export function CompradorPipeline({ leads }: { leads: PipelineComprador[] }) {
   if (leads.length === 0) {
     return (
-      <p className="font-text text-sm text-base/60">
-        Nenhum lead comprador capturado ainda. Quando alguém preencher{' '}
-        <code className="font-mono text-xs">/comprar/lead</code> ou{' '}
-        <code className="font-mono text-xs">/comprar/reservar</code>, aparece
-        aqui.
+      <p className="font-text text-sm text-base/70">
+        Nenhum comprador ainda. Interesses e reservas feitos em Comprar aparecem aqui.
       </p>
     );
   }

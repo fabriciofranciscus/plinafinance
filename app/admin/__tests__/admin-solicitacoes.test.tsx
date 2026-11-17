@@ -254,6 +254,17 @@ describe('detalhe: só a etapa "Agora" tem controles', () => {
     expect(alerta.textContent).toContain('DESAGIO_TOTAL_EXCEDE');
   });
 
+  it('AP-3: #lead-<id> abre o detalhe também quando o hash muda com a página já aberta; hash de outro lead não selecionado some sem erro', async () => {
+    montar([lead({ oferta: { status: 'ENVIADA' }, lead: { status: 'OFERTA_ENVIADA' } })]);
+    expect(screen.queryByTestId('detalhe')).toBeNull();
+    window.location.hash = `#lead-${ID}`;
+    await waitFor(() => expect(screen.getByTestId('detalhe')).toBeTruthy());
+    window.location.hash = '#lead-nao-existe';
+    // um id que não existe não troca a seleção nem derruba a tela
+    await waitFor(() => expect(window.location.hash).toBe('#lead-nao-existe'));
+    expect(screen.getByTestId('detalhe')).toBeTruthy();
+  });
+
   it('2 aceite do cedente: sem botão, só o texto com a validade', () => {
     montar([lead({ oferta: { status: 'ENVIADA' }, lead: { status: 'OFERTA_ENVIADA' } })]);
     abrir();

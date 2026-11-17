@@ -29,11 +29,11 @@ import { fetchSupplyOnChainFromEnv } from '@/lib/stellar/supply';
 import { LoginForm } from './login-form';
 import { IncorporarCotaForm } from './incorporar-cota-form';
 import { ClawbackForm } from './clawback-form';
+import { PaineisAdmin } from './paineis';
 import { Concentracao } from './concentracao';
 import { ValidacaoForm } from './validacao-form';
 import { VendedorPipeline } from './vendedor-pipeline';
 import { CompradorPipeline } from './comprador-pipeline';
-import { logoutAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 // incorporarCotaAction (usada nesta página) pode segurar uma $transaction de até
@@ -150,6 +150,7 @@ export default async function AdminPage() {
   const spreadAcumulado = spreadRealizadoAcumulado(realizacoes);
   const concentracao = concentracaoPorAdministradora(cotas);
 
+  // Nomes de navegação: os atuais (a troca por "Resumo"/"Auditoria" da spec depende de revisão editorial).
   const sections = [
     { id: 'overview', label: 'Overview' },
     { id: 'vendedores', label: `Solicitações (${leadsVendedor.length})` },
@@ -159,6 +160,7 @@ export default async function AdminPage() {
     { id: 'audit', label: 'Audit log' },
     { id: 'incorporar', label: 'Avulsas' },
   ];
+  const rotuloDe = (id: string) => sections.find((x) => x.id === id)?.label ?? id;
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-12">
@@ -171,75 +173,15 @@ export default async function AdminPage() {
             Painel Plina
           </h1>
         </div>
-        <form action={logoutAction}>
-          <button
-            type="submit"
-            className="font-details text-[10px] tracking-[0.2em] uppercase border border-light-hairline px-4 py-2 hover:bg-base hover:text-lightBg transition-colors"
-          >
-            Sair
-          </button>
-        </form>
       </header>
 
-      <nav className="sticky top-14 z-30 -mx-6 px-6 mb-10 bg-lightBg/95 backdrop-blur border-b border-light-hairline">
-        <ul className="flex gap-1 md:gap-2 overflow-x-auto py-2">
-          {sections.map((s) => (
-            <li key={s.id}>
-              <a
-                href={`#${s.id}`}
-                className="block whitespace-nowrap font-details text-[10px] tracking-[0.2em] uppercase font-bold px-3 py-2 text-base/70 hover:text-base hover:bg-document-grey transition-colors"
-              >
-                {s.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
-
-      {parametros && (
-        <>
-          <section className="mb-2 grid grid-cols-1 md:grid-cols-4 gap-px bg-base/15 border border-light-hairline">
-            <Metric label="NAV total (ativo + caixa)" value={brl(navTotal)} />
-            <Metric
-              label={`${parametros.assetCode} vivos`}
-              value={tokenFmt(tokensVivos)}
-            />
-            <Metric label="Cotas ativas" value={String(cotas.length)} />
-            <Metric
-              label="Investidores"
-              value={String(investidores.length)}
-            />
-          </section>
-          <section className="mb-12 grid grid-cols-1 md:grid-cols-3 gap-px bg-base/15 border border-light-hairline">
-            <Metric label="NAV / token" value={navUnitLabel} />
-            <Metric
-              label="Supply circulante (ledger)"
-              value={supply ? tokenFmt(Number(supply.circulante)) : '—'}
-            />
-            <Metric label="Caixa realizado" value={brl(caixa)} />
-            <Metric
-              label="Diferença realizada acumulada"
-              value={brl(spreadAcumulado)}
-            />
-          </section>
-        </>
-      )}
-
-      {/* Issuer / Distributor */}
-      {parametros && (
-        <section className="mb-12 grid grid-cols-1 md:grid-cols-2 gap-6 font-text text-xs">
-          <KvPubkey
-            label="Issuer"
-            pubkey={parametros.issuerPubkey}
-            extraLink={{
-              label: 'Asset Stellar Expert →',
-              url: assetExplorerUrl(parametros.issuerPubkey),
-            }}
-          />
-          <KvPubkey label="Distributor" pubkey={parametros.distributorPubkey} />
-        </section>
-      )}
-
+      <PaineisAdmin
+        paineis={[
+          {
+            id: 'vendedores',
+            rotulo: rotuloDe('vendedores'),
+            conteudo: (
+              <>
       <section id="vendedores" className="mb-16 scroll-mt-32">
         <h2 className="font-title text-2xl font-semibold mb-2 tracking-tight">
           Solicitações de venda ({leadsVendedor.length})
@@ -301,6 +243,14 @@ export default async function AdminPage() {
         />
       </section>
 
+              </>
+            ),
+          },
+          {
+            id: 'compradores',
+            rotulo: rotuloDe('compradores'),
+            conteudo: (
+              <>
       <section id="compradores" className="mb-16 scroll-mt-32">
         <h2 className="font-title text-2xl font-semibold mb-2 tracking-tight">
           Funil comprador-usuário ({leadsComprador.length})
@@ -337,6 +287,14 @@ export default async function AdminPage() {
         />
       </section>
 
+              </>
+            ),
+          },
+          {
+            id: 'cotas',
+            rotulo: rotuloDe('cotas'),
+            conteudo: (
+              <>
       <section id="cotas" className="mb-16 scroll-mt-32">
         <h2 className="font-title text-2xl font-semibold mb-4 tracking-tight">
           Cotas ({cotas.length})
@@ -416,6 +374,7 @@ export default async function AdminPage() {
                 <tr>
                   <td colSpan={9} className="text-center py-8 text-base/60">
                     Nenhuma cota no pool.
+                    <span className="block mt-1 text-base/70">Cotas entram pela etapa 10 de uma solicitação.</span>
                   </td>
                 </tr>
               )}
@@ -433,15 +392,22 @@ export default async function AdminPage() {
         />
       </section>
 
+              </>
+            ),
+          },
+          {
+            id: 'investidores',
+            rotulo: rotuloDe('investidores'),
+            conteudo: (
+              <>
       <section id="investidores" className="mb-16 scroll-mt-32">
         <h2 className="font-title text-2xl font-semibold mb-4 tracking-tight">
           Investidores ({investidores.length})
         </h2>
         {investidores.length === 0 ? (
           <p className="font-text text-sm text-base/70">
-            Nenhum investidor onboarded ainda. Quando alguém usar{' '}
-            <code className="font-mono text-xs">/investir</code> e concluir
-            KYC, aparece aqui com opção de clawback.
+            Nenhum investidor ainda.
+            <span className="block mt-1">Quem concluir o cadastro em Investir aparece aqui.</span>
           </p>
         ) : (
           <div className="space-y-4">
@@ -480,17 +446,83 @@ export default async function AdminPage() {
                     </p>
                   </div>
                 </div>
-                <ClawbackForm
+                <details className="border-t border-light-hairline pt-3">
+                  <summary className="min-h-[44px] flex items-center cursor-pointer font-details text-[10px] tracking-[0.2em] uppercase font-bold">
+                    Clawback
+                  </summary>
+                  <ClawbackForm
                   investidorId={inv.id}
                   investidorEmail={inv.email}
                   saldoEsperado={tokenFmt(inv.saldoEsperado)}
                 />
+                </details>
               </div>
             ))}
           </div>
         )}
       </section>
 
+              </>
+            ),
+          },
+          {
+            id: 'overview',
+            rotulo: rotuloDe('overview'),
+            conteudo: (
+              <>
+                <h2 className="font-title text-2xl font-semibold mb-4 tracking-tight">{rotuloDe('overview')}</h2>
+      {parametros && (
+        <>
+          <section className="mb-2 grid grid-cols-1 md:grid-cols-4 gap-px bg-base/15 border border-light-hairline">
+            <Metric label="NAV total (ativo + caixa)" value={brl(navTotal)} />
+            <Metric
+              label={`${parametros.assetCode} vivos`}
+              value={tokenFmt(tokensVivos)}
+            />
+            <Metric label="Cotas ativas" value={String(cotas.length)} />
+            <Metric
+              label="Investidores"
+              value={String(investidores.length)}
+            />
+          </section>
+          <section className="mb-12 grid grid-cols-1 md:grid-cols-4 gap-px bg-base/15 border border-light-hairline">
+            <Metric label="NAV / token" value={navUnitLabel} />
+            <Metric
+              label="Supply circulante (ledger)"
+              value={supply ? tokenFmt(Number(supply.circulante)) : '—'}
+            />
+            <Metric label="Caixa realizado" value={brl(caixa)} />
+            <Metric
+              label="Diferença realizada acumulada"
+              value={brl(spreadAcumulado)}
+            />
+          </section>
+        </>
+      )}
+
+      {/* Issuer / Distributor */}
+      {parametros && (
+        <section className="mb-12 grid grid-cols-1 md:grid-cols-2 gap-6 font-text text-xs">
+          <KvPubkey
+            label="Issuer"
+            pubkey={parametros.issuerPubkey}
+            extraLink={{
+              label: 'Asset Stellar Expert →',
+              url: assetExplorerUrl(parametros.issuerPubkey),
+            }}
+          />
+          <KvPubkey label="Distributor" pubkey={parametros.distributorPubkey} />
+        </section>
+      )}
+
+              </>
+            ),
+          },
+          {
+            id: 'audit',
+            rotulo: rotuloDe('audit'),
+            conteudo: (
+              <>
       <section id="audit" className="scroll-mt-32">
         <h2 className="font-title text-2xl font-semibold mb-4 tracking-tight">
           Audit log (últimos 20)
@@ -544,7 +576,7 @@ export default async function AdminPage() {
               {eventos.length === 0 && (
                 <tr>
                   <td colSpan={7} className="text-center py-8 text-base/60">
-                    Sem eventos.
+                    Nenhum evento registrado.
                   </td>
                 </tr>
               )}
@@ -553,6 +585,14 @@ export default async function AdminPage() {
         </div>
       </section>
 
+              </>
+            ),
+          },
+          {
+            id: 'incorporar',
+            rotulo: rotuloDe('incorporar'),
+            conteudo: (
+              <>
       <details id="incorporar" className="mt-16 scroll-mt-32 border border-light-hairline p-4">
         <summary className="min-h-[44px] flex items-center cursor-pointer font-title text-xl font-semibold tracking-tight">
           Operações avulsas
@@ -566,6 +606,11 @@ export default async function AdminPage() {
         </p>
         <IncorporarCotaForm />
       </details>
+              </>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }
