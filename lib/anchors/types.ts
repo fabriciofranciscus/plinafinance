@@ -664,6 +664,9 @@ export interface Anchor {
  * Wraps provider API errors with a machine-readable `code` and HTTP `statusCode`
  * for consistent error handling across providers.
  */
+/** Código do AnchorError quando a Etherfuse não responde dentro do prazo do chamador (hoje: status do on-ramp, 4 s). */
+export const ANCHOR_TIMEOUT_CODE = 'ANCHOR_TIMEOUT';
+
 export class AnchorError extends Error {
     /** Machine-readable error code (e.g. `"MISSING_EMAIL"`, `"UNKNOWN_ERROR"`). */
     code: string;

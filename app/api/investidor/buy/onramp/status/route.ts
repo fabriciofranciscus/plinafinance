@@ -17,6 +17,7 @@ import { withApi } from '@/lib/api/with-api';
 import { ok } from '@/lib/api/response';
 import { ApiError } from '@/lib/api/errors';
 import { onrampStatusLimiter } from '@/lib/rate-limit/config';
+import { AnchorError, ANCHOR_TIMEOUT_CODE } from '@/lib/anchors/types';
 import { infoConfirmacao } from '@/lib/services/ordem-pendente';
 import { STATUS_TERMINAIS_ONRAMP, reservarConsultaDeStatus } from '@/lib/services/onramp-status-reserva';
 
@@ -150,7 +151,16 @@ export const GET = withApi(async (req, { requestId }) => {
       console.error('[onramp/status] reserva da consulta falhou', (err as { name?: string })?.name ?? 'erro');
     }
     if (!ganhou) return respostaDoBanco();
-    remote = await anchor.getOnRampTransaction(orderId);
+    try {
+      remote = await anchor.getOnRampTransaction(orderId);
+    } catch (err) {
+      // Etherfuse não respondeu em ~4 s: degrada para o estado do banco (200, mesmo formato), sem 5xx, sem gravar e SEM cachear.
+      if (err instanceof AnchorError && err.code === ANCHOR_TIMEOUT_CODE) {
+        console.error('[onramp/status] Etherfuse não respondeu a tempo', ANCHOR_TIMEOUT_CODE);
+        return respostaDoBanco();
+      }
+      throw err;
+    }
     guardarCache(orderId, remote);
   }
   if (!remote) {

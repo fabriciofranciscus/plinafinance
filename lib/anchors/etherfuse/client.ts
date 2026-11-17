@@ -37,7 +37,10 @@ import type {
     PaymentInstructions,
     TransactionStatus,
 } from '../types';
-import { AnchorError } from '../types';
+import { AnchorError, ANCHOR_TIMEOUT_CODE } from '../types';
+
+/** Prazo da consulta de status do on-ramp (a janela da trava por ordem é de 5 s: a consulta tem de acabar antes). */
+const ONRAMP_STATUS_TIMEOUT_MS = 4000;
 import { StrKey } from '@stellar/stellar-sdk';
 import type {
     EtherfuseConfig,
@@ -157,6 +160,7 @@ export class EtherfuseClient implements Anchor {
         method: 'GET' | 'POST' | 'PUT' | 'DELETE',
         endpoint: string,
         body?: unknown,
+        opts?: { timeoutMs?: number },
     ): Promise<T> {
         const url = `${this.config.baseUrl}${endpoint}`;
 
@@ -169,14 +173,26 @@ export class EtherfuseClient implements Anchor {
                 const id = idDeCorrelacao();
                 logAnchor('log', { id, metodo: method, endpoint });
 
-                const response = await fetch(url, {
-                    method,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: this.config.apiKey,
-                    },
-                    body: body ? JSON.stringify(body) : undefined,
-                });
+                let response: Response;
+                try {
+                    response = await fetch(url, {
+                        method,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: this.config.apiKey,
+                        },
+                        body: body ? JSON.stringify(body) : undefined,
+                        // Timeout só quando o chamador pede (hoje: status do on-ramp). Sem ele o fetch não tem prazo nosso.
+                        ...(opts?.timeoutMs ? { signal: AbortSignal.timeout(opts.timeoutMs) } : {}),
+                    });
+                } catch (err) {
+                    if (opts?.timeoutMs && err instanceof Error && err.name === 'TimeoutError') {
+                        // Mensagem FIXA: sem URL, id da ordem nem chave.
+                        logAnchor('error', { id, metodo: method, endpoint, codigo: ANCHOR_TIMEOUT_CODE });
+                        throw new AnchorError('Etherfuse não respondeu a tempo', ANCHOR_TIMEOUT_CODE, 504);
+                    }
+                    throw err;
+                }
                 span.setAttribute('http.status_code', response.status);
 
                 if (!response.ok) {
@@ -571,11 +587,17 @@ export class EtherfuseClient implements Anchor {
      * @returns The {@link OnRampTransaction}, or `null` if not found.
      * @throws {AnchorError} On non-404 API errors.
      */
-    async getOnRampTransaction(transactionId: string): Promise<OnRampTransaction | null> {
+    async getOnRampTransaction(
+        transactionId: string,
+        opts?: { timeoutMs?: number },
+    ): Promise<OnRampTransaction | null> {
         try {
             const response = await this.request<EtherfuseOrderResponse>(
                 'GET',
                 `/ramp/order/${transactionId}`,
+                undefined,
+                // Timeout próprio (~4 s): sem ele a janela de 5 s da trava por ordem não impede consultas sobrepostas.
+                { timeoutMs: opts?.timeoutMs ?? ONRAMP_STATUS_TIMEOUT_MS },
             );
             return this.mapOnRampTransaction(response);
         } catch (error) {
