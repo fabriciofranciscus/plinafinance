@@ -75,4 +75,17 @@ describe('pollOnRampUntilTerminal — teto próprio por consulta', () => {
     await vi.advanceTimersByTimeAsync(45_000 + 25_000);
     expect(await resultado).toMatchObject({ code: 'POLL_TIMEOUT' });
   });
+
+  // Entre o `while (Date.now() < deadline)` e o cálculo do teto passam alguns ms: o que resta pode dar 0 ou negativo. Com 0 o fetch
+  // sairia SEM signal (sem limite; `timeoutMs` 0 é falso) e com negativo o AbortSignal.timeout lançaria e abortaria o poll.
+  it.each([['resta 0', 6_000], ['resta negativo (passou do prazo no meio)', 6_500]])('no limite do prazo (%s): a consulta sai COM signal de no mínimo 1 s e o poll segue', async (_nome, agoraNoCalculo) => {
+    const relogio = vi.spyOn(Date, 'now');
+    // chamadas em ordem no poll: 1 = startedAt (1000), 2 = while (5999 < deadline 6000), 3 = cálculo do teto; depois, tempo parado
+    relogio.mockReturnValueOnce(1_000).mockReturnValueOnce(5_999).mockReturnValueOnce(agoraNoCalculo).mockReturnValue(agoraNoCalculo);
+    const f = vi.fn((_u: unknown, _i?: RequestInit) => Promise.resolve(resposta('completed')));
+    vi.stubGlobal('fetch', f);
+    await expect(cliente().pollOnRampUntilTerminal(ORDEM, { intervalMs: 2000, timeoutMs: 5_000 })).resolves.toMatchObject({ status: 'completed' });
+    expect(tetos).toEqual([1_000]); // piso de 1 s
+    expect(f.mock.calls[0]![1]?.signal).toBeDefined();
+  });
 });
