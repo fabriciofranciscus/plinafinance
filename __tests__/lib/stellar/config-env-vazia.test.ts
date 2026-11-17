@@ -2,25 +2,23 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Env vazia não pode virar valor vazio (Atlas, 16/11, extensão do fix/horizon-url-vazia): `??` só cai no padrão com
- * undefined. Ex.: FUNDER_DAILY_CAP='' virava Number('') = 0 (teto 0); ASSET_CODE='' virava código vazio.
+ * undefined. Ex.: ASSET_CODE='' virava código vazio. O FUNDER_DAILY_CAP saiu desta tabela: ele é obrigatório e
+ * fail-closed, sem padrão (decisão do Atlas; funder-cap-obrigatorio.test.ts).
  */
-type Nome = 'FUNDER_DAILY_CAP' | 'ASSET_CODE' | 'FUNDER_BALANCE_FLOOR' | 'ISSUER_BALANCE_FLOOR' | 'DISTRIBUTOR_BALANCE_FLOOR';
+type Nome = 'ASSET_CODE' | 'FUNDER_BALANCE_FLOOR' | 'ISSUER_BALANCE_FLOOR' | 'DISTRIBUTOR_BALANCE_FLOOR';
 const EXPORT: Record<Nome, string> = {
-  FUNDER_DAILY_CAP: 'FUNDER_DAILY_CAP',
   ASSET_CODE: 'assetCode',
   FUNDER_BALANCE_FLOOR: 'FUNDER_BALANCE_FLOOR',
   ISSUER_BALANCE_FLOOR: 'ISSUER_BALANCE_FLOOR',
   DISTRIBUTOR_BALANCE_FLOOR: 'DISTRIBUTOR_BALANCE_FLOOR',
 };
 const PADRAO: Record<Nome, unknown> = {
-  FUNDER_DAILY_CAP: 100,
   ASSET_CODE: 'PLINARF',
   FUNDER_BALANCE_FLOOR: '50',
   ISSUER_BALANCE_FLOOR: '5',
   DISTRIBUTOR_BALANCE_FLOOR: '5',
 };
 const PREENCHIDO: Record<Nome, [string, unknown]> = {
-  FUNDER_DAILY_CAP: [' 7 ', 7],
   ASSET_CODE: [' PLINAX ', 'PLINAX'],
   FUNDER_BALANCE_FLOOR: [' 80 ', '80'],
   ISSUER_BALANCE_FLOOR: [' 9 ', '9'],

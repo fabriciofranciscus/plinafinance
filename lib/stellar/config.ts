@@ -58,9 +58,18 @@ export const STELLAR_FUNDER_STARTING_BALANCE =
 /**
  * N-09: cap diário global de funding em mainnet. Contado via EventoAudit
  * com acao=WALLET_FUNDED. Excedido → throw (operador precisa bumpar
- * manualmente após investigar). Default conservador.
+ * manualmente após investigar). Sem default: a env é obrigatória.
  */
-export const FUNDER_DAILY_CAP = Number(envOu('FUNDER_DAILY_CAP', '100'));
+export const FUNDER_DAILY_CAP: number | null = (() => {
+  // Limite de dinheiro, fail-closed (Argus + Atlas, 16/11). Só inteiro ≥ 1 vale. Vazio, ilegível ('abc', '1e3'), zero,
+  // negativo ou decimal → null em QUALQUER rede (antes: '' virava 0 e 'abc' virava NaN; `count >= NaN` é sempre falso,
+  // ou seja, funding SEM limite). Ausente: 100 na TESTNET (ambiente de demonstração; não quebra o deploy, a env não
+  // existe na Vercel) e null na PUBLIC. null → o funding recusa (account.ts).
+  const raw = process.env.FUNDER_DAILY_CAP;
+  if (raw === undefined) return STELLAR_NETWORK === 'PUBLIC' ? null : 100;
+  const v = raw.trim();
+  return /^[1-9]\d*$/.test(v) ? Number(v) : null;
+})();
 
 /**
  * N-09: piso de XLM do funder pra warn (não bloqueia). Operador vê no
