@@ -95,6 +95,15 @@ export async function incorporarCotaAction(
   formData: FormData,
 ): Promise<ActionResult> {
   await ensureAuth();
+  // Prazo: em branco = sem prazo; 0 = cota QUITADA (preservado, nunca trocado por "sem prazo"); inteiro 0..600 como na rota admin.
+  const prazoBruto = String(formData.get('prazoRestanteMeses') ?? '').trim();
+  let prazoRestanteMeses: number | undefined;
+  if (prazoBruto !== '') {
+    prazoRestanteMeses = /^\d{1,3}$/.test(prazoBruto) ? Number(prazoBruto) : NaN;
+    if (!(prazoRestanteMeses >= 0 && prazoRestanteMeses <= 600)) {
+      return { ok: false, error: 'Prazo inválido: informe um número inteiro de 0 a 600 (0 = cota quitada).' };
+    }
+  }
   try {
     const result = await incorporarCota({
       tipoBem: formData.get('tipoBem') as TipoBem,
@@ -105,8 +114,7 @@ export async function incorporarCotaAction(
         String(formData.get('desagioRevenda') ?? '').trim() || undefined,
       localizacaoAprox:
         String(formData.get('localizacaoAprox') ?? '').trim() || undefined,
-      prazoRestanteMeses:
-        Number(formData.get('prazoRestanteMeses')) || undefined,
+      prazoRestanteMeses,
       caminhoPrevisto:
         (formData.get('caminhoPrevisto') as CaminhoRealizacao) ?? 'A_REVENDA',
       notas: String(formData.get('notas') ?? '').trim() || undefined,
