@@ -145,8 +145,8 @@ export function InvestidoresPainel({ investidores }: { investidores: InvestidorA
                 <dd className="font-mono text-xs text-base/70">{inv.status}</dd>
               </div>
             </dl>
-            <details className="border-t border-light-hairline pt-3">
-              <summary className="group flex min-h-[44px] cursor-pointer list-none items-center gap-3 font-details text-label-ui text-base [&::-webkit-details-marker]:hidden">
+            <details className="group border-t border-light-hairline pt-3">
+              <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-3 font-details text-label-ui text-base [&::-webkit-details-marker]:hidden">
                 {/* Indicador de expansão decorativo (como no AP-5): o estado vem do próprio <details>. */}
                 <span
                   data-testid="indicador-clawback"

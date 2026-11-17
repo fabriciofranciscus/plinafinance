@@ -171,6 +171,12 @@ describe('observações da Íris adiantadas', () => {
     const resumo = container.querySelector('details > summary') as HTMLElement;
     expect(resumo.querySelector('[data-testid="indicador-clawback"][aria-hidden="true"]')).toBeTruthy();
     expect(resumo.textContent).toBe('Clawback');
+    // `group-open:` só funciona com `group` no <details> (ancestral); no <summary> o indicador ficava preso em "+".
+    const detalhes = resumo.parentElement as HTMLElement;
+    expect(detalhes.tagName).toBe('DETAILS');
+    expect(detalhes.className.split(/\s+/)).toContain('group');
+    expect(resumo.className.split(/\s+/)).not.toContain('group');
+    expect(resumo.querySelector('[data-testid="indicador-clawback"]')!.className).toContain('group-open:before:content-');
   });
   it('o h3 de "Incorporar nova cota" usa o papel de label, não text-lg ad hoc', () => {
     expect(src('page.tsx')).not.toMatch(/<h3 className="[^"]*text-lg/);
