@@ -17,6 +17,7 @@ import { networkPassphrase } from '../stellar/config';
 import { assertResgateXdrMatchesQuote, buildResgateXdr } from '../stellar/resgate';
 import { fetchTransactionByHash, preSignWithSigner, submitWithPrivySignature } from '../stellar/transactions';
 import { distributorSigner } from '../stellar/signer';
+import { FEE_MAXIMO_POR_OP_STROOPS, getTaxaBaseDaRede } from '../stellar/fee';
 import { assetCodeForClasse } from '../stellar/classes';
 import { calcularPrecoDeResgate } from './liquidacao';
 import { navMudou } from './pool';
@@ -296,6 +297,17 @@ async function submeterResgateInterno(input: SubmeterResgateInput): Promise<{ tx
   // NAV relido só em reserva NOVA (numa órfã a tx pode já estar no ledger e o NAV de agora já a reflete).
   let saldoTesouro: { saldo: Prisma.Decimal; lidoEm: number } | null = null;
   if (!orfa) {
+    // Fee (adendo 2 do Argus; mesma régua do swap/submit, fix/swap-fee-surge): a Plina co-assina este envelope, então
+    // recusa ANTES de reservar e de assinar o que a rede recusaria de certo (abaixo da taxa base × ops) e o fee inflado
+    // pelo cliente antes de assinar (acima do teto × ops). Só em reserva NOVA: numa órfã a tx pode já estar no ledger.
+    const ops = BigInt(tx.operations.length);
+    const fee = BigInt(tx.fee);
+    if (fee < BigInt(await getTaxaBaseDaRede()) * ops) {
+      throw new ApiError('FEE_ABAIXO_DO_MINIMO', 409, 'A taxa da transação está abaixo do mínimo da rede. Gere o resgate de novo.');
+    }
+    if (fee > BigInt(FEE_MAXIMO_POR_OP_STROOPS) * ops) {
+      throw new ApiError('FEE_ACIMA_DO_TETO', 409, 'A taxa da transação está acima do limite permitido. Gere o resgate de novo.');
+    }
     const atual = await calcularPrecoDeResgate({ amountPlinarf: new Prisma.Decimal(cot.plinarfAmount).toFixed(7) });
     if (navMudou(cot.navPorTokenNaCotacao, atual.navPorToken)) {
       throw new ApiError('NAV_MUDOU', 409, 'O NAV mudou desde a cotação. Gere uma nova cotação.');
