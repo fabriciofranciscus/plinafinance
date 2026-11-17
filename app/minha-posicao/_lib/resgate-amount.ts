@@ -6,9 +6,30 @@
 
 const FORMATO = /^\d{1,12}(\.\d{1,7})?$/;
 
-/** Aceita vírgula como separador (pt-BR) e devolve o ponto. */
+/** Parte inteira com milhar bem formado: 1 a 3 dígitos e grupos de 3 ("1.234.567"). */
+const milharValido = (inteira: string, sep: '.' | ','): boolean => new RegExp(`^\\d{1,3}(\\${sep}\\d{3})+$`).test(inteira);
+
+/**
+ * Aceita os formatos que a pessoa digita e devolve decimal puro com ponto: "1,25" → "1.25"; "1.234,5" e "1,234.5" →
+ * "1234.5" (o último separador é o decimal); vários separadores iguais com grupos de 3 ("1.234.567") são milhar. Um só
+ * ponto é decimal ("1.234" = 1,234): ambíguo, e a regra antiga fica. Milhar mal formado ("1..2", "12.34.5") não é
+ * "consertado": volta como veio e `quantidadeValida` recusa. Só formata; quem valida é `quantidadeValida`.
+ */
 export function normalizarQuantidade(v: string): string {
-  return v.trim().replace(',', '.');
+  const s = v.trim();
+  const virgulas = (s.match(/,/g) ?? []).length;
+  const pontos = (s.match(/\./g) ?? []).length;
+  if (virgulas > 0 && pontos > 0) {
+    const iDec = Math.max(s.lastIndexOf(','), s.lastIndexOf('.'));
+    const decimal = s[iDec] as ',' | '.';
+    const milhar = decimal === ',' ? '.' : ',';
+    const inteira = s.slice(0, iDec);
+    if (!milharValido(inteira, milhar)) return s;
+    return inteira.split(milhar).join('') + '.' + s.slice(iDec + 1);
+  }
+  if (virgulas > 1) return milharValido(s, ',') ? s.split(',').join('') : s;
+  if (pontos > 1) return milharValido(s, '.') ? s.split('.').join('') : s;
+  return s.replace(',', '.');
 }
 
 /** > 0, no formato do contrato e não maior que o saldo exibido. */
