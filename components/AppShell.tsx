@@ -33,13 +33,26 @@ export function AppShell({ children, isAdmin, issuerPubkey }: AppShellProps) {
     (r) => pathname === r || (r !== '/' && pathname.startsWith(r)),
   );
 
+  // Funis (/vender, /comprar) têm chrome próprio no topo, mas não tinham rodapé: recebem o compacto.
+  const funil = ['/vender', '/comprar'].some((r) => pathname === r || pathname.startsWith(`${r}/`));
+  if (funil) {
+    return (
+      <>
+        {children}
+        <AppFooter issuerPubkey={issuerPubkey} variante="compacto" />
+      </>
+    );
+  }
+
   if (hideShell) return <>{children}</>;
+
+  const variante = pathname === '/admin' || pathname.startsWith('/admin/') ? 'operacao' : 'completo';
 
   return (
     <div className="flex flex-col min-h-screen">
       <AppHeader isAdmin={isAdmin} />
       <main className="flex-1">{children}</main>
-      <AppFooter issuerPubkey={issuerPubkey} />
+      <AppFooter issuerPubkey={issuerPubkey} variante={variante} />
     </div>
   );
 }
