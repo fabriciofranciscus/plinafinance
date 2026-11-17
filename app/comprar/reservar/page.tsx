@@ -8,10 +8,11 @@
  */
 
 import { Suspense, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useAppPrivy } from '@/lib/hooks/privy';
 import { useRequireAuth } from '@/lib/hooks/use-require-auth';
 import { postJson } from '@/lib/http/client';
+import { SemCotaEscolhida } from './sem-cota';
 
 function explorerTx(hash: string) {
   return `https://stellar.expert/explorer/testnet/tx/${hash}`;
@@ -25,7 +26,6 @@ interface ReservaResult {
 
 function Inner() {
   const params = useSearchParams();
-  const router = useRouter();
   const { getAccessToken } = useAppPrivy();
   const { checking, authenticated } = useRequireAuth();
   const cotaId = params.get('cotaId');
@@ -44,21 +44,7 @@ function Inner() {
     );
   }
 
-  if (!cotaId) {
-    return (
-      <div className="mx-auto max-w-2xl px-6 py-16">
-        <p className="font-text text-base/70">
-          Sem cotaId. Volte e escolha uma cota.
-        </p>
-        <button
-          onClick={() => router.push('/cotas')}
-          className="mt-6 font-details text-[10px] tracking-[0.2em] uppercase underline"
-        >
-          Ver cotas →
-        </button>
-      </div>
-    );
-  }
+  if (!cotaId) return <SemCotaEscolhida />;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
