@@ -23,7 +23,10 @@ describe('A-13: alvos de 44 px no celular', () => {
 
   it('rodapé: todos os links do <footer> ganham 44 px no celular', () => {
     const f = readFileSync('components/AppFooter.tsx', 'utf8');
-    expect(f).toMatch(/<footer className="[^"]*max-md:\[&_a\]:min-h-\[44px\]/);
+    // A classe vive numa constante usada por TODAS as variantes (completo, compacto, operação); o render é conferido em
+    // app/__tests__/footer-variantes.test.tsx.
+    expect(f).toMatch(/const MOBILE_ALVOS =\s*'[^']*max-md:\[&_a\]:min-h-\[44px\]/);
+    expect((f.match(/<footer [^>]*\$\{MOBILE_ALVOS\}/g) ?? []).length).toBe(3);
   });
 
   it('link "Pular para conteúdo" tem 44 px quando aparece', () => {
