@@ -645,6 +645,20 @@ describe('incorporarCota — emissão recusada (nada vai à chain)', () => {
       expect(e?.code).not.toBe('DESAGIO_INVALIDO');
     });
   }
+  // desagioRevenda (Argus, sobre o c0971e8): a faixa vale NO SERVIÇO, nos dois caminhos (rota admin e formulário/funil). Vazio = sem revenda.
+  for (const d of ['-0.0001', '-0.1', '1.0001', '2', 'abc', '1e3']) {
+    it(`desagioRevenda ${JSON.stringify(d)} fora de [0, 1] ou ilegível é recusado (DESAGIO_INVALIDO), sem emitir`, async () => {
+      await recusa({ ...base, desagioRevenda: d }, 'DESAGIO_INVALIDO');
+      expect(emissoes()).toBe(0);
+      expect(st.cotas.size).toBe(0);
+    });
+  }
+  for (const d of [undefined, '', '0', '0.0001', '0.37', '1']) {
+    it(`desagioRevenda ${JSON.stringify(d)} (ausente/vazio ou dentro de [0, 1]) não é recusado por DESAGIO_INVALIDO`, async () => {
+      const e = await incorporarCota({ ...base, desagioRevenda: d }).then(() => null, (x) => x);
+      expect(e?.code).not.toBe('DESAGIO_INVALIDO');
+    });
+  }
   it('a mensagem de DESAGIO_INVALIDO é fixa (sem eco do valor enviado)', async () => {
     const err = await incorporarCota({ ...base, desagioAquisicao: '-7.77' }).catch((e) => e);
     expect(err.code).toBe('DESAGIO_INVALIDO');

@@ -565,10 +565,17 @@ export async function incorporarCota(
 
   // Invariante: deságio em [0, 1] (logo NAV ≤ valorCarta). Deságio negativo faria o custo, e os PLINARF emitidos a partir dele,
   // ficarem ACIMA da carta; o limite é o mesmo do gerar-oferta (comporDesagioDaOferta). Ilegível também é recusado.
-  try {
-    const desagio = new Prisma.Decimal(input.desagioAquisicao);
-    if (!desagio.isFinite() || desagio.lt(0) || desagio.gt(1)) throw new Error('fora');
-  } catch {
+  // O mesmo vale para o deságio de revenda, quando informado (vazio/ausente = sem revenda): a faixa fica NO SERVIÇO, nos dois caminhos.
+  const desagioEmFaixa = (v: string): boolean => {
+    try {
+      const d = new Prisma.Decimal(v);
+      return d.isFinite() && d.gte(0) && d.lte(1);
+    } catch {
+      return false;
+    }
+  };
+  if (!desagioEmFaixa(input.desagioAquisicao)) throw new IncorporacaoBloqueadaError('DESAGIO_INVALIDO');
+  if (input.desagioRevenda !== undefined && input.desagioRevenda !== '' && !desagioEmFaixa(input.desagioRevenda)) {
     throw new IncorporacaoBloqueadaError('DESAGIO_INVALIDO');
   }
 
