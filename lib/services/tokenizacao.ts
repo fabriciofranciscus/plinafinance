@@ -776,7 +776,7 @@ export type ClawbackErrorCode =
 const MENSAGENS_CLAWBACK: Record<ClawbackErrorCode, string> = {
   PEDIDO_INVALIDO: 'Pedido de clawback inválido ou já usado com outros dados. Recarregue a tela e envie de novo.',
   FUNDAMENTO_INVALIDO: 'Informe a URL do fundamento (documento público, http ou https).',
-  VALOR_INVALIDO: 'Informe uma quantidade maior que zero.',
+  VALOR_INVALIDO: 'Informe uma quantidade maior que zero, só com dígitos e ponto decimal (até 12 inteiros e 7 casas).',
   EMISSOR_NAO_CONFIGURADO: 'A execução do clawback não está configurada neste ambiente.',
   INVESTIDOR_NAO_ENCONTRADO: 'Investidor não encontrado.',
   PEDIDO_EM_ANDAMENTO: 'Este pedido já foi enviado e está em andamento ou foi interrompido. Nada foi executado de novo. O clawback pode ter entrado na rede: NÃO crie outro pedido antes de conferir o saldo on-chain e o histórico.',
@@ -822,13 +822,12 @@ export async function executarClawback(
 ): Promise<ExecutarClawbackResult> {
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(input.pedidoId ?? '')) throw new ClawbackError('PEDIDO_INVALIDO');
   if (!input.fundamentoUrl || !/^https?:\/\//.test(input.fundamentoUrl)) throw new ClawbackError('FUNDAMENTO_INVALIDO');
-  let valor: Prisma.Decimal;
-  try {
-    valor = new Prisma.Decimal(input.amount);
-  } catch {
-    throw new ClawbackError('VALOR_INVALIDO');
-  }
-  if (!valor.isFinite() || valor.lte(0)) throw new ClawbackError('VALOR_INVALIDO');
+  // Formato ANTES de gravar a tentativa (mesmo regex do liquidar/build): decimal puro, até 12 inteiros e 7 casas (precisão do ativo
+  // Stellar). Sem isso o SDK recusava >7 casas/enorme só depois da tentativa gravada (pedido preso em `incerto` sem nada enviado) e
+  // aceitava notação científica ("1e3" ficava cru na auditoria e a rede recebia 1000). A quantidade segue ao anchor como veio.
+  if (typeof input.amount !== 'string' || !/^\d{1,12}(\.\d{1,7})?$/.test(input.amount)) throw new ClawbackError('VALOR_INVALIDO');
+  const valor = new Prisma.Decimal(input.amount);
+  if (valor.lte(0)) throw new ClawbackError('VALOR_INVALIDO');
 
   if (!process.env.STELLAR_ISSUER_SECRET) throw new ClawbackError('EMISSOR_NAO_CONFIGURADO');
 

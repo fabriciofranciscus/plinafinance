@@ -147,10 +147,28 @@ describe('erros fixos e validações (antes de qualquer registro ou execução)'
     ['fundamento sem http(s)', { fundamentoUrl: 'ftp://x' }, 'FUNDAMENTO_INVALIDO'],
     ['valor zero', { amount: '0' }, 'VALOR_INVALIDO'],
     ['valor não numérico', { amount: 'abc' }, 'VALOR_INVALIDO'],
+    // Formato (Flora I2 / I3): o SDK da Stellar recusa >7 casas, 0, negativo e enorme só DEPOIS de a tentativa ser gravada (o pedido
+    // ficava `incerto` sem nada ter sido enviado), e aceita notação científica ("1e3" gravado cru na auditoria, 1000 na rede).
+    ['notação científica', { amount: '1e3' }, 'VALOR_INVALIDO'],
+    ['notação científica negativa', { amount: '1e-3' }, 'VALOR_INVALIDO'],
+    ['mais de 7 casas', { amount: '0.00000001' }, 'VALOR_INVALIDO'],
+    ['mais de 12 dígitos inteiros', { amount: '1234567890123' }, 'VALOR_INVALIDO'],
+    ['negativo', { amount: '-5' }, 'VALOR_INVALIDO'],
+    ['com espaço', { amount: ' 5 ' }, 'VALOR_INVALIDO'],
+    ['vírgula decimal', { amount: '1,5' }, 'VALOR_INVALIDO'],
+    ['vazio', { amount: '' }, 'VALOR_INVALIDO'],
+    ['zero com casas', { amount: '0.0000000' }, 'VALOR_INVALIDO'],
+    ['hexadecimal', { amount: '0x10' }, 'VALOR_INVALIDO'],
   ])('%s → %s, nada executado nem gravado', async (_n, over, code) => {
     await expect(executarClawback({ ...IN, ...over })).rejects.toMatchObject({ code });
     expect(m.executeClawback).not.toHaveBeenCalled();
     expect(m.eventos).toHaveLength(0);
+  });
+
+  it.each(['100', '0.0000001', '999999999999.9999999', '1', '0.5', '1234.5'])('quantidade %s (decimal puro, até 12 inteiros e 7 casas) é aceita e vai ao anchor como veio', async (amount) => {
+    await executarClawback({ ...IN, amount });
+    expect(m.executeClawback).toHaveBeenCalledTimes(1);
+    expect(m.executeClawback.mock.calls[0]![2]).toBe(amount);
   });
 
   it('sem a chave do emissor: EMISSOR_NAO_CONFIGURADO com mensagem que NÃO cita o nome da variável', async () => {
