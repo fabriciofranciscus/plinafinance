@@ -41,6 +41,12 @@ import { AnchorError, ANCHOR_TIMEOUT_CODE } from '../types';
 
 /** Prazo da consulta de status do on-ramp (a janela da trava por ordem é de 5 s: a consulta tem de acabar antes). */
 const ONRAMP_STATUS_TIMEOUT_MS = 4000;
+
+/**
+ * Prazo de CADA consulta dentro do poll (sandbox-pay, smokes). PRÓPRIO e maior que o do status: uma consulta lenta no meio do poll não
+ * pode derrubar a liquidação da demo. Não reaproveitar ONRAMP_STATUS_TIMEOUT_MS (são dois usos diferentes).
+ */
+const ONRAMP_POLL_CALL_TIMEOUT_MS = 20_000;
 import { StrKey } from '@stellar/stellar-sdk';
 import type {
     EtherfuseConfig,
@@ -1039,9 +1045,12 @@ export class EtherfuseClient implements Anchor {
              * Doutrina: etherfuse-pix-demo README quirk #7.
              */
             acceptProcessing?: boolean;
+            /** Prazo de cada consulta (padrão 20 s). O prazo GERAL do poll continua sendo `timeoutMs`. */
+            callTimeoutMs?: number;
             onTick?: (state: { status: string | null; notFound: boolean }) => void;
         } = {},
     ) {
+        const callTimeoutMs = opts.callTimeoutMs ?? ONRAMP_POLL_CALL_TIMEOUT_MS;
         const intervalMs = opts.intervalMs ?? 2000;
         const timeoutMs = opts.timeoutMs ?? 90_000;
         const indexingGraceMs = opts.indexingGraceMs ?? 12_000;
@@ -1057,7 +1066,20 @@ export class EtherfuseClient implements Anchor {
         const deadline = startedAt + timeoutMs;
 
         while (Date.now() < deadline) {
-            const tx = await this.getOnRampTransaction(orderId);
+            // Uma consulta que estoura o prazo POR CHAMADA conta como "sem resposta neste tick": o poll segue até o prazo geral.
+            const tick = await this.getOnRampTransaction(orderId, { timeoutMs: callTimeoutMs }).then(
+                (t) => ({ t }),
+                (err: unknown) => {
+                    if (err instanceof AnchorError && err.code === ANCHOR_TIMEOUT_CODE) return null;
+                    throw err;
+                },
+            );
+            if (tick === null) {
+                opts.onTick?.({ status: null, notFound: false });
+                await new Promise((r) => setTimeout(r, intervalMs));
+                continue;
+            }
+            const tx = tick.t;
             const notFound = tx === null;
             const status = tx?.status ?? null;
             opts.onTick?.({ status, notFound });
