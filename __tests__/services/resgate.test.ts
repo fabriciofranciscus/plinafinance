@@ -16,6 +16,7 @@ const m = vi.hoisted(() => ({
   preco: vi.fn(), buildResgate: vi.fn(), fetchTx: vi.fn(), preSign: vi.fn(), submitPrivy: vi.fn(),
   caixa: vi.fn(), ref: vi.fn(), saldo: vi.fn(), precoAgora: vi.fn(), agregado: vi.fn(), lockRaw: vi.fn(),
   conferencia: vi.fn(), decrementar: vi.fn(), investidorUpdate: vi.fn(), eventoCreate: vi.fn(), movCreateMany: vi.fn(),
+  taxaBase: vi.fn(),
 }));
 
 vi.mock('@/lib/db', () => {
@@ -40,6 +41,14 @@ vi.mock('@/lib/stellar/account', () => ({ getAssetBalance: m.saldo }));
 vi.mock('@/lib/services/holdings', () => ({ decrementarHolding: m.decrementar }));
 vi.mock('@/lib/services/swap-orfao', () => ({ assertSemSwapEmConferencia: m.conferencia }));
 vi.mock('@/lib/stellar/signer', () => ({ distributorSigner: () => ({ id: 'dist' }) }));
+// Harness (fix/resgate-fee-piso-teto): a régua de fee do resgate. O padrão '100' é o mesmo valor que o fallback do
+// fee.ts dava antes (Horizon indisponível no mock → BASE_FEE), então os casos antigos não mudam.
+vi.mock('@/lib/stellar/fee', () => ({
+  getTaxaBaseDaRede: m.taxaBase,
+  FEE_MAXIMO_POR_OP_STROOPS: 100_000,
+  getDynamicFee: async () => '100',
+  getFeeOfertaInvestidor: async () => '100',
+}));
 vi.mock('@/lib/stellar/transactions', () => ({
   fetchTransactionByHash: m.fetchTx,
   preSignWithSigner: m.preSign,
@@ -59,8 +68,8 @@ const D = (v: string) => new Prisma.Decimal(v);
 const ok = (v: string) => ({ status: 'OK', preco: new Prisma.Decimal(v), base: new Prisma.Decimal(v), idadeDias: 0, origem: 'SWAP' });
 const NAV = D('1.00000000');
 
-function envelope(opts: { amount?: string; bridge?: string; maxTime?: number; quoteId?: string; assinar?: boolean; memo?: Buffer } = {}) {
-  const b = new TransactionBuilder(new Account(INV.publicKey(), '1'), { fee: '100', networkPassphrase })
+function envelope(opts: { amount?: string; bridge?: string; maxTime?: number; quoteId?: string; assinar?: boolean; memo?: Buffer; fee?: string } = {}) {
+  const b = new TransactionBuilder(new Account(INV.publicKey(), '1'), { fee: opts.fee ?? '100', networkPassphrase })
     .addOperation(Operation.payment({ source: INV.publicKey(), destination: ISSUER.publicKey(), asset: new Asset('PLINARF', ISSUER.publicKey()), amount: opts.amount ?? '100' }))
     .addOperation(Operation.payment({ source: DIST.publicKey(), destination: INV.publicKey(), asset: TESOURO, amount: opts.bridge ?? '80' }))
     .setTimebounds(0, opts.maxTime ?? AGORA_SEC + 100)
@@ -104,6 +113,7 @@ beforeEach(() => {
   m.decrementar.mockResolvedValue(undefined);
   m.investidorUpdate.mockResolvedValue({});
   m.eventoCreate.mockResolvedValue({});
+  m.taxaBase.mockResolvedValue('100');
 });
 
 const cotarIn = (over: Record<string, unknown> = {}) => ({
@@ -650,5 +660,57 @@ describe('submeterResgate — falha do Horizon', () => {
     m.preSign.mockReturnValue({ pubkey: Keypair.random().publicKey(), sigBase64: 'x' });
     await expect(submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: envelope().toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA })).rejects.toThrow(/signer/);
     expect(m.submitPrivy).not.toHaveBeenCalled();
+  });
+});
+
+describe('submeterResgate — fee: piso da rede e teto (adendo 2 do Argus; mesma régua do swap/submit)', () => {
+  const tenta = (tx: ReturnType<typeof envelope>) =>
+    submeterResgate({ investidor: inv, quoteId: 'q_1', signedXdr: tx.toXDR(), obterPrecoTesouroBrl: m.precoAgora, agora: AGORA });
+  const nadaReservadoNemAssinado = () => {
+    expect(m.lockRaw).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(m.preSign).not.toHaveBeenCalled();
+    expect(m.submitPrivy).not.toHaveBeenCalled();
+  };
+
+  it('fee abaixo de last_ledger_base_fee × ops → 409 FEE_ABAIXO_DO_MINIMO, antes de reservar e de a Plina assinar', async () => {
+    m.findFirst.mockResolvedValue(cotacao());
+    m.taxaBase.mockResolvedValue('250'); // 2 ops × 250 = 500 > 2 × 100
+    await expect(tenta(envelope())).rejects.toMatchObject({ code: 'FEE_ABAIXO_DO_MINIMO', status: 409 });
+    nadaReservadoNemAssinado();
+  });
+
+  it('fee acima de 100.000 × ops → 409 FEE_ACIMA_DO_TETO (o investidor não queima XLM com a co-assinatura da Plina)', async () => {
+    m.findFirst.mockResolvedValue(cotacao());
+    await expect(tenta(envelope({ fee: '100001' }))).rejects.toMatchObject({ code: 'FEE_ACIMA_DO_TETO', status: 409 });
+    nadaReservadoNemAssinado();
+  });
+
+  it('fee exatamente no teto passa', async () => {
+    m.findFirst.mockResolvedValue(cotacao());
+    expect((await tenta(envelope({ fee: '100000' }))).txHash).toBe('tx_hash_final');
+  });
+
+  it('surto (taxa base normal): fee de 100/op passa — a régua não é o p70', async () => {
+    m.findFirst.mockResolvedValue(cotacao());
+    expect((await tenta(envelope())).txHash).toBe('tx_hash_final');
+    expect(m.taxaBase).toHaveBeenCalled();
+  });
+
+  it('mensagens fixas: nada de dado nem de erro interno no texto', async () => {
+    m.findFirst.mockResolvedValue(cotacao());
+    const e = await tenta(envelope({ fee: '100001' })).catch((x) => x);
+    expect(String(e.message)).not.toMatch(/Error|stack|G[A-Z2-7]{55}/);
+  });
+
+  it('reserva ÓRFÃ: a régua não vale (a tx pode já estar no ledger com o fee de antes) — segue para a reconciliação', async () => {
+    const tx = envelope();
+    const hash = createHash('sha256').update(tx.hash()).digest('hex');
+    m.findFirst.mockResolvedValue(cotacao({ submitXdrHash: hash }));
+    m.updateMany.mockResolvedValueOnce({ count: 0 });
+    m.taxaBase.mockResolvedValue('250');
+    m.fetchTx.mockResolvedValue({ hash: 'tx_na_chain', successful: true });
+    expect(await tenta(tx)).toEqual({ txHash: 'tx_na_chain' });
+    expect(m.taxaBase).not.toHaveBeenCalled();
   });
 });

@@ -22,6 +22,8 @@ export const API_ERROR_CODES = [
   'LIQUIDEZ_INSUFICIENTE', // 409 — resgate acima do caixa disponível do fundo ou do saldo de TESOURO do distributor
   'PRECO_FORA_DA_FAIXA',   // 409 — preço do TESOURO (Etherfuse) fora de ±2% da referência independente, ou sem referência
   'RESGATE_ACIMA_DO_TETO', // 409 — resgate acima do teto configurável por resgate
+  'FEE_ABAIXO_DO_MINIMO',  // 409 — fee do envelope abaixo da taxa base da rede × ops (resgate; Argus adendo 2)
+  'FEE_ACIMA_DO_TETO',     // 409 — fee do envelope acima do teto por op × ops (resgate; Argus adendo 2)
   'COTACAO_EXPIRADA',      // 410 — cotação do resgate vencida (ou envelope fora do maxTime)
   'NAV_MUDOU',             // 409 — NAV divergiu da cotação além de 1 bp; recotar
   'SWAP_EM_CONFERENCIA',   // 409 — o investidor tem um swap em conferência (reserva órfã): sem quote/reserva novos
