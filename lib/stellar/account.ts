@@ -149,6 +149,9 @@ async function fundViaCreateAccount(destination: string): Promise<void> {
   // múltiplos KYCs aprovados em sequência (cada um dispara 2 XLM do
   // funder). Conta WALLET_FUNDED nas últimas 24h.
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  if (FUNDER_DAILY_CAP === null) {
+    throw new Error('FUNDER_DAILY_CAP ausente ou inválido — funding recusado (configure um inteiro ≥ 1)');
+  }
   const fundedToday = await db.eventoAudit.count({
     where: { acao: 'WALLET_FUNDED', criadoEm: { gte: since } },
   });

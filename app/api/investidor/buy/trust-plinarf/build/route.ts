@@ -14,6 +14,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { buildTrustlineXdr } from '@/lib/stellar/transactions';
+import { assetCode as SENIOR_ASSET_CODE } from '@/lib/stellar/config';
+import { SUBORDINADA_ASSET_CODE } from '@/lib/stellar/classes';
 import { fundAccountIfNeeded } from '@/lib/stellar/account';
 import { withAuth } from '@/lib/wallet/auth-guard';
 import { parseBody } from '@/lib/http/parse-body';
@@ -48,8 +50,9 @@ export const POST = withAuth(async (req, { user }) => {
       );
     }
     const fund = await fundAccountIfNeeded(pubkey);
-    const defaultCode = process.env.ASSET_CODE ?? 'PLINARF';
-    const subordinadaCode = process.env.ASSET_CODE_SUBORDINADA ?? 'PLINARFB';
+    // Fonte única (nota 1 da Vera): a mesma leitura de env, com o tratamento de vazio, que lib/stellar usa.
+    const defaultCode = SENIOR_ASSET_CODE;
+    const subordinadaCode = SUBORDINADA_ASSET_CODE;
     // F-M3-3: aceita PLINARF (Sênior, default) ou PLINARFB (Subordinada).
     const assetCode =
       assetCodeInput === subordinadaCode ? subordinadaCode : defaultCode;

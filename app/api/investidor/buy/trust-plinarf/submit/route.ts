@@ -19,6 +19,8 @@ import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { submitWithPrivySignature } from '@/lib/stellar/transactions';
+import { assetCode as SENIOR_ASSET_CODE } from '@/lib/stellar/config';
+import { SUBORDINADA_ASSET_CODE } from '@/lib/stellar/classes';
 import { authorizeTrustline } from '@/lib/stellar/issuer';
 import { issuerSigner } from '@/lib/stellar/signer';
 import { assertElegivelParaTrustline } from '@/lib/services/investidor';
@@ -53,8 +55,9 @@ export const POST = withApi(async (req, { requestId }) => {
     signatureHex,
     assetCode: assetCodeInput,
   } = Schema.parse(await req.json());
-  const defaultCode = process.env.ASSET_CODE ?? 'PLINARF';
-  const subordinadaCode = process.env.ASSET_CODE_SUBORDINADA ?? 'PLINARFB';
+  // Fonte única (nota 1 da Vera): a mesma leitura de env, com o tratamento de vazio, que lib/stellar usa.
+  const defaultCode = SENIOR_ASSET_CODE;
+  const subordinadaCode = SUBORDINADA_ASSET_CODE;
   // F-M3-3: PLINARF = Sênior (legacy), PLINARFB = Subordinada (nova).
   const assetCode =
     assetCodeInput === subordinadaCode ? subordinadaCode : defaultCode;

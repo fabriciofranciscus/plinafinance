@@ -16,15 +16,22 @@ export const STELLAR_NETWORK: StellarNetwork =
 export const networkPassphrase =
   STELLAR_NETWORK === 'PUBLIC' ? Networks.PUBLIC : Networks.TESTNET;
 
+// `||` + trim: uma STELLAR_HORIZON_URL vazia (ex.: `STELLAR_HORIZON_URL=` no .env) cai no padrão da rede, em vez de
+// virar URL vazia e derrubar /pool, /cotas e /admin com 500 (achado da Vera no quickstart, 16/11).
 export const horizonUrl =
-  process.env.STELLAR_HORIZON_URL ??
+  process.env.STELLAR_HORIZON_URL?.trim() ||
   (STELLAR_NETWORK === 'PUBLIC'
     ? 'https://horizon.stellar.org'
     : 'https://horizon-testnet.stellar.org');
 
 export const friendbotUrl = 'https://friendbot.stellar.org';
 
-export const assetCode = process.env.ASSET_CODE ?? 'PLINARF';
+/** Valor da env sem espaços nas pontas, ou o padrão quando ausente, vazia ou só espaços (`??` só cobre undefined). */
+function envOu(nome: string, padrao: string): string {
+  return process.env[nome]?.trim() || padrao;
+}
+
+export const assetCode = envOu('ASSET_CODE', 'PLINARF');
 
 /**
  * Timeout em segundos pra todas as txs Stellar (Memo.hash, trustline, swap,
@@ -51,24 +58,33 @@ export const STELLAR_FUNDER_STARTING_BALANCE =
 /**
  * N-09: cap diário global de funding em mainnet. Contado via EventoAudit
  * com acao=WALLET_FUNDED. Excedido → throw (operador precisa bumpar
- * manualmente após investigar). Default conservador.
+ * manualmente após investigar). Sem default: a env é obrigatória.
  */
-export const FUNDER_DAILY_CAP = Number(process.env.FUNDER_DAILY_CAP ?? '100');
+export const FUNDER_DAILY_CAP: number | null = (() => {
+  // Limite de dinheiro, fail-closed (Argus + Atlas, 16/11). Só inteiro de 1 a 999999 vale. Vazio, ilegível ('abc', '1e3'), zero,
+  // negativo ou decimal → null em QUALQUER rede (antes: '' virava 0 e 'abc' virava NaN; `count >= NaN` é sempre falso,
+  // ou seja, funding SEM limite). Ausente: 100 na TESTNET (ambiente de demonstração; não quebra o deploy, a env não
+  // existe na Vercel) e null na PUBLIC. null → o funding recusa (account.ts).
+  const raw = process.env.FUNDER_DAILY_CAP;
+  if (raw === undefined) return STELLAR_NETWORK === 'PUBLIC' ? null : 100;
+  const v = raw.trim();
+  // Até 6 dígitos (1..999999): sem teto, um valor absurdo viraria Infinity (Argus, 5ecde15).
+  return /^[1-9]\d{0,5}$/.test(v) ? Number(v) : null;
+})();
 
 /**
  * N-09: piso de XLM do funder pra warn (não bloqueia). Operador vê no
  * log e bumpa antes de drenar. Default cobre ~25 contas a 2 XLM.
  */
-export const FUNDER_BALANCE_FLOOR = process.env.FUNDER_BALANCE_FLOOR ?? '50';
+export const FUNDER_BALANCE_FLOOR = envOu('FUNDER_BALANCE_FLOOR', '50');
 
 /**
  * F-M0-4: pisos de XLM de issuer e distributor pra warn (não bloqueia, mesmo
  * padrão do funder). Issuer/distributor pagam fee em toda emissão/distribuição;
  * sem alarme, podem secar em mainnet sem aviso. Operador vê no log e recarrega.
  */
-export const ISSUER_BALANCE_FLOOR = process.env.ISSUER_BALANCE_FLOOR ?? '5';
-export const DISTRIBUTOR_BALANCE_FLOOR =
-  process.env.DISTRIBUTOR_BALANCE_FLOOR ?? '5';
+export const ISSUER_BALANCE_FLOOR = envOu('ISSUER_BALANCE_FLOOR', '5');
+export const DISTRIBUTOR_BALANCE_FLOOR = envOu('DISTRIBUTOR_BALANCE_FLOOR', '5');
 
 const stellarExpertBase =
   STELLAR_NETWORK === 'PUBLIC'

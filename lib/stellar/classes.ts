@@ -12,8 +12,9 @@ import { assetCode } from './config';
  *
  * `assetCode` vem de `config.ts` (env `ASSET_CODE`, default `PLINARF`).
  */
-export const SUBORDINADA_ASSET_CODE =
-  process.env.ASSET_CODE_SUBORDINADA ?? 'PLINARFB';
+// Mesmo tratamento de env vazia do envOu (config.ts), inline para não criar dependência nova de módulo (há testes
+// que mockam a config). Vazia ou só espaços → 'PLINARFB'.
+export const SUBORDINADA_ASSET_CODE = process.env.ASSET_CODE_SUBORDINADA?.trim() || 'PLINARFB';
 
 export function assetCodeForClasse(classe: ClassePLINARF | null | undefined): string {
   return classe === 'SUBORDINADA' ? SUBORDINADA_ASSET_CODE : assetCode;
