@@ -182,3 +182,27 @@ describe('observações da Íris adiantadas', () => {
     expect(src('page.tsx')).not.toMatch(/<h3 className="[^"]*text-lg/);
   });
 });
+
+describe('a variante "operacao" do footer herda o container operacional (rebase sobre #146)', () => {
+  const ISSUER = 'GCN34WOPABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMWLGA7E';
+  it('operacao + operacional: as duas faixas (conteúdo e linha legal) usam 1440 + gutter fluido', () => {
+    const { container } = render(<AppFooter issuerPubkey={ISSUER} variante="operacao" operacional />);
+    expect(container.querySelector('footer')!.getAttribute('data-variante')).toBe('operacao');
+    const html = container.innerHTML;
+    expect((html.match(/max-w-\[var\(--workspace-max\)\] px-\[var\(--spacing-gutter-ui\)\]/g) ?? []).length).toBe(2);
+    expect(html).not.toContain('max-w-6xl');
+  });
+  it('operacao sem a flag e compacto continuam em 1152 px', () => {
+    for (const v of ['operacao', 'compacto'] as const) {
+      const { container, unmount } = render(<AppFooter issuerPubkey={ISSUER} variante={v} operacional={v === 'compacto'} />);
+      expect(container.innerHTML, v).toContain('max-w-6xl');
+      expect(container.innerHTML, v).not.toContain('--workspace-max');
+      unmount();
+    }
+  });
+  it('o AppShell liga as duas coisas no /admin: variante operacao e container operacional', () => {
+    const shell = readFileSync('components/AppShell.tsx', 'utf8');
+    expect(shell).toMatch(/const variante = operacional \? 'operacao' : 'completo'/);
+    expect(shell).toMatch(/<AppFooter issuerPubkey=\{issuerPubkey\} variante=\{variante\} operacional=\{operacional\}/);
+  });
+});
