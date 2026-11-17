@@ -188,3 +188,42 @@ describe('foco depois da navegação explícita', () => {
     expect(document.activeElement).toBe(document.body);
   });
 });
+
+// Revisão visual da Íris (AP-5 66ba520): indicador do disclosure, números em mono, instrução de assinatura antes do documento.
+describe('ajustes da revisão visual', () => {
+  it('o summary do exemplo tem indicador gráfico de expansão (decorativo) sem mudar o nome acessível', () => {
+    const { container } = render(<AcompanharView data={semOferta} />);
+    const resumo = container.querySelector('details > summary') as HTMLElement;
+    expect(resumo.querySelector('[data-testid="indicador-exemplo"][aria-hidden="true"]')).toBeTruthy();
+    expect(resumo.textContent).toBe(SUMMARY);
+    expect(screen.getByText(SUMMARY)).toBeTruthy();
+  });
+
+  it('valores monetários da oferta real usam fonte mono; o texto de pagamento continua em fonte de texto', () => {
+    render(<AcompanharView data={base} />);
+    const valor = (rotulo: string) => screen.getByText(rotulo).nextElementSibling as HTMLElement;
+    for (const r of ['Valor de face da cota', 'Valor líquido a receber', 'Prazo restante da cota']) {
+      expect(valor(r).className).toContain('font-mono');
+    }
+    expect(valor('Pagamento').className).not.toContain('font-mono');
+  });
+
+  it('valor do Pix em mono (só o número); o aviso "(Pix simulado)" fica fora do trecho mono', () => {
+    render(<AcompanharView data={{ ...base, status: 'CONCLUIDA', etapaAtual: 5, pixTx: { hashShort: 'abcd1234', url: 'https://x.test/tx' }, valorLiquidoPix: undefined } as AcompanharData} />);
+    const h3 = screen.getByRole('heading', { level: 3 });
+    expect(h3.textContent).toMatch(/\(Pix simulado\)/);
+    const num = h3.querySelector('span.font-mono') as HTMLElement;
+    expect(num.textContent).toMatch(/^R\$/);
+    expect(num.textContent).not.toMatch(/Pix/);
+  });
+
+  it('cessão: a instrução de assinatura vem ANTES do documento; assinada não mostra instrução', () => {
+    const c = { ...base, status: 'OFERTA_ACEITA', etapaAtual: 4, cessaoId: 'ces-1' } as AcompanharData;
+    const { unmount } = render(<AcompanharView data={c} />);
+    expect(antes(screen.getByTestId('assinatura-por-email'), screen.getByText('Documento'))).toBe(true);
+    unmount();
+    render(<AcompanharView data={{ ...c, aguardandoAssinatura: true }} />);
+    // o contexto real já traz a frase da DocuSign; o bloco de aviso do painel também precede o documento
+    expect(antes(screen.getByTestId('aguardando-assinatura'), screen.getByText('Documento'))).toBe(true);
+  });
+});

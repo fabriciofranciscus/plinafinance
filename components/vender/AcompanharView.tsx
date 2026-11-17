@@ -240,8 +240,14 @@ const TOPO = 'mt-6 border-t border-light-hairline pt-6';
 /** Disclosure do exemplo ilustrativo: o resumo é o aviso aprovado; o conteúdo de exemplo só existe aberto. */
 function ExemploIlustrativo({ children }: { children: React.ReactNode }) {
   return (
-    <details className="mt-4 border border-light-hairline">
-      <summary className="flex min-h-[44px] cursor-pointer items-center px-4 font-mono text-[11px] text-base/70">
+    <details className="group mt-4 border border-light-hairline">
+      <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-3 px-4 font-mono text-[11px] text-base/70 [&::-webkit-details-marker]:hidden">
+        {/* Indicador de expansão: o flex suprimia o marcador nativo. Decorativo; o estado vem do próprio <details>. */}
+        <span
+          data-testid="indicador-exemplo"
+          aria-hidden="true"
+          className="inline-flex h-5 w-5 shrink-0 items-center justify-center border border-light-hairline text-sm leading-none text-primary-deep before:content-['+'] group-open:before:content-['−']"
+        />
         Exemplo ilustrativo (simulação em rede de testes).
       </summary>
       <div className="px-4 pb-4">{children}</div>
@@ -361,7 +367,7 @@ function OfertaLinhas({ v }: { v: { valorCarta: number; desagioPct: string; valo
       <OfertaLinha label="Deságio aplicado" value={`− ${v.desagioPct.replace('.', ',')}%`} accent />
       <OfertaLinha label="Valor líquido a receber" value={BRL.format(v.valorLiquido)} destaque />
       {v.prazoRestanteMeses != null && <OfertaLinha label="Prazo restante da cota" value={`${v.prazoRestanteMeses} meses`} />}
-      <OfertaLinha label="Pagamento" value="Pix (simulado em rede de testes)" />
+      <OfertaLinha label="Pagamento" value="Pix (simulado em rede de testes)" texto />
       {v.validade && <OfertaLinha label="Validade da proposta" value={v.validade} mono />}
     </>
   );
@@ -373,12 +379,15 @@ function OfertaLinha({
   accent = false,
   destaque = false,
   mono = false,
+  texto = false,
 }: {
   label: string;
   value: string;
   accent?: boolean;
   destaque?: boolean;
   mono?: boolean;
+  /** Valor em palavras (ex.: forma de pagamento), não número de significado: mantém a fonte de texto. */
+  texto?: boolean;
 }) {
   return (
     <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4 px-5 py-4 border-b border-light-hairline last:border-b-0">
@@ -387,12 +396,14 @@ function OfertaLinha({
         className={[
           'min-w-0 break-words text-left sm:text-right',
           destaque
-            ? 'font-title text-2xl font-bold text-primary-deep'
+            ? 'font-mono text-2xl font-bold text-primary-deep'
             : accent
               ? 'font-mono text-base font-semibold text-primary-deep'
               : mono
                 ? 'font-mono text-sm text-base'
-                : 'font-text text-base font-semibold text-base',
+                : texto
+                  ? 'font-text text-base font-semibold text-base'
+                  : 'font-mono text-base font-semibold text-base',
         ].join(' ')}
       >
         {value}
@@ -424,10 +435,23 @@ function PainelCessao({
 }) {
   return (
     <div className={semTopo ? '' : TOPO}>
-      <p className="font-text text-sm text-base/70">
-        Hash do documento registrado em rede de testes. A validade da cessão depende da anuência da administradora e dos
-        instrumentos jurídicos.
-      </p>
+      {aguardandoAssinatura ? (
+        <p
+          role="status"
+          data-testid="aguardando-assinatura"
+          className="mb-4 border-l-4 border-l-base border border-light-hairline p-4 font-text text-sm text-base/80"
+        >
+          <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 block mb-1">
+            Aguardando assinatura
+          </span>
+          Enviado por DocuSign. Nenhum pagamento é feito antes da sua assinatura.
+        </p>
+      ) : assinada ? null : (
+        <p data-testid="assinatura-por-email" className="mb-4 font-text text-sm text-base/80">
+          A assinatura eletrônica é feita pelo link de e-mail que a equipe envia nesta etapa. Verifique a caixa de spam. Enquanto isso, nada
+          precisa ser feito aqui.
+        </p>
+      )}
 
       <div className="mt-4 border border-light-hairline bg-document-grey/30 p-6">
         <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/55">
@@ -443,23 +467,10 @@ function PainelCessao({
         </div>
       </div>
 
-      {aguardandoAssinatura ? (
-        <p
-          role="status"
-          data-testid="aguardando-assinatura"
-          className="mt-4 border-l-4 border-l-base border border-light-hairline p-4 font-text text-sm text-base/80"
-        >
-          <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 block mb-1">
-            Aguardando assinatura
-          </span>
-          Enviado por DocuSign. Nenhum pagamento é feito antes da sua assinatura.
-        </p>
-      ) : assinada ? null : (
-        <p data-testid="assinatura-por-email" className="mt-4 font-text text-sm text-base/80">
-          A assinatura eletrônica é feita pelo link de e-mail que a equipe envia nesta etapa. Verifique a caixa de spam. Enquanto isso, nada
-          precisa ser feito aqui.
-        </p>
-      )}
+      <p className="mt-4 font-text text-sm text-base/70">
+        Hash do documento registrado em rede de testes. A validade da cessão depende da anuência da administradora e dos
+        instrumentos jurídicos.
+      </p>
 
       {(cessaoTx || cessaoId) && (
         <div className="mt-4 space-y-2">
@@ -517,7 +528,9 @@ function PainelPix({
       <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-primary text-base">
         <span className="text-3xl">✓</span>
       </div>
-      <h3 className="font-title text-3xl font-semibold tracking-tight mt-6">{BRL.format(valor)} (Pix simulado)</h3>
+      <h3 className="font-title text-3xl font-semibold tracking-tight mt-6">
+        <span className="font-mono">{BRL.format(valor)}</span> (Pix simulado)
+      </h3>
       <p className="font-mono text-sm text-base/70 mt-2">Simulação em rede de testes: nenhum dinheiro real foi enviado.</p>
       <p
         data-testid={temCota ? 'cota-incorporada' : 'cota-nao-incorporada'}
