@@ -17,6 +17,7 @@
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { DesagioColunaString, FracaoDesagioString, ValorBrlString } from '@/lib/api/valores';
 import { isAdminAuthenticated } from '@/lib/auth/admin';
 import { requireAdminCsrf } from '@/lib/auth/admin-csrf';
 import { parseBody } from '@/lib/http/parse-body';
@@ -46,7 +47,6 @@ export const dynamic = 'force-dynamic';
 // o `maxDuration` vai na PÁGINA que as usa (app/admin/page.tsx, dona: Flora).
 export const maxDuration = 150;
 
-const NumericString = z.string().regex(/^\d+(\.\d+)?$/, 'valor numérico inválido');
 
 /**
  * Operador das ações do E1-2 (auditoria): a sessão admin é um cookie único, sem identidade por usuário, então o operador é
@@ -113,9 +113,9 @@ const Schema = z.discriminatedUnion('action', [
       action: z.literal('gerar-oferta'),
       leadVendedorId: z.string().min(1).max(60),
       tipoBem: z.enum(['IMOVEL', 'VEICULO', 'EQUIPAMENTO', 'SERVICO']),
-      valorCarta: NumericString,
+      valorCarta: ValorBrlString,
       administradora: z.string().min(1).max(200),
-      desagioAquisicao: NumericString,
+      desagioAquisicao: DesagioColunaString,
       // 0 = cota QUITADA (sem componente de prazo; guardado como 0, não null). A-01.
       prazoRestanteMeses: z.number().int().min(0).max(600).optional(),
       validadeHoras: z.number().int().positive().max(168).optional(),
@@ -125,9 +125,9 @@ const Schema = z.discriminatedUnion('action', [
   z
     .object({
       action: z.literal('previa-oferta'),
-      valorCarta: NumericString,
+      valorCarta: ValorBrlString,
       administradora: z.string().min(1).max(200),
-      desagioAquisicao: NumericString,
+      desagioAquisicao: DesagioColunaString,
       prazoRestanteMeses: z.number().int().min(0).max(600).optional(),
     })
     .strict(),
@@ -176,7 +176,7 @@ const Schema = z.discriminatedUnion('action', [
       action: z.literal('incorporar-cota'),
       cessaoId: z.string().min(1).max(60),
       localizacaoAprox: z.string().max(200).optional(),
-      desagioRevenda: NumericString.optional(),
+      desagioRevenda: FracaoDesagioString.optional(),
     })
     .strict(),
 ]);

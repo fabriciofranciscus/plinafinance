@@ -36,6 +36,7 @@ import { assertSemSwapEmConferencia } from '@/lib/services/swap-orfao';
 import { navUnavailableResponse } from '@/lib/api/nav-unavailable';
 import { internalErrorResponse } from '@/lib/api/internal-error';
 import { ApiError } from '@/lib/api/errors';
+import { formatoQuantidadeStellarValido } from '@/lib/api/valores';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,7 +84,8 @@ export const POST = withAuth(async (req, { user }) => {
     let fromCurrency: string;
     let toCurrency: string;
     if (direction === 'offramp') {
-      const v = Number(body.amountTesouro);
+      // Formato do ativo Stellar (até 12 inteiros e 7 casas, > 0): `Number()` aceitava "1e3", "0x10" e " 5 ".
+      const v = formatoQuantidadeStellarValido(body.amountTesouro) ? Number(body.amountTesouro) : NaN;
       if (!Number.isFinite(v) || v <= 0) {
         return NextResponse.json(
           { error: 'amountTesouro inválido' },

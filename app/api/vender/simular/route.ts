@@ -9,6 +9,7 @@
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { ValorBrlString } from '@/lib/api/valores';
 import { calcularFaixaIndicativa } from '@/lib/services/originacao';
 import { TipoBem } from '@prisma/client';
 import { parseBody } from '@/lib/http/parse-body';
@@ -20,10 +21,7 @@ const Schema = z
   .object({
     tipoBem: z.enum(['IMOVEL', 'VEICULO', 'EQUIPAMENTO', 'SERVICO']),
     administradora: z.string().max(200).optional(),
-    valorCarta: z
-      .string()
-      .regex(/^\d+(\.\d+)?$/, 'valorCarta deve ser numérico')
-      .refine((v) => Number(v) > 0, 'valorCarta deve ser > 0'),
+    valorCarta: ValorBrlString.refine((v) => Number(v) > 0, 'valorCarta deve ser > 0'),
     prazoRestanteMeses: z.number().int().positive().max(600).optional(),
   })
   .strict();
