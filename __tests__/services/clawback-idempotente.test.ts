@@ -36,6 +36,9 @@ vi.mock('@/lib/db', () => {
 
 import { ClawbackError, executarClawback } from '@/lib/services/tokenizacao';
 
+/** Memo do fundamento REJEITADO pela rede (result_codes): prova que ele não entrou, então o reenvio pode refazê-lo na hora. */
+const memoRejeitado = () => Object.assign(new Error('memo caiu'), { response: { data: { extras: { result_codes: { transaction: 'tx_failed' } } } } });
+
 const IN = { investidorId: 'inv_1', amount: '100', motivo: 'ERRO_OPERACIONAL' as never, fundamentoUrl: 'https://x.test/decisao.pdf', operador: 'admin-panel', pedidoId: 'pedido-0123456789abcdef' };
 
 beforeEach(() => {
@@ -114,7 +117,7 @@ describe('idempotência por pedido', () => {
   });
 
   it('R1: reenvio do MESMO pedido com outra URL de fundamento ou outro motivo → PEDIDO_INVALIDO e NADA é ancorado com a URL nova (nem na retomada)', async () => {
-    m.registerOnChainHash.mockRejectedValueOnce(new Error('memo caiu')); // deixa o pedido em `onchain` (retomável)
+    m.registerOnChainHash.mockRejectedValueOnce(memoRejeitado()); // deixa o pedido em `onchain` (retomável na hora: rejeição DEFINITIVA da rede)
     await executarClawback(IN).catch(() => undefined);
     m.registerOnChainHash.mockClear();
     await expect(executarClawback({ ...IN, fundamentoUrl: 'https://outro.test/falso.pdf' })).rejects.toMatchObject({ code: 'PEDIDO_INVALIDO' });
@@ -127,7 +130,7 @@ describe('idempotência por pedido', () => {
   });
 
   it('o clawback já foi à rede mas o registro falhou (memo): erro REGISTRO_PENDENTE com o txHash; o MESMO pedido RETOMA sem reexecutar o clawback nem decrementar duas vezes', async () => {
-    m.registerOnChainHash.mockRejectedValueOnce(new Error('memo caiu'));
+    m.registerOnChainHash.mockRejectedValueOnce(memoRejeitado());
     const e1 = await executarClawback(IN).catch((e) => e);
     expect(e1.code).toBe('REGISTRO_PENDENTE');
     expect(e1.txHash).toBe('tx_claw_1');
