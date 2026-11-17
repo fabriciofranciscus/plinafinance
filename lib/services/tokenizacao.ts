@@ -39,7 +39,7 @@ import { registrarMovimentoFundo } from './razao-fundo';
 import { getStellarPlinaPositionPublic } from '../env/ops';
 import { logStellarError } from '../stellar/log-error';
 import { causaSegura } from '../api/causa-segura';
-import { STELLAR_NETWORK, assetCode } from '../stellar/config';
+import { STELLAR_NETWORK, STELLAR_TX_TIMEOUT_SEC, assetCode } from '../stellar/config';
 import { assetCodeForClasse, classeFromAssetCode } from '../stellar/classes';
 import { decrementarHolding } from './holdings';
 import { buildAuditPayload, registerOnChainHash } from '../stellar/audit';
@@ -747,6 +747,12 @@ export interface ExecutarClawbackInput {
    * vezes. 16 a 64 caracteres de [A-Za-z0-9_-].
    */
   pedidoId: string;
+  /**
+   * Carteira (publicKey) que o operador VIU na revisão. Se vier e divergir da carteira lida do investidor no envio, o pedido é
+   * recusado (`CARTEIRA_DIVERGENTE`) ANTES de gravar a tentativa e de qualquer envio. Ausente = comportamento anterior (a tela atual
+   * não tem revisão da carteira); o PR 3 do U1-11 deve enviar sempre, e torná-la obrigatória é recusar aqui quando faltar.
+   */
+  carteiraRevisada?: string;
 }
 
 export interface ExecutarClawbackResult {
@@ -766,6 +772,7 @@ export type ClawbackErrorCode =
   | 'VALOR_INVALIDO'
   | 'EMISSOR_NAO_CONFIGURADO'
   | 'INVESTIDOR_NAO_ENCONTRADO'
+  | 'CARTEIRA_DIVERGENTE'
   | 'PEDIDO_EM_ANDAMENTO'
   | 'PEDIDO_FALHOU'
   | 'EXECUCAO_FALHOU'
@@ -776,9 +783,10 @@ export type ClawbackErrorCode =
 const MENSAGENS_CLAWBACK: Record<ClawbackErrorCode, string> = {
   PEDIDO_INVALIDO: 'Pedido de clawback inválido ou já usado com outros dados. Recarregue a tela e envie de novo.',
   FUNDAMENTO_INVALIDO: 'Informe a URL do fundamento (documento público, http ou https).',
-  VALOR_INVALIDO: 'Informe uma quantidade maior que zero.',
+  VALOR_INVALIDO: 'Informe uma quantidade maior que zero, só com dígitos e ponto decimal (até 12 inteiros e 7 casas).',
   EMISSOR_NAO_CONFIGURADO: 'A execução do clawback não está configurada neste ambiente.',
   INVESTIDOR_NAO_ENCONTRADO: 'Investidor não encontrado.',
+  CARTEIRA_DIVERGENTE: 'A carteira do investidor não é a que você revisou. Nada foi executado nem registrado. Recarregue a tela, confira a carteira atual e envie de novo.',
   PEDIDO_EM_ANDAMENTO: 'Este pedido já foi enviado e está em andamento ou foi interrompido. Nada foi executado de novo. O clawback pode ter entrado na rede: NÃO crie outro pedido antes de conferir o saldo on-chain e o histórico.',
   PEDIDO_FALHOU: 'Este pedido já falhou antes e não será repetido. Confira o saldo e o histórico; se precisar, crie um novo pedido.',
   EXECUCAO_FALHOU: 'A rede recusou o clawback e ele não foi executado. Confira o saldo e o histórico; se precisar, crie um novo pedido.',
@@ -803,8 +811,16 @@ type PayloadClawback = {
   status?: 'attempting' | 'onchain' | 'executed' | 'failed' | 'incerto';
   clawbackTxHash?: string;
   fundamentoTxHash?: string;
+  /** ISO: quem está concluindo o registro (memo do fundamento + saldo) tem esse prazo; os outros reenvios esperam (U1-11, duplo envio). */
+  concluindoDesde?: string;
   causa?: unknown;
 };
+
+/**
+ * Prazo de quem conclui o registro. A tx do memo do fundamento nasce DEPOIS de tomar o prazo e pode ainda entrar na rede até o seu
+ * timeout (STELLAR_TX_TIMEOUT_SEC); por isso o prazo é esse timeout MAIS uma folga: só depois disso um outro reenvio pode assumir.
+ */
+export const PRAZO_CONCLUSAO_CLAWBACK_MS = (STELLAR_TX_TIMEOUT_SEC + 60) * 1000;
 
 /**
  * Executa clawback. Whitepaper §6.5: 4 hipóteses exclusivas (enum força).
@@ -822,18 +838,21 @@ export async function executarClawback(
 ): Promise<ExecutarClawbackResult> {
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(input.pedidoId ?? '')) throw new ClawbackError('PEDIDO_INVALIDO');
   if (!input.fundamentoUrl || !/^https?:\/\//.test(input.fundamentoUrl)) throw new ClawbackError('FUNDAMENTO_INVALIDO');
-  let valor: Prisma.Decimal;
-  try {
-    valor = new Prisma.Decimal(input.amount);
-  } catch {
-    throw new ClawbackError('VALOR_INVALIDO');
-  }
-  if (!valor.isFinite() || valor.lte(0)) throw new ClawbackError('VALOR_INVALIDO');
+  // Formato ANTES de gravar a tentativa (mesmo regex do liquidar/build): decimal puro, até 12 inteiros e 7 casas (precisão do ativo
+  // Stellar). Sem isso o SDK recusava >7 casas/enorme só depois da tentativa gravada (pedido preso em `incerto` sem nada enviado) e
+  // aceitava notação científica ("1e3" ficava cru na auditoria e a rede recebia 1000). A quantidade segue ao anchor como veio.
+  if (typeof input.amount !== 'string' || !/^\d{1,12}(\.\d{1,7})?$/.test(input.amount)) throw new ClawbackError('VALOR_INVALIDO');
+  const valor = new Prisma.Decimal(input.amount);
+  if (valor.lte(0)) throw new ClawbackError('VALOR_INVALIDO');
 
   if (!process.env.STELLAR_ISSUER_SECRET) throw new ClawbackError('EMISSOR_NAO_CONFIGURADO');
 
   const investidor = await db.investidor.findUnique({ where: { id: input.investidorId } });
   if (!investidor) throw new ClawbackError('INVESTIDOR_NAO_ENCONTRADO');
+  // Trava da carteira NO SERVIDOR: a revisada tem de ser a lida agora; antes de gravar a tentativa (o pedidoId não é consumido).
+  if (input.carteiraRevisada !== undefined && input.carteiraRevisada.trim() !== investidor.publicKey) {
+    throw new ClawbackError('CARTEIRA_DIVERGENTE');
+  }
 
   const chaveLock = `plina:clawback:${input.pedidoId}`;
   const filtroPedido = { acao: 'CLAWBACK_EXECUTADO' as const, payloadJson: { path: ['pedidoId'], equals: input.pedidoId } };
@@ -884,6 +903,20 @@ export async function executarClawback(
       };
     }
     if (guardado.status === 'onchain' && guardado.clawbackTxHash) {
+      // Só UM reenvio conclui o registro: dois juntos mandariam dois memos do fundamento à rede (só um ficaria no registro).
+      const vez = await tomarConclusaoDoClawback(eventoId, chaveLock);
+      if (!vez.tomou) {
+        const g = (vez.evento.payloadJson ?? {}) as PayloadClawback;
+        if (g.status === 'executed') {
+          return {
+            txHash: vez.evento.stellarTxHash ?? g.clawbackTxHash ?? '',
+            fundamentoTxHash: g.fundamentoTxHash ?? '',
+            payloadHash: vez.evento.payloadHash ?? '',
+            idempotente: true,
+          };
+        }
+        throw new ClawbackError('PEDIDO_EM_ANDAMENTO');
+      }
       return concluirRegistroDoClawback({ eventoId, chaveLock, input, publicKey: investidor.publicKey, clawbackTxHash: guardado.clawbackTxHash, retomada: true });
     }
     throw new ClawbackError(guardado.status === 'failed' ? 'PEDIDO_FALHOU' : guardado.status === 'incerto' ? 'EXECUCAO_INCERTA' : 'PEDIDO_EM_ANDAMENTO');
@@ -912,7 +945,7 @@ export async function executarClawback(
     where: { id: eventoId },
     data: {
       stellarTxHash: clawbackTxHash,
-      payloadJson: { ...guardado, status: 'onchain', clawbackTxHash } as unknown as Prisma.InputJsonValue,
+      payloadJson: { ...guardado, status: 'onchain', clawbackTxHash, concluindoDesde: new Date().toISOString() } as unknown as Prisma.InputJsonValue,
     },
   });
 
@@ -927,6 +960,42 @@ function rejeicaoDefinitivaDaRede(err: unknown): boolean {
   const rc = (err as { response?: { data?: { extras?: { result_codes?: { transaction?: unknown } } } } })?.response?.data?.extras?.result_codes;
   if (!rc || typeof rc !== 'object') return false;
   return rc.transaction !== 'tx_too_late' && rc.transaction !== 'tx_bad_seq';
+}
+
+/**
+ * Toma a vez de concluir o registro de um clawback já na rede: transação curta sob o MESMO advisory lock do claim (sem rede dentro).
+ * Só toma quem vê `onchain` sem prazo vigente (`concluindoDesde` ausente ou mais velho que PRAZO_CONCLUSAO_CLAWBACK_MS). Quem não
+ * toma recebe o evento atual (se já `executed`, o chamador devolve o resultado do 1º; senão, recusa como "em andamento").
+ */
+async function tomarConclusaoDoClawback(eventoId: string, chaveLock: string) {
+  return db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${chaveLock}))`;
+    const evento = await tx.eventoAudit.findFirst({ where: { id: eventoId } });
+    if (!evento) throw new ClawbackError('PEDIDO_EM_ANDAMENTO');
+    const g = (evento.payloadJson ?? {}) as PayloadClawback;
+    const desde = g.concluindoDesde ? Date.parse(g.concluindoDesde) : NaN;
+    const vigente = Number.isFinite(desde) && Date.now() - desde < PRAZO_CONCLUSAO_CLAWBACK_MS;
+    if (g.status !== 'onchain' || vigente) return { tomou: false as const, evento };
+    const atualizado = await tx.eventoAudit.update({
+      where: { id: eventoId },
+      data: { payloadJson: { ...g, concluindoDesde: new Date().toISOString() } as unknown as Prisma.InputJsonValue },
+    });
+    return { tomou: true as const, evento: atualizado };
+  });
+}
+
+/** Solta o prazo quando o memo foi REJEITADO de forma definitiva pela rede: o reenvio seguinte do operador não espera o prazo vencer. Melhor esforço. */
+async function soltarConclusaoDoClawback(eventoId: string, chaveLock: string): Promise<void> {
+  await db
+    .$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${chaveLock}))`;
+      const evento = await tx.eventoAudit.findFirst({ where: { id: eventoId } });
+      const g = (evento?.payloadJson ?? {}) as PayloadClawback;
+      if (!evento || g.status !== 'onchain' || !g.concluindoDesde) return;
+      const { concluindoDesde: _liberado, ...resto } = g;
+      await tx.eventoAudit.update({ where: { id: eventoId }, data: { payloadJson: resto as unknown as Prisma.InputJsonValue } });
+    })
+    .catch(() => undefined);
 }
 
 /** Passos 3 e 4: memo do fundamento + (evento executado, saldoEsperado e holding) numa transação, idempotente por evento. */
@@ -953,6 +1022,10 @@ async function concluirRegistroDoClawback(a: {
     fundamentoOnChain = await registerOnChainHash(payload);
   } catch (err) {
     console.error('[clawback] registro do fundamento falhou', causaSegura(err));
+    // Só a REJEIÇÃO DEFINITIVA da rede (result_codes) prova que o memo não entrou: aí o reenvio seguinte pode refazê-lo na hora. Timeout,
+    // 5xx e queda de conexão deixam o prazo VENCER: o payload leva `_at`, então cada tentativa gera um hash novo e nada impediria um
+    // 2º memo enquanto o 1º ainda pode entrar.
+    if (rejeicaoDefinitivaDaRede(err)) await soltarConclusaoDoClawback(a.eventoId, a.chaveLock);
     throw new ClawbackError('REGISTRO_PENDENTE', a.clawbackTxHash);
   }
 
@@ -996,6 +1069,7 @@ async function concluirRegistroDoClawback(a: {
       ...(a.retomada || jaConcluido ? { idempotente: true } : {}),
     };
   } catch (err) {
+    // Aqui o memo do fundamento JÁ foi à rede: não se solta o prazo (outro reenvio mandaria um 2º memo); ele vence sozinho.
     console.error('[clawback] conclusão do registro falhou', causaSegura(err));
     throw new ClawbackError('REGISTRO_PENDENTE', a.clawbackTxHash);
   }

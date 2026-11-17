@@ -34,7 +34,11 @@ vi.mock('@/lib/db', () => {
   return { db: { ...tx, investidor: { findUnique: async () => m.investidor, update: async () => ({}) }, $transaction: async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx) } };
 });
 
-import { ClawbackError, executarClawback } from '@/lib/services/tokenizacao';
+import { ClawbackError, PRAZO_CONCLUSAO_CLAWBACK_MS, executarClawback } from '@/lib/services/tokenizacao';
+import { STELLAR_TX_TIMEOUT_SEC } from '@/lib/stellar/config';
+
+/** Memo do fundamento REJEITADO pela rede (result_codes): prova que ele não entrou, então o reenvio pode refazê-lo na hora. */
+const memoRejeitado = () => Object.assign(new Error('memo caiu'), { response: { data: { extras: { result_codes: { transaction: 'tx_failed' } } } } });
 
 const IN = { investidorId: 'inv_1', amount: '100', motivo: 'ERRO_OPERACIONAL' as never, fundamentoUrl: 'https://x.test/decisao.pdf', operador: 'admin-panel', pedidoId: 'pedido-0123456789abcdef' };
 
@@ -47,6 +51,12 @@ beforeEach(() => {
   m.decrementar.mockResolvedValue(undefined);
   process.env.STELLAR_ISSUER_SECRET = 'SXXXX';
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
+});
+
+describe('janela de conclusão do registro (Argus)', () => {
+  it('é no mínimo o timeout da tx do memo MAIS 60 s: antes disso outro reenvio não pode assumir (a tx ainda pode entrar)', () => {
+    expect(PRAZO_CONCLUSAO_CLAWBACK_MS).toBeGreaterThanOrEqual((STELLAR_TX_TIMEOUT_SEC + 60) * 1000);
+  });
 });
 
 describe('idempotência por pedido', () => {
@@ -114,7 +124,7 @@ describe('idempotência por pedido', () => {
   });
 
   it('R1: reenvio do MESMO pedido com outra URL de fundamento ou outro motivo → PEDIDO_INVALIDO e NADA é ancorado com a URL nova (nem na retomada)', async () => {
-    m.registerOnChainHash.mockRejectedValueOnce(new Error('memo caiu')); // deixa o pedido em `onchain` (retomável)
+    m.registerOnChainHash.mockRejectedValueOnce(memoRejeitado()); // deixa o pedido em `onchain` (retomável na hora: rejeição DEFINITIVA da rede)
     await executarClawback(IN).catch(() => undefined);
     m.registerOnChainHash.mockClear();
     await expect(executarClawback({ ...IN, fundamentoUrl: 'https://outro.test/falso.pdf' })).rejects.toMatchObject({ code: 'PEDIDO_INVALIDO' });
@@ -127,7 +137,7 @@ describe('idempotência por pedido', () => {
   });
 
   it('o clawback já foi à rede mas o registro falhou (memo): erro REGISTRO_PENDENTE com o txHash; o MESMO pedido RETOMA sem reexecutar o clawback nem decrementar duas vezes', async () => {
-    m.registerOnChainHash.mockRejectedValueOnce(new Error('memo caiu'));
+    m.registerOnChainHash.mockRejectedValueOnce(memoRejeitado());
     const e1 = await executarClawback(IN).catch((e) => e);
     expect(e1.code).toBe('REGISTRO_PENDENTE');
     expect(e1.txHash).toBe('tx_claw_1');
@@ -147,10 +157,70 @@ describe('erros fixos e validações (antes de qualquer registro ou execução)'
     ['fundamento sem http(s)', { fundamentoUrl: 'ftp://x' }, 'FUNDAMENTO_INVALIDO'],
     ['valor zero', { amount: '0' }, 'VALOR_INVALIDO'],
     ['valor não numérico', { amount: 'abc' }, 'VALOR_INVALIDO'],
+    // Formato (Flora I2 / I3): o SDK da Stellar recusa >7 casas, 0, negativo e enorme só DEPOIS de a tentativa ser gravada (o pedido
+    // ficava `incerto` sem nada ter sido enviado), e aceita notação científica ("1e3" gravado cru na auditoria, 1000 na rede).
+    ['notação científica', { amount: '1e3' }, 'VALOR_INVALIDO'],
+    ['notação científica negativa', { amount: '1e-3' }, 'VALOR_INVALIDO'],
+    ['mais de 7 casas', { amount: '0.00000001' }, 'VALOR_INVALIDO'],
+    ['mais de 12 dígitos inteiros', { amount: '1234567890123' }, 'VALOR_INVALIDO'],
+    ['negativo', { amount: '-5' }, 'VALOR_INVALIDO'],
+    ['com espaço', { amount: ' 5 ' }, 'VALOR_INVALIDO'],
+    ['vírgula decimal', { amount: '1,5' }, 'VALOR_INVALIDO'],
+    ['vazio', { amount: '' }, 'VALOR_INVALIDO'],
+    ['zero com casas', { amount: '0.0000000' }, 'VALOR_INVALIDO'],
+    ['hexadecimal', { amount: '0x10' }, 'VALOR_INVALIDO'],
   ])('%s → %s, nada executado nem gravado', async (_n, over, code) => {
     await expect(executarClawback({ ...IN, ...over })).rejects.toMatchObject({ code });
     expect(m.executeClawback).not.toHaveBeenCalled();
     expect(m.eventos).toHaveLength(0);
+  });
+
+  it.each(['100', '0.0000001', '999999999999.9999999', '1', '0.5', '1234.5'])('quantidade %s (decimal puro, até 12 inteiros e 7 casas) é aceita e vai ao anchor como veio', async (amount) => {
+    await executarClawback({ ...IN, amount });
+    expect(m.executeClawback).toHaveBeenCalledTimes(1);
+    expect(m.executeClawback.mock.calls[0]![2]).toBe(amount);
+  });
+
+  // Trava da carteira (Argus 22:05; backlog pós-tag): a carteira mostrada na revisão tem de ser a lida AGORA no envio. Divergiu →
+  // CARTEIRA_DIVERGENTE antes de gravar a tentativa e de qualquer envio (o pedidoId não é consumido).
+  describe('carteira revisada', () => {
+    it('igual à carteira lida no envio: executa para essa carteira', async () => {
+      await executarClawback({ ...IN, carteiraRevisada: 'GABC' });
+      expect(m.executeClawback).toHaveBeenCalledTimes(1);
+      expect(m.executeClawback.mock.calls[0]![1]).toBe('GABC');
+    });
+    it('espaços ao redor são ignorados na comparação', async () => {
+      await executarClawback({ ...IN, carteiraRevisada: '  GABC  ' });
+      expect(m.executeClawback).toHaveBeenCalledTimes(1);
+    });
+    it.each([['outra chave', 'GXYZ'], ['minúscula', 'gabc'], ['prefixo', 'GAB'], ['sufixo', 'GABCD']])('%s → CARTEIRA_DIVERGENTE, nada executado nem gravado', async (_n, revisada) => {
+      await expect(executarClawback({ ...IN, carteiraRevisada: revisada })).rejects.toMatchObject({ code: 'CARTEIRA_DIVERGENTE' });
+      expect(m.executeClawback).not.toHaveBeenCalled();
+      expect(m.eventos).toHaveLength(0);
+    });
+    it('a carteira do investidor mudou DEPOIS da revisão: recusa, e o mesmo pedidoId segue livre para um novo envio com a carteira nova', async () => {
+      m.investidor = { id: 'inv_1', publicKey: 'GNOVA', saldoEsperado: '1000' };
+      await expect(executarClawback({ ...IN, carteiraRevisada: 'GABC' })).rejects.toMatchObject({ code: 'CARTEIRA_DIVERGENTE' });
+      expect(m.eventos).toHaveLength(0);
+      await executarClawback({ ...IN, carteiraRevisada: 'GNOVA' });
+      expect(m.executeClawback).toHaveBeenCalledTimes(1);
+      expect(m.executeClawback.mock.calls[0]![1]).toBe('GNOVA');
+    });
+    it('a mensagem é fixa e não cita nenhuma das duas carteiras', async () => {
+      const err = await executarClawback({ ...IN, carteiraRevisada: 'GXYZSEGREDO' }).catch((e) => e);
+      expect(err).toBeInstanceOf(ClawbackError);
+      expect(err.message).not.toMatch(/GXYZ|GABC|SEGREDO/);
+    });
+    it('a divergência vem antes da leitura do pedido: pedido já executado + carteira divergente também recusa (sem devolver o resultado do 1º)', async () => {
+      await executarClawback({ ...IN, carteiraRevisada: 'GABC' });
+      await expect(executarClawback({ ...IN, carteiraRevisada: 'GXYZ' })).rejects.toMatchObject({ code: 'CARTEIRA_DIVERGENTE' });
+    });
+    // Compatibilidade até o PR 3 do U1-11 (a tela atual não tem revisão da carteira): sem o campo, o comportamento é o de antes.
+    // O PR 3 DEVE enviar sempre; torná-lo obrigatório é recusar aqui (decisão do Argus/Atlas).
+    it('sem carteiraRevisada (tela atual): comportamento anterior, executa', async () => {
+      await executarClawback(IN);
+      expect(m.executeClawback).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('sem a chave do emissor: EMISSOR_NAO_CONFIGURADO com mensagem que NÃO cita o nome da variável', async () => {
