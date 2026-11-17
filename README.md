@@ -129,7 +129,7 @@ pnpm dev                           # http://localhost:3000
 
 Requisitos: Node 20.9+ (requisito do Next.js 16), pnpm 10 e, para `smoke:ciclo` e para os testes com banco real, Docker ou um Postgres local vazio.
 
-`.env.example` lista as principais variáveis; as opcionais de URL (`STELLAR_HORIZON_URL`, `ETHERFUSE_BASE_URL`) ficam **comentadas** de propósito (vazias, quebram o app). Os grupos que o app local precisa:
+`.env.example` lista as principais variáveis; as opcionais de URL (`STELLAR_HORIZON_URL`, `ETHERFUSE_BASE_URL`) ficam **comentadas** de propósito (se ficarem vazias, `/pool`, `/cotas` e `/admin` respondem 500). Os grupos que o app local precisa:
 
 | Grupo | Variáveis (nomes) | Observação |
 |---|---|---|
