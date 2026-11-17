@@ -1,81 +1,14 @@
-# Plina Finance — POC
+# Plina Finance — protótipo em rede de testes
 
-**Direitos creditórios de consórcio brasileiro, tokenizados como cota de FIDC na Stellar.**
+Cotas contempladas de consórcio, representadas como tokens de demonstração na rede Stellar testnet. Fase 01: operação privada, sem oferta pública e sem FIDC nesta fase.
 
-POC do hackathon. Roda em **testnet Stellar** + **Etherfuse sandbox** (anchor regulada LATAM). Demonstra um ciclo institucional completo: PIX brasileiro entra via anchor, vira PLINA-RF on-chain, e o investidor acompanha posição lida direto do Horizon.
+> **PT:** Esta é uma demonstração em rede de testes (Stellar testnet). Nenhum dinheiro real é movido, e nada aqui é oferta de valores mobiliários, promessa de rentabilidade ou garantia de liquidez.
+>
+> **EN:** This is a demonstration on the Stellar testnet. No real money moves, and nothing here is an offer of securities, a promise of returns, or a guarantee of liquidity.
 
-> Whitepaper canônico: `../PlinaFinance-1.pdf` (v1.0, abril 2026).
-> Política de clawback (4 hipóteses, públicas): `/politica-clawback`.
+Protótipo em rede de testes (Stellar testnet) com o sandbox da Etherfuse. Demonstra o ciclo de ponta a ponta: Pix simulado entra, vira PLINA-RF on-chain e tem saída. O Pix ao cedente usa o sandbox de um provedor de pagamento (Asaas) ou um provedor simulado; em nenhum dos dois há dinheiro real.
 
----
-
-## Demo flow (o fluxo único da POC)
-
-`/investir` é a tela que prova a tese end-to-end:
-
-1. **Login Privy** → wallet Stellar embedded criada (Tier 2, `rawSign` Ed25519).
-2. **KYC mock + trustline PLINA-RF** autorizada pelo issuer (`AUTH_REQUIRED`).
-3. **Quote BRL → TESOURO** via Etherfuse sandbox (REST real, não mock).
-4. **Onramp PIX → TESOURO** (com `pollOnRampUntilTerminal` para os 3–10s de indexing).
-5. **Swap TESOURO → PLINA-RF** via distributor (preço NAV do pool).
-6. **`/minha-posicao`** lê o balance direto do Horizon — Postgres é só cache.
-7. **`/admin`** registra liquidação → resgate + offramp Etherfuse fecha o ciclo.
-
----
-
-## Stack
-
-- **Next.js 16.2.4 + React 19.2.4** — App Router, Server Actions. _Não é o Next.js da sua training data — leia `node_modules/next/dist/docs/` antes de assumir APIs antigas._
-- **Stellar testnet** via `@stellar/stellar-sdk` 13 — issuer com `AUTH_REQUIRED + AUTH_REVOCABLE + AUTH_CLAWBACK_ENABLED`.
-- **Privy** (`@privy-io/react-auth` + `@privy-io/server-auth`) — wallet embedded Stellar do investidor.
-- **Etherfuse sandbox** (`api.sand.etherfuse.com`) — anchor LATAM regulada, asset bridge **TESOURO**, rail **PIX (BRL)**. SDK vendorado em `lib/anchors/etherfuse/` (4 patches `PLINA-MOD-NNN` documentados em `lib/anchors/README.md`).
-- **Prisma + Neon Postgres** — duas connection strings: pooled (`DATABASE_URL`) + direct (`DIRECT_URL`).
-- **Tailwind v4** (config-less, tokens em `app/globals.css`).
-
-Arquitetura: hexagonal-lite. Services consomem a interface `Anchor` (`lib/anchors/types.ts`), nunca classes concretas. Trocar provider = 1 linha em `lib/adapters/index.ts`.
-
----
-
-## Quickstart
-
-```bash
-npm install
-cp .env.local.example .env.local   # preencher os secrets abaixo
-npm run prisma:migrate              # cria schema no Neon
-npm run prisma:seed                 # cota mock incorporada + investidor de teste
-npm run dev                         # http://localhost:3000
-```
-
-### Env vars obrigatórias (`.env.local`)
-
-```env
-# Banco
-DATABASE_URL=               # Neon pooled
-DIRECT_URL=                 # Neon direct (migrations)
-
-# Stellar testnet
-STELLAR_NETWORK=testnet
-STELLAR_ISSUER_SECRET=      # testnet — flags AUTH_* habilitadas
-STELLAR_DISTRIBUTOR_SECRET= # testnet
-
-# Privy (dashboard.privy.io, free tier 1000 MAUs)
-PRIVY_APP_ID=
-PRIVY_APP_SECRET=
-
-# Etherfuse (devnet.etherfuse.com → Ramp → API Keys)
-ETHERFUSE_API_KEY=
-ETHERFUSE_ENV=sandbox
-
-# Admin POC
-ADMIN_PASSWORD=             # painel da operação
-
-# Lead capture landing
-SMTP_HOST=
-SMTP_PORT=
-SMTP_USER=
-SMTP_PASS=
-LEAD_EMAIL_TO=
-```
+**Para quem avalia as entregas do Instaward 2:** comece por [Verify the Instaward 2 deliverables](#verify-the-instaward-2-deliverables). O comando principal é `pnpm smoke:ciclo`: roda o ciclo inteiro na testnet, sem `.env` e sem chave.
 
 ---
 
@@ -137,7 +70,7 @@ pnpm snapshot:verificar https://plina.finance/api/nav-snapshot/2026-11-14 \
 
 Read-only, public file plus Horizon; the accounts and network come from **your** arguments, never from the file under check.
 It checks that the file is canonical JSON (RFC 8785), that the anchor transaction's `Memo.hash` equals the SHA-256 of the file
-(source = the distributor you passed), that the distributor is listed in `ACCOUNTS` of the public `stellar.toml`, that the NAV
+(source = the distributor you passed), that the distributor is listed in `ACCOUNTS` of the public stellar.toml, that the NAV
 is recomputed from the file, and that circulating supply and trustline totals match Horizon.
 
 Exit codes: `0` CONFERIDO · `1` REPROVADO (a check failed) · `2` NÃO CONFERIDO (nothing failed, but something could not be checked, e.g. balances that changed after the snapshot) · `64` usage error (missing or invalid arguments; nothing was checked).
@@ -177,26 +110,64 @@ curl -s https://horizon-testnet.stellar.org/transactions/<txHash> | python3 -c \
   'import sys,json,base64;t=json.load(sys.stdin);print(t["successful"],t["memo_type"],base64.b64decode(t["memo"]).hex())'
 ```
 
-Worked example with a real artifact (a Pix settlement receipt from the Asaas sandbox, anchored on testnet; the file `comprovante-pix-4274834b.json` is in the evidence package):
-`sha256sum comprovante-pix-4274834b.json` gives `32417ce2fe08bea91585a1b337ccd5e0c35fe5bfb45f53055ec10b473bedd48a`, and tx
+Worked example with a real artifact (a Pix settlement receipt from the Asaas sandbox, anchored on testnet; the receipt JSON file is in the evidence package, not in this repository):
+`sha256sum` of that file gives `32417ce2fe08bea91585a1b337ccd5e0c35fe5bfb45f53055ec10b473bedd48a`, and tx
 [`eb7306d1…dbcd`](https://stellar.expert/explorer/testnet/tx/eb7306d1995224bc5b9649f7559899eb195542eb5d9d7eeb6ba8bc446271dbcd)
 shows `True hash 32417ce2…d48a`. (That receipt is a sandbox smoke, separate from the proof quota, whose settlement is a simulated Pix.)
 
-## Smoke tests (rodar antes de gravar a demo)
+---
+
+## Quickstart (desenvolvimento local)
 
 ```bash
-npm run smoke:stellar     # cria contas testnet, trustline, emite PLINA-RF, autoriza, faz clawback
-npm run smoke:etherfuse   # quote BRL→TESOURO, customer, bank account, on-ramp order
-npm run smoke:audit       # audit log append-only
+pnpm install
+cp .env.example .env.local         # preencher os valores (ver abaixo); nunca versionar o .env.local
+pnpm prisma:migrate                # cria o schema no Postgres (Neon ou local)
+pnpm prisma:seed                   # cotas de demonstração, emitidas de verdade na testnet
+pnpm dev                           # http://localhost:3000
 ```
 
-Saídas verdes ficam em `smoke-stellar-output.json` e `smoke-etherfuse-output.json`.
+Requisitos: Node 20.9+ (requisito do Next.js 16), pnpm 10 e, para `smoke:ciclo` e para os testes com banco real, Docker ou um Postgres local vazio.
 
-```bash
-npm run typecheck         # tsc --noEmit
-npm run build             # next build (inclui Prisma generate)
-npm run test:e2e          # Playwright (19 specs)
-```
+`.env.example` documenta cada variável. Os grupos que o app local precisa:
+
+| Grupo | Variáveis (nomes) | Observação |
+|---|---|---|
+| Banco | `DATABASE_URL`, `DIRECT_URL` | Postgres; no Neon, a primeira é a conexão com pool e a segunda a direta (migrations) |
+| Stellar | `STELLAR_NETWORK=TESTNET`, `STELLAR_ISSUER_SECRET`, `STELLAR_DISTRIBUTOR_SECRET` | só testnet; `STELLAR_NETWORK=PUBLIC` (mainnet) é recusado pelos scripts e pelo Pix de saída |
+| Login | `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, `NEXT_PUBLIC_PRIVY_APP_ID` | Privy (carteira Stellar embutida do investidor) |
+| Rampa | `ETHERFUSE_ENV=sandbox`, `ETHERFUSE_API_KEY` | Etherfuse, só sandbox |
+| Operação | `ADMIN_PASSWORD`, `TITULAR_HMAC_SECRET`, `OPS_CRON_SECRET` | painel `/admin`, conferência do titular e rotas de operação |
+| Pix de saída | `PSP_PROVIDER` (`SIMULADO` ou `ASAAS`), `PIX_MAX_BRL`, `ASAAS_API_KEY` | `ASAAS` só fala com o sandbox (a base é fixa no código) |
+| Opcionais | e-mail (`SMTP_*`), Blob (`BLOB_READ_WRITE_TOKEN`), DocuSign (`DOCUSIGN_*`), limites (`UPSTASH_*`) | ver `.env.example` |
+
+---
+
+## Comandos (`package.json`)
+
+| Comando | O que faz | Precisa de |
+|---|---|---|
+| `pnpm dev` / `pnpm build` / `pnpm start` | servidor de desenvolvimento, build e servidor de produção do Next.js | `.env.local` |
+| `pnpm typecheck` | `tsc --noEmit` | — |
+| `pnpm test` / `pnpm test:watch` | Vitest. Os testes `*-pg.test.ts` só rodam com `TEST_PG_URL` apontando para um Postgres **local** vazio | — |
+| `pnpm lint:auth-guard` | confere que toda rota de `app/api` tem guarda de autenticação (roda também antes do build) | — |
+| `pnpm test:e2e` / `pnpm test:e2e:stub` | Playwright (specs em `e2e/`); o `:stub` roda os specs `*-full-flow`/`*-authed` com o login simulado (`E2E_STUB=1`) | navegador do Playwright |
+| `pnpm prisma:generate`, `pnpm prisma:migrate`, `pnpm prisma:deploy`, `pnpm prisma:studio`, `pnpm prisma:seed` | cliente Prisma, migrations (`migrate dev` e `migrate deploy`), Prisma Studio e seed | `DATABASE_URL`, `DIRECT_URL` |
+
+### Provas e smokes (todos em testnet)
+
+| Comando | O que prova | Precisa de |
+|---|---|---|
+| **`pnpm smoke:ciclo`** | **o ciclo completo**: originar → emitir → recuperar → investir → resgatar → realizar → reconciliar, com o link do Stellar Expert de cada passo | Docker (ou `SMOKE_CICLO_PG_URL` local) e internet. Sem `.env` e sem chave |
+| `pnpm snapshot:verificar <url>` | recalcula o NAV publicado a partir do arquivo público e do Horizon | internet; só leitura |
+| `pnpm evidencia:cota <cotaId>` | a cadeia de prova de uma cota (validação → cessão → liquidação → incorporação → emissão) | banco e Blob do projeto: **operadores**, não dá para rodar de fora |
+| `pnpm evidencia:swap <txHash>` | confere uma tx de investir/resgatar: 1 envelope bem-sucedido com as 2 pernas | internet; só leitura, sem banco e sem segredo |
+| `pnpm smoke:stellar` | trilho Stellar: issuer com `AUTH_REQUIRED`, trustline, emissão de PLINA-RF, autorização e clawback | internet (friendbot); grava um JSON de saída na raiz (arquivo gerado, não versionado) |
+| `pnpm evidencia:plina-rf` | empacota a saída do `smoke:stellar` num relatório | o JSON gerado pelo `pnpm smoke:stellar`; não chama a rede |
+| `pnpm smoke:audit` | hash de auditoria on-chain (`Memo.hash`) para um payload de exemplo | internet e `STELLAR_DISTRIBUTOR_SECRET` (testnet) no `.env.local` |
+| `pnpm smoke:etherfuse` | caminho programático no sandbox da Etherfuse: cotação, cliente, conta bancária, ordem de on-ramp | `ETHERFUSE_API_KEY` (sandbox) |
+| `pnpm smoke:investidor` | cadeia do investidor com prova on-chain de cada perna (Pix → ativo-ponte → swap para PLINA-RF) | chaves do sandbox |
+| `pnpm smoke:docusign <e-mail>` | DocuSign sandbox: token, envelope com minuta "TESTNET" e status; o e-mail informado recebe o envelope | `DOCUSIGN_*` |
 
 ---
 
@@ -204,53 +175,58 @@ npm run test:e2e          # Playwright (19 specs)
 
 | Rota | Audiência | O que faz |
 |---|---|---|
-| `/` | Investidor institucional | Tese + lead capture (SMTP) |
-| `/pool` | Público | NAV + supply PLINA-RF lidos do Horizon, link Stellar Expert |
-| `/politica-clawback` | Público | 4 hipóteses de clawback (linkadas no `stellar.toml`) |
-| `/investir` | Investidor | **Fluxo principal da POC** — Privy + Etherfuse + emissão |
-| `/minha-posicao` | Investidor | Saldo on-chain + yield projetado + liquidação |
-| `/cotas` / `/cessao/[id]` | Público | Cotas no pool + comprovante de cessão |
-| `/comprar` / `/vender` | Caminho A | Funil comprador-usuário (revenda 30–90d) e vendedor |
-| `/admin` | Operação | Pipeline vendedor + comprador, incorporação, validação, clawback |
-| `/lab` | Dev | Playground das primitivas Stellar |
+| `/` | Público | Apresentação e captação de contatos |
+| `/pool` | Público | NAV e supply de PLINA-RF lidos do Horizon, com link do Stellar Expert |
+| `/cotas`, `/cessao/[id]` | Público | Cotas disponíveis e comprovante de cessão |
+| `/politica-clawback`, `/privacidade` | Público | Hipóteses de clawback (linkadas no stellar.toml) e política de privacidade |
+| `/entrar`, `/painel` | Todos | Login (Privy) e hub pessoal depois do login |
+| `/inicio` | Investidor | Próxima ação do investidor depois do login |
+| `/investir` | Investidor | Compra: cotação, on-ramp (Pix de teste), swap para PLINA-RF |
+| `/minha-posicao`, `/historico`, `/sacar` | Investidor | Saldo on-chain e valor de referência por token, histórico e saque |
+| `/vender` | Cedente | Envio da cota, proposta, assinatura e acompanhamento (`/vender/minhas`, `/vender/acompanhar/[leadId]`) |
+| `/comprar` | Comprador | Funil do comprador de cotas |
+| `/admin` | Operação | Pipeline do cedente e do comprador, validação, pagamento ao cedente, incorporação, clawback |
+| `/lab` | Dev | Bancada de testes das primitivas Privy + Stellar |
+
+---
+
+## Stack
+
+- **Next.js 16.4.6 + React 19.2.8** (App Router, Server Actions); **Tailwind v4** (tokens em `app/globals.css`).
+- **Stellar testnet** via `@stellar/stellar-sdk` 13: issuer com `AUTH_REQUIRED + AUTH_REVOCABLE + AUTH_CLAWBACK_ENABLED`.
+- **Privy** (`@privy-io/react-auth` + `@privy-io/server-auth`): carteira Stellar embutida do investidor.
+- **Etherfuse sandbox** (`api.sand.etherfuse.com`): provedor de rampa (ambiente de testes), ativo-ponte **TESOURO**, trilho Pix (BRL). SDK vendorado em `lib/anchors/etherfuse/` (patches `PLINA-MOD-NNN` documentados em `lib/anchors/README.md`).
+- **Pix de saída ao cedente:** porta de PSP em `lib/integrations/psp/` com provedor simulado e **Asaas só-sandbox** (a base é fixa no código).
+- **DocuSign sandbox** para a assinatura da cessão.
+- **Prisma + Postgres (Neon)**: duas connection strings, com pool (`DATABASE_URL`) e direta (`DIRECT_URL`).
+
+Arquitetura: os serviços (`lib/services/`) dependem de portas (por exemplo `lib/anchors/types.ts` e `lib/integrations/psp/types.ts`) e nunca de SDK de terceiro diretamente; o banco só é atualizado depois da confirmação na rede.
 
 ---
 
 ## Estrutura
 
 ```
-app/                  # rotas Next 16 (App Router)
-  investir/           # ← fluxo principal da POC
-  minha-posicao/      # ← posição on-chain do investidor
-  pool/, admin/, ...
+app/                  # rotas Next 16 (App Router); app/api = rotas de API
+components/, hooks/   # interface
 lib/
-  stellar/            # wrappers @stellar/stellar-sdk
-  anchors/
-    types.ts          # interface Anchor (port)
-    etherfuse/        # SDK vendorado de regional-starter-pack (Apache-2.0)
-  wallet/privy.ts     # rawSign + reconstrução de envelope Stellar
-  services/           # originacao, tokenizacao, investidor, liquidacao, ...
-  db/                 # Prisma client
-prisma/               # schema + seed
-scripts/              # smoke tests
-e2e/                  # Playwright specs
+  stellar/            # wrappers do @stellar/stellar-sdk
+  anchors/            # porta Anchor + SDK vendorado da Etherfuse (Apache-2.0)
+  integrations/       # PSP (Pix de saída), DocuSign, Blob
+  services/           # originação, tokenização, investidor, liquidação, resgate, ...
+  wallet/, auth/      # carteira Privy e guardas de rota
+prisma/               # schema, migrations e seed
+scripts/              # smokes, provas e verificadores
+e2e/                  # specs do Playwright
+ops/runbooks/         # procedimentos de operação (inclui o do smoke:ciclo)
 ```
 
 ---
 
-## Links
+## Documentação neste repositório
 
-- **Whitepaper v1.0**: `../PlinaFinance-1.pdf`
-- **Arquitetura**: `../ARCHITECTURE.md`
-- **Plano hackathon**: `../HACKATHON_PLAN.md`
-- **Specs MVP**: `../SPECS_MVP.md` + `../SPECS_MVP_TECH.md`
-- **Etherfuse SDK vendorado**: `lib/anchors/README.md` (atribuição + patches `PLINA-MOD-*`)
-- **Brand & voz**: `PRODUCT.md` + `DESIGN.md`
+- `lib/anchors/README.md`: atribuição do SDK da Etherfuse e patches `PLINA-MOD-*`.
+- `ops/runbooks/`: runbooks de operação (`ops/runbooks/smoke-ciclo.md`, `ops/runbooks/pix-saida-incerto.md`, `ops/runbooks/ambientes.md`, `ops/runbooks/instaward2-cutover.md`, `ops/runbooks/mainnet-cutover.md`, `ops/runbooks/incorporar-cota-timeout.md`).
+- `PRODUCT.md` e `DESIGN.md`: marca, voz e sistema de design.
 
----
-
-## Commits que evidenciam a integração com a anchor
-
-- [`0e4b5c5`](https://github.com/fabriciofranciscus/plinafinance/commit/0e4b5c5) — fundação: Etherfuse + Privy + Neon, fluxo BRL → TESOURO → PLINA-RF
-- [`1a60d43`](https://github.com/fabriciofranciscus/plinafinance/commit/1a60d43) — `/investir` end-to-end consumindo a anchor real
-- [`75da658`](https://github.com/fabriciofranciscus/plinafinance/commit/75da658) — `PLINA-MOD-005`: bank account API + arquitetura iframe Etherfuse
+Histórico da integração com a Etherfuse (use `git show <hash>`): `0e4b5c5` (fundação: Etherfuse, Privy e Postgres), `1a60d43` (`/investir` de ponta a ponta) e `75da658` (`PLINA-MOD-005`: API de conta bancária).
