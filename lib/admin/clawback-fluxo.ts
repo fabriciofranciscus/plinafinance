@@ -7,6 +7,9 @@
  * por escolha deliberada depois de uma RECUSA DEFINITIVA. Uma resposta sem código, desconhecida ou uma exceção é
  * resultado INCERTO e mantém a chave (falha de transporte não prova que nada foi executado).
  *
+ * A carteira mostrada na Revisão (`carteiraRevisada`, opcional) é congelada com a tentativa e enviada como sexto campo: o servidor
+ * recusa com CARTEIRA_DIVERGENTE, ANTES de qualquer tentativa, se a carteira mudou entre revisão e envio.
+ *
  * A validação local repete a do servidor (`lib/services/tokenizacao.ts` e `liquidar/build`): a tela não decide limites.
  */
 
@@ -28,7 +31,15 @@ export interface Congelado {
   amount: string;
   motivo: Motivo;
   fundamentoUrl: string;
+  /** Carteira (chave pública) que o operador viu na Revisão; opcional por enquanto (trava de carteira no servidor). */
+  carteiraRevisada?: string;
 }
+
+/**
+ * Erros que o servidor devolve ANTES de gravar a tentativa e de qualquer envio: nada foi executado e a chave do pedido
+ * não foi consumida (decisão do Argus: lista fechada). Os demais códigos NÃO renovam a chave sem uma escolha deliberada.
+ */
+export const ERROS_ANTES_DA_TENTATIVA = ['VALOR_INVALIDO', 'FUNDAMENTO_INVALIDO', 'PEDIDO_INVALIDO', 'CARTEIRA_DIVERGENTE'] as const;
 
 /** Formato de `ActionResult` da action de clawback (só o que a máquina usa). */
 export interface Retorno {
@@ -47,6 +58,7 @@ export type ClasseResultado =
   | 'falhou'
   | 'campo_invalido'
   | 'pedido_invalido'
+  | 'carteira_divergente'
   | 'indisponivel';
 
 export interface Resultado {
@@ -65,8 +77,8 @@ export interface Resultado {
 
 export type Estado =
   | { tipo: 'repouso'; investidorId: string }
-  | { tipo: 'dados'; investidorId: string; dados: Dados; erros: ErrosDados }
-  | { tipo: 'revisao'; investidorId: string; dados: Dados; atesto: boolean }
+  | { tipo: 'dados'; investidorId: string; dados: Dados; erros: ErrosDados; aviso?: 'carteira_divergente' }
+  | { tipo: 'revisao'; investidorId: string; dados: Dados; atesto: boolean; carteira?: string }
   | { tipo: 'envio'; investidorId: string; envio: Congelado; recolhido?: boolean }
   | { tipo: 'resultado'; investidorId: string; envio: Congelado; resultado: Resultado; recolhido?: boolean };
 
@@ -114,11 +126,17 @@ export function editar<K extends keyof Dados>(e: Estado, campo: K, valor: Dados[
 }
 
 /** Validação local, sem chamar o servidor. Com erro fica em Dados apontando os campos; sem erro vai à Revisão. */
-export function revisar(e: Estado): Estado {
+export function revisar(e: Estado, carteira?: string): Estado {
   if (e.tipo !== 'dados') return e;
   const erros = validarDados(e.dados);
   if (Object.keys(erros).length > 0) return { ...e, erros };
-  return { tipo: 'revisao', investidorId: e.investidorId, dados: { ...e.dados, fundamentoUrl: e.dados.fundamentoUrl.trim() }, atesto: false };
+  return {
+    tipo: 'revisao',
+    investidorId: e.investidorId,
+    dados: { ...e.dados, fundamentoUrl: e.dados.fundamentoUrl.trim() },
+    atesto: false,
+    ...(carteira ? { carteira } : {}),
+  };
 }
 
 export function marcarAtesto(e: Estado, atesto: boolean): Estado {
@@ -147,11 +165,18 @@ export function confirmar(e: Estado, pedidoId: string): Estado {
   return {
     tipo: 'envio',
     investidorId: e.investidorId,
-    envio: { investidorId: e.investidorId, pedidoId, amount: e.dados.amount, motivo: e.dados.motivo as Motivo, fundamentoUrl: e.dados.fundamentoUrl },
+    envio: {
+      investidorId: e.investidorId,
+      pedidoId,
+      amount: e.dados.amount,
+      motivo: e.dados.motivo as Motivo,
+      fundamentoUrl: e.dados.fundamentoUrl,
+      ...(e.carteira ? { carteiraRevisada: e.carteira } : {}),
+    },
   };
 }
 
-/** FormData com exatamente os cinco campos que `executarClawbackAction` lê. */
+/** FormData com os campos que `executarClawbackAction` lê: os cinco da tentativa e, se houver, `carteiraRevisada`. */
 export function paraFormData(c: Congelado): FormData {
   const fd = new FormData();
   fd.set('investidorId', c.investidorId);
@@ -159,6 +184,7 @@ export function paraFormData(c: Congelado): FormData {
   fd.set('amount', c.amount);
   fd.set('motivo', c.motivo);
   fd.set('fundamentoUrl', c.fundamentoUrl);
+  if (c.carteiraRevisada) fd.set('carteiraRevisada', c.carteiraRevisada);
   return fd;
 }
 
@@ -195,7 +221,10 @@ export function classificarRetorno(ret: Retorno | null | undefined): Resultado {
     case 'FUNDAMENTO_INVALIDO':
       return r('campo_invalido', { mensagem, code: ret.code, campo: 'fundamentoUrl' });
     case 'PEDIDO_INVALIDO':
-      return r('pedido_invalido', { mensagem, code: ret.code, camposTravados: true, manterPedidoId: true });
+      // Antes da tentativa (Argus): nada foi executado; a chave pode ser renovada, só por novo pedido deliberado.
+      return r('pedido_invalido', { mensagem, code: ret.code, podeNovoPedido: true });
+    case 'CARTEIRA_DIVERGENTE':
+      return r('carteira_divergente', { mensagem, code: ret.code });
     case 'INVESTIDOR_NAO_ENCONTRADO':
     case 'EMISSOR_NAO_CONFIGURADO':
       return r('indisponivel', { mensagem, code: ret.code, camposTravados: true, manterPedidoId: true });
@@ -212,6 +241,11 @@ export function atribuirResposta(e: Estado, retorno: Retorno | null | undefined)
     // Nada foi executado: volta aos Dados, com o que foi digitado e o erro no campo.
     const { amount, motivo, fundamentoUrl } = e.envio;
     return { tipo: 'dados', investidorId: e.investidorId, dados: { amount, motivo, fundamentoUrl }, erros: { [resultado.campo]: 'invalido' } };
+  }
+  if (resultado.classe === 'carteira_divergente') {
+    // Nada foi executado nem a chave consumida: volta aos Dados; a carteira revisada antiga NÃO se reaproveita (nova revisão).
+    const { amount, motivo, fundamentoUrl } = e.envio;
+    return { tipo: 'dados', investidorId: e.investidorId, dados: { amount, motivo, fundamentoUrl }, erros: {}, aviso: 'carteira_divergente' };
   }
   return { tipo: 'resultado', investidorId: e.investidorId, envio: e.envio, resultado, recolhido: e.recolhido };
 }

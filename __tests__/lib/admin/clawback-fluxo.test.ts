@@ -17,6 +17,7 @@ import {
   cancelar,
   concluirRegistro,
   novoPedido,
+  ERROS_ANTES_DA_TENTATIVA,
   type Estado,
 } from '@/lib/admin/clawback-fluxo';
 
@@ -131,8 +132,16 @@ describe('classificação dos retornos da action (tabela 6 da spec)', () => {
     expect(c({ ok: false, code: 'VALOR_INVALIDO', error: 'x' })).toMatchObject({ classe: 'campo_invalido', campo: 'amount' });
     expect(c({ ok: false, code: 'FUNDAMENTO_INVALIDO', error: 'x' })).toMatchObject({ classe: 'campo_invalido', campo: 'fundamentoUrl' });
   });
-  it('PEDIDO_INVALIDO: conferir, sem reenvio cego e sem renovar a chave', () => {
-    expect(c({ ok: false, code: 'PEDIDO_INVALIDO', error: 'x' })).toMatchObject({ classe: 'pedido_invalido', manterPedidoId: true, podeNovoPedido: false });
+  it('PEDIDO_INVALIDO: erro anterior à tentativa (decisão do Argus): nada foi executado, a chave pode ser renovada, mas só por novo pedido deliberado (sem reenvio automático)', () => {
+    expect(c({ ok: false, code: 'PEDIDO_INVALIDO', error: 'x' })).toMatchObject({ classe: 'pedido_invalido', manterPedidoId: false, podeNovoPedido: true, camposTravados: false });
+  });
+  it('CARTEIRA_DIVERGENTE: erro anterior à tentativa; nada foi executado nem a chave consumida', () => {
+    expect(c({ ok: false, code: 'CARTEIRA_DIVERGENTE', error: 'x' })).toMatchObject({ classe: 'carteira_divergente', manterPedidoId: false, camposTravados: false, podeConcluirRegistro: false });
+  });
+  it('a lista fechada de erros anteriores à tentativa é exatamente esta; os demais NÃO renovam a chave sem escolha', () => {
+    expect([...ERROS_ANTES_DA_TENTATIVA].sort()).toEqual(['CARTEIRA_DIVERGENTE', 'FUNDAMENTO_INVALIDO', 'PEDIDO_INVALIDO', 'VALOR_INVALIDO']);
+    for (const code of ERROS_ANTES_DA_TENTATIVA) expect(c({ ok: false, code, error: 'x' }).manterPedidoId, code).toBe(false);
+    for (const code of ['REGISTRO_PENDENTE', 'EXECUCAO_INCERTA', 'PEDIDO_EM_ANDAMENTO', 'INVESTIDOR_NAO_ENCONTRADO', 'EMISSOR_NAO_CONFIGURADO']) expect(c({ ok: false, code, error: 'x' }).manterPedidoId, code).toBe(true);
   });
   it('INVESTIDOR_NAO_ENCONTRADO e EMISSOR_NAO_CONFIGURADO: ação indisponível', () => {
     for (const code of ['INVESTIDOR_NAO_ENCONTRADO', 'EMISSOR_NAO_CONFIGURADO']) expect(c({ ok: false, code, error: 'x' }), code).toMatchObject({ classe: 'indisponivel' });
@@ -144,6 +153,38 @@ describe('classificação dos retornos da action (tabela 6 da spec)', () => {
   });
   it('a mensagem do servidor passa como veio (texto fixo do serviço, nunca reescrito aqui)', () => {
     expect(c({ ok: false, code: 'VALOR_INVALIDO', error: 'Informe uma quantidade válida' })).toMatchObject({ mensagem: 'Informe uma quantidade válida' });
+  });
+});
+
+describe('carteira revisada (trava no servidor, campo opcional `carteiraRevisada`)', () => {
+  const comCarteira = (carteira?: string) => {
+    let e = preparar(estadoInicial(ALVO));
+    e = editar(editar(editar(e, 'amount', dadosOk.amount), 'motivo', dadosOk.motivo), 'fundamentoUrl', dadosOk.fundamentoUrl);
+    return marcarAtesto(revisar(e, carteira), true);
+  };
+  it('a carteira mostrada na Revisão é congelada com a tentativa e vai no FormData como sexto campo', () => {
+    const env = confirmar(comCarteira('GABC'), 'ped-1') as Extract<Estado, { tipo: 'envio' }>;
+    expect(env.envio.carteiraRevisada).toBe('GABC');
+    const fd = paraFormData(env.envio);
+    expect([...fd.keys()].sort()).toEqual(['amount', 'carteiraRevisada', 'fundamentoUrl', 'investidorId', 'motivo', 'pedidoId']);
+    expect(fd.get('carteiraRevisada')).toBe('GABC');
+  });
+  it('sem carteira informada nada muda: os mesmos cinco campos de antes', () => {
+    const env = confirmar(comCarteira(), 'ped-1') as Extract<Estado, { tipo: 'envio' }>;
+    expect(env.envio.carteiraRevisada).toBeUndefined();
+    expect([...paraFormData(env.envio).keys()].sort()).toEqual(['amount', 'fundamentoUrl', 'investidorId', 'motivo', 'pedidoId']);
+  });
+  it('CARTEIRA_DIVERGENTE volta aos Dados com aviso, o que foi digitado e SEM a carteira antiga (nova revisão obrigatória)', () => {
+    const env = confirmar(comCarteira('GABC'), 'ped-1');
+    const e = atribuirResposta(env, { ok: false, code: 'CARTEIRA_DIVERGENTE', error: 'x' });
+    expect(e).toMatchObject({ tipo: 'dados', dados: dadosOk, aviso: 'carteira_divergente' });
+    // revisar de novo com a carteira atual gera outra tentativa, com chave nova
+    const rev = marcarAtesto(revisar(e, 'GNOVA'), true);
+    expect(confirmar(rev, 'ped-2')).toMatchObject({ tipo: 'envio', envio: { pedidoId: 'ped-2', carteiraRevisada: 'GNOVA' } });
+  });
+  it('REGISTRO_PENDENTE reenvia a MESMA carteira revisada junto dos outros campos', () => {
+    const pend = atribuirResposta(confirmar(comCarteira('GABC'), 'ped-1'), { ok: false, code: 'REGISTRO_PENDENTE', txHash: 'h', error: 'x' });
+    expect(concluirRegistro(pend)).toMatchObject({ tipo: 'envio', envio: { pedidoId: 'ped-1', carteiraRevisada: 'GABC' } });
   });
 });
 
@@ -163,6 +204,11 @@ describe('resposta aplicada ao estado', () => {
   it('resposta sem código mantém o congelado (mesma chave e dados): reenviar seria o MESMO pedido', () => {
     const e = atribuirResposta(emEnvio(), { ok: false, error: 'erro interno' }) as Extract<Estado, { tipo: 'resultado' }>;
     expect(e).toMatchObject({ tipo: 'resultado', resultado: { classe: 'incerto' }, envio: { pedidoId: 'ped-1', amount: '139.6' } });
+  });
+  it('PEDIDO_INVALIDO fica como resultado e só um novo pedido deliberado volta aos Dados', () => {
+    const e = atribuirResposta(emEnvio(), { ok: false, code: 'PEDIDO_INVALIDO', error: 'x' });
+    expect(e).toMatchObject({ tipo: 'resultado', resultado: { classe: 'pedido_invalido' } });
+    expect(novoPedido(e)).toMatchObject({ tipo: 'dados', dados: dadosOk });
   });
   it('registro pendente: concluir registro reenvia os MESMOS cinco campos (mesma chave)', () => {
     const pend = atribuirResposta(emEnvio(), { ok: false, code: 'REGISTRO_PENDENTE', txHash: 'h', error: 'x' });
