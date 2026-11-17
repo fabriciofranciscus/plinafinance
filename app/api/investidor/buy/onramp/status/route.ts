@@ -18,6 +18,7 @@ import { ok } from '@/lib/api/response';
 import { ApiError } from '@/lib/api/errors';
 import { onrampStatusLimiter } from '@/lib/rate-limit/config';
 import { infoConfirmacao } from '@/lib/services/ordem-pendente';
+import { reservarConsultaDeStatus } from '@/lib/services/onramp-status-reserva';
 
 export const dynamic = 'force-dynamic';
 
@@ -95,16 +96,10 @@ export const GET = withApi(async (req, { requestId }) => {
     );
   }
 
-  // Limite por investidor (depois do dono e do terminal/mock). Acima do limite, ou com o limiter fora do ar, degrada para leitura:
-  // devolve o estado guardado no banco, sem consultar a Etherfuse e sem 429 (falha fechada para o anchor).
-  let dentroDoLimite = false;
-  try {
-    dentroDoLimite = (await onrampStatusLimiter.consume(user.investidorId)) === true;
-  } catch {
-    dentroDoLimite = false;
-  }
-  if (!dentroDoLimite) {
-    return ok(
+  // Degradação: o estado guardado no banco, sem consultar a Etherfuse e sem 429 (falha fechada para o anchor). Mesmo formato da
+  // resposta normal. Usada pelo limite por investidor e pela trava por ordem.
+  const respostaDoBanco = () =>
+    ok(
       {
         orderId: order.id,
         status: order.status,
@@ -119,7 +114,15 @@ export const GET = withApi(async (req, { requestId }) => {
       },
       { requestId },
     );
+
+  // Limite por investidor (depois do dono e do terminal/mock). Acima do limite, ou com o limiter fora do ar, degrada para leitura.
+  let dentroDoLimite = false;
+  try {
+    dentroDoLimite = (await onrampStatusLimiter.consume(user.investidorId)) === true;
+  } catch {
+    dentroDoLimite = false;
   }
+  if (!dentroDoLimite) return respostaDoBanco();
 
   // Real: pull no Etherfuse (com cache de 5 s) + atualiza DB se mudou.
   const apiKey = process.env.ETHERFUSE_API_KEY;
@@ -138,6 +141,15 @@ export const GET = withApi(async (req, { requestId }) => {
   if (emCache) {
     remote = emCache.remote;
   } else {
+    // Trava por ordem, entre instâncias (o cache acima é só da instância): no máximo 1 consulta à Etherfuse por ordem a cada N s.
+    // Quem perde a reserva, ou não consegue reservar (banco/coluna indisponível), degrada para o estado do banco: nunca 500 nem 429.
+    let ganhou = false;
+    try {
+      ganhou = await reservarConsultaDeStatus(orderId);
+    } catch (err) {
+      console.error('[onramp/status] reserva da consulta falhou', (err as { name?: string })?.name ?? 'erro');
+    }
+    if (!ganhou) return respostaDoBanco();
     remote = await anchor.getOnRampTransaction(orderId);
     guardarCache(orderId, remote);
   }
@@ -169,16 +181,19 @@ export const GET = withApi(async (req, { requestId }) => {
   if (changed) {
     const settledNow = newStatus === 'completed' && !order.settledAt;
     await db.$transaction(async (tx) => {
-      await tx.onRampOrder.update({
-        where: { id: order.id },
+      // Escrita CONDICIONAL: só move uma ordem que ainda não é terminal e ainda não foi liquidada. Duas consultas que vejam `completed`
+      // quase juntas (várias abas, instâncias, sobreposição) gravam UMA transição e UM evento de auditoria; e uma leitura atrasada
+      // (cache, instância lenta) nunca desfaz um estado terminal já gravado por outra.
+      const r = await tx.onRampOrder.updateMany({
+        where: { id: order.id, settledAt: null, status: { notIn: [...TERMINAL] } },
         data: {
           status: newStatus,
           stellarTxHash: newTxHash,
           stellarClaimableBalanceId: newCbId,
-          settledAt: settledNow ? new Date() : order.settledAt,
+          ...(settledNow ? { settledAt: new Date() } : {}),
         },
       });
-      if (settledNow) {
+      if (settledNow && r.count === 1) {
         await tx.eventoAudit.create({
           data: {
             acao: 'ONRAMP_LIQUIDADA',
