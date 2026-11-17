@@ -1,22 +1,30 @@
 'use client';
 
+import Link from 'next/link';
 import type { OnRampData, QuoteData } from '../../_types';
 import { NUMBER_BR, explorerTx } from '../../_lib/format';
 import { TestnetBanner } from '../shell/testnet-banner';
 import { Term } from '../shared/term';
 import { DataRow } from '../shared/data-row';
 import { tokensDaCotacao } from '../../_lib/quote-tokens';
+import { TEXTO_LIQUIDACAO, mailtoEquipe } from '../../_lib/texto-liquidacao';
+import { useDecorrido } from '../shared/use-decorrido';
 
 export function SettlingScreen({
   onRamp,
   quote,
   swapLoading,
   onContinue,
+  onAtualizar,
+  atualizando = false,
 }: {
   onRamp: OnRampData;
   quote: QuoteData;
   swapLoading: boolean;
   onContinue: () => void;
+  /** U2 A-09: consulta o status já (sem esperar o próximo tick). */
+  onAtualizar?: () => void;
+  atualizando?: boolean;
 }) {
   // PIX/BRL sandbox pode parar em `processing` (= funded upstream) sem
   // auto-completar. Se anchor emitiu CB, o claim já está disponível —
@@ -24,6 +32,10 @@ export function SettlingScreen({
   const done =
     onRamp.status === 'completed' ||
     (onRamp.status === 'processing' && !!onRamp.stellarClaimableBalanceId);
+  // U2 A-09: o servidor decide quando a espera passou do limite (processing sem claimable há mais de 180 s). Se a ordem já
+  // andou (`done`), o aviso de atraso some sozinho.
+  const atrasada = !done && onRamp.atrasada === true;
+  const decorrido = useDecorrido(!done ? onRamp.desde : null);
   return (
     <div>
       <TestnetBanner />
@@ -32,7 +44,7 @@ export function SettlingScreen({
         05 // Liquidação · TESOURO na sua wallet
       </p>
       <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">
-        {done ? 'TESOURO liquidado — prossiga' : 'Aguardando settlement…'}
+        {done ? 'TESOURO liquidado — prossiga' : atrasada ? TEXTO_LIQUIDACAO.atrasada.titulo : TEXTO_LIQUIDACAO.espera.titulo}
       </h1>
       <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
         {done ? (
@@ -42,10 +54,7 @@ export function SettlingScreen({
             on-chain numa única transação.
           </>
         ) : (
-          <>
-            A Etherfuse está indexando o pagamento. Polling a cada 3s.
-            Indexing grace de ~12s antes de marcar falha.
-          </>
+          (atrasada ? TEXTO_LIQUIDACAO.atrasada.texto : TEXTO_LIQUIDACAO.espera.texto)
         )}
       </p>
 
@@ -72,6 +81,16 @@ export function SettlingScreen({
               </span>
             }
           />
+          {!done && decorrido && (
+            <DataRow
+              k={TEXTO_LIQUIDACAO.espera.rotuloTempo}
+              v={
+                <span data-testid="tempo-de-espera" className="font-mono text-sm">
+                  {decorrido}
+                </span>
+              }
+            />
+          )}
           {onRamp.stellarTxHash && (
             <DataRow
               k="TESOURO tx"
@@ -117,8 +136,32 @@ export function SettlingScreen({
             ? 'Preparando envelope…'
             : done
               ? 'Continuar para revisão do swap'
-              : 'Aguardando settlement…'}
+              : TEXTO_LIQUIDACAO.espera.botaoAguardando}
         </button>
+        {atrasada && (
+          <div className="mt-8 flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-x-8" data-testid="saidas-atraso">
+            <button
+              type="button"
+              onClick={onAtualizar}
+              disabled={atualizando || !onAtualizar}
+              className="inline-flex min-h-[44px] items-center justify-center border border-base text-base font-details text-[10px] tracking-[0.2em] uppercase px-5 py-3 hover:bg-base hover:text-white transition-colors disabled:opacity-50"
+            >
+              {atualizando ? TEXTO_LIQUIDACAO.atrasada.botaoAtualizando : TEXTO_LIQUIDACAO.atrasada.botaoAtualizar}
+            </button>
+            <Link
+              href="/inicio"
+              className="inline-flex min-h-[44px] items-center font-details text-[10px] tracking-[0.2em] uppercase underline underline-offset-4 text-primary-deep hover:text-primary"
+            >
+              {TEXTO_LIQUIDACAO.atrasada.voltar}
+            </Link>
+            <a
+              href={mailtoEquipe(onRamp.orderId)}
+              className="inline-flex min-h-[44px] items-center font-details text-[10px] tracking-[0.2em] uppercase underline underline-offset-4 text-primary-deep hover:text-primary"
+            >
+              {TEXTO_LIQUIDACAO.atrasada.equipe}
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 
 const m = vi.hoisted(() => ({
   investidorFind: vi.fn(), leadFindMany: vi.fn(), holdingFind: vi.fn(), snapFind: vi.fn(), cotaFindMany: vi.fn(),
-  quoteFindMany: vi.fn(), resgateFindMany: vi.fn(), eventoFindMany: vi.fn(), ofertaFindMany: vi.fn(),
+  quoteFindMany: vi.fn(), onrampFirst: vi.fn(), resgateFindMany: vi.fn(), eventoFindMany: vi.fn(), ofertaFindMany: vi.fn(),
   supply: vi.fn(), caixa: vi.fn(), soroban: vi.fn(), nav: vi.fn(),
 }));
 vi.mock('@/lib/db', () => ({
@@ -14,6 +14,7 @@ vi.mock('@/lib/db', () => ({
     snapshotNav: { findFirst: m.snapFind },
     cota: { findMany: m.cotaFindMany },
     quote: { findMany: m.quoteFindMany },
+    onRampOrder: { findFirst: m.onrampFirst },
     resgateCotacao: { findMany: m.resgateFindMany },
     eventoAudit: { findMany: m.eventoFindMany },
     oferta: { findMany: m.ofertaFindMany },
@@ -45,6 +46,7 @@ beforeEach(() => {
   m.snapFind.mockResolvedValue({ publicadoEm: new Date('2026-11-15T09:00:00Z'), txHash: 'h'.repeat(64) });
   m.cotaFindMany.mockResolvedValue([]);
   m.quoteFindMany.mockResolvedValue([]);
+  m.onrampFirst.mockResolvedValue(null);
   m.resgateFindMany.mockResolvedValue([]);
   m.eventoFindMany.mockResolvedValue([]);
   m.ofertaFindMany.mockResolvedValue([]);
@@ -111,17 +113,53 @@ describe('montarResumo', () => {
     expect(solicitacoes[1]).toMatchObject({ id: 'lead_2', tipoBem: null, valorCarta: null, valorLiquido: null, ofertaValidade: null, cessaoStatus: null });
   });
 
-  it('operações pendentes: reserva = em_conferencia; cotação vigente sem envelope = aguardando_assinatura; rotas de continuação', async () => {
-    m.quoteFindMany.mockResolvedValue([{ fromAmount: D('150'), submitXdrHash: 'x' }, { fromAmount: D('90.5'), submitXdrHash: null }]);
+  const ordemDe = (o: { status?: string; cb?: string | null; claim?: string | null; submit?: string | null; valor?: string } = {}) => ({
+    id: 'or_1',
+    status: o.status ?? 'completed',
+    stellarClaimableBalanceId: o.cb === undefined ? 'cb_1' : o.cb,
+    claimTxHash: o.claim === undefined ? 'claim_tx' : o.claim,
+    criadoEm: new Date('2026-11-16T10:00:00Z'),
+    quote: { fromAmount: D(o.valor ?? '90.5'), submitXdrHash: o.submit ?? null, consumedAt: null },
+  });
+
+  it('operações pendentes: a compra não concluída vem da MESMA leitura da rota /investir (fase incluída); a saída segue pela cotação de resgate', async () => {
+    m.onrampFirst.mockResolvedValue(ordemDe());
     m.resgateFindMany.mockResolvedValue([{ brlEquivalente: D('100'), submitXdrHash: null }]);
     const { operacoesPendentes } = await montarResumo(user());
     expect(operacoesPendentes).toEqual([
-      { tipo: 'entrada', valor: '150.00', situacao: 'em_conferencia', continuarEm: '/investir' },
-      { tipo: 'entrada', valor: '90.50', situacao: 'aguardando_assinatura', continuarEm: '/investir' },
+      { tipo: 'entrada', valor: '90.50', situacao: 'aguardando_assinatura', fase: 'concluir_swap', continuarEm: '/investir' },
       { tipo: 'saida', valor: '100.00', situacao: 'aguardando_assinatura', continuarEm: '/sacar' },
     ]);
-    expect(m.quoteFindMany.mock.calls[0][0].where).toMatchObject({ investidorId: 'inv_1', consumedAt: null });
+    // a consulta é a do investidor, sem filtro de validade da cotação (a cotação dura ~2 min; o swap/build a renova)
+    const where = m.onrampFirst.mock.calls[0][0].where;
+    expect(where.investidorId).toBe('inv_1');
+    expect(where.quote).toEqual({ consumedAt: null });
+    expect(JSON.stringify(where)).not.toMatch(/expiresAt/);
     expect(m.resgateFindMany.mock.calls[0][0].where).toMatchObject({ investidorId: 'inv_1', consumedAt: null });
+  });
+
+  it('A-07: ordem liquidada com a COTAÇÃO JÁ EXPIRADA continua sendo pendência (era o buraco: sumia e o /inicio dizia "Nenhuma ação pendente")', async () => {
+    // a consulta não filtra expiresAt; a ordem completed com claim feito é concluir_swap mesmo que a cotação tenha vencido há horas
+    m.onrampFirst.mockResolvedValue(ordemDe({ valor: '300' }));
+    const { operacoesPendentes } = await montarResumo(user());
+    expect(operacoesPendentes).toEqual([{ tipo: 'entrada', valor: '300.00', situacao: 'aguardando_assinatura', fase: 'concluir_swap', continuarEm: '/investir' }]);
+  });
+
+  it.each([
+    [{ status: 'pending', cb: null, claim: null }, 'aguardando_pagamento', 'aguardando_assinatura'],
+    [{ status: 'processing', cb: null, claim: null }, 'liquidando', 'aguardando_assinatura'],
+    [{ status: 'processing', cb: 'cb', claim: null }, 'resgatar_tesouro', 'aguardando_assinatura'],
+    [{ status: 'completed', cb: 'cb', claim: 'c' }, 'concluir_swap', 'aguardando_assinatura'],
+    [{ status: 'completed', cb: 'cb', claim: 'c', submit: 'x'.repeat(64) }, 'em_conferencia', 'em_conferencia'],
+  ] as const)('fase da entrada %j → %s (situacao %s)', async (o, fase, situacao) => {
+    m.onrampFirst.mockResolvedValue(ordemDe(o));
+    const [op] = (await montarResumo(user())).operacoesPendentes;
+    expect(op).toMatchObject({ tipo: 'entrada', fase, situacao, continuarEm: '/investir' });
+  });
+
+  it('ordem morta ou sem fase retomável não vira pendência', async () => {
+    m.onrampFirst.mockResolvedValue(ordemDe({ status: 'status-novo' }));
+    expect((await montarResumo(user())).operacoesPendentes).toEqual([]);
   });
 
   it('bloqueio: Investidor REVOGADO = conta_suspensa; sem KYC = kyc_pendente; KYC ok = null', async () => {

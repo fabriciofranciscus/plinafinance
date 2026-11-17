@@ -8,6 +8,7 @@ import { proximaAcao, linhaAndamento, idCurtoSolicitacao } from '@/lib/me/proxim
 import { ROTULO_TIPO_BEM, STATUS_ABERTOS } from '@/lib/me/vocabulario';
 import { explorerTx, fmtBrl, fmtBrlInteiro, fmtDataHora, fmtNavToken, fmtTokens, nomeExibivel } from '@/lib/me/formato';
 import type { OperacaoPendente, ResumoDaConta } from '@/lib/me/tipos';
+import type { FaseOrdemPendente } from '@/lib/services/ordem-pendente';
 
 export type EstadoInicio =
   | { tipo: 'carregando' }
@@ -22,6 +23,14 @@ const LINK = 'inline-flex min-h-[44px] items-center font-details text-[10px] tra
 const SITUACAO_OPERACAO: Record<OperacaoPendente['situacao'], string> = {
   em_conferencia: 'Em conferência',
   aguardando_assinatura: 'Aguardando sua assinatura',
+};
+/** A-07: a entrada (compra) diz em que passo parou, em vez de "Aguardando sua assinatura" para tudo. */
+const SITUACAO_FASE: Record<FaseOrdemPendente, string> = {
+  aguardando_pagamento: 'Aguardando o pagamento',
+  liquidando: 'Pagamento sendo confirmado',
+  resgatar_tesouro: 'Falta receber o TESOURO',
+  concluir_swap: 'Falta concluir a compra',
+  em_conferencia: 'Em conferência',
 };
 /** Norma B1 (Consuelo aprovou): o valor é referência, não preço de compra ou venda. */
 const APOIO_NAV =
@@ -250,7 +259,7 @@ function OperacaoItem({ op }: { op: OperacaoPendente }) {
       <p className="font-text text-sm font-semibold">
         {op.tipo === 'entrada' ? 'Entrada no pool' : 'Saída do pool'} · <span className="font-mono">{op.valor}</span>
       </p>
-      <p className="font-text text-sm text-base/80 mt-1">{SITUACAO_OPERACAO[op.situacao]} (pagamento simulado)</p>
+      <p className="font-text text-sm text-base/80 mt-1">{op.fase ? SITUACAO_FASE[op.fase] : SITUACAO_OPERACAO[op.situacao]} (pagamento simulado)</p>
       <Link href={op.continuarEm} className={`${LINK} mt-1`}>
         Continuar →
       </Link>

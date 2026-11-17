@@ -309,7 +309,39 @@ describe('useOnRamp — sandboxPay & misc', () => {
     expect(result.current.onRamp).toBeNull();
   });
 
-  describe('cadência do polling', () => {
+  describe('atualizarAgora (U2 A-09)', () => {
+    const envelope = (data: unknown) => jsonResponse({ data, error: null });
+
+    it('consulta o status JÁ (sem esperar o próximo tick), junta o limite/atraso na ordem e liga/desliga "atualizando"', async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(createdOnRamp)); // create
+      const { result } = setup({ screen: 'quote', quote, onRampLoading: false });
+      await act(async () => { await result.current.goToOnramp(); });
+      fetchMock.mockResolvedValueOnce(envelope({ status: 'processing', stellarTxHash: null, stellarClaimableBalanceId: null, mock: false, desde: '2026-11-16T11:50:00.000Z', atrasada: true, limiteSegundos: 180 }));
+      await act(async () => { await result.current.atualizarAgora(); });
+      const url = String(fetchMock.mock.calls.at(-1)![0]);
+      expect(url).toContain('/api/investidor/buy/onramp/status?orderId=or-9');
+      expect(result.current.onRamp).toMatchObject({ orderId: 'or-9', status: 'processing', atrasada: true, limiteSegundos: 180, desde: '2026-11-16T11:50:00.000Z' });
+      expect(result.current.atualizando).toBe(false);
+    });
+
+    it('sem ordem é no-op (não consulta nada)', async () => {
+      const { result } = setup({ screen: 'settling', quote, onRampLoading: false });
+      await act(async () => { await result.current.atualizarAgora(); });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('falha da consulta não derruba a tela: a ordem fica como estava e "atualizando" volta a false', async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(createdOnRamp));
+      const { result } = setup({ screen: 'quote', quote, onRampLoading: false });
+      await act(async () => { await result.current.goToOnramp(); });
+      fetchMock.mockRejectedValueOnce(new Error('rede caiu'));
+      await act(async () => { await result.current.atualizarAgora(); });
+      expect(result.current.onRamp?.orderId).toBe('or-9');
+      expect(result.current.atualizando).toBe(false);
+    });
+  });
+
+  describe('cadência do polling (U2 A-09)', () => {
     const envelope = (data: unknown) => jsonResponse({ data, error: null });
     /** Resposta de status que devolve um objeto NOVO a cada vez; a partir de `teto` chamadas a consulta fica pendurada (o teste não trava num laço). */
     function mockStatus(teto: number) {
