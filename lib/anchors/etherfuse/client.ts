@@ -1067,7 +1067,9 @@ export class EtherfuseClient implements Anchor {
 
         while (Date.now() < deadline) {
             // Uma consulta que estoura o prazo POR CHAMADA conta como "sem resposta neste tick": o poll segue até o prazo geral.
-            const tick = await this.getOnRampTransaction(orderId, { timeoutMs: callTimeoutMs }).then(
+            // O prazo da consulta nunca passa do que resta do prazo GERAL (uma consulta pendurada não estoura o poll).
+            const tetoDaConsulta = Math.min(callTimeoutMs, Math.max(1_000, deadline - Date.now()));
+            const tick = await this.getOnRampTransaction(orderId, { timeoutMs: tetoDaConsulta }).then(
                 (t) => ({ t }),
                 (err: unknown) => {
                     if (err instanceof AnchorError && err.code === ANCHOR_TIMEOUT_CODE) return null;
