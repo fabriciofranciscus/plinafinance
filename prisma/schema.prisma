@@ -524,6 +524,10 @@ model OnRampOrder {
   /// Persistido pra UI poder re-renderizar sem hit no Etherfuse.
   paymentInstructionsJson   Json?
   settledAt                 DateTime?
+  /// Quando a rota de status RESERVOU a última consulta à Etherfuse: a trava por ordem, entre instâncias (no máximo 1 consulta
+  /// por ordem a cada N s). Só a trava lê e escreve (SQL cru, relógio do banco, ver lib/services/onramp-status-reserva.ts). NÃO é
+  /// `atualizadoEm`: o A-09 usa `atualizadoEm` como "desde quando a ordem espera", e esta marca não pode movê-lo.
+  statusConsultadoEm        DateTime?
   criadoEm                  DateTime   @default(now())
   atualizadoEm              DateTime   @updatedAt
 

@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { findUnique, getOnRampTransaction, update, auditCreate } = vi.hoisted(() => ({
+const { findUnique, getOnRampTransaction, updateMany, reservar, auditCreate } = vi.hoisted(() => ({
   findUnique: vi.fn(),
   getOnRampTransaction: vi.fn(),
-  update: vi.fn(),
+  updateMany: vi.fn(),
+  reservar: vi.fn(),
   auditCreate: vi.fn(),
 }));
 
@@ -26,9 +27,12 @@ vi.mock('@/lib/db', () => ({
   db: {
     onRampOrder: { findUnique },
     // Quando o status muda a rota grava numa transação (mesmo contrato de antes; só os mocks para o caso de mudança).
-    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn({ onRampOrder: { update }, eventoAudit: { create: auditCreate } }),
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn({ onRampOrder: { updateMany }, eventoAudit: { create: auditCreate } }),
   },
 }));
+
+// A reserva por ordem no banco tem teste próprio (onramp-status-reserva-pg e status-trava): aqui ela sempre ganha.
+vi.mock('@/lib/services/onramp-status-reserva', async (orig) => ({ ...(await orig<typeof import('@/lib/services/onramp-status-reserva')>()), reservarConsultaDeStatus: reservar }));
 
 vi.mock('@/lib/anchors/etherfuse', () => ({
   EtherfuseClient: class {
@@ -47,7 +51,8 @@ function req(qs: string): Request {
 beforeEach(() => {
   findUnique.mockReset();
   getOnRampTransaction.mockReset();
-  update.mockReset().mockResolvedValue({});
+  updateMany.mockReset().mockResolvedValue({ count: 1 }); // a gravação da transição agora é condicional (updateMany)
+  reservar.mockReset().mockResolvedValue(true);
   auditCreate.mockReset().mockResolvedValue({});
 });
 

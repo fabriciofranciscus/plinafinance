@@ -4,9 +4,11 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const { findUnique, update, getOnRampTransaction, consume } = vi.hoisted(() => ({
+const { findUnique, update, updateMany, reservar, getOnRampTransaction, consume } = vi.hoisted(() => ({
   findUnique: vi.fn(),
   update: vi.fn(),
+  updateMany: vi.fn(),
+  reservar: vi.fn(),
   getOnRampTransaction: vi.fn(),
   consume: vi.fn(),
 }));
@@ -20,12 +22,14 @@ vi.mock('@/lib/wallet/auth-guard', async (importOriginal) => {
 });
 vi.mock('@/lib/db', () => ({
   db: {
-    onRampOrder: { findUnique, update },
+    onRampOrder: { findUnique, update, updateMany },
     eventoAudit: { create: vi.fn() },
-    $transaction: async (fn: (tx: unknown) => unknown) => fn({ onRampOrder: { update }, eventoAudit: { create: vi.fn() } }),
+    $transaction: async (fn: (tx: unknown) => unknown) => fn({ onRampOrder: { update, updateMany }, eventoAudit: { create: vi.fn() } }),
   },
 }));
 vi.mock('@/lib/anchors/etherfuse', () => ({ EtherfuseClient: class { getOnRampTransaction = getOnRampTransaction; } }));
+// A reserva por ordem no banco tem teste próprio (onramp-status-reserva-pg e status-trava): aqui ela sempre ganha.
+vi.mock('@/lib/services/onramp-status-reserva', async (orig) => ({ ...(await orig<typeof import('@/lib/services/onramp-status-reserva')>()), reservarConsultaDeStatus: reservar }));
 vi.mock('@/lib/rate-limit/config', () => ({ onrampStatusLimiter: { consume, reset: vi.fn() } }));
 
 process.env.ETHERFUSE_API_KEY = 'test';
@@ -41,8 +45,10 @@ let n = 0;
 const novoId = () => `ord_lim_${++n}`; // o cache é por ordem: um id novo por teste
 
 beforeEach(() => {
-  findUnique.mockReset(); update.mockReset(); getOnRampTransaction.mockReset(); consume.mockReset();
+  findUnique.mockReset(); update.mockReset(); updateMany.mockReset(); reservar.mockReset(); getOnRampTransaction.mockReset(); consume.mockReset();
   consume.mockResolvedValue(true);
+  reservar.mockResolvedValue(true);
+  updateMany.mockResolvedValue({ count: 1 });
 });
 afterEach(() => { vi.useRealTimers(); });
 
@@ -68,6 +74,7 @@ describe('onramp/status — limite por investidor', () => {
     const lim = await r.json();
     expect(Object.keys(lim.data).sort()).toEqual(Object.keys(normal.data).sort());
     expect(lim.data.status).toBe('pending');
+    expect(updateMany).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
   });
 
@@ -143,7 +150,7 @@ describe('onramp/status — cache curto do status remoto (5 s, por ordem)', () =
     getOnRampTransaction.mockResolvedValue({ status: 'completed', stellarTxHash: 'tx1' });
     const r1 = await (await GET(req(id))).json();
     expect(r1.data.status).toBe('completed');
-    expect(update).toHaveBeenCalledTimes(1); // o banco foi atualizado normalmente
+    expect(updateMany).toHaveBeenCalledTimes(1); // o banco foi atualizado normalmente (escrita condicional)
     getOnRampTransaction.mockResolvedValue({ status: 'completed', stellarTxHash: 'tx1' });
     await GET(req(id));
     expect(getOnRampTransaction).toHaveBeenCalledTimes(2);

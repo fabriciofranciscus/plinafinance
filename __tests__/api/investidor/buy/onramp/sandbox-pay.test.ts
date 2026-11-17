@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { findUnique, update, eventoAuditCreate } = vi.hoisted(() => ({
+const { findUnique, updateMany, eventoAuditCreate } = vi.hoisted(() => ({
   findUnique: vi.fn(),
-  update: vi.fn(),
+  updateMany: vi.fn(),
   eventoAuditCreate: vi.fn(),
 }));
 
@@ -30,12 +30,12 @@ vi.mock('@/lib/db', () => ({
     onRampOrder: { findUnique },
     $transaction: async (
       cb: (tx: {
-        onRampOrder: { update: typeof update };
+        onRampOrder: { updateMany: typeof updateMany };
         eventoAudit: { create: typeof eventoAuditCreate };
       }) => Promise<unknown>,
     ) =>
       cb({
-        onRampOrder: { update },
+        onRampOrder: { updateMany },
         eventoAudit: { create: eventoAuditCreate },
       }),
   },
@@ -72,7 +72,7 @@ function baseOrder(overrides: Partial<Record<string, unknown>> = {}) {
 
 beforeEach(() => {
   findUnique.mockReset();
-  update.mockReset().mockResolvedValue({});
+  updateMany.mockReset().mockResolvedValue({ count: 1 });
   eventoAuditCreate.mockReset().mockResolvedValue({});
 });
 
@@ -102,7 +102,7 @@ describe('POST /api/investidor/buy/onramp/sandbox-pay', () => {
     expect(r.status).toBe(200);
     const json = await r.json();
     expect(json.status).toBe('completed');
-    expect(update).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
   });
 
   it('200 mock pay flipa pra completed + grava ONRAMP_LIQUIDADA', async () => {
@@ -112,10 +112,20 @@ describe('POST /api/investidor/buy/onramp/sandbox-pay', () => {
     const json = await r.json();
     expect(json.status).toBe('completed');
     expect(json.stellarTxHash).toBe('mock-stellar-ord_1');
-    expect(update).toHaveBeenCalledOnce();
+    expect(updateMany).toHaveBeenCalledOnce();
+    // escrita condicional: só uma ordem ainda não liquidada (o mesmo critério da rota de status)
+    expect(updateMany.mock.calls[0]![0].where).toMatchObject({ id: 'ord_1', settledAt: null });
     expect(eventoAuditCreate).toHaveBeenCalledOnce();
     expect(eventoAuditCreate.mock.calls[0][0].data.acao).toBe('ONRAMP_LIQUIDADA');
     expect(eventoAuditCreate.mock.calls[0][0].data.investidorId).toBe('inv_1');
     expect(eventoAuditCreate.mock.calls[0][0].data.privyId).toBe('did:privy:abc');
+  });
+
+  it('outra consulta liquidou a ordem no meio (updateMany count 0): responde 200 e NÃO grava um 2º ONRAMP_LIQUIDADA', async () => {
+    findUnique.mockResolvedValueOnce(baseOrder());
+    updateMany.mockResolvedValueOnce({ count: 0 });
+    const r = await POST(req({ orderId: 'ord_1' }));
+    expect(r.status).toBe(200);
+    expect(eventoAuditCreate).not.toHaveBeenCalled();
   });
 });

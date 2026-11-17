@@ -37,7 +37,16 @@ import type {
     PaymentInstructions,
     TransactionStatus,
 } from '../types';
-import { AnchorError } from '../types';
+import { AnchorError, ANCHOR_TIMEOUT_CODE } from '../types';
+
+/** Prazo da consulta de status do on-ramp (a janela da trava por ordem é de 5 s: a consulta tem de acabar antes). */
+const ONRAMP_STATUS_TIMEOUT_MS = 4000;
+
+/**
+ * Prazo de CADA consulta dentro do poll (sandbox-pay, smokes). PRÓPRIO e maior que o do status: uma consulta lenta no meio do poll não
+ * pode derrubar a liquidação da demo. Não reaproveitar ONRAMP_STATUS_TIMEOUT_MS (são dois usos diferentes).
+ */
+const ONRAMP_POLL_CALL_TIMEOUT_MS = 20_000;
 import { StrKey } from '@stellar/stellar-sdk';
 import type {
     EtherfuseConfig,
@@ -157,6 +166,7 @@ export class EtherfuseClient implements Anchor {
         method: 'GET' | 'POST' | 'PUT' | 'DELETE',
         endpoint: string,
         body?: unknown,
+        opts?: { timeoutMs?: number },
     ): Promise<T> {
         const url = `${this.config.baseUrl}${endpoint}`;
 
@@ -169,14 +179,26 @@ export class EtherfuseClient implements Anchor {
                 const id = idDeCorrelacao();
                 logAnchor('log', { id, metodo: method, endpoint });
 
-                const response = await fetch(url, {
-                    method,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: this.config.apiKey,
-                    },
-                    body: body ? JSON.stringify(body) : undefined,
-                });
+                let response: Response;
+                try {
+                    response = await fetch(url, {
+                        method,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: this.config.apiKey,
+                        },
+                        body: body ? JSON.stringify(body) : undefined,
+                        // Timeout só quando o chamador pede (hoje: status do on-ramp). Sem ele o fetch não tem prazo nosso.
+                        ...(opts?.timeoutMs ? { signal: AbortSignal.timeout(opts.timeoutMs) } : {}),
+                    });
+                } catch (err) {
+                    if (opts?.timeoutMs && err instanceof Error && err.name === 'TimeoutError') {
+                        // Mensagem FIXA: sem URL, id da ordem nem chave.
+                        logAnchor('error', { id, metodo: method, endpoint, codigo: ANCHOR_TIMEOUT_CODE });
+                        throw new AnchorError('Etherfuse não respondeu a tempo', ANCHOR_TIMEOUT_CODE, 504);
+                    }
+                    throw err;
+                }
                 span.setAttribute('http.status_code', response.status);
 
                 if (!response.ok) {
@@ -571,11 +593,17 @@ export class EtherfuseClient implements Anchor {
      * @returns The {@link OnRampTransaction}, or `null` if not found.
      * @throws {AnchorError} On non-404 API errors.
      */
-    async getOnRampTransaction(transactionId: string): Promise<OnRampTransaction | null> {
+    async getOnRampTransaction(
+        transactionId: string,
+        opts?: { timeoutMs?: number },
+    ): Promise<OnRampTransaction | null> {
         try {
             const response = await this.request<EtherfuseOrderResponse>(
                 'GET',
                 `/ramp/order/${transactionId}`,
+                undefined,
+                // Timeout próprio (~4 s): sem ele a janela de 5 s da trava por ordem não impede consultas sobrepostas.
+                { timeoutMs: opts?.timeoutMs ?? ONRAMP_STATUS_TIMEOUT_MS },
             );
             return this.mapOnRampTransaction(response);
         } catch (error) {
@@ -1017,9 +1045,12 @@ export class EtherfuseClient implements Anchor {
              * Doutrina: etherfuse-pix-demo README quirk #7.
              */
             acceptProcessing?: boolean;
+            /** Prazo de cada consulta (padrão 20 s). O prazo GERAL do poll continua sendo `timeoutMs`. */
+            callTimeoutMs?: number;
             onTick?: (state: { status: string | null; notFound: boolean }) => void;
         } = {},
     ) {
+        const callTimeoutMs = opts.callTimeoutMs ?? ONRAMP_POLL_CALL_TIMEOUT_MS;
         const intervalMs = opts.intervalMs ?? 2000;
         const timeoutMs = opts.timeoutMs ?? 90_000;
         const indexingGraceMs = opts.indexingGraceMs ?? 12_000;
@@ -1035,7 +1066,22 @@ export class EtherfuseClient implements Anchor {
         const deadline = startedAt + timeoutMs;
 
         while (Date.now() < deadline) {
-            const tx = await this.getOnRampTransaction(orderId);
+            // Uma consulta que estoura o prazo POR CHAMADA conta como "sem resposta neste tick": o poll segue até o prazo geral.
+            // O prazo da consulta nunca passa do que resta do prazo GERAL (uma consulta pendurada não estoura o poll).
+            const tetoDaConsulta = Math.min(callTimeoutMs, Math.max(1_000, deadline - Date.now()));
+            const tick = await this.getOnRampTransaction(orderId, { timeoutMs: tetoDaConsulta }).then(
+                (t) => ({ t }),
+                (err: unknown) => {
+                    if (err instanceof AnchorError && err.code === ANCHOR_TIMEOUT_CODE) return null;
+                    throw err;
+                },
+            );
+            if (tick === null) {
+                opts.onTick?.({ status: null, notFound: false });
+                await new Promise((r) => setTimeout(r, intervalMs));
+                continue;
+            }
+            const tx = tick.t;
             const notFound = tx === null;
             const status = tx?.status ?? null;
             opts.onTick?.({ status, notFound });
