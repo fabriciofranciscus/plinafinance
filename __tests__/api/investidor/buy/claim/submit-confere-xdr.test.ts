@@ -99,7 +99,11 @@ beforeEach(() => {
   mockUpdate.mockReset().mockResolvedValue(undefined);
   mockEventoAuditCreate.mockReset().mockResolvedValue(undefined);
   mockDbTransaction.mockReset().mockImplementation(async (fn) =>
-    fn({ onRampOrder: { update: mockUpdate }, eventoAudit: { create: mockEventoAuditCreate } }),
+    fn({
+      onRampOrder: { update: mockUpdate },
+      eventoAudit: { create: mockEventoAuditCreate },
+      $queryRaw: async () => [{ claimTxHash: null }], // trava da linha da ordem (submit-concorrente-pg cobre o real)
+    }),
   );
   mockSubmitWithPrivySignature.mockReset().mockImplementation(async ({ xdr }: { xdr: string }) => ({
     hash: txHashFromXdr(xdr),
