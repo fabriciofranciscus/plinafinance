@@ -4,7 +4,7 @@
  * 4 casas; quantidade Stellar → até 12 inteiros e 7 casas (o mesmo regex do liquidar/build).
  */
 import { describe, expect, it } from 'vitest';
-import { DesagioColunaString, FracaoDesagioString, QuantidadeStellarString, ValorBrlString } from '@/lib/api/valores';
+import { DesagioColunaString, formatoQuantidadeStellarValido, FracaoDesagioString, QuantidadeStellarString, ValorBrlString } from '@/lib/api/valores';
 
 const ok = (s: { safeParse: (v: unknown) => { success: boolean } }, v: unknown) => s.safeParse(v).success;
 
@@ -12,7 +12,7 @@ describe('ValorBrlString (Decimal(15,2))', () => {
   it.each(['8', '500', '1234', '1234.5', '1234.56', '0', '0.01', '9999999999999', '9999999999999.99', '007'])('aceita %s', (v) => {
     expect(ok(ValorBrlString, v)).toBe(true);
   });
-  it.each(['10000000000000', '1234.567', '0.001', '1e3', '-5', ' 5', '5 ', '1,5', '', '.5', '5.', 'abc', '0x10', 5, null, undefined])('recusa %j', (v) => {
+  it.each(['1.23.45', '1.2.3', '1..2', '10000000000000', '1234.567', '0.001', '1e3', '-5', ' 5', '5 ', '1,5', '', '.5', '5.', 'abc', '0x10', 5, null, undefined])('recusa %j', (v) => {
     expect(ok(ValorBrlString, v)).toBe(false);
   });
   it('a mensagem diz o limite (sem eco do valor enviado)', () => {
@@ -26,7 +26,7 @@ describe('DesagioColunaString (formato Decimal(5,4); a faixa [0,1] é do serviç
   it.each(['0', '1', '0.2', '0.2345', '9.9999', '2', '1.0001'])('aceita %s (faixa não é checada aqui)', (v) => {
     expect(ok(DesagioColunaString, v)).toBe(true);
   });
-  it.each(['10', '0.12345', '-0.1', '1e0', '', '.5', '5%', 'abc', 0.2])('recusa %j', (v) => {
+  it.each(['0.1.2', '10', '0.12345', '-0.1', '1e0', '', '.5', '5%', 'abc', 0.2])('recusa %j', (v) => {
     expect(ok(DesagioColunaString, v)).toBe(false);
   });
 });
@@ -44,7 +44,17 @@ describe('QuantidadeStellarString (12 inteiros, 7 casas, > 0)', () => {
   it.each(['1', '0.0000001', '999999999999.9999999', '85.4921510', '0.5'])('aceita %s', (v) => {
     expect(ok(QuantidadeStellarString, v)).toBe(true);
   });
-  it.each(['0', '0.0000000', '0.00000001', '1234567890123', '1e3', '-1', ' 1', '1,5', '', '0x10', 'Infinity', 1])('recusa %j', (v) => {
+  it.each(['1.2.3', '0', '0.0000000', '0.00000001', '1234567890123', '1e3', '-1', ' 1', '1,5', '', '0x10', 'Infinity', 1])('recusa %j', (v) => {
     expect(ok(QuantidadeStellarString, v)).toBe(false);
+  });
+});
+
+describe('formatoQuantidadeStellarValido (helper fora do Zod)', () => {
+  it.each(['1', '0.0000001', '999999999999.9999999', '85.4921510'])('true para %s', (v) => {
+    expect(formatoQuantidadeStellarValido(v)).toBe(true);
+  });
+  // "0" e "0.0000000" passam o formato mas NÃO são > 0: o helper também recusa (mesma regra do QuantidadeStellarString).
+  it.each(['0', '0.0000000', '1.2.3', '1e3', '-1', ' 1', '', 'abc', 1, null, undefined])('false para %j', (v) => {
+    expect(formatoQuantidadeStellarValido(v)).toBe(false);
   });
 });
