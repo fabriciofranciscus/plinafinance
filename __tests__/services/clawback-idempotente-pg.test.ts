@@ -25,7 +25,8 @@ vi.mock('@/lib/stellar/audit', () => ({
 }));
 
 import { db } from '@/lib/db';
-import { executarClawback } from '@/lib/services/tokenizacao';
+import { registerOnChainHash } from '@/lib/stellar/audit';
+import { executarClawback, PRAZO_CONCLUSAO_CLAWBACK_MS } from '@/lib/services/tokenizacao';
 
 const IN = { investidorId: 'inv_cb', amount: '100', motivo: 'ERRO_OPERACIONAL' as never, fundamentoUrl: 'https://x.test/d.pdf', operador: 'admin-panel', pedidoId: 'pedido-pg-0123456789abcd' };
 const saldo = async () => Number((await db.investidor.findUniqueOrThrow({ where: { id: 'inv_cb' } })).saldoEsperado);
@@ -73,6 +74,49 @@ describe.skipIf(!PG)('clawback — idempotência sob concorrência real no Postg
     expect(r).toMatchObject({ txHash: 'tx_claw_1', idempotente: true });
     expect(st.chamadas).toBe(1);
     expect(await saldo()).toBe(900);
+  });
+
+  it('DOIS reenvios simultâneos de um pedido já na rede (onchain): o memo do fundamento vai à rede UMA vez, o saldo baixa uma vez, 1 evento', async () => {
+    st.falhaMemo = true;
+    await expect(executarClawback(IN)).rejects.toMatchObject({ code: 'REGISTRO_PENDENTE', txHash: 'tx_claw_1' });
+    vi.mocked(registerOnChainHash).mockClear();
+    const r = await Promise.allSettled([executarClawback(IN), executarClawback(IN)]);
+    expect(vi.mocked(registerOnChainHash)).toHaveBeenCalledTimes(1); // antes: 2 memos na rede, só um ficava no registro
+    expect(st.chamadas).toBe(1);
+    expect(await saldo()).toBe(900);
+    expect(await db.eventoAudit.count({ where: { acao: 'CLAWBACK_EXECUTADO' } })).toBe(1);
+    for (const x of r.filter((y): y is PromiseRejectedResult => y.status === 'rejected')) {
+      expect(x.reason).toMatchObject({ code: 'PEDIDO_EM_ANDAMENTO' }); // o que perde a corrida é recusado, não conclui de novo
+    }
+    expect(r.some((x) => x.status === 'fulfilled')).toBe(true);
+  });
+
+  /** Deixa o pedido na rede (onchain) com o prazo de conclusão numa idade dada (null = sem prazo). */
+  const deixarOnchain = async (idadeDoPrazoMs: number | null) => {
+    st.falhaMemo = true;
+    await expect(executarClawback(IN)).rejects.toMatchObject({ code: 'REGISTRO_PENDENTE' });
+    const ev = await db.eventoAudit.findFirstOrThrow({ where: { acao: 'CLAWBACK_EXECUTADO' } });
+    const g = ev.payloadJson as Record<string, unknown>;
+    const { concluindoDesde: _x, ...resto } = g;
+    const novo = idadeDoPrazoMs === null ? resto : { ...resto, concluindoDesde: new Date(Date.now() - idadeDoPrazoMs).toISOString() };
+    await db.eventoAudit.update({ where: { id: ev.id }, data: { payloadJson: novo as never } });
+    vi.mocked(registerOnChainHash).mockClear();
+  };
+
+  it('quem já conclui o registro (prazo vigente) segura os outros reenvios: recusados, sem memo na rede e sem baixar o saldo', async () => {
+    await deixarOnchain(10_000); // alguém tomou a vez há 10 s
+    await expect(executarClawback(IN)).rejects.toMatchObject({ code: 'PEDIDO_EM_ANDAMENTO' });
+    expect(vi.mocked(registerOnChainHash)).not.toHaveBeenCalled();
+    expect(await saldo()).toBe(1000);
+  });
+
+  it('queda no meio: com o prazo VENCIDO, outro reenvio assume e conclui (uma vez); com a vez solta, também', async () => {
+    await deixarOnchain(PRAZO_CONCLUSAO_CLAWBACK_MS + 1_000);
+    const r = await executarClawback(IN);
+    expect(r).toMatchObject({ txHash: 'tx_claw_1', idempotente: true });
+    expect(vi.mocked(registerOnChainHash)).toHaveBeenCalledTimes(1);
+    expect(await saldo()).toBe(900);
+    expect(st.chamadas).toBe(1);
   });
 
   it('pedidos diferentes: cada um executa e baixa o saldo', async () => {

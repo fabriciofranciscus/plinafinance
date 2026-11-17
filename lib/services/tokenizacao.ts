@@ -803,8 +803,13 @@ type PayloadClawback = {
   status?: 'attempting' | 'onchain' | 'executed' | 'failed' | 'incerto';
   clawbackTxHash?: string;
   fundamentoTxHash?: string;
+  /** ISO: quem está concluindo o registro (memo do fundamento + saldo) tem esse prazo; os outros reenvios esperam (U1-11, duplo envio). */
+  concluindoDesde?: string;
   causa?: unknown;
 };
+
+/** Prazo de quem conclui o registro: o memo do fundamento tem timeout de rede bem menor. Depois dele, outro reenvio pode assumir (queda no meio). */
+export const PRAZO_CONCLUSAO_CLAWBACK_MS = 2 * 60_000;
 
 /**
  * Executa clawback. Whitepaper §6.5: 4 hipóteses exclusivas (enum força).
@@ -884,6 +889,20 @@ export async function executarClawback(
       };
     }
     if (guardado.status === 'onchain' && guardado.clawbackTxHash) {
+      // Só UM reenvio conclui o registro: dois juntos mandariam dois memos do fundamento à rede (só um ficaria no registro).
+      const vez = await tomarConclusaoDoClawback(eventoId, chaveLock);
+      if (!vez.tomou) {
+        const g = (vez.evento.payloadJson ?? {}) as PayloadClawback;
+        if (g.status === 'executed') {
+          return {
+            txHash: vez.evento.stellarTxHash ?? g.clawbackTxHash ?? '',
+            fundamentoTxHash: g.fundamentoTxHash ?? '',
+            payloadHash: vez.evento.payloadHash ?? '',
+            idempotente: true,
+          };
+        }
+        throw new ClawbackError('PEDIDO_EM_ANDAMENTO');
+      }
       return concluirRegistroDoClawback({ eventoId, chaveLock, input, publicKey: investidor.publicKey, clawbackTxHash: guardado.clawbackTxHash, retomada: true });
     }
     throw new ClawbackError(guardado.status === 'failed' ? 'PEDIDO_FALHOU' : guardado.status === 'incerto' ? 'EXECUCAO_INCERTA' : 'PEDIDO_EM_ANDAMENTO');
@@ -912,7 +931,7 @@ export async function executarClawback(
     where: { id: eventoId },
     data: {
       stellarTxHash: clawbackTxHash,
-      payloadJson: { ...guardado, status: 'onchain', clawbackTxHash } as unknown as Prisma.InputJsonValue,
+      payloadJson: { ...guardado, status: 'onchain', clawbackTxHash, concluindoDesde: new Date().toISOString() } as unknown as Prisma.InputJsonValue,
     },
   });
 
@@ -927,6 +946,42 @@ function rejeicaoDefinitivaDaRede(err: unknown): boolean {
   const rc = (err as { response?: { data?: { extras?: { result_codes?: { transaction?: unknown } } } } })?.response?.data?.extras?.result_codes;
   if (!rc || typeof rc !== 'object') return false;
   return rc.transaction !== 'tx_too_late' && rc.transaction !== 'tx_bad_seq';
+}
+
+/**
+ * Toma a vez de concluir o registro de um clawback já na rede: transação curta sob o MESMO advisory lock do claim (sem rede dentro).
+ * Só toma quem vê `onchain` sem prazo vigente (`concluindoDesde` ausente ou mais velho que PRAZO_CONCLUSAO_CLAWBACK_MS). Quem não
+ * toma recebe o evento atual (se já `executed`, o chamador devolve o resultado do 1º; senão, recusa como "em andamento").
+ */
+async function tomarConclusaoDoClawback(eventoId: string, chaveLock: string) {
+  return db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${chaveLock}))`;
+    const evento = await tx.eventoAudit.findFirst({ where: { id: eventoId } });
+    if (!evento) throw new ClawbackError('PEDIDO_EM_ANDAMENTO');
+    const g = (evento.payloadJson ?? {}) as PayloadClawback;
+    const desde = g.concluindoDesde ? Date.parse(g.concluindoDesde) : NaN;
+    const vigente = Number.isFinite(desde) && Date.now() - desde < PRAZO_CONCLUSAO_CLAWBACK_MS;
+    if (g.status !== 'onchain' || vigente) return { tomou: false as const, evento };
+    const atualizado = await tx.eventoAudit.update({
+      where: { id: eventoId },
+      data: { payloadJson: { ...g, concluindoDesde: new Date().toISOString() } as unknown as Prisma.InputJsonValue },
+    });
+    return { tomou: true as const, evento: atualizado };
+  });
+}
+
+/** Solta o prazo quando a conclusão falhou (REGISTRO_PENDENTE): o reenvio seguinte do operador não espera o prazo vencer. Melhor esforço. */
+async function soltarConclusaoDoClawback(eventoId: string, chaveLock: string): Promise<void> {
+  await db
+    .$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${chaveLock}))`;
+      const evento = await tx.eventoAudit.findFirst({ where: { id: eventoId } });
+      const g = (evento?.payloadJson ?? {}) as PayloadClawback;
+      if (!evento || g.status !== 'onchain' || !g.concluindoDesde) return;
+      const { concluindoDesde: _liberado, ...resto } = g;
+      await tx.eventoAudit.update({ where: { id: eventoId }, data: { payloadJson: resto as unknown as Prisma.InputJsonValue } });
+    })
+    .catch(() => undefined);
 }
 
 /** Passos 3 e 4: memo do fundamento + (evento executado, saldoEsperado e holding) numa transação, idempotente por evento. */
@@ -953,6 +1008,7 @@ async function concluirRegistroDoClawback(a: {
     fundamentoOnChain = await registerOnChainHash(payload);
   } catch (err) {
     console.error('[clawback] registro do fundamento falhou', causaSegura(err));
+    await soltarConclusaoDoClawback(a.eventoId, a.chaveLock);
     throw new ClawbackError('REGISTRO_PENDENTE', a.clawbackTxHash);
   }
 
@@ -997,6 +1053,7 @@ async function concluirRegistroDoClawback(a: {
     };
   } catch (err) {
     console.error('[clawback] conclusão do registro falhou', causaSegura(err));
+    await soltarConclusaoDoClawback(a.eventoId, a.chaveLock);
     throw new ClawbackError('REGISTRO_PENDENTE', a.clawbackTxHash);
   }
 }
