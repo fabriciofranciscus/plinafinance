@@ -16,8 +16,10 @@ export const STELLAR_NETWORK: StellarNetwork =
 export const networkPassphrase =
   STELLAR_NETWORK === 'PUBLIC' ? Networks.PUBLIC : Networks.TESTNET;
 
+// `||` + trim: uma STELLAR_HORIZON_URL vazia (ex.: `STELLAR_HORIZON_URL=` no .env) cai no padrão da rede, em vez de
+// virar URL vazia e derrubar /pool, /cotas e /admin com 500 (achado da Vera no quickstart, 16/11).
 export const horizonUrl =
-  process.env.STELLAR_HORIZON_URL ??
+  process.env.STELLAR_HORIZON_URL?.trim() ||
   (STELLAR_NETWORK === 'PUBLIC'
     ? 'https://horizon.stellar.org'
     : 'https://horizon-testnet.stellar.org');
