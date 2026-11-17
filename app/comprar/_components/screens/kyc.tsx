@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import type { PessoaState } from '@/components/PessoaProvider';
+import type { CotaResumo, ReservaData } from '../../_types';
+import { FaixaContexto } from '../shell/faixa-contexto';
 
 const fieldCls =
   'w-full px-4 py-3 border border-light-hairline font-text text-sm text-base bg-lightBg/30 focus:outline-none focus-visible:border-primary-deep focus-visible:ring-2 focus-visible:ring-primary-deep/20 transition-colors';
@@ -10,10 +12,14 @@ const labelCls =
 
 export function KycScreen({
   pessoa,
+  cota,
+  reserva,
   loading,
   onSubmit,
 }: {
   pessoa: PessoaState;
+  cota: CotaResumo | null;
+  reserva: ReservaData | null;
   loading: boolean;
   onSubmit: (input: { nome?: string; cpf?: string }) => void;
 }) {
@@ -41,6 +47,8 @@ export function KycScreen({
         fora da rede. A transferência da cota também depende da aprovação da
         administradora, que analisa a capacidade de pagamento do comprador.
       </p>
+
+      <FaixaContexto cota={cota} reserva={reserva} />
 
       <div className="mt-8 space-y-4 max-w-md">
         <div>
@@ -73,12 +81,12 @@ export function KycScreen({
         </div>
       </div>
 
-      <div className="mt-5 max-w-md border border-dashed border-light-hairline p-4 font-text text-sm text-base/70">
-        ⬆ Upload de documento + selfie ·{' '}
-        <span className="font-mono text-xs text-base/55">
+      <p data-testid="nota-upload" className="mt-5 max-w-md font-text text-sm text-base/70">
+        <span aria-hidden="true">⬆</span> Upload de documento + selfie ·{' '}
+        <span className="font-mono text-xs text-base/70">
           auto-aprovado no ambiente de testes
         </span>
-      </div>
+      </p>
 
       <label className="mt-6 flex items-start gap-3 font-text text-sm text-base/85 max-w-md cursor-pointer">
         <input

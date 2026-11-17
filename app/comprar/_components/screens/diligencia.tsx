@@ -1,5 +1,6 @@
 import type { CotaResumo, DiligenciaData } from '../../_types';
 import { BRL, TIPO_LABEL } from '../../_lib/glossary';
+import { FaixaContexto } from '../shell/faixa-contexto';
 
 const ACAO_LABEL: Record<string, string> = {
   COTA_VALIDADA: 'Validação legal registrada',
@@ -57,6 +58,8 @@ export function DiligenciaScreen({
       <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
         {tipo} · {valor} · verificação jurídica e prova on-chain.
       </p>
+
+      <FaixaContexto cota={selectedCota} reserva={null} />
 
       {loading ? (
         <p className="mt-8 font-details text-[10px] tracking-[0.2em] uppercase text-base/55 animate-pulse">

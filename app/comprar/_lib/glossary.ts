@@ -52,3 +52,8 @@ export const BRL = new Intl.NumberFormat('pt-BR', {
 export function valorRevenda(valorCarta: number, desagioRevenda: number | null): number {
   return Math.floor(valorCarta * (1 - (desagioRevenda ?? 0)));
 }
+
+/** Rótulo curto da tela (subtela) dentro da fase: "KYC", "Assinatura"... */
+export function screenLabel(screen: Screen): string {
+  return SCREENS.find((s) => s.id === screen)?.label ?? '';
+}
