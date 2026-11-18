@@ -47,7 +47,7 @@ export function PropostaScreen({
         <Row k="Validade da reserva" v="72 horas" />
       </div>
 
-      <p className="mt-4 font-mono text-xs text-base/60 max-w-prose leading-relaxed">
+      <p className="mt-4 font-mono text-xs text-base/65 max-w-prose leading-relaxed">
         O desconto reflete o deságio original pago ao cotista mais a margem
         operacional da Plina. Você adquire uma cota com carta de crédito já
         disponível na administradora.
@@ -88,7 +88,7 @@ function Row({
 }) {
   return (
     <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-light-hairline last:border-b-0">
-      <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
+      <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65">
         {k}
       </span>
       <span

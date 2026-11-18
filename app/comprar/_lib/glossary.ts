@@ -57,3 +57,14 @@ export function valorRevenda(valorCarta: number, desagioRevenda: number | null):
 export function screenLabel(screen: Screen): string {
   return SCREENS.find((s) => s.id === screen)?.label ?? '';
 }
+
+/** Subtela a exibir depois do nome da fase (cabeçalho do celular); só fases com mais de uma tela têm. */
+export function subtelaDaFase(screen: Screen): string | null {
+  const { phase } = phaseForScreen(screen);
+  return phase.screens.length > 1 ? screenLabel(screen) : null;
+}
+
+/** Link da transação no explorer (testnet), com o hash COMPLETO. */
+export function explorerTx(hash: string): string {
+  return `https://stellar.expert/explorer/testnet/tx/${hash}`;
+}
