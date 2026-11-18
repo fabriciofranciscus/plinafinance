@@ -14,6 +14,7 @@ export function ConfirmacaoScreen({
   confirmacao,
   confirming,
   onConfirmar,
+  erro,
 }: {
   cota: CotaResumo | null;
   reserva: ReservaData | null;
@@ -21,6 +22,7 @@ export function ConfirmacaoScreen({
   confirmacao: ConfirmacaoData | null;
   confirming: boolean;
   onConfirmar: () => void;
+  erro?: React.ReactNode;
 }) {
   const paga = cota ? valorRevenda(cota.valorCarta, cota.desagioRevenda) : 0;
   const economia = cota ? cota.valorCarta - paga : 0;
@@ -56,6 +58,7 @@ export function ConfirmacaoScreen({
         >
           {confirming ? 'Confirmando…' : 'Confirmar transferência →'}
         </button>
+        {erro}
       </div>
     );
   }
@@ -90,6 +93,7 @@ export function ConfirmacaoScreen({
             </a>
           </p>
         )}
+        {erro}
       </div>
     );
   }
@@ -152,6 +156,7 @@ export function ConfirmacaoScreen({
           </a>
         )}
       </div>
+      {erro}
     </div>
   );
 }

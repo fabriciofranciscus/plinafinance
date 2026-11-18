@@ -11,6 +11,7 @@ export function CessaoScreen({
   reserva,
   signing,
   onAssinar,
+  erro,
 }: {
   pessoa: PessoaState;
   cota: CotaResumo | null;
@@ -18,6 +19,7 @@ export function CessaoScreen({
   cessao: CessaoData | null;
   signing: boolean;
   onAssinar: () => void;
+  erro?: React.ReactNode;
 }) {
   return (
     <div>
@@ -55,6 +57,7 @@ export function CessaoScreen({
       >
         {signing ? 'Simulando…' : 'Simular assinatura →'}
       </button>
+      {erro}
     </div>
   );
 }

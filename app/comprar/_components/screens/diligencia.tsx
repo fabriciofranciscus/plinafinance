@@ -38,11 +38,13 @@ export function DiligenciaScreen({
   data,
   loading,
   onContinue,
+  erro,
 }: {
   selectedCota: CotaResumo | null;
   data: DiligenciaData | null;
   loading: boolean;
   onContinue: () => void;
+  erro?: React.ReactNode;
 }) {
   const tipo = selectedCota ? TIPO_LABEL[selectedCota.tipoBem] ?? selectedCota.tipoBem : '';
   const valor = selectedCota ? BRL.format(selectedCota.valorCarta) : '';
@@ -119,6 +121,7 @@ export function DiligenciaScreen({
       >
         Avançar para proposta →
       </button>
+      {erro}
     </div>
   );
 }
