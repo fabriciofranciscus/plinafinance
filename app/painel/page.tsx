@@ -12,7 +12,7 @@
  * pra quem já tem papel.
  */
 
-import { rotuloKyc } from '@/lib/format/status-humano';
+import { seloVerificacao } from '@/lib/format/status-humano';
 import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -102,7 +102,7 @@ export default function PainelPage() {
                 : 'border-base/20 text-base/60'
             }`}
           >
-            {pessoa.kycAprovado ? '● KYC verificado' : `○ KYC ${rotuloKyc(pessoa.kycStatus)}`}
+            {seloVerificacao(pessoa.kycAprovado, pessoa.kycStatus)}
           </span>
           {isInvestidor && (
             <span className="font-details text-[10px] tracking-[0.2em] uppercase px-3 py-1 rounded-full border border-base/20 text-base/60">

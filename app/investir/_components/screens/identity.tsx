@@ -1,6 +1,6 @@
 'use client';
 
-import { FUNDING_ROTULO, FUNDING_TEXTO, rotuloKyc } from '@/lib/format/status-humano';
+import { FUNDING_ROTULO, FUNDING_TEXTO, ROTULO_VERIFICACAO, rotuloKyc } from '@/lib/format/status-humano';
 import { useAppPrivy as usePrivy } from '@/lib/hooks/privy';
 import type {
   EntityType,
@@ -162,7 +162,7 @@ export function IdentityScreen({
                 v={<span className="font-mono text-xs">{maskId(onboard.etherfuseCustomerId)}</span>}
               />
               <DataRow
-                k="KYC status"
+                k={ROTULO_VERIFICACAO}
                 v={
                   <span
                     className={`font-details text-[10px] tracking-[0.2em] uppercase ${

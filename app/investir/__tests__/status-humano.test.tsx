@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { FUNDING_ROTULO, FUNDING_TEXTO, rotuloKyc } from '@/lib/format/status-humano';
+import { FUNDING_ROTULO, FUNDING_TEXTO, ROTULO_VERIFICACAO, rotuloKyc, seloVerificacao } from '@/lib/format/status-humano';
 import { IdentityScreen } from '../_components/screens/identity';
 
 // A3 (backlog de usabilidade, 25/11): status crus e jargão na tela ("KYC NAO_INICIADO", "○ not_started", "friendbot · agora").
@@ -11,15 +11,16 @@ afterEach(cleanup);
 
 describe('rotuloKyc: enum → texto humano, nos dois vocabulários do app', () => {
   it('vocabulário do banco (Pessoa.kycStatus)', () => {
-    expect(rotuloKyc('NAO_INICIADO')).toBe('não iniciado');
+    // Feminino: o nome mostrado é "Verificação de identidade" (glossário U3, Consuelo). "KYC" não é rótulo para o usuário.
+    expect(rotuloKyc('NAO_INICIADO')).toBe('não iniciada');
     expect(rotuloKyc('PENDENTE')).toBe('em andamento');
-    expect(rotuloKyc('APROVADO')).toBe('aprovado');
-    expect(rotuloKyc('REJEITADO')).toBe('não aprovado');
+    expect(rotuloKyc('APROVADO')).toBe('aprovada');
+    expect(rotuloKyc('REJEITADO')).toBe('não aprovada');
   });
   it('vocabulário do /investir (onboard.kycStatus)', () => {
-    expect(rotuloKyc('not_started')).toBe('não iniciado');
+    expect(rotuloKyc('not_started')).toBe('não iniciada');
     expect(rotuloKyc('pending')).toBe('em andamento');
-    expect(rotuloKyc('approved')).toBe('aprovado');
+    expect(rotuloKyc('approved')).toBe('aprovada');
   });
   it('ausente ou desconhecido NUNCA vira o valor cru: texto neutro', () => {
     for (const v of [null, undefined, '', 'CODIGO_NOVO', 'xyz']) {
@@ -58,7 +59,7 @@ describe('/investir: a linha de status da verificação e o funding', () => {
     );
 
   it('"pending" e "not_started" saem como texto humano, sem o valor cru', () => {
-    for (const [cru, humano] of [['pending', '○ em andamento'], ['not_started', '○ não iniciado']] as const) {
+    for (const [cru, humano] of [['pending', '○ em andamento'], ['not_started', '○ não iniciada']] as const) {
       cleanup();
       const { container } = montar({ kycStatus: cru });
       expect(container.textContent, cru).toContain(humano);
@@ -66,9 +67,11 @@ describe('/investir: a linha de status da verificação e o funding', () => {
       expect(container.textContent, cru).not.toMatch(/not_started/);
     }
   });
-  it('aprovado continua "● aprovado"', () => {
+  it('aprovada: "● aprovada"; e a linha se chama "Verificação de identidade", não "KYC status"', () => {
     const { container } = montar({ kycStatus: 'approved' });
-    expect(container.textContent).toContain('● aprovado');
+    expect(container.textContent).toContain('● aprovada');
+    expect(screen.getByText(ROTULO_VERIFICACAO)).toBeTruthy();
+    expect(container.textContent).not.toMatch(/KYC status/);
   });
   it('o funding não cita "friendbot": rótulo e texto vêm do arquivo de rótulos', () => {
     const { container } = montar({ kycStatus: 'approved', fundedNow: true });
@@ -78,7 +81,8 @@ describe('/investir: a linha de status da verificação e o funding', () => {
     expect(FUNDING_TEXTO).not.toMatch(/friendbot|funding/i);
     // Norma (25/11): "agora" sugeriria que o saldo chega a cada uso; é só na criação da conta.
     expect(FUNDING_ROTULO).toBe('Saldo inicial');
-    expect(FUNDING_TEXTO).toBe('XLM de teste recebido na criação da conta.');
+    // Norma: "na criação da conta" (não "agora"). Consuelo: sempre dizer que é da rede de testes e sem valor real.
+    expect(FUNDING_TEXTO).toBe('XLM de teste da rede de testes, sem valor real, recebido na criação da conta.');
     expect(FUNDING_TEXTO).not.toMatch(/agora/);
   });
   it('sem funding agora, a linha não aparece', () => {
@@ -87,11 +91,23 @@ describe('/investir: a linha de status da verificação e o funding', () => {
   });
 });
 
+describe('selo da verificação de identidade (/painel)', () => {
+  it('o nome vem antes do status, no feminino, para aprovada e para os demais; nunca "KYC"', () => {
+    expect(seloVerificacao(true, 'APROVADO')).toBe('● Verificação de identidade: aprovada');
+    expect(seloVerificacao(false, 'NAO_INICIADO')).toBe('○ Verificação de identidade: não iniciada');
+    expect(seloVerificacao(false, 'PENDENTE')).toBe('○ Verificação de identidade: em andamento');
+    expect(seloVerificacao(false, 'REJEITADO')).toBe('○ Verificação de identidade: não aprovada'); // sem motivo da recusa
+    expect(seloVerificacao(false, null)).toBe('○ Verificação de identidade: sem informação');
+    for (const a of [true, false]) expect(seloVerificacao(a, 'x')).not.toMatch(/KYC|NAO_|_/);
+  });
+});
+
 describe('/painel: o selo de KYC não imprime o enum cru', () => {
   const src = readFileSync('app/painel/page.tsx', 'utf8');
   it('usa rotuloKyc e não interpola pessoa.kycStatus direto', () => {
     expect(src).toContain("from '@/lib/format/status-humano'");
-    expect(src).toMatch(/rotuloKyc\(pessoa\.kycStatus\)/);
+    expect(src).toMatch(/seloVerificacao\(pessoa\.kycAprovado, pessoa\.kycStatus\)/);
     expect(src).not.toMatch(/KYC \$\{pessoa\.kycStatus/);
+    expect(src).not.toMatch(/KYC verificado|○ KYC/);
   });
 });
