@@ -24,7 +24,7 @@ export function ReceiptScreen({
       </p>
       <h1 className="font-title text-4xl md:text-5xl font-semibold mt-4 tracking-tight leading-[1.05] text-base">
         {NUMBER_BR.format(Number(tokensDaCotacao(quote)))}
-        <span className="font-mono text-2xl md:text-3xl text-base/55 ml-3">PLINA-RF</span>
+        <span className="font-mono text-2xl md:text-3xl text-base/70 ml-3">PLINA-RF</span>
       </h1>
       <p className="font-text text-base mt-6 text-base/80 leading-relaxed max-w-prose">
         Na sua wallet Stellar, em rede de testes. Token de demonstração, sem
@@ -35,7 +35,7 @@ export function ReceiptScreen({
       </p>
 
       <div className="mt-14">
-        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65 mb-4">
+        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 mb-4">
           Transações on-chain
         </p>
         <ol className="space-y-px bg-base/10 border-y border-light-hairline">
@@ -52,7 +52,7 @@ export function ReceiptScreen({
             idx={buyResult.onRampTxHash ? 2 : 1}
           />
         </ol>
-        <p className="font-mono text-[10px] text-base/55 mt-3">
+        <p className="font-mono text-[10px] text-base/70 mt-3">
           {buyResult.mock
             ? 'mock sandbox · sem TESOURO on-chain'
             : 'investidor assinou envelope · distributor co-assinou · 2 legs em 1 tx'}
@@ -79,13 +79,13 @@ export function ReceiptScreen({
       <div className="mt-16 pt-8 border-t border-light-hairline flex flex-wrap items-center gap-x-8 gap-y-3">
         <button
           onClick={onBuyMore}
-          className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 hover:text-base transition-colors"
+          className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 hover:text-base transition-colors"
         >
           Comprar mais
         </button>
         <a
           href="/pool"
-          className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 hover:text-base transition-colors"
+          className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 hover:text-base transition-colors"
         >
           Pool atualizado →
         </a>

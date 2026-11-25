@@ -9,7 +9,7 @@ export function QuoteCell({
 }) {
   return (
     <div className="bg-white px-5 py-6">
-      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65">
+      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
         {label}
       </p>
       <p

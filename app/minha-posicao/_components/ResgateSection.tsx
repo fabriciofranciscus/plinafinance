@@ -29,7 +29,7 @@ export function ResgateSection({
   if (r.passo === 'done' && r.txHash) {
     return (
       <section className="mb-16" aria-labelledby="resgate-titulo">
-        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 mb-4">
+        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 mb-4">
           {SACAR.passo.resgate}
         </p>
         <div className="border border-light-hairline p-6 md:p-8" role="status">
@@ -53,7 +53,7 @@ export function ResgateSection({
           <div className="mt-6 flex flex-wrap items-center gap-4">
             <a
               href="/sacar"
-              className="inline-flex items-center min-h-[48px] px-6 rounded-full bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase font-bold hover:bg-primary-deep transition-colors"
+              className="inline-flex items-center min-h-[48px] px-6 rounded-full bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase font-bold hover:bg-signal-700 transition-colors"
             >
               {RESGATE.concluido.proximo}
             </a>
@@ -72,7 +72,7 @@ export function ResgateSection({
 
   return (
     <section className="mb-16" aria-labelledby="resgate-titulo">
-      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 mb-4">
+      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 mb-4">
         {SACAR.passo.resgate}
       </p>
       <div className="border border-light-hairline p-6 md:p-8 space-y-5">
@@ -112,7 +112,7 @@ export function ResgateSection({
             type="button"
             onClick={r.gerarCotacao}
             disabled={!quantidadeValida(r.amount, plinarfQty) || ocupado}
-            className="min-h-[48px] rounded-full bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase font-bold px-6 hover:bg-primary-deep transition-colors disabled:opacity-40"
+            className="min-h-[48px] rounded-full bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase font-bold px-6 hover:bg-signal-700 transition-colors disabled:opacity-40"
           >
             {r.passo === 'building' ? RESGATE.gerando : RESGATE.gerar}
           </button>
@@ -146,7 +146,7 @@ export function ResgateSection({
                 type="button"
                 onClick={r.confirmar}
                 disabled={ocupado}
-                className="min-h-[48px] rounded-full bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase font-bold px-6 hover:bg-primary-deep transition-colors disabled:opacity-50"
+                className="min-h-[48px] rounded-full bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase font-bold px-6 hover:bg-signal-700 transition-colors disabled:opacity-50"
               >
                 {r.passo === 'signing' ? RESGATE.assinando : r.passo === 'submitting' ? RESGATE.enviando : RESGATE.confirmar}
               </button>

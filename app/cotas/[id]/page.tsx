@@ -89,20 +89,20 @@ export default async function CotaDetailPage({ params }: PageProps) {
           {TIPO_LABEL[cota.tipoBem] ?? cota.tipoBem}
         </p>
         <h1 className="font-title text-4xl md:text-5xl font-semibold tracking-tight mt-3">
-          {BRL.format(valorCarta)} <span className="text-base/40 text-2xl md:text-3xl">de carta</span>
+          {BRL.format(valorCarta)} <span className="text-base/70 text-2xl md:text-3xl">de carta</span>
         </h1>
       </header>
 
       <section className="mb-12">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-base/15 border border-light-hairline">
           <div className="bg-sheet-white p-6">
-            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
+            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
               Você paga
             </p>
             <p className="font-title text-3xl md:text-4xl font-semibold mt-2 tracking-tight">
               {BRL.format(valorRevenda)}
             </p>
-            <p className="font-mono text-xs text-base/60 mt-2">
+            <p className="font-mono text-xs text-base/70 mt-2">
               Deságio revenda {(desagioRevenda * 100).toFixed(1)}% sobre o
               valor de face.
             </p>
@@ -144,11 +144,11 @@ export default async function CotaDetailPage({ params }: PageProps) {
         <section className="mb-12">
           <Link
             href={`/comprar/reservar?cotaId=${cota.id}`}
-            className="inline-block bg-base text-lightBg font-details text-xs tracking-[0.2em] uppercase px-8 py-4 hover:bg-primary-deep transition-colors"
+            className="inline-block bg-base text-lightBg font-details text-xs tracking-[0.2em] uppercase px-8 py-4 hover:bg-signal-700 transition-colors"
           >
             Reservar por 72h →
           </Link>
-          <p className="font-text text-xs text-base/60 mt-4 max-w-prose leading-relaxed">
+          <p className="font-text text-xs text-base/70 mt-4 max-w-prose leading-relaxed">
             A reserva trava a cota por 72 horas pra você qualificar capital +
             preparar transferência. Após qualificação, Plina coordena a
             transferência de titularidade na administradora. Contrato com
@@ -174,7 +174,7 @@ export default async function CotaDetailPage({ params }: PageProps) {
           <li>· Contatos de suporte à transferência.</li>
           <li>· Documentação completa (extrato + comprovante de contemplação).</li>
         </ul>
-        <p className="font-text text-xs text-base/55 mt-4 leading-relaxed max-w-prose">
+        <p className="font-text text-xs text-base/70 mt-4 leading-relaxed max-w-prose">
           Pré-revelar essas informações expõe o vendedor original sem
           contrato firmado. Política de privacidade alinhada à LGPD e ao
           princípio do whitepaper §9: PII off-chain, on-chain só hash.

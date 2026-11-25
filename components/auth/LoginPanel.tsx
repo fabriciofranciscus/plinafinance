@@ -101,8 +101,8 @@ export function LoginPanel({
 
   const inputBase =
     variant === 'standalone'
-      ? 'mt-3 block w-full bg-transparent border-b border-base/30 focus:border-base placeholder:text-base/30 py-3 focus:outline-none transition-colors disabled:opacity-50'
-      : 'mt-3 block w-full bg-white border border-base/20 px-3 py-2.5 focus:border-base placeholder:text-base/30 focus:outline-none transition-colors disabled:opacity-50';
+      ? 'mt-3 block w-full bg-transparent border-b border-base/30 focus:border-base placeholder:text-base/70 py-3 focus:outline-none transition-colors disabled:opacity-50'
+      : 'mt-3 block w-full bg-white border border-base/20 px-3 py-2.5 focus:border-base placeholder:text-base/70 focus:outline-none transition-colors disabled:opacity-50';
 
   return (
     <div>
@@ -120,7 +120,7 @@ export function LoginPanel({
 
           <div className="flex items-center gap-4 mt-8" aria-hidden>
             <span className="h-px flex-1 bg-base/15" />
-            <span className="font-details text-[10px] tracking-[0.3em] uppercase text-base/55">
+            <span className="font-details text-[10px] tracking-[0.3em] uppercase text-base/70">
               ou
             </span>
             <span className="h-px flex-1 bg-base/15" />
@@ -158,7 +158,7 @@ export function LoginPanel({
               )}
               {sending ? 'Enviando código…' : 'Enviar código de acesso'}
             </button>
-            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/55 mt-4">
+            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 mt-4">
               Privy · embedded wallet Stellar · sem extensão
             </p>
           </div>
@@ -188,7 +188,7 @@ export function LoginPanel({
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
               disabled={verifying}
-              className={`${inputBase} font-mono text-3xl md:text-4xl text-base tracking-[0.4em] placeholder:text-base/25`}
+              className={`${inputBase} font-mono text-3xl md:text-4xl text-base tracking-[0.4em] placeholder:text-base/70`}
             />
           </label>
 
@@ -207,7 +207,7 @@ export function LoginPanel({
               type="button"
               onClick={onResend}
               disabled={sending || verifying}
-              className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 hover:text-base transition-colors disabled:opacity-40"
+              className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 hover:text-base transition-colors disabled:opacity-40"
             >
               {sending ? 'Reenviando…' : 'Reenviar código'}
             </button>

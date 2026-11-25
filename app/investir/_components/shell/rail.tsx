@@ -83,7 +83,7 @@ export function Rail({
               <div className="flex items-baseline gap-4">
                 <span
                   className={`font-mono text-xs transition-colors ${
-                    isDone ? 'text-primary-deep' : isCurrent ? 'text-base' : 'text-base/35'
+                    isDone ? 'text-primary-deep' : isCurrent ? 'text-base' : 'text-base/70'
                   }`}
                 >
                   {String(idx + 1).padStart(2, '0')}
@@ -94,7 +94,7 @@ export function Rail({
                       ? 'text-base'
                       : isDone
                         ? 'text-base/70'
-                        : 'text-base/40'
+                        : 'text-base/70'
                   }`}
                 >
                   {phase.label}
@@ -123,8 +123,8 @@ export function Rail({
                             subCurrent
                               ? 'text-base font-bold'
                               : subDone
-                                ? 'text-base/60'
-                                : 'text-base/35'
+                                ? 'text-base/70'
+                                : 'text-base/70'
                           }`}
                         >
                           {SCREEN_LABEL[sid]}
@@ -140,7 +140,7 @@ export function Rail({
       </ol>
 
       <div className="mt-auto pt-12">
-        <p className="font-mono text-[10px] text-base/55 leading-relaxed">
+        <p className="font-mono text-[10px] text-base/70 leading-relaxed">
           Rede de testes · sem oferta<br />
           Stellar testnet · Etherfuse sandbox
         </p>

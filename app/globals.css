@@ -113,7 +113,8 @@ body {
 }
 .skip-link:focus {
   top: 16px;
-  outline: 2px solid #0EA7C7;
+  /* A página abre em superfície clara: o anel segue a superfície (signal-700; o ciano 500 dá 2,24:1 no cinza). */
+  outline: 2px solid var(--color-signal-700);
   outline-offset: 4px;
 }
 

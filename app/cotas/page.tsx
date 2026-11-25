@@ -49,7 +49,7 @@ export default async function CotasPage() {
           >
             Comprar cota →
           </Link>
-          <span className="text-base/30">·</span>
+          <span className="text-base/70">·</span>
           <Link
             href="/comprar/lead"
             className="font-details tracking-[0.2em] uppercase underline text-base/70 hover:text-primary-deep"
@@ -81,7 +81,7 @@ export default async function CotasPage() {
         </div>
       )}
 
-      <p className="mt-8 font-text text-xs text-base/60 max-w-2xl">
+      <p className="mt-8 font-text text-xs text-base/70 max-w-2xl">
         Identificadores administrativos (número de grupo, administradora,
         titular original) são revelados apenas após qualificação. On-chain
         circula apenas hash da cessão, NAV e endereços públicos.
@@ -113,13 +113,13 @@ function CotaCard({
       href={`/cotas/${id}`}
       className="group bg-sheet-white p-6 hover:bg-base hover:text-lightBg transition-colors flex flex-col"
     >
-      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 group-hover:text-lightBg/60">
+      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 group-hover:text-lightBg/60">
         {TIPO_LABEL[tipoBem] ?? tipoBem}
       </p>
       <p className="font-title text-2xl md:text-3xl font-semibold mt-2 tracking-tight">
         {BRL.format(valorCarta)}
       </p>
-      <p className="font-mono text-xs text-base/60 group-hover:text-lightBg/60 mt-1">
+      <p className="font-mono text-xs text-base/70 group-hover:text-lightBg/60 mt-1">
         Você paga {BRL.format(valorRevenda)} · poupa{' '}
         <span className="text-primary-deep group-hover:text-primary">
           {BRL.format(economia)}
@@ -129,7 +129,7 @@ function CotaCard({
       <div className="mt-4 pt-4 border-t border-base/15 group-hover:border-lightBg/20 grid grid-cols-2 gap-2 text-xs">
         {localizacaoAprox && (
           <div>
-            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/50 group-hover:text-lightBg/50">
+            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 group-hover:text-lightBg/60">
               Local
             </p>
             <p className="font-text mt-0.5">{localizacaoAprox}</p>
@@ -138,7 +138,7 @@ function CotaCard({
         {/* 0 é prazo válido (cota quitada): `&&` imprimiria o próprio 0 (A-21); só `null` esconde o bloco. */}
         {prazoRestanteMeses != null && (
           <div>
-            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/50 group-hover:text-lightBg/50">
+            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 group-hover:text-lightBg/60">
               Prazo
             </p>
             <p className="font-mono mt-0.5">{prazoRestanteMeses === 0 ? 'Quitada' : fmtPrazo(prazoRestanteMeses)}</p>

@@ -33,7 +33,7 @@ export function LoginForm() {
             required
             autoFocus
             autoComplete="current-password"
-            className="mt-2 w-full bg-white border border-light-hairline px-4 py-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            className="mt-2 w-full bg-white border border-light-hairline px-4 py-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-signal-700"
           />
         </label>
         {state?.error && (
@@ -42,7 +42,7 @@ export function LoginForm() {
         <button
           type="submit"
           disabled={pending}
-          className="w-full bg-base text-lightBg font-details text-xs tracking-[0.2em] uppercase py-3 hover:bg-primary-deep transition-colors disabled:opacity-50"
+          className="w-full bg-base text-lightBg font-details text-xs tracking-[0.2em] uppercase py-3 hover:bg-signal-700 transition-colors disabled:opacity-50"
         >
           {pending ? 'Verificando…' : 'Entrar'}
         </button>
