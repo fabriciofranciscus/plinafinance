@@ -125,9 +125,20 @@ describe('/investir: a linha de status da verificação e o funding', () => {
     const texto = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1').replace(/\s+/g, ' ');
     expect(texto).not.toMatch(/KYC programático|KYC auto-aprovado|Identidade · KYC/);
     expect(texto).not.toMatch(/anchor regulada/i); // "regulada" é afirmação não verificada (⚖)
-    expect(texto).toContain('Wallet Stellar e verificação de identidade.');
-    expect(texto).toContain('registra o investidor na Etherfuse. Verificação de identidade de teste no sandbox.');
-    expect(texto).toContain('submissão da verificação de identidade no ambiente de sandbox.');
+    // Norma (25/11, versão final): carteira, "parceira de pagamento", simulada em ambiente de teste; sem "dado real" afirmado.
+    expect(texto).toContain('Sua carteira e a verificação de identidade.');
+    expect(texto).toContain('A Plina cria sua carteira Stellar e envia seus dados à Etherfuse, parceira de pagamento, para a verificação de identidade. Em ambiente de teste, a verificação é simulada.');
+    expect(texto).toContain('submissão da verificação de identidade no ambiente de teste (simulada).');
+    expect(texto).not.toMatch(/Nenhum dado real é coletado|nenhum dado real é usado/);
+    expect(texto).not.toMatch(/Wallet Stellar e verificação/);
+  });
+  it('quote e progresso do onboarding sem "anchor regulada" nem "KYC programático" (Norma)', () => {
+    const quote = readFileSync('app/investir/_components/screens/quote.tsx', 'utf8').replace(/\s+/g, ' ');
+    expect(quote).toContain('Cotação ao vivo do parceiro de pagamento.');
+    expect(quote).not.toMatch(/anchor regulada|Quote ao vivo/);
+    const prog = readFileSync('app/investir/_components/shared/onboarding-progress.tsx', 'utf8');
+    expect(prog).toContain("'Enviando sua verificação de identidade',");
+    expect(prog).not.toMatch(/KYC programático|Submetendo KYC/);
   });
   it('sem funding agora, a linha não aparece', () => {
     montar({ kycStatus: 'approved', fundedNow: false });

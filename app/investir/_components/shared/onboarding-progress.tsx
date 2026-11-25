@@ -6,7 +6,7 @@ export function OnboardingProgress() {
   const phases = [
     'Criando wallet Stellar embedded',
     'Registrando customer na anchor',
-    'Submetendo KYC programático',
+    'Enviando sua verificação de identidade',
     'Confirmando aprovação',
   ];
   const [step, setStep] = useState(0);
