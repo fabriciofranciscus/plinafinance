@@ -1,5 +1,6 @@
 'use client';
 
+import { FUNDING_ROTULO, FUNDING_TEXTO, rotuloKyc } from '@/lib/format/status-humano';
 import { useAppPrivy as usePrivy } from '@/lib/hooks/privy';
 import type {
   EntityType,
@@ -168,7 +169,7 @@ export function IdentityScreen({
                       onboard.kycStatus === 'approved' ? 'text-primary-deep' : 'text-base/70'
                     }`}
                   >
-                    {onboard.kycStatus === 'approved' ? '● aprovado' : `○ ${onboard.kycStatus}`}
+                    {onboard.kycStatus === 'approved' ? `● ${rotuloKyc('approved')}` : `○ ${rotuloKyc(onboard.kycStatus)}`}
                   </span>
                 }
               />
@@ -190,10 +191,10 @@ export function IdentityScreen({
               )}
               {onboard.fundedNow && (
                 <DataRow
-                  k="Funding"
+                  k={FUNDING_ROTULO}
                   v={
-                    <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65">
-                      friendbot · agora
+                    <span className="font-text text-sm text-base/80">
+                      {FUNDING_TEXTO}
                     </span>
                   }
                 />
