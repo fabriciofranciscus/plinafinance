@@ -25,4 +25,4 @@ export function rotuloKyc(status: string | null | undefined): string {
 
 /** Linha de funding da conta de teste no /investir (antes: "Funding" / "friendbot · agora"). */
 export const FUNDING_ROTULO = 'Saldo inicial';
-export const FUNDING_TEXTO = 'XLM de teste recebido agora';
+export const FUNDING_TEXTO = 'XLM de teste recebido na criação da conta.';

@@ -76,6 +76,10 @@ describe('/investir: a linha de status da verificação e o funding', () => {
     expect(container.textContent).toContain(FUNDING_ROTULO);
     expect(container.textContent).toContain(FUNDING_TEXTO);
     expect(FUNDING_TEXTO).not.toMatch(/friendbot|funding/i);
+    // Norma (25/11): "agora" sugeriria que o saldo chega a cada uso; é só na criação da conta.
+    expect(FUNDING_ROTULO).toBe('Saldo inicial');
+    expect(FUNDING_TEXTO).toBe('XLM de teste recebido na criação da conta.');
+    expect(FUNDING_TEXTO).not.toMatch(/agora/);
   });
   it('sem funding agora, a linha não aparece', () => {
     montar({ kycStatus: 'approved', fundedNow: false });
