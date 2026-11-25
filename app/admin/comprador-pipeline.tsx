@@ -261,7 +261,7 @@ function ExecutarCaminhoAForm({
       { rotulo: 'Valor recebido', valor: <span className="font-mono">{BRL_CENTAVOS.format(Number(dados.get('valorRealizado')))}</span> },
     ],
     consequencia:
-      'A cota sai do pool como REALIZADA e o valor recebido entra no caixa do fundo, que passa a compor o NAV. Não há como desfazer pelo painel.',
+      'A cota sai do pool como realizada. O valor recebido entra no caixa do fundo e passa a compor o NAV. Não há como desfazer pelo painel.',
     atesto: 'Conferi o comprador, a cota e o valor efetivamente recebido.',
     confirmar: 'Executar Caminho A',
   }));

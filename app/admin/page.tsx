@@ -32,6 +32,7 @@ import { InvestidoresPainel } from './investidores-painel';
 import { PaineisAdmin } from './paineis';
 import { Concentracao } from './concentracao';
 import { ValidacaoForm } from './validacao-form';
+import { rotuloTipoBem } from '@/lib/admin/tipo-bem';
 import { VendedorPipeline } from './vendedor-pipeline';
 import { CompradorPipeline } from './comprador-pipeline';
 
@@ -365,7 +366,7 @@ export default async function AdminPage() {
                         <ValidacaoForm
                           cotaId={c.id}
                           hasValidacao={!!c.validacaoTxHash}
-                          descricaoCota={`${c.tipoBem} · ${c.administradora} · ${brl(Number(c.valorCarta))}`}
+                          descricaoCota={`${rotuloTipoBem(c.tipoBem)} · ${c.administradora} · ${brl(Number(c.valorCarta))}`}
                           redePublica={process.env.STELLAR_NETWORK === 'PUBLIC'}
                         />
                       )}

@@ -39,10 +39,9 @@ export function IncorporarCotaForm({ redePublica = false }: { redePublica?: bool
         { rotulo: 'Caminho previsto', valor: rotuloDe(caminhoOptions, d.get('caminhoPrevisto')) },
         { rotulo: 'Valor da carta', valor: <span className="font-mono">{BRL.format(valorCarta)}</span> },
         { rotulo: 'Deságio de aquisição', valor: <span className="font-mono">{(desagio * 100).toFixed(2).replace('.', ',')}%</span> },
-        { rotulo: 'Valor do aporte (NAV da cota)', valor: <span className="font-mono">{BRL.format(valorCarta * (1 - desagio))}</span> },
         { rotulo: 'Rede', valor: rede },
       ],
-      consequencia: `Cria a cota no pool e emite PLINA-RF na ${rede}, ao NAV do momento. Token emitido não volta sem uma queima registrada.`,
+      consequencia: `Cria a cota no pool e emite PLINA-RF na ${rede}, ao NAV do momento. Token emitido só sai de circulação com uma queima registrada na rede.`,
       atesto: `Conferi a cota, o valor da carta e o deságio, e entendo que a emissão fica registrada na ${rede}.`,
       confirmar: 'Incorporar e emitir',
     };

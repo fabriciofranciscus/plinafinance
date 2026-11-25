@@ -561,7 +561,7 @@ describe('ações irreversíveis abrem a Revisão antes de enviar', () => {
     fireEvent.click(agora().getByRole('button', { name: 'Pagar cedente (Pix simulado, rede de testes)' }));
     expect(fetchMock).not.toHaveBeenCalled();
     const r = within(screen.getByTestId('revisao-acao'));
-    expect(r.getByRole('heading', { name: 'Revisar antes de pagar' })).toBe(document.activeElement);
+    expect(r.getByRole('heading', { name: 'Revisar antes de pagar o cedente' })).toBe(document.activeElement);
     const texto = screen.getByTestId('revisao-acao').textContent!;
     expect(texto).toContain('A1B2C3');
     expect(texto).toContain('Cedente de teste · cedente@exemplo.test');
@@ -603,9 +603,10 @@ describe('ações irreversíveis abrem a Revisão antes de enviar', () => {
     abrir();
     fireEvent.click(agora().getByRole('button', { name: 'Pagar cedente (Pix)' }));
     expect(screen.getByTestId('revisao-consequencia').textContent).toBe(
-      'Envia o Pix do valor ao cedente para a chave do cadastro dele. Pix enviado não volta.',
+      'Envia o Pix do valor ao cedente. Pix enviado não volta.', // sem "a chave do cadastro dele": a Revisão não mostra o destino (Íris)
     );
     expect(screen.getByTestId('revisao-acao').textContent).toContain('Stellar (rede principal)');
+    expect(screen.getByTestId('revisao-acao').textContent).toContain('Conferi o cedente e o valor, e entendo que o Pix enviado não volta.');
   });
 
   it('reconsultar um Pix em andamento não paga de novo e não abre Revisão', async () => {
@@ -621,7 +622,7 @@ describe('ações irreversíveis abrem a Revisão antes de enviar', () => {
     abrir();
     fireEvent.click(agora().getByRole('button', { name: 'Incorporar cota ao pool · emitir PLINA-RF' }));
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByTestId('revisao-consequencia').textContent).toMatch(/emite PLINA-RF na Stellar \(rede de testes\).*não volta sem uma queima/);
+    expect(screen.getByTestId('revisao-consequencia').textContent).toMatch(/emite PLINA-RF na Stellar \(rede de testes\).*só sai de circulação com uma queima registrada na rede/);
   });
 
   it('laudo: a Revisão mostra a URL que vai ser registrada', () => {

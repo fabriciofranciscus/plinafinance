@@ -117,13 +117,14 @@ describe('incorporação avulsa', () => {
     fireEvent.change(screen.getByLabelText('Deságio aquisição (0–1)', { selector: 'input' }), { target: { value: '0.18' } });
   };
 
-  it('enviar abre a Revisão com o aporte calculado; a action só roda na confirmação', async () => {
+  it('enviar abre a Revisão com a carta e o deságio (sem repetir o aporte na tela); a action só roda na confirmação', async () => {
     render(<IncorporarCotaForm />);
     preencher();
     fireEvent.click(screen.getByRole('button', { name: 'Incorporar cota + emitir PLINA-RF' }));
     expect(incorporar).not.toHaveBeenCalled();
     const texto = screen.getByTestId('revisao-acao').textContent!;
-    expect(texto).toMatch(/Valor do aporte \(NAV da cota\)\s*R\$\s*205\.000,00/);
+    expect(texto).toMatch(/Valor da carta\s*R\$\s*250\.000,00/);
+    expect(texto).not.toMatch(/Valor do aporte/); // o servidor calcula o aporte; a tela não repete a conta
     expect(texto).toContain('Stellar (rede de testes)');
     confirmar();
     await waitFor(() => expect(incorporar).toHaveBeenCalledTimes(1));

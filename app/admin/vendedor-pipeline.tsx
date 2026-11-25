@@ -492,7 +492,7 @@ function linhasDoLead(lead: PipelineLead, redePublica: boolean): LinhaRevisao[] 
   ];
 }
 
-function revisaoDe(
+export function revisaoDe(
   acao: 'registrar-cessao' | 'registrar-laudo' | 'enviar-cessao' | 'registrar-anuencia' | 'pagar-cedente' | 'reabrir-pagamento-cedente' | 'incorporar-cota',
   lead: PipelineLead,
   redePublica: boolean,
@@ -505,7 +505,7 @@ function revisaoDe(
       return {
         titulo: 'Revisar antes de registrar a cessão',
         linhas,
-        consequencia: 'Registra a cessão desta proposta e envia o termo ao cedente para assinatura (DocuSign). O cedente recebe o e-mail na hora; não há como cancelar o envio por aqui.',
+        consequencia: 'Registra a cessão desta proposta e envia o termo ao cedente para assinatura (DocuSign). Não há como cancelar o envio por aqui.',
         atesto: 'Conferi o cedente, a cota e o valor, e entendo que o termo será enviado para assinatura.',
         confirmar: 'Registrar e enviar',
       };
@@ -513,7 +513,7 @@ function revisaoDe(
       return {
         titulo: 'Revisar antes de enviar para assinatura',
         linhas,
-        consequencia: 'Envia o termo de cessão ao cedente pelo DocuSign. O cedente recebe o e-mail na hora; não há como cancelar o envio por aqui.',
+        consequencia: 'Envia o termo de cessão ao cedente para assinatura (DocuSign). Não há como cancelar o envio por aqui.',
         atesto: 'Conferi o cedente, a cota e o valor, e entendo que o termo será enviado para assinatura.',
         confirmar: 'Enviar para assinatura',
       };
@@ -529,18 +529,20 @@ function revisaoDe(
       return {
         titulo: 'Revisar antes de registrar a anuência',
         linhas,
-        consequencia: 'Registra a anuência da administradora na auditoria desta cessão. Ela libera o pagamento ao cedente; um registro novo substitui este, mas os dois ficam no histórico.',
+        // Norma (25/11): "libera o pagamento" afirmaria uma aprovação real. Na rede de testes a anuência é simulada; na principal a frase fica
+        // neutra até o jurídico (⚖) fechar o texto.
+        consequencia: `Registra a anuência da administradora na auditoria desta cessão. ${redePublica ? '' : 'Na rede de testes, a anuência é simulada. Ela registra a etapa, mas não substitui a aprovação real da administradora. '}Um registro novo substitui este, mas os dois ficam no histórico.`,
         atesto: 'Conferi a cessão, o tipo de anuência e a referência.',
         confirmar: 'Registrar anuência',
       };
     case 'pagar-cedente':
       return {
-        titulo: 'Revisar antes de pagar',
+        titulo: 'Revisar antes de pagar o cedente',
         linhas,
         consequencia: redePublica
-          ? 'Envia o Pix do valor ao cedente para a chave do cadastro dele. Pix enviado não volta.'
+          ? 'Envia o Pix do valor ao cedente. Pix enviado não volta.'
           : 'Envia o Pix simulado do valor ao cedente, na rede de testes. Na rede principal, esta ação envia um Pix real.',
-        atesto: 'Conferi o cedente e o valor do pagamento.',
+        atesto: redePublica ? 'Conferi o cedente e o valor, e entendo que o Pix enviado não volta.' : 'Conferi o cedente e o valor do pagamento.',
         confirmar: redePublica ? 'Pagar cedente' : 'Pagar cedente (Pix simulado)',
       };
     case 'reabrir-pagamento-cedente':
@@ -555,7 +557,7 @@ function revisaoDe(
       return {
         titulo: 'Revisar antes de incorporar a cota',
         linhas,
-        consequencia: `Incorpora a cota ao pool e emite PLINA-RF na ${rede}, ao NAV do momento. Token emitido não volta sem uma queima registrada.`,
+        consequencia: `Incorpora a cota ao pool e emite PLINA-RF na ${rede}, ao NAV do momento. Token emitido só sai de circulação com uma queima registrada na rede.`,
         atesto: `Conferi a cota e o valor, e entendo que a emissão fica registrada na ${rede}.`,
         confirmar: 'Incorporar e emitir',
       };
