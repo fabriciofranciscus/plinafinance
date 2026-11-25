@@ -16,7 +16,7 @@ vi.mock('@/lib/db', () => {
     db: {
       tentativaEmissao: { findFirst: m.tentativaEmFlight }, // gate de emissão em voo (E1-4)
       cota: { findMany: m.cotas },
-      movimentoFundo: { aggregate: async () => ({ _sum: { deltaCaixa: null } }) },
+      movimentoFundo: { aggregate: async () => ({ _sum: { deltaCaixa: null, deltaTokens: '1000000000000000' } }) /* razão cobre o ledger do teste; o gate de lastro é testado em nav-supply.test.ts */ },
       quote: { updateMany: m.quoteUpdateMany, findFirst: async () => null }, // findFirst: nenhum swap em voo
       resgateCotacao: { findFirst: async () => null },
       $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),

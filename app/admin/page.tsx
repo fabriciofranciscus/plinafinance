@@ -27,6 +27,13 @@ import {
   tokensEmitidosVivos,
 } from '@/lib/services/pool';
 import { lerSupplyParaPainel } from '@/lib/services/painel-supply';
+import {
+  NAV_MOTIVO_OPERADOR,
+  NavIndisponivelError,
+  lerSupplyDoNav,
+  type NavIndisponivelMotivo,
+} from '@/lib/services/nav-supply';
+import { caixaParaNav } from '@/lib/services/razao-fundo';
 import { LoginForm } from './login-form';
 import { IncorporarCotaForm } from './incorporar-cota-form';
 import { InvestidoresPainel } from './investidores-painel';
@@ -48,6 +55,15 @@ function brl(value: number): string {
     style: 'currency',
     currency: 'BRL',
     maximumFractionDigits: 0,
+  }).format(value);
+}
+/** NAV por token fica perto de R$ 1: com zero casas, 0,1524 virava "R$ 0" (mesmo formato de /pool). */
+function brlPorToken(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4,
   }).format(value);
 }
 function tokenFmt(value: number | string | { toString(): string }): string {
@@ -138,17 +154,26 @@ export default async function AdminPage() {
     ).map((t) => [t.cessaoId, t.status as string]),
   );
 
-  const navTotal = navTotalDoPool(cotas, realizacoes);
+  // O NAV do operador é o MESMO da página pública: mesma leitura do ledger (`lerSupplyDoNav`: trava
+  // D3, gates de emissão/swap em voo e de supply sem lastro) e o caixa do razão do fundo. Quando o NAV
+  // fecha, o operador vê o motivo; o público vê só "—".
+  const caixaNav = await caixaParaNav();
+  const navTotal = navTotalDoPool(cotas, caixaNav);
   const tokensVivos = tokensEmitidosVivos(cotas);
-  const caixa = caixaRealizado(realizacoes);
-
-  // Denominador do ledger. O painel operacional é onde a divergência entre
-  // `tokensVivos` (lastro de cota viva) e o supply circulante tem de ficar
-  // visível: a diferença é o quanto do passivo já está coberto por caixa.
-  // M17: a leitura nunca derruba o painel, mas a falha deixa de ser silenciosa: vai ao log (sem mensagem) e a tela explica o "—".
+  const caixa = caixaRealizado(caixaNav);
+  // NAV/token: a mesma leitura com gates do /pool. Quando fecha, o operador vê o motivo no banner.
+  let supplyNav: Awaited<ReturnType<typeof lerSupplyDoNav>>['senior'] | null = null;
+  let navMotivo: NavIndisponivelMotivo | null = null;
+  try {
+    supplyNav = (await lerSupplyDoNav()).senior;
+  } catch (err) {
+    navMotivo = err instanceof NavIndisponivelError ? err.motivo : 'LEDGER_LEITURA_FALHOU';
+  }
+  const navUnit = supplyNav ? navPorToken(cotas, caixaNav, supplyNav) : null;
+  const navUnitLabel = navUnit === null ? 'Indisponível' : brlPorToken(navUnit);
+  // Supply circulante: leitura bruta do ledger, sem os gates do NAV, para o operador ver a divergência
+  // justamente quando o NAV fecha (ex.: SUPPLY_SEM_LASTRO). M17: a falha vai ao log e a tela explica o "—".
   const { supply, indisponivel: supplyIndisponivel } = await lerSupplyParaPainel();
-  const navUnit = supply ? navPorToken(cotas, realizacoes, supply) : null;
-  const navUnitLabel = navUnit === null ? '—' : brl(navUnit);
   const spreadAcumulado = spreadRealizadoAcumulado(realizacoes);
   const concentracao = concentracaoPorAdministradora(cotas);
 
@@ -448,6 +473,14 @@ export default async function AdminPage() {
               value={String(investidores.length)}
             />
           </section>
+          {navMotivo && (
+            <div role="status" className="mb-2 rounded-panel border border-light-hairline bg-sheet-white px-5 py-4">
+              <p className="font-details text-label-ui text-base/70">
+                NAV por token indisponível · {navMotivo}
+              </p>
+              <p className="font-text text-body-ui text-base/80 mt-1">{NAV_MOTIVO_OPERADOR[navMotivo]}</p>
+            </div>
+          )}
           <section className="mb-12 grid grid-cols-1 md:grid-cols-4 gap-px bg-base/15 border border-light-hairline rounded-panel overflow-hidden">
             <Metric label="NAV / token" value={navUnitLabel} nota={supplyIndisponivel ? NOTA_SUPPLY_INDISPONIVEL : undefined} />
             <Metric

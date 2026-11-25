@@ -174,7 +174,7 @@ vi.mock('@/lib/db', () => {
     },
   };
   const movimentoFundo = {
-    aggregate: async () => ({ _sum: { deltaCaixa: null } }),
+    aggregate: async () => ({ _sum: { deltaCaixa: null, deltaTokens: '1000000000000000' } }) /* razão cobre o ledger do teste; o gate de lastro é testado em nav-supply.test.ts */,
     createMany: async ({ data }: { data: Row[] }) => {
       st.calls.push('mov.create');
       let count = 0;

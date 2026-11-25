@@ -11,7 +11,11 @@
  *    PENDENTE ou CONFIRMADA sem `aplicadaEm` (tx possivelmente na chain, domínio ainda sem a cota), o
  *    supply do ledger já tem +q e o ativo no banco ainda não tem +V: o NAV cairia.
  *    Fail-closed: sem NAV até a incorporação terminar (ou a tentativa expirar/falhar).
- * 4. TTL curto + single-flight: a rota pública de summary não vira amplificador
+ * 4. Supply com lastro no razão: o PLINARF emitido no ledger não pode passar do
+ *    que o razão do fundo registra (Σ `MovimentoFundo.deltaTokens`). Token a
+ *    mais no ledger não tem ativo por trás e diluiria o NAV sem que nada
+ *    parecesse errado. Caso de origem: o seed rodado duas vezes em 16/11/2026.
+ * 5. TTL curto + single-flight: a rota pública de summary não vira amplificador
  *    de leitura ao Horizon (N requests = 1 leitura por janela).
  *
  * O asset code vem de `fetchSupplyDasClasses` (`assetCodeForClasse`): fonte
@@ -25,6 +29,7 @@ import {
 } from '../stellar/supply';
 import { extractSafeError } from '../stellar/log-error';
 import { db } from '../db';
+import { supplyEmitidoParaNavAsDecimal, supplySemLastro } from './pool';
 
 /** Janela em que o supply lido é reaproveitado. */
 export const NAV_SUPPLY_TTL_MS = 15_000;
@@ -38,7 +43,22 @@ export type NavIndisponivelMotivo =
   | 'SUBORDINADA_CIRCULANDO'
   | 'EMISSAO_PENDENTE'
   | 'NAV_NAO_POSITIVO'
-  | 'SWAP_EM_VOO';
+  | 'SWAP_EM_VOO'
+  | 'SUPPLY_SEM_LASTRO';
+
+/**
+ * Motivo em linguagem de operador, para o painel da operação. Nunca vai para a
+ * página pública nem para a API, que seguem com `NAV_INDISPONIVEL_MENSAGEM`.
+ */
+export const NAV_MOTIVO_OPERADOR: Record<NavIndisponivelMotivo, string> = {
+  LEDGER_LEITURA_FALHOU: 'O ledger ou o banco não respondeu. Recarregue em instantes.',
+  SUBORDINADA_CIRCULANDO: 'Há PLINARFB circulando (trava D3): o NAV só conhece a classe Sênior.',
+  EMISSAO_PENDENTE: 'Há uma incorporação com emissão em andamento. O NAV volta quando ela terminar.',
+  NAV_NAO_POSITIVO: 'O NAV calculado não é positivo.',
+  SWAP_EM_VOO: 'Há uma compra ou um resgate reservado e ainda não escriturado.',
+  SUPPLY_SEM_LASTRO:
+    'O ledger tem mais PLINARF emitido do que o razão do fundo registra. Reconciliar antes de publicar; as quantidades estão no log "[nav-supply] supply sem lastro".',
+};
 
 export class NavIndisponivelError extends Error {
   readonly code = 'LEDGER_UNAVAILABLE' as const;
@@ -142,15 +162,45 @@ async function exigirSemSwapEmVoo(): Promise<void> {
   if (emVooRow) throw new NavIndisponivelError('SWAP_EM_VOO');
 }
 
+/**
+ * Supply sem lastro: o ledger tem mais PLINARF emitido do que o razão do fundo registra. Roda DEPOIS dos
+ * gates de emissão e swap em voo (que cobrem a janela legítima em que o ledger já tem +q e o razão ainda
+ * não), e sobre o supply que vai ser devolvido, inclusive o do cache. O razão é lido a cada chamada.
+ * Falha de leitura fecha, como nos outros gates.
+ */
+async function exigirSupplyComLastro(supplies: SupplyDoNav): Promise<SupplyDoNav> {
+  let noRazao;
+  try {
+    const agg = await db.movimentoFundo.aggregate({ _sum: { deltaTokens: true } });
+    noRazao = agg._sum.deltaTokens ?? 0;
+  } catch (err) {
+    console.error('[nav-supply] leitura do razão do fundo falhou', extractSafeError(err));
+    throw new NavIndisponivelError('LEDGER_LEITURA_FALHOU', { cause: err });
+  }
+  const emitido = supplyEmitidoParaNavAsDecimal(supplies.senior);
+  const { excedente, semLastro } = supplySemLastro(emitido, noRazao);
+  if (semLastro) {
+    // Só quantidades (públicas no ledger): o operador precisa delas para reconciliar.
+    console.error('[nav-supply] supply sem lastro no razão do fundo', {
+      emitidoNoLedger: emitido.toString(),
+      noRazao: noRazao.toString(),
+      excedente: excedente.toString(),
+    });
+    throw new NavIndisponivelError('SUPPLY_SEM_LASTRO');
+  }
+  return supplies;
+}
+
 export async function lerSupplyDoNav(opts: { fresh?: boolean } = {}): Promise<SupplyDoNav> {
   // Dois gates fail-closed (cada um consulta o banco a cada chamada, fora do cache): emissão de cota em voo
   // (E1-4: TentativaEmissao PENDENTE/CONFIRMADA sem aplicadaEm) e swap de subscrição em voo (N1: Quote
-  // reservado e sem consumedAt). Qualquer um fecha o NAV.
+  // reservado e sem consumedAt). Qualquer um fecha o NAV. Depois da leitura, o supply ainda tem de ter
+  // lastro no razão (`exigirSupplyComLastro`).
   await exigirSemEmissaoEmVoo();
   await exigirSemSwapEmVoo();
   if (!opts.fresh) {
-    if (cache && Date.now() < cache.expiraEm) return aplicarTravaD3(cache.value);
-    if (emVoo) return aplicarTravaD3(await emVoo);
+    if (cache && Date.now() < cache.expiraEm) return exigirSupplyComLastro(aplicarTravaD3(cache.value));
+    if (emVoo) return exigirSupplyComLastro(aplicarTravaD3(await emVoo));
   }
 
   const leitura = lerDoLedger().then((value) => {
@@ -164,5 +214,5 @@ export async function lerSupplyDoNav(opts: { fresh?: boolean } = {}): Promise<Su
     };
     leitura.then(limpar, limpar);
   }
-  return aplicarTravaD3(await leitura);
+  return exigirSupplyComLastro(aplicarTravaD3(await leitura));
 }
