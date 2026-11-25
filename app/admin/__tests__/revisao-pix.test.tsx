@@ -74,3 +74,12 @@ describe('a frase do Pix em andamento não imprime o enum', () => {
     expect(src).not.toMatch(/Pix em andamento \(\{cessao\?\.pixStatus\}\)/);
   });
 });
+
+describe('o aviso de falha confirmada não diz "Pix" nem "PSP"', () => {
+  const src = readFileSync('app/admin/vendedor-pipeline.tsx', 'utf8');
+  it('usa o texto aprovado pela Norma', () => {
+    expect(src).toContain('O pagamento não foi concluído e foi confirmado pelo parceiro de pagamento. Reabrir pagamento é uma ação auditada.');
+    expect(src).not.toContain('O Pix falhou');
+    expect(src).not.toMatch(/confirmado pelo PSP/);
+  });
+});

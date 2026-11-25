@@ -783,7 +783,7 @@ function ControlesDaEtapa({
       if (analise.pagamento === 'reabrir') {
         return (
           <div className="mt-2">
-            <p className="font-text text-xs text-base/70 mb-2">O Pix falhou e foi confirmado pelo PSP. Reabrir pagamento é uma ação auditada.</p>
+            <p className="font-text text-xs text-base/70 mb-2">O pagamento não foi concluído e foi confirmado pelo parceiro de pagamento. Reabrir pagamento é uma ação auditada.</p>
             <AcaoComRevisao
               className={BTN}
               desabilitado={ocupado}
