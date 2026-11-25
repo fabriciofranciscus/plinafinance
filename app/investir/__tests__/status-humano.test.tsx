@@ -120,6 +120,15 @@ describe('/investir: a linha de status da verificação e o funding', () => {
     expect(container.textContent).toContain('02 // Verificação de identidade');
     expect(container.textContent).not.toContain('Identidade · KYC');
   });
+  it('título, introdução e consentimento falam em "verificação de identidade": nenhum "KYC" e nenhuma "anchor regulada" (Norma, Consuelo)', () => {
+    const src = readFileSync('app/investir/_components/screens/identity.tsx', 'utf8');
+    const texto = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1').replace(/\s+/g, ' ');
+    expect(texto).not.toMatch(/KYC programático|KYC auto-aprovado|Identidade · KYC/);
+    expect(texto).not.toMatch(/anchor regulada/i); // "regulada" é afirmação não verificada (⚖)
+    expect(texto).toContain('Wallet Stellar e verificação de identidade.');
+    expect(texto).toContain('registra o investidor na Etherfuse. Verificação de identidade de teste no sandbox.');
+    expect(texto).toContain('submissão da verificação de identidade no ambiente de sandbox.');
+  });
   it('sem funding agora, a linha não aparece', () => {
     montar({ kycStatus: 'approved', fundedNow: false });
     expect(screen.queryByText(FUNDING_TEXTO)).toBeNull();

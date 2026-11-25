@@ -59,11 +59,11 @@ export function IdentityScreen({
         02 // Verificação de identidade
       </p>
       <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">
-        Wallet Stellar e KYC programático.
+        Wallet Stellar e verificação de identidade.
       </h1>
       <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
         A Plina cria sua wallet Stellar embedded e registra o investidor na
-        anchor regulada Etherfuse. KYC auto-aprovado no sandbox.
+        Etherfuse. Verificação de identidade de teste no sandbox.
       </p>
 
       {/* Trilha: Institucional BR (funcional) / Internacional (M4, gated). */}
@@ -113,8 +113,8 @@ export function IdentityScreen({
               </p>
               <p className="font-text text-sm text-base/80 leading-relaxed">
                 Ao continuar, você consente com a criação da wallet Stellar
-                embedded, registro do customer na Etherfuse e submissão de
-                KYC programático no ambiente de sandbox. Nenhum dado real
+                embedded, registro do customer na Etherfuse e submissão da
+                verificação de identidade no ambiente de sandbox. Nenhum dado real
                 é coletado nesta etapa.
               </p>
             </div>
