@@ -109,7 +109,7 @@ export default function AcompanharPrivado({ leadId }: { leadId: string }) {
         <p className="font-text text-base/80 leading-relaxed">Entre para ver os detalhes desta solicitação.</p>
         <Link
           href={`/entrar?next=${encodeURIComponent(`/vender/acompanhar/${leadId}`)}`}
-          className="mt-4 inline-flex min-h-[44px] items-center bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-primary-deep transition-colors"
+          className="mt-4 inline-flex min-h-[44px] items-center bg-base text-lightBg font-details text-[11px] tracking-[0.2em] uppercase px-6 py-3 hover:bg-signal-700 transition-colors"
         >
           Entrar para ver os detalhes
         </Link>
@@ -136,7 +136,7 @@ export default function AcompanharPrivado({ leadId }: { leadId: string }) {
         <button
           type="button"
           onClick={() => void carregar()}
-          className="mt-3 min-h-[44px] bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-primary-deep transition-colors"
+          className="mt-3 min-h-[44px] bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:bg-signal-700 transition-colors"
         >
           Tentar de novo
         </button>

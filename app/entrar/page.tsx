@@ -66,7 +66,7 @@ function EntrarInner() {
 
         <div className="mt-12">
           {verifying ? (
-            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/55 animate-pulse">
+            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 animate-pulse">
               Verificando acesso…
             </p>
           ) : (
@@ -81,7 +81,7 @@ function EntrarInner() {
             { k: 'Rede', v: 'Stellar testnet' },
           ].map((it) => (
             <div key={it.k} className="bg-white px-5 py-5">
-              <dt className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65">
+              <dt className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
                 {it.k}
               </dt>
               <dd className="font-mono text-sm mt-2 text-base">{it.v}</dd>
@@ -98,7 +98,7 @@ export default function EntrarPage() {
     <Suspense
       fallback={
         <div className="min-h-[60vh] flex items-center justify-center">
-          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/55 animate-pulse">
+          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 animate-pulse">
             Carregando…
           </p>
         </div>

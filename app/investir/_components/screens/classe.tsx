@@ -79,7 +79,7 @@ export function ClasseScreen({ initial = 'SENIOR', onContinue }: ClasseScreenPro
               }`}
               aria-pressed={active}
             >
-              <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/55">
+              <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
                 {active ? '● selecionado' : 'selecionar'}
               </p>
               <h2 className="font-title text-xl font-semibold mt-2 text-base">
@@ -88,11 +88,11 @@ export function ClasseScreen({ initial = 'SENIOR', onContinue }: ClasseScreenPro
 
               <dl className="mt-5 space-y-2 font-text text-sm">
                 <div className="flex justify-between gap-3">
-                  <dt className="text-base/55">Waterfall</dt>
+                  <dt className="text-base/70">Waterfall</dt>
                   <dd className="text-base text-right">{opt.posicaoWaterfall}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-base/55">Risco relativo</dt>
+                  <dt className="text-base/70">Risco relativo</dt>
                   <dd className="text-base text-right">{opt.risco}</dd>
                 </div>
               </dl>
@@ -105,7 +105,7 @@ export function ClasseScreen({ initial = 'SENIOR', onContinue }: ClasseScreenPro
         })}
       </div>
 
-      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/55 mt-10 max-w-prose leading-relaxed">
+      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 mt-10 max-w-prose leading-relaxed">
         Simulação em rede de testes, sem valor financeiro real. Esta tela não é
         oferta nem promessa de retorno ou de rentabilidade; uma estrutura
         institucional é fase futura, sujeita a aprovação regulatória.

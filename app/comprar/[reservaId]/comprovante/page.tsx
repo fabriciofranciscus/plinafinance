@@ -65,7 +65,7 @@ export default async function ComprovanteCompradorPage({ params }: PageProps) {
         <h1 className="font-title text-3xl md:text-4xl font-semibold tracking-tight mt-3">
           {realizacao ? 'Aquisição concluída' : 'Reserva registrada'}
         </h1>
-        <p className="font-mono text-xs text-base/60 mt-3">reserva: {reserva.id}</p>
+        <p className="font-mono text-xs text-base/70 mt-3">reserva: {reserva.id}</p>
       </header>
 
       <section className="mb-12 border border-light-hairline">
@@ -140,7 +140,7 @@ export default async function ComprovanteCompradorPage({ params }: PageProps) {
               key={e.id}
               className="border-b border-light-hairline last:border-b-0 py-4 grid grid-cols-1 md:grid-cols-[160px_1fr_auto] gap-2 md:gap-4 px-4"
             >
-              <span className="font-mono text-[11px] text-base/60">
+              <span className="font-mono text-[11px] text-base/70">
                 {new Date(e.criadoEm).toLocaleString('pt-BR', { hour12: false })}
               </span>
               <span className="font-details text-[10px] tracking-[0.2em] uppercase">
@@ -156,7 +156,7 @@ export default async function ComprovanteCompradorPage({ params }: PageProps) {
                   {e.stellarTxHash.slice(0, 10)}…
                 </a>
               ) : (
-                <span className="text-base/40">—</span>
+                <span className="text-base/70">—</span>
               )}
             </li>
           ))}
@@ -215,10 +215,10 @@ function HashRow({
           <p className="font-mono text-xs mt-2 break-all">{value}</p>
         )
       ) : (
-        <p className="font-text text-sm text-base/40 mt-2">—</p>
+        <p className="font-text text-sm text-base/70 mt-2">—</p>
       )}
       {hint && (
-        <p className="font-text text-xs text-base/60 mt-2 max-w-prose leading-relaxed">
+        <p className="font-text text-xs text-base/70 mt-2 max-w-prose leading-relaxed">
           {hint}
         </p>
       )}
