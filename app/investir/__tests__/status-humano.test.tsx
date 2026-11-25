@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FUNDING_ROTULO, FUNDING_TEXTO, ROTULO_VERIFICACAO, rotuloKyc, seloVerificacao } from '@/lib/format/status-humano';
 import { IdentityScreen } from '../_components/screens/identity';
@@ -84,6 +84,41 @@ describe('/investir: a linha de status da verificação e o funding', () => {
     // Norma: "na criação da conta" (não "agora"). Consuelo: sempre dizer que é da rede de testes e sem valor real.
     expect(FUNDING_TEXTO).toBe('XLM de teste da rede de testes, sem valor real, recebido na criação da conta.');
     expect(FUNDING_TEXTO).not.toMatch(/agora/);
+  });
+  it('a espera da verificação fala em "parceiro de pagamento", sem "anchor" nem "webhook" (Norma)', () => {
+    const { container } = montar({ kycStatus: 'pending' });
+    const t = screen.getByTestId('kyc-pending').textContent;
+    expect(t).toBe('Aguardando a confirmação do parceiro de pagamento. Esta tela atualiza sozinha.');
+    expect(t).not.toMatch(/anchor|webhook/i);
+    cleanup();
+    const atraso = render(
+      <IdentityScreen
+        onboard={{ ...base, kycStatus: 'pending' } as never}
+        onboarding={false}
+        consented
+        onConsent={() => {}}
+        user={{ id: 'did:privy:fict' } as never}
+        trustlinesReady={false}
+        trustlineLoading={false}
+        onSetupTrustlines={() => {}}
+        onContinue={() => {}}
+        onRetry={() => {}}
+        track="BR"
+        onTrackChange={() => {}}
+        institutionalProfile={null}
+        onInstitutionalChange={() => {}}
+        kycTimedOut
+      />,
+    );
+    const a = within(atraso.container).getByTestId('kyc-pending').textContent;
+    expect(a).toBe('A verificação ainda não foi confirmada pelo parceiro de pagamento. Recarregue a página mais tarde.');
+    expect(a).not.toMatch(/anchor|webhook/i);
+    expect(container).toBeTruthy();
+  });
+  it('o sobretítulo da tela se chama "Verificação de identidade", não "Identidade · KYC"', () => {
+    const { container } = montar({ kycStatus: 'approved' });
+    expect(container.textContent).toContain('02 // Verificação de identidade');
+    expect(container.textContent).not.toContain('Identidade · KYC');
   });
   it('sem funding agora, a linha não aparece', () => {
     montar({ kycStatus: 'approved', fundedNow: false });

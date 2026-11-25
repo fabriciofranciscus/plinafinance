@@ -56,7 +56,7 @@ export function IdentityScreen({
       <TestnetBanner />
 
       <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
-        02 // Identidade · KYC
+        02 // Verificação de identidade
       </p>
       <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">
         Wallet Stellar e KYC programático.
@@ -183,8 +183,8 @@ export function IdentityScreen({
                       className="font-text text-xs text-base/75"
                     >
                       {kycTimedOut
-                        ? 'A verificação ainda não foi confirmada pela anchor. Recarregue a página mais tarde.'
-                        : 'Aguardando a confirmação da anchor (webhook assinado). Esta tela atualiza sozinha.'}
+                        ? 'A verificação ainda não foi confirmada pelo parceiro de pagamento. Recarregue a página mais tarde.'
+                        : 'Aguardando a confirmação do parceiro de pagamento. Esta tela atualiza sozinha.'}
                     </span>
                   }
                 />
