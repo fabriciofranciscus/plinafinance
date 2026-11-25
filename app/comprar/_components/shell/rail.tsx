@@ -14,7 +14,7 @@ export function Rail({ current }: { current: Screen }) {
   return (
     <div className="px-8 py-12 h-full flex flex-col">
       <div className="mb-12">
-        <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
+        <p className="font-details text-[10px] tracking-[0.3em] uppercase text-base">
           Comprar · cota contemplada
         </p>
         <p className="font-title text-lg font-semibold mt-3 tracking-tight leading-tight text-base">
@@ -29,6 +29,7 @@ export function Rail({ current }: { current: Screen }) {
           return (
             <li
               key={phase.id}
+              aria-current={isCurrent ? 'step' : undefined}
               className={`relative bg-lightBg px-8 py-5 transition-colors duration-300 ${
                 isCurrent ? 'bg-white' : ''
               }`}
@@ -46,14 +47,14 @@ export function Rail({ current }: { current: Screen }) {
               <div className="flex items-baseline gap-4">
                 <span
                   className={`font-mono text-xs transition-colors ${
-                    phaseDone ? 'text-primary-deep' : isCurrent ? 'text-base' : 'text-base/35'
+                    phaseDone || isCurrent ? 'text-base' : 'text-base/70'
                   }`}
                 >
                   {String(idx + 1).padStart(2, '0')}
                 </span>
                 <span
                   className={`font-details text-[11px] tracking-[0.2em] uppercase transition-colors ${
-                    isCurrent ? 'text-base' : phaseDone ? 'text-base/70' : 'text-base/40'
+                    isCurrent ? 'text-base' : phaseDone ? 'text-base/70' : 'text-base/70'
                   }`}
                 >
                   {phase.label}
@@ -66,7 +67,7 @@ export function Rail({ current }: { current: Screen }) {
                     const subCurrent = sid === current;
                     const subDone = isDone(sid);
                     return (
-                      <li key={sid} className="flex items-center gap-2">
+                      <li key={sid} aria-current={subCurrent ? 'step' : undefined} className="flex items-center gap-2">
                         <span
                           aria-hidden
                           className={`h-1 w-1 rounded-full ${
@@ -78,8 +79,8 @@ export function Rail({ current }: { current: Screen }) {
                             subCurrent
                               ? 'text-base font-bold'
                               : subDone
-                                ? 'text-base/60'
-                                : 'text-base/35'
+                                ? 'text-base/70'
+                                : 'text-base/70'
                           }`}
                         >
                           {SCREEN_LABEL[sid]}
@@ -95,7 +96,7 @@ export function Rail({ current }: { current: Screen }) {
       </ol>
 
       <div className="mt-auto pt-12">
-        <p className="font-mono text-[10px] text-base/55 leading-relaxed">
+        <p className="font-mono text-[10px] text-base/70 leading-relaxed">
           Rede de testes · sem oferta<br />
           Cessão registrada on-chain · Stellar testnet
         </p>
