@@ -32,6 +32,7 @@
   --plina-ink-on-light-faint: rgba(19, 39, 40, 0.2);
   --plina-ink-on-dark: var(--plina-document-grey);
   --plina-ink-on-dark-muted: var(--plina-glacier-tint);
+  --plina-ink-on-dark-subtle: rgba(228, 228, 228, 0.6); /* floor on dark; 50% fails AA */
   --plina-ink-on-signal: var(--plina-deep-petrol); /* never white on cyan */
 
   /* ---- Hairlines: the only structural separator. ------------------------ */
@@ -234,7 +235,8 @@
   background-color: rgba(228, 228, 228, 0.2); color: var(--plina-deep-petrol);
   transition: border-color var(--plina-duration-fast) var(--plina-ease);
 }
-.plina-input:focus { outline: none; border-color: var(--plina-signal-500); }
+/* Light field: the indicator is signal-700. signal-500 is 2.85:1 on white and fails the 3:1 non-text minimum. */
+.plina-input:focus-visible { outline: 2px solid var(--plina-focus-ring); outline-offset: 2px; border-color: var(--plina-signal-700); }
 .plina-input[aria-invalid='true'] { border-color: var(--plina-danger); }
 
 .plina-chip {
