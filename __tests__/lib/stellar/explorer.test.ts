@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { accountExplorerUrl, assetExplorerUrl, txExplorerUrl } from '../explorer';
+import { accountExplorerUrl, assetExplorerUrl, txExplorerUrl } from '@/lib/stellar/explorer';
 
 afterEach(() => vi.unstubAllEnvs());
 

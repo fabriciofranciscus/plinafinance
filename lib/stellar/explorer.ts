@@ -14,7 +14,7 @@ const BASE_PUBLIC = 'https://stellar.expert/explorer/public';
 const BASE_TESTNET = 'https://stellar.expert/explorer/testnet';
 
 function explorerBase(): string {
-  const rede = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? process.env.STELLAR_NETWORK;
+  const rede = process.env.NEXT_PUBLIC_STELLAR_NETWORK || process.env.STELLAR_NETWORK;
   return rede === 'PUBLIC' ? BASE_PUBLIC : BASE_TESTNET;
 }
 
