@@ -38,7 +38,7 @@ export function ErrorBlock({
         </button>
         <button
           onClick={() => setReportOpen(true)}
-          className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep hover:text-base"
+          className="font-details text-[10px] tracking-[0.2em] uppercase text-signal-700 hover:text-base"
         >
           Reportar incidente →
         </button>

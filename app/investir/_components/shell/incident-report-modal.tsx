@@ -84,7 +84,7 @@ export function IncidentReportModal({
         {state.status === 'success' ? (
           <div role="status" aria-live="polite" className="px-5 py-8 text-center">
             <span className="w-12 h-12 rounded-full bg-primary-deep/10 flex items-center justify-center mx-auto mb-4">
-              <Check className="w-6 h-6 text-primary-deep" aria-hidden />
+              <Check className="w-6 h-6 text-signal-700" aria-hidden />
             </span>
             <p className="font-text text-sm text-base/85 leading-relaxed">
               Incidente enviado. Nossa equipe vai analisar e responder no e-mail
@@ -95,7 +95,7 @@ export function IncidentReportModal({
             </p>
             <button
               onClick={onClose}
-              className="mt-6 font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep hover:text-base"
+              className="mt-6 font-details text-[10px] tracking-[0.2em] uppercase text-signal-700 hover:text-base"
             >
               Fechar
             </button>

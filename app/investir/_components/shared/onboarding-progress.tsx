@@ -35,7 +35,7 @@ export function OnboardingProgress() {
               />
               <span
                 className={`font-mono text-xs transition-colors ${
-                  isDone ? 'text-primary-deep' : isCurrent ? 'text-base' : 'text-base/70'
+                  isDone ? 'text-signal-700' : isCurrent ? 'text-base' : 'text-base/70'
                 }`}
               >
                 {String(idx + 1).padStart(2, '0')}
@@ -50,7 +50,7 @@ export function OnboardingProgress() {
               </span>
               {isDone && (
                 <span
-                  className="font-mono text-[10px] text-primary-deep"
+                  className="font-mono text-[10px] text-signal-700"
                   aria-label="concluído"
                 >
                   ✓

@@ -65,7 +65,7 @@ export function ConfirmScreen({
     <div>
       <TestnetBanner />
 
-      <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
+      <p className="font-details text-[10px] tracking-[0.3em] uppercase text-signal-700">
         06 // Revisão · swap atômico
       </p>
       <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">
@@ -267,7 +267,7 @@ export function ConfirmScreen({
               type="button"
               onClick={onRequote}
               disabled={requoting}
-              className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep hover:text-base disabled:opacity-40"
+              className="font-details text-[10px] tracking-[0.2em] uppercase text-signal-700 hover:text-base disabled:opacity-40"
             >
               {requoting ? 'Gerando cotação…' : 'Gerar nova cotação →'}
             </button>

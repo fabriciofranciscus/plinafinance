@@ -46,6 +46,10 @@ describe('piso de contraste nos arquivos migrados', () => {
         const ruins = L.filter(({ t }) => /focus:ring-primary(?![-\w])|focus-visible:outline-primary(?![-\w])/.test(t)).map(({ n }) => n);
         expect(ruins).toEqual([]);
       });
+      it('texto em tinta primary-deep (signal-600) vira signal-700: signal-600 só passa sobre branco e dá 3,89:1 sobre o cinza (Íris, 8d2f854)', () => {
+        const ruins = L.filter(({ t }) => /text-primary-deep(?![-\w])/.test(t)).map(({ n }) => n);
+        expect(ruins).toEqual([]);
+      });
       it('botão com rótulo off-white usa hover signal-700 (off-white sobre signal-600 dá 3,89:1)', () => {
         const ruins = L.filter(({ t }) => /text-lightBg(?![/\w-])/.test(t) && /hover:bg-primary-deep(?![/\w-])/.test(t)).map(({ n }) => n);
         expect(ruins).toEqual([]);

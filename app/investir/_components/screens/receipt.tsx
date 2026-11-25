@@ -18,7 +18,7 @@ export function ReceiptScreen({
 }) {
   return (
     <div>
-      <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
+      <p className="font-details text-[10px] tracking-[0.3em] uppercase text-signal-700">
         <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary-deep mr-2 align-middle" aria-hidden />
         07 // {buyResult.mock ? 'Distribuição (mock sandbox) concluída' : 'Swap atômico concluído'}
       </p>

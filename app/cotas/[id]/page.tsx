@@ -85,7 +85,7 @@ export default async function CotaDetailPage({ params }: PageProps) {
         >
           ← Cotas disponíveis
         </Link>
-        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep mt-6">
+        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-signal-700 mt-6">
           {TIPO_LABEL[cota.tipoBem] ?? cota.tipoBem}
         </p>
         <h1 className="font-title text-4xl md:text-5xl font-semibold tracking-tight mt-3">

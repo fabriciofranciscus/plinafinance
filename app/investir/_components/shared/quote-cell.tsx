@@ -13,7 +13,7 @@ export function QuoteCell({
         {label}
       </p>
       <p
-        className={`font-mono text-xl mt-3 ${accent ? 'text-primary-deep font-medium' : 'text-base'}`}
+        className={`font-mono text-xl mt-3 ${accent ? 'text-signal-700 font-medium' : 'text-base'}`}
       >
         {value}
       </p>

@@ -52,7 +52,7 @@ function EntrarInner() {
   return (
     <div className="bg-white min-h-screen">
       <div className="mx-auto max-w-2xl px-6 py-16 md:py-24">
-        <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
+        <p className="font-details text-[10px] tracking-[0.3em] uppercase text-signal-700">
           01 // Acesso · Rede de testes
         </p>
         <h1 className="font-title text-4xl md:text-5xl font-semibold mt-4 tracking-tight leading-[1.05] text-base">

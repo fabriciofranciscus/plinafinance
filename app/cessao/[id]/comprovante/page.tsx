@@ -72,7 +72,7 @@ export default async function ComprovantePage({ params }: PageProps) {
   return (
     <div className="mx-auto max-w-3xl px-6 py-12 md:py-16">
       <header className="border-b border-light-hairline pb-8 mb-10">
-        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep">
+        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-signal-700">
           Comprovante público · prova on-chain
         </p>
         <h1 className="font-title text-3xl md:text-4xl font-semibold tracking-tight mt-3">
@@ -165,7 +165,7 @@ export default async function ComprovantePage({ params }: PageProps) {
                     href={txExplorerUrl(cessao.pagamento.onChainTxHash)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-mono text-[11px] underline text-primary-deep hover:text-primary break-all"
+                    className="font-mono text-[11px] underline text-signal-700 hover:text-primary break-all"
                   >
                     {cessao.pagamento.onChainTxHash.slice(0, 12)}…
                   </a>
@@ -180,7 +180,7 @@ export default async function ComprovantePage({ params }: PageProps) {
                     href={`/api/comprovante/${cessao.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-details text-[10px] tracking-[0.2em] uppercase underline text-primary-deep hover:text-primary"
+                    className="font-details text-[10px] tracking-[0.2em] uppercase underline text-signal-700 hover:text-primary"
                   >
                     Baixar comprovante →
                   </a>
@@ -241,7 +241,7 @@ export default async function ComprovantePage({ params }: PageProps) {
                   href={txExplorerUrl(e.stellarTxHash)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-mono text-[10px] underline text-primary-deep break-all md:text-right"
+                  className="font-mono text-[10px] underline text-signal-700 break-all md:text-right"
                 >
                   {e.stellarTxHash.slice(0, 10)}…
                 </a>
@@ -299,7 +299,7 @@ function HashRow({
             href={link}
             target="_blank"
             rel="noopener noreferrer"
-            className="block font-mono text-xs mt-2 break-all underline text-primary-deep hover:text-primary"
+            className="block font-mono text-xs mt-2 break-all underline text-signal-700 hover:text-primary"
           >
             {value}
           </a>

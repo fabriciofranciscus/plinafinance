@@ -52,7 +52,7 @@ export function ClasseScreen({ initial = 'SENIOR', onContinue }: ClasseScreenPro
     <div>
       <TestnetBanner />
 
-      <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
+      <p className="font-details text-[10px] tracking-[0.3em] uppercase text-signal-700">
         03 // Subclasse · PLINA-RF
       </p>
       <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">

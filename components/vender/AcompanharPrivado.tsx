@@ -122,7 +122,7 @@ export default function AcompanharPrivado({ leadId }: { leadId: string }) {
       <div data-testid="acompanhar-nao-encontrada" role="alert">
         <p className="font-text text-base/80 leading-relaxed">Solicitação não encontrada neste login.</p>
         <p className="font-text text-sm text-base/70 mt-2">Confira se entrou com a conta que enviou a cota.</p>
-        <Link href="/vender/minhas" className="mt-4 inline-flex min-h-[44px] items-center font-details text-[10px] tracking-[0.2em] uppercase underline underline-offset-4 text-primary-deep">
+        <Link href="/vender/minhas" className="mt-4 inline-flex min-h-[44px] items-center font-details text-[10px] tracking-[0.2em] uppercase underline underline-offset-4 text-signal-700">
           Ver minhas solicitações →
         </Link>
       </div>

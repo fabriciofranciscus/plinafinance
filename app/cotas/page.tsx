@@ -45,14 +45,14 @@ export default async function CotasPage() {
         <div className="mt-6 flex gap-3 text-xs">
           <Link
             href="/comprar"
-            className="font-details tracking-[0.2em] uppercase underline text-base/70 hover:text-primary-deep"
+            className="font-details tracking-[0.2em] uppercase underline text-base/70 hover:text-signal-700"
           >
             Comprar cota →
           </Link>
           <span className="text-base/70">·</span>
           <Link
             href="/comprar/lead"
-            className="font-details tracking-[0.2em] uppercase underline text-base/70 hover:text-primary-deep"
+            className="font-details tracking-[0.2em] uppercase underline text-base/70 hover:text-signal-700"
           >
             Qualificar-me
           </Link>
@@ -121,7 +121,7 @@ function CotaCard({
       </p>
       <p className="font-mono text-xs text-base/70 group-hover:text-lightBg/60 mt-1">
         Você paga {BRL.format(valorRevenda)} · poupa{' '}
-        <span className="text-primary-deep group-hover:text-primary">
+        <span className="text-signal-700 group-hover:text-primary">
           {BRL.format(economia)}
         </span>
       </p>
