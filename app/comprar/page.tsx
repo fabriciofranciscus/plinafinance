@@ -40,6 +40,8 @@ export default function ComprarPage() {
 
   const { screen } = flow;
   const { phase, index: phaseIdx } = phaseForScreen(screen);
+  // O erro fica junto da ação que o gerou (AP-5 C4): a tela ativa recebe o bloco e o renderiza logo abaixo do botão.
+  const erro = flow.error ? <ErrorBlock error={flow.error} onDismiss={flow.dismissError} /> : null;
 
   return (
     <div className="bg-lightBg min-h-screen">
@@ -83,6 +85,8 @@ export default function ComprarPage() {
                 <BuscarScreen
                   cotas={flow.cotas.cotas}
                   loading={flow.cotas.loading}
+                  falhou={flow.cotas.falhou}
+                  erro={erro}
                   onSelect={flow.onSelectCota}
                 />
               )}
@@ -92,6 +96,7 @@ export default function ComprarPage() {
                   data={flow.diligencia.diligencia}
                   loading={flow.diligencia.loading}
                   onContinue={flow.onDiligenciaContinue}
+                  erro={erro}
                 />
               )}
               {screen === 'proposta' && (
@@ -99,6 +104,7 @@ export default function ComprarPage() {
                   cota={flow.selectedCota}
                   loading={flow.reserva.loading}
                   onAceitar={flow.onAceitarProposta}
+                  erro={erro}
                 />
               )}
               {screen === 'kyc' && (
@@ -108,6 +114,7 @@ export default function ComprarPage() {
                   reserva={flow.reserva.reserva}
                   loading={flow.kyc.loading}
                   onSubmit={flow.onKycSubmit}
+                  erro={erro}
                 />
               )}
               {screen === 'cessao' && (
@@ -118,6 +125,7 @@ export default function ComprarPage() {
                   cessao={flow.cessao.cessao}
                   signing={flow.cessao.signing}
                   onAssinar={flow.onAssinarCessao}
+                  erro={erro}
                 />
               )}
               {screen === 'confirmacao' && (
@@ -128,13 +136,10 @@ export default function ComprarPage() {
                   confirmacao={flow.cessao.confirmacao}
                   confirming={flow.cessao.confirming}
                   onConfirmar={flow.onConfirmar}
+                  erro={erro}
                 />
               )}
             </ScreenFader>
-
-            {flow.error && (
-              <ErrorBlock error={flow.error} onDismiss={flow.dismissError} />
-            )}
 
             {screen !== 'confirmacao' && (
               <div className="hidden md:block mt-20 pt-8 border-t border-light-hairline">

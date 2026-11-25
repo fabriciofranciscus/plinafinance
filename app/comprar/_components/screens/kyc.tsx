@@ -16,12 +16,14 @@ export function KycScreen({
   reserva,
   loading,
   onSubmit,
+  erro,
 }: {
   pessoa: PessoaState;
   cota: CotaResumo | null;
   reserva: ReservaData | null;
   loading: boolean;
   onSubmit: (input: { nome?: string; cpf?: string }) => void;
+  erro?: React.ReactNode;
 }) {
   const [nome, setNome] = useState('');
   const [cpf, setCpf] = useState('');
@@ -105,6 +107,7 @@ export function KycScreen({
       >
         {loading ? 'Verificando…' : 'Verificar identidade →'}
       </button>
+      {erro}
     </div>
   );
 }

@@ -14,10 +14,13 @@ export interface UseCotasArgs {
 export function useCotas({ getAccessToken, onError, clearError }: UseCotasArgs) {
   const [cotas, setCotas] = useState<CotaResumo[] | null>(null);
   const [loading, setLoading] = useState(false);
+  /** Última leitura falhou: a tela não pode tratar isso como "filtro sem resultado". */
+  const [falhou, setFalhou] = useState(false);
 
   const load = useCallback(async () => {
     clearError();
     setLoading(true);
+    setFalhou(false);
     try {
       const data = await getJson<{ cotas: CotaResumo[] }>(
         '/api/comprar/cotas',
@@ -25,11 +28,12 @@ export function useCotas({ getAccessToken, onError, clearError }: UseCotasArgs) 
       );
       setCotas(data.cotas);
     } catch (err) {
+      setFalhou(true);
       onError(asFlowError(err));
     } finally {
       setLoading(false);
     }
   }, [getAccessToken, onError, clearError]);
 
-  return { cotas, loading, load };
+  return { cotas, loading, falhou, load };
 }
