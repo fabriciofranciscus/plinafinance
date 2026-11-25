@@ -1,3 +1,4 @@
+import { accountExplorerUrl, txExplorerUrl } from '@/lib/stellar/explorer';
 export const NUMBER_BR = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 });
 export const BRL = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -6,10 +7,10 @@ export const BRL = new Intl.NumberFormat('pt-BR', {
 });
 
 export function explorerTx(hash: string) {
-  return `https://stellar.expert/explorer/testnet/tx/${hash}`;
+  return txExplorerUrl(hash);
 }
 export function explorerAccount(pubkey: string) {
-  return `https://stellar.expert/explorer/testnet/account/${pubkey}`;
+  return accountExplorerUrl(pubkey);
 }
 export function maskId(id: string | null | undefined): string {
   if (!id) return '—';

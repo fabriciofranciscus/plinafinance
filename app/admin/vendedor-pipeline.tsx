@@ -17,6 +17,7 @@ import { NOME_EM_ANDAMENTO, etapasDoLead, ordenarSolicitacoes, type AnaliseSolic
 import { avisoDeResposta, interpretarErroDeAcao, oQueFazer, TEXTO_INCERTO, type ErroDeAcao } from '@/lib/admin/erro-acao';
 import type { LeadAdmin } from '@/lib/admin/tipos';
 import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
+import { txExplorerUrl } from '@/lib/stellar/explorer';
 
 type PipelineLead = LeadAdmin;
 
@@ -55,7 +56,7 @@ const GERUNDIO: Record<string, string> = {
 };
 
 function explorerTx(hash: string) {
-  return `https://stellar.expert/explorer/testnet/tx/${hash}`;
+  return txExplorerUrl(hash);
 }
 const curto = (h: string) => (h.length > 12 ? `${h.slice(0, 4)}…${h.slice(-4)}` : h);
 const fmtData = (d: string | Date | null | undefined) => {

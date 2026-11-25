@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import { registrarValidacaoLegalAction, type ActionResult } from './actions';
+import { txExplorerUrl } from '@/lib/stellar/explorer';
 
 /**
  * Form inline pra registrar laudo de validação legal numa cota (whitepaper
@@ -49,7 +50,7 @@ export function ValidacaoForm({
       )}
       {state?.ok && state.txHash && (
         <a
-          href={`https://stellar.expert/explorer/testnet/tx/${state.txHash}`}
+          href={txExplorerUrl(state.txHash)}
           target="_blank"
           rel="noopener noreferrer"
           className="font-mono text-[10px] underline text-primary-deep"

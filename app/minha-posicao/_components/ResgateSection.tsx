@@ -4,11 +4,12 @@ import { useRef } from 'react';
 import { normalizarQuantidade, quantidadeMaxima, quantidadeValida } from '../_lib/resgate-amount';
 import { useResgate, type UseResgateArgs } from '../_hooks/use-resgate';
 import { RESGATE, SACAR, erroResgate } from '@/lib/sacar/microcopy';
+import { txExplorerUrl } from '@/lib/stellar/explorer';
 
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const NUM = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 7 });
 
-const explorerTx = (hash: string) => `https://stellar.expert/explorer/testnet/tx/${hash}`;
+const explorerTx = (hash: string) => txExplorerUrl(hash);
 
 /** Mostra um valor decimal do servidor sem recalcular nada (só formata). */
 const fmt = (v: string, f: Intl.NumberFormat) => (Number.isFinite(Number(v)) ? f.format(Number(v)) : v);
