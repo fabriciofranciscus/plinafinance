@@ -11,7 +11,7 @@
 
 import { useAppLogout as useLogout } from '@/lib/hooks/privy';
 import { useRequireAuth } from '@/lib/hooks/use-require-auth';
-import { PHASES, phaseForScreen } from './_lib/glossary';
+import { PHASES, phaseForScreen, screenLabel } from './_lib/glossary';
 import { useComprarFlow } from './_hooks/use-comprar-flow';
 import { Rail } from './_components/shell/rail';
 import { ScreenFader } from '@/app/investir/_components/shell/screen-fader';
@@ -56,6 +56,7 @@ export default function ComprarPage() {
             </span>
             <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base">
               {phase?.label}
+              {phase && phase.screens.length > 1 && <> · {screenLabel(screen)}</>}
             </span>
           </div>
           <button
@@ -103,6 +104,8 @@ export default function ComprarPage() {
               {screen === 'kyc' && (
                 <KycScreen
                   pessoa={flow.pessoa}
+                  cota={flow.selectedCota}
+                  reserva={flow.reserva.reserva}
                   loading={flow.kyc.loading}
                   onSubmit={flow.onKycSubmit}
                 />
