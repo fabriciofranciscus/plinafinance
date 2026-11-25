@@ -67,9 +67,9 @@ export function avisoDeResposta(action: string, corpo: unknown): string | null {
     return null; // ASSINADA | JA_ASSINADA
   }
   if (action === 'pagar-cedente') {
-    if (j.status === 'PROCESSANDO') return 'Pix em processamento. Reconsultar não paga de novo; confira mais tarde.';
-    if (j.status === 'INCERTO') return 'Resultado do Pix incerto. Reconsulte antes de qualquer nova ação; não repita o pagamento.';
-    if (j.status === 'FALHOU') return 'O Pix falhou. Use "Reabrir pagamento" depois de conferir.';
+    if (j.status === 'PROCESSANDO') return 'Pagamento em processamento. Reconsultar não paga de novo; confira mais tarde.';
+    if (j.status === 'INCERTO') return 'Resultado do pagamento incerto. Reconsulte antes de qualquer nova ação; não repita o pagamento.';
+    if (j.status === 'FALHOU') return 'O pagamento não foi concluído. Use "Reabrir pagamento" depois de conferir.';
     return null; // COMPROVADA ou sem status
   }
   return null;
