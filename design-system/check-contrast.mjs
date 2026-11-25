@@ -222,12 +222,28 @@ if (scanArg !== -1) {
     h.files.add(relative(process.cwd(), file));
     hits.set(key, h);
   };
+  const toReview = new Map();
+  const review = (key, file) => {
+    const h = toReview.get(key) ?? { count: 0, files: new Set() };
+    h.count++;
+    h.files.add(relative(process.cwd(), file));
+    toReview.set(key, h);
+  };
   for (const file of files) {
     const src = readFileSync(file, 'utf8');
-    for (const [, name, pct] of src.matchAll(/\btext-(base|lightBg|white)\/(\d{1,3})\b/g)) {
-      const [ink, surfaces] = SCAN_INKS[name];
-      const worst = Math.min(...surfaces.map((s) => ratio(hex(ink), hex(s), Number(pct) / 100)));
-      if (worst < AA) add(`text-${name}/${pct}  ${worst.toFixed(2)}:1 worst case${worst >= AA_LARGE ? ' (large text only)' : ''}`, file);
+    for (const line of src.split('\n')) {
+      // Disabled controls are exempt from contrast minimums (WCAG 1.4.3): skip the `disabled:` variant and any
+      // line that declares the disabled look.
+      const disabledLine = /\bcursor-not-allowed\b|aria-disabled/.test(line);
+      for (const [, variant, name, pct] of line.matchAll(/((?:[\w-]+:)*)text-(base|lightBg|white)\/(\d{1,3})\b/g)) {
+        if (disabledLine || /(^|:)disabled:/.test(variant)) continue;
+        const [ink, surfaces] = SCAN_INKS[name];
+        const worst = Math.min(...surfaces.map((s) => ratio(hex(ink), hex(s), Number(pct) / 100)));
+        if (worst < AA) add(`text-${name}/${pct}  ${worst.toFixed(2)}:1 worst case${worst >= AA_LARGE ? ' (large text only)' : ''}`, file);
+      }
+      // signal-600 as ink is legal on sheet-white only (4.94:1); on document-grey it is 3.89:1. The scan cannot
+      // see the surface, so this is listed for review and never counts towards --strict.
+      for (const m of line.matchAll(/(?<![\w-])(?:[\w-]+:)*text-primary-deep\b/g)) review(m[0].replace(/^.*:/, ''), file);
     }
     for (const [re, why] of SCAN_PATTERNS) for (const m of src.matchAll(re)) add(`${m[0]}  ${why}`, file);
     // Filled-button hover: an off-white label on a signal-600 fill is 3.89:1. Same-line heuristic.
@@ -243,6 +259,9 @@ if (scanArg !== -1) {
   for (const [key, h] of sorted) console.log(`  ${String(h.count).padStart(4)}×  in ${String(h.files.size).padStart(3)} file(s)  ${key}`);
   const total = sorted.reduce((n, [, h]) => n + h.count, 0);
   console.log(total === 0 ? '  No usage below the floor.' : `\n  ${total} usage(s) below the floor. The scan does not see the real background or font size: confirm in the browser.`);
+  for (const [key, h] of toReview) {
+    console.log(`\n  Review (not counted): ${h.count}× ${key} in ${h.files.size} file(s) — signal.600 ink passes on sheet-white only; on document-grey use signal-700.`);
+  }
   if (process.argv.includes('--files')) for (const [key, h] of sorted) console.log(`\n  ${key}\n    ${[...h.files].join('\n    ')}`);
   if (strict && total > 0) failures += total;
 }
