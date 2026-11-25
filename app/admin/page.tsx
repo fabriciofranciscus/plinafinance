@@ -19,6 +19,7 @@ import { accountExplorerUrl, assetExplorerUrl, txExplorerUrl } from '@/lib/stell
 import {
   caixaRealizado,
   concentracaoPorAdministradora,
+  contarCotasAtivas,
   navDaCota,
   navPorToken,
   navTotalDoPool,
@@ -440,7 +441,7 @@ export default async function AdminPage() {
               label={`${parametros.assetCode} vivos`}
               value={tokenFmt(tokensVivos)}
             />
-            <Metric label="Cotas ativas" value={String(cotas.length)} />
+            <Metric label="Cotas ativas" value={String(contarCotasAtivas(cotas))} />
             <Metric
               label="Investidores"
               value={String(investidores.length)}
