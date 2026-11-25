@@ -1,5 +1,6 @@
 'use client';
 
+import { aporteDaCotaBrl } from '@/lib/services/aporte';
 import { useActionState } from 'react';
 import { incorporarCotaAction, type ActionResult } from './actions';
 import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
@@ -32,6 +33,8 @@ export function IncorporarCotaForm({ redePublica = false }: { redePublica?: bool
     const valorCarta = Number(d.get('valorCarta'));
     const desagio = Number(d.get('desagioAquisicao'));
     const rede = nomeDaRede(redePublica);
+    // O aporte vem da função única (BigInt, meio-par, igual ao servidor) com as strings cruas dos campos; null = o servidor recusaria.
+    const aporte = aporteDaCotaBrl(String(d.get('valorCarta') ?? ''), String(d.get('desagioAquisicao') ?? ''));
     return {
       titulo: 'Revisar antes de incorporar a cota',
       linhas: [
@@ -39,6 +42,7 @@ export function IncorporarCotaForm({ redePublica = false }: { redePublica?: bool
         { rotulo: 'Caminho previsto', valor: rotuloDe(caminhoOptions, d.get('caminhoPrevisto')) },
         { rotulo: 'Valor da carta', valor: <span className="font-mono">{BRL.format(valorCarta)}</span> },
         { rotulo: 'Deságio de aquisição', valor: <span className="font-mono">{(desagio * 100).toFixed(2).replace('.', ',')}%</span> },
+        { rotulo: 'Valor do aporte (NAV da cota)', valor: <span className="font-mono">{aporte === null ? '—' : BRL.format(Number(aporte))}</span> },
         { rotulo: 'Rede', valor: rede },
       ],
       consequencia: `Cria a cota no pool e emite PLINA-RF na ${rede}, ao NAV do momento. Token emitido só sai de circulação com uma queima registrada na rede.`,

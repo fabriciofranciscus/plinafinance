@@ -88,7 +88,7 @@ describe('Incorporar (Norma): só sai de circulação com uma queima registrada 
     expect(c).toContain('Token emitido só sai de circulação com uma queima registrada na rede.');
     expect(c).not.toContain('não volta sem');
   });
-  it('na incorporação avulsa, e sem a linha de valor calculado na tela', () => {
+  it('na incorporação avulsa, com o aporte vindo da função única', () => {
     render(<IncorporarCotaForm />);
     fireEvent.change(screen.getByLabelText('Administradora', { selector: 'input' }), { target: { value: 'Porto Seguro' } });
     fireEvent.change(screen.getByLabelText('Localização aproximada', { selector: 'input' }), { target: { value: 'São Paulo - SP' } });
@@ -97,8 +97,8 @@ describe('Incorporar (Norma): só sai de circulação com uma queima registrada 
     fireEvent.click(screen.getByRole('button', { name: 'Incorporar cota + emitir PLINA-RF' }));
     const painel = screen.getByTestId('revisao-acao');
     expect(within(painel).getByTestId('revisao-consequencia').textContent).toContain('Token emitido só sai de circulação com uma queima registrada na rede.');
-    // O aporte é calculado no servidor (Decimal, HALF_EVEN); a tela não repete a conta em ponto flutuante.
-    expect(painel.textContent).not.toMatch(/Valor do aporte|205\.000/);
+    // O aporte volta pela função pura do Bento (BigInt, meio-par), igual ao servidor; nunca em ponto flutuante na tela.
+    expect(painel.textContent).toMatch(/Valor do aporte \(NAV da cota\)\s*R\$\s*205\.000,00/);
     expect(painel.textContent).toMatch(/Valor da carta\s*R\$\s*250\.000,00/);
     expect(painel.textContent).toMatch(/Deságio de aquisição\s*18,00%/);
   });
