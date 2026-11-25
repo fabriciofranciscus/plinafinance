@@ -11,12 +11,14 @@ const KYC: Record<string, string> = {
   // Pessoa.kycStatus (banco)
   NAO_INICIADO: 'não iniciada',
   PENDENTE: 'em andamento',
-  APROVADO: 'aprovada',
+  // "aprovada" sem qualificador sugere aprovação real (Consuelo). Enquanto a verificação for simulada (rede de testes), o selo diz
+  // "(simulada)"; este é o ÚNICO lugar a mudar no cutover para a rede principal.
+  APROVADO: 'aprovada (simulada)',
   REJEITADO: 'não aprovada',
   // onboard.kycStatus (/investir)
   not_started: 'não iniciada',
   pending: 'em andamento',
-  approved: 'aprovada',
+  approved: 'aprovada (simulada)',
 };
 
 /** Rótulo do status de KYC. Valor ausente ou desconhecido nunca vai cru para a tela. */

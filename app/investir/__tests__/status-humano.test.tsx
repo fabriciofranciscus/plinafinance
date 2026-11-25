@@ -14,13 +14,14 @@ describe('rotuloKyc: enum → texto humano, nos dois vocabulários do app', () =
     // Feminino: o nome mostrado é "Verificação de identidade" (glossário U3, Consuelo). "KYC" não é rótulo para o usuário.
     expect(rotuloKyc('NAO_INICIADO')).toBe('não iniciada');
     expect(rotuloKyc('PENDENTE')).toBe('em andamento');
-    expect(rotuloKyc('APROVADO')).toBe('aprovada');
+    // Consuelo: "aprovada" sem qualificador sugere aprovação real; na rede de testes a verificação é simulada.
+    expect(rotuloKyc('APROVADO')).toBe('aprovada (simulada)');
     expect(rotuloKyc('REJEITADO')).toBe('não aprovada');
   });
   it('vocabulário do /investir (onboard.kycStatus)', () => {
     expect(rotuloKyc('not_started')).toBe('não iniciada');
     expect(rotuloKyc('pending')).toBe('em andamento');
-    expect(rotuloKyc('approved')).toBe('aprovada');
+    expect(rotuloKyc('approved')).toBe('aprovada (simulada)');
   });
   it('ausente ou desconhecido NUNCA vira o valor cru: texto neutro', () => {
     for (const v of [null, undefined, '', 'CODIGO_NOVO', 'xyz']) {
@@ -69,7 +70,7 @@ describe('/investir: a linha de status da verificação e o funding', () => {
   });
   it('aprovada: "● aprovada"; e a linha se chama "Verificação de identidade", não "KYC status"', () => {
     const { container } = montar({ kycStatus: 'approved' });
-    expect(container.textContent).toContain('● aprovada');
+    expect(container.textContent).toContain('● aprovada (simulada)');
     expect(screen.getByText(ROTULO_VERIFICACAO)).toBeTruthy();
     expect(container.textContent).not.toMatch(/KYC status/);
   });
@@ -148,7 +149,7 @@ describe('/investir: a linha de status da verificação e o funding', () => {
 
 describe('selo da verificação de identidade (/painel)', () => {
   it('o nome vem antes do status, no feminino, para aprovada e para os demais; nunca "KYC"', () => {
-    expect(seloVerificacao(true, 'APROVADO')).toBe('● Verificação de identidade: aprovada');
+    expect(seloVerificacao(true, 'APROVADO')).toBe('● Verificação de identidade: aprovada (simulada)');
     expect(seloVerificacao(false, 'NAO_INICIADO')).toBe('○ Verificação de identidade: não iniciada');
     expect(seloVerificacao(false, 'PENDENTE')).toBe('○ Verificação de identidade: em andamento');
     expect(seloVerificacao(false, 'REJEITADO')).toBe('○ Verificação de identidade: não aprovada'); // sem motivo da recusa
