@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import { registrarValidacaoLegalAction, type ActionResult } from './actions';
+import { nomeDaRede, useRevisaoDeFormulario } from './revisao-acao';
 
 /**
  * Form inline pra registrar laudo de validação legal numa cota (whitepaper
@@ -10,14 +11,34 @@ import { registrarValidacaoLegalAction, type ActionResult } from './actions';
 export function ValidacaoForm({
   cotaId,
   hasValidacao,
+  descricaoCota,
+  redePublica = false,
 }: {
   cotaId: string;
   hasValidacao: boolean;
+  /** Como a cota aparece na tabela (tipo, administradora, valor), para a Revisão. */
+  descricaoCota?: string;
+  redePublica?: boolean;
 }) {
   const [state, formAction, pending] = useActionState<ActionResult | null, FormData>(
     registrarValidacaoLegalAction,
     null,
   );
+  // Enviar (botão ou Enter) abre a Revisão; só a confirmação grava o hash on-chain.
+  const revisao = useRevisaoDeFormulario((d) => {
+    const rede = nomeDaRede(redePublica);
+    return {
+      titulo: 'Revisar antes de validar a cota',
+      linhas: [
+        { rotulo: 'Cota', valor: <span><span className="font-mono">{cotaId.slice(0, 8)}…</span>{descricaoCota ? ` · ${descricaoCota}` : ''}</span> },
+        { rotulo: 'Laudo', valor: <span className="break-all font-mono text-sm">{String(d.get('laudoUrl') ?? '')}</span> },
+        { rotulo: 'Rede', valor: rede },
+      ],
+      consequencia: `Grava o hash do laudo na ${rede}, ligado a esta cota. O registro é público e não pode ser apagado.`,
+      atesto: `Conferi a cota e o laudo, e entendo que o hash fica registrado na ${rede}.`,
+      confirmar: 'Validar cota',
+    };
+  });
 
   if (hasValidacao && !state?.ok) {
     return (
@@ -28,7 +49,8 @@ export function ValidacaoForm({
   }
 
   return (
-    <form action={formAction} className="flex flex-col md:flex-row md:items-center gap-2">
+    <>
+    <form action={formAction} {...revisao.formProps} className="flex flex-col md:flex-row md:items-center gap-2">
       <input type="hidden" name="cotaId" value={cotaId} />
       <input
         type="url"
@@ -58,5 +80,7 @@ export function ValidacaoForm({
         </a>
       )}
     </form>
+    {revisao.painel}
+    </>
   );
 }

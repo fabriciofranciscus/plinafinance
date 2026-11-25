@@ -3,6 +3,11 @@
 import { useActionState } from 'react';
 import { incorporarCotaAction, type ActionResult } from './actions';
 import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
+import { nomeDaRede, useRevisaoDeFormulario } from './revisao-acao';
+
+const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const rotuloDe = (opcoes: { value: string; label: string }[], v: FormDataEntryValue | null) =>
+  opcoes.find((o) => o.value === v)?.label ?? String(v ?? '');
 
 const tipoBemOptions = [
   { value: 'IMOVEL', label: 'Imóvel' },
@@ -17,14 +22,34 @@ const caminhoOptions = [
   { value: 'C_PRAZO_GRUPO', label: 'C — Prazo de grupo' },
 ];
 
-export function IncorporarCotaForm() {
+export function IncorporarCotaForm({ redePublica = false }: { redePublica?: boolean }) {
   const [state, formAction, pending] = useActionState<ActionResult | null, FormData>(
     incorporarCotaAction,
     null,
   );
+  // Enviar (botão ou Enter) abre a Revisão; só a confirmação chama a action, com os mesmos campos revisados.
+  const revisao = useRevisaoDeFormulario((d) => {
+    const valorCarta = Number(d.get('valorCarta'));
+    const desagio = Number(d.get('desagioAquisicao'));
+    const rede = nomeDaRede(redePublica);
+    return {
+      titulo: 'Revisar antes de incorporar a cota',
+      linhas: [
+        { rotulo: 'Cota', valor: `${rotuloDe(tipoBemOptions, d.get('tipoBem'))} · ${String(d.get('administradora') ?? '')}` },
+        { rotulo: 'Caminho previsto', valor: rotuloDe(caminhoOptions, d.get('caminhoPrevisto')) },
+        { rotulo: 'Valor da carta', valor: <span className="font-mono">{BRL.format(valorCarta)}</span> },
+        { rotulo: 'Deságio de aquisição', valor: <span className="font-mono">{(desagio * 100).toFixed(2).replace('.', ',')}%</span> },
+        { rotulo: 'Valor do aporte (NAV da cota)', valor: <span className="font-mono">{BRL.format(valorCarta * (1 - desagio))}</span> },
+        { rotulo: 'Rede', valor: rede },
+      ],
+      consequencia: `Cria a cota no pool e emite PLINA-RF na ${rede}, ao NAV do momento. Token emitido não volta sem uma queima registrada.`,
+      atesto: `Conferi a cota, o valor da carta e o deságio, e entendo que a emissão fica registrada na ${rede}.`,
+      confirmar: 'Incorporar e emitir',
+    };
+  });
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={formAction} {...revisao.formProps} className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Field label="Tipo de bem">
           <select name="tipoBem" defaultValue="IMOVEL" required className={selectClass}>
@@ -147,6 +172,7 @@ export function IncorporarCotaForm() {
       >
         {pending ? 'Emitindo on-chain…' : 'Incorporar cota + emitir PLINA-RF'}
       </button>
+      {revisao.painel}
     </form>
   );
 }

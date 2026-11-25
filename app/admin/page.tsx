@@ -284,6 +284,7 @@ export default async function AdminPage() {
               },
             })),
           }))}
+          redePublica={process.env.STELLAR_NETWORK === 'PUBLIC'}
         />
       </section>
 
@@ -364,6 +365,8 @@ export default async function AdminPage() {
                         <ValidacaoForm
                           cotaId={c.id}
                           hasValidacao={!!c.validacaoTxHash}
+                          descricaoCota={`${c.tipoBem} · ${c.administradora} · ${brl(Number(c.valorCarta))}`}
+                          redePublica={process.env.STELLAR_NETWORK === 'PUBLIC'}
                         />
                       )}
                     </Td>
@@ -565,7 +568,7 @@ export default async function AdminPage() {
         <p className="font-text text-sm text-base/70 mb-6 max-w-2xl">
           Emite PLINA-RF on-chain (issuer → distributor) e persiste a cota no pool. Operação real na testnet — irreversível.
         </p>
-        <IncorporarCotaForm />
+        <IncorporarCotaForm redePublica={process.env.STELLAR_NETWORK === 'PUBLIC'} />
       </details>
               </>
             ),

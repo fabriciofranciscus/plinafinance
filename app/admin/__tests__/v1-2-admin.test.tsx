@@ -13,7 +13,7 @@ import { AppFooter } from '@/components/AppFooter';
 // Design system v1.2, fatia V1 (admin: shell, painéis, Investidores, ClawbackForm, concentração).
 // Só apresentação: os handlers, textos, ids e estados dos testes anteriores continuam valendo.
 const src = (f: string) => readFileSync(`app/admin/${f}`, 'utf8');
-const ARQUIVOS_V1 = ['page.tsx', 'paineis.tsx', 'investidores-painel.tsx', 'clawback-form.tsx', 'concentracao.tsx', 'loading.tsx', 'error.tsx'];
+const ARQUIVOS_V1 = ['page.tsx', 'paineis.tsx', 'revisao-acao.tsx', 'investidores-painel.tsx', 'clawback-form.tsx', 'concentracao.tsx', 'loading.tsx', 'error.tsx'];
 
 const lista: InvestidorAdmin[] = [
   { id: 'inv-a', email: 'a@exemplo.test', publicKey: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWXYZ', explorerUrl: 'https://explorer.test/a', saldoEsperado: '139,6', status: 'AUTORIZADO' },

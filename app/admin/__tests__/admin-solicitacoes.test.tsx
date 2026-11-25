@@ -38,6 +38,12 @@ afterEach(() => {
 const abrir = (id = 'A1B2C3') => fireEvent.click(within(screen.getByTestId('lista-tabela')).getByRole('link', { name: id }));
 const detalhe = () => within(screen.getByTestId('detalhe'));
 const agora = () => within(screen.getByTestId('etapa-agora'));
+/** Ação irreversível abre a Revisão antes de enviar: marca o atesto e confirma (o 1º botão da Revisão). */
+const confirmarRevisao = () => {
+  const r = within(screen.getByTestId('revisao-acao'));
+  fireEvent.click(r.getByRole('checkbox'));
+  fireEvent.click(r.getAllByRole('button')[0]!);
+};
 const corpo = (i = 0) => JSON.parse(String((fetchMock.mock.calls[i]![1] as RequestInit).body));
 const montar = (leads: LeadAdmin[], redePublica = false) => render(<VendedorPipeline leads={leads} redePublica={redePublica} />);
 const resposta = (body: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers });
@@ -276,6 +282,7 @@ describe('detalhe: só a etapa "Agora" tem controles', () => {
     montar([lead()]);
     abrir();
     fireEvent.click(agora().getByRole('button', { name: 'Registrar cessão' }));
+    confirmarRevisao();
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(corpo()).toEqual({ action: 'registrar-cessao', ofertaId: 'o1' });
     await waitFor(() => expect(refresh).toHaveBeenCalled());
@@ -289,6 +296,7 @@ describe('detalhe: só a etapa "Agora" tem controles', () => {
     expect(screen.getByText(/item 7 \(quitação\): saldo devedor R\$ 0,00/)).toBeTruthy();
     fireEvent.change(agora().getByPlaceholderText(/laudo\.pdf#sha256/), { target: { value: 'https://exemplo.test/laudo.pdf#sha256=abc' } });
     fireEvent.click(botao);
+    confirmarRevisao();
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(corpo()).toEqual({ action: 'registrar-laudo', cessaoId: 'c1', laudoUrl: 'https://exemplo.test/laudo.pdf#sha256=abc' });
   });
@@ -297,6 +305,7 @@ describe('detalhe: só a etapa "Agora" tem controles', () => {
     montar([lead({ cessao: cessao({ laudoRegistrado: true }) })]);
     abrir();
     fireEvent.click(agora().getByRole('button', { name: /Enviar para assinatura/ }));
+    confirmarRevisao();
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(corpo()).toEqual({ action: 'enviar-cessao', cessaoId: 'c1' });
     cleanup();
@@ -335,6 +344,7 @@ describe('detalhe: só a etapa "Agora" tem controles', () => {
     montar([lead({ cessao: assinada() })]);
     abrir();
     fireEvent.click(agora().getByRole('button', { name: 'Registrar anuência' }));
+    confirmarRevisao();
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(corpo()).toEqual({ action: 'registrar-anuencia', hashValidacao: 'a'.repeat(64), status: 'DECLARADA_PENDENTE' });
     cleanup();
@@ -358,6 +368,7 @@ describe('detalhe: só a etapa "Agora" tem controles', () => {
     abrir();
     expect(screen.queryByRole('button', { name: /Executar Pix simulado/i })).toBeNull();
     fireEvent.click(agora().getByRole('button', { name: 'Pagar cedente (Pix simulado, rede de testes)' }));
+    confirmarRevisao();
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(corpo()).toEqual({ action: 'pagar-cedente', cessaoId: 'c1' });
     cleanup();
@@ -380,6 +391,7 @@ describe('detalhe: só a etapa "Agora" tem controles', () => {
     abrir();
     expect(agora().getAllByRole('button').map((b) => b.textContent)).toEqual(['Reabrir pagamento']);
     fireEvent.click(agora().getByRole('button', { name: 'Reabrir pagamento' }));
+    confirmarRevisao();
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(corpo()).toEqual({ action: 'reabrir-pagamento-cedente', cessaoId: 'c1' });
   });
@@ -389,6 +401,7 @@ describe('detalhe: só a etapa "Agora" tem controles', () => {
     montar([lead({ cessao: assinada({ anuenciaStatus: 'CONFIRMADA' }) })]);
     abrir();
     fireEvent.click(agora().getByRole('button', { name: /Pagar cedente/ }));
+    confirmarRevisao();
     expect((await screen.findByTestId('aviso-acao')).textContent).toMatch(/não repita o pagamento/);
   });
 
@@ -398,6 +411,7 @@ describe('detalhe: só a etapa "Agora" tem controles', () => {
     montar([lead({ cessao: assinada({ anuenciaStatus: 'CONFIRMADA', pixStatus: 'COMPROVADA', pagamento: { id: 'p', status: 'EXECUTADO', onChainTxHash: null } }) })]);
     abrir();
     fireEvent.click(agora().getByRole('button', { name: 'Incorporar cota ao pool · emitir PLINA-RF' }));
+    confirmarRevisao();
     const ocupado = await agora().findByRole('button', { name: 'Incorporando…' });
     expect((ocupado as HTMLButtonElement).disabled).toBe(true);
     expect(agora().getByText('Processando. Aguarde a confirmação antes de repetir.')).toBeTruthy();
@@ -471,6 +485,7 @@ describe('erros e resultado incerto (checklist do item 14)', () => {
     montar([lead({ cessao: cessao({ laudoRegistrado: true }) })]);
     abrir();
     fireEvent.click(agora().getByRole('button', { name: /Enviar para assinatura/ }));
+    confirmarRevisao();
   };
 
   it('código conhecido: mensagem segura dentro da etapa, logo abaixo do botão, e o código numa segunda linha', async () => {
@@ -534,5 +549,87 @@ describe('erros e resultado incerto (checklist do item 14)', () => {
     const alerta = await agora().findByRole('alert');
     expect(alerta.textContent).toContain('Deságio total acima de 100%.');
     expect(alerta.textContent).toContain('Não concluído');
+  });
+});
+
+describe('ações irreversíveis abrem a Revisão antes de enviar', () => {
+  const pronta = () => lead({ cessao: assinada({ anuenciaStatus: 'CONFIRMADA' }) });
+
+  it('o 1º clique em "Pagar cedente" não envia: abre a Revisão com cedente, cota, valor e rede', () => {
+    montar([pronta()]);
+    abrir();
+    fireEvent.click(agora().getByRole('button', { name: 'Pagar cedente (Pix simulado, rede de testes)' }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    const r = within(screen.getByTestId('revisao-acao'));
+    expect(r.getByRole('heading', { name: 'Revisar antes de pagar' })).toBe(document.activeElement);
+    const texto = screen.getByTestId('revisao-acao').textContent!;
+    expect(texto).toContain('A1B2C3');
+    expect(texto).toContain('Cedente de teste · cedente@exemplo.test');
+    expect(texto).toContain('Imóvel · Administradora');
+    expect(texto).toMatch(/Valor ao cedente\s*R\$\s*120\.000,00/);
+    expect(texto).toContain('Stellar (rede de testes)');
+    expect(r.getByTestId('revisao-consequencia').textContent).toMatch(/Pix simulado.*Na rede principal, esta ação envia um Pix real/);
+  });
+
+  it('confirmar fica desligado até o atesto; com o atesto, envia uma vez', async () => {
+    montar([pronta()]);
+    abrir();
+    fireEvent.click(agora().getByRole('button', { name: 'Pagar cedente (Pix simulado, rede de testes)' }));
+    const r = within(screen.getByTestId('revisao-acao'));
+    const confirmar = r.getByRole('button', { name: 'Pagar cedente (Pix simulado)' }) as HTMLButtonElement;
+    expect(confirmar.disabled).toBe(true);
+    fireEvent.click(confirmar);
+    expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.click(r.getByRole('checkbox'));
+    expect(confirmar.disabled).toBe(false);
+    fireEvent.click(confirmar);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(corpo()).toEqual({ action: 'pagar-cedente', cessaoId: 'c1' });
+    expect(screen.queryByTestId('revisao-acao')).toBeNull();
+  });
+
+  it('Voltar fecha sem enviar e devolve o foco ao botão da ação', () => {
+    montar([pronta()]);
+    abrir();
+    fireEvent.click(agora().getByRole('button', { name: 'Pagar cedente (Pix simulado, rede de testes)' }));
+    fireEvent.click(within(screen.getByTestId('revisao-acao')).getByRole('button', { name: 'Voltar' }));
+    expect(screen.queryByTestId('revisao-acao')).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(agora().getByRole('button', { name: 'Pagar cedente (Pix simulado, rede de testes)' }));
+  });
+
+  it('na rede principal o texto fala de Pix real que não volta', () => {
+    montar([pronta()], true);
+    abrir();
+    fireEvent.click(agora().getByRole('button', { name: 'Pagar cedente (Pix)' }));
+    expect(screen.getByTestId('revisao-consequencia').textContent).toBe(
+      'Envia o Pix do valor ao cedente para a chave do cadastro dele. Pix enviado não volta.',
+    );
+    expect(screen.getByTestId('revisao-acao').textContent).toContain('Stellar (rede principal)');
+  });
+
+  it('reconsultar um Pix em andamento não paga de novo e não abre Revisão', async () => {
+    montar([lead({ cessao: assinada({ anuenciaStatus: 'CONFIRMADA', pixStatus: 'PROCESSANDO' }) })]);
+    abrir();
+    fireEvent.click(agora().getByRole('button', { name: 'Reconsultar pagamento' }));
+    expect(screen.queryByTestId('revisao-acao')).toBeNull();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  });
+
+  it('incorporar: a Revisão diz que emite PLINA-RF e que o token não volta sem queima', () => {
+    montar([lead({ cessao: assinada({ anuenciaStatus: 'CONFIRMADA', pixStatus: 'COMPROVADA', pagamento: { id: 'p', status: 'EXECUTADO', onChainTxHash: null } }) })]);
+    abrir();
+    fireEvent.click(agora().getByRole('button', { name: 'Incorporar cota ao pool · emitir PLINA-RF' }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId('revisao-consequencia').textContent).toMatch(/emite PLINA-RF na Stellar \(rede de testes\).*não volta sem uma queima/);
+  });
+
+  it('laudo: a Revisão mostra a URL que vai ser registrada', () => {
+    montar([lead({ cessao: cessao({ laudoRegistrado: false }) })]);
+    abrir();
+    fireEvent.change(agora().getByPlaceholderText(/laudo\.pdf#sha256/), { target: { value: 'https://exemplo.test/laudo.pdf#sha256=abc' } });
+    fireEvent.click(agora().getByRole('button', { name: 'Registrar laudo' }));
+    expect(screen.getByTestId('revisao-acao').textContent).toContain('https://exemplo.test/laudo.pdf#sha256=abc');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
