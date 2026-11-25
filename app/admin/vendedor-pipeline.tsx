@@ -17,6 +17,7 @@ import { NOME_EM_ANDAMENTO, etapasDoLead, ordenarSolicitacoes, type AnaliseSolic
 import { avisoDeResposta, interpretarErroDeAcao, oQueFazer, TEXTO_INCERTO, type ErroDeAcao } from '@/lib/admin/erro-acao';
 import type { LeadAdmin } from '@/lib/admin/tipos';
 import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
+import { rotuloPagamentoPix } from '@/lib/admin/pix-rotulo';
 import { AcaoComRevisao, nomeDaRede, type ConteudoRevisao, type LinhaRevisao } from './revisao-acao';
 
 type PipelineLead = LeadAdmin;
@@ -498,7 +499,14 @@ export function revisaoDe(
   redePublica: boolean,
   extra: LinhaRevisao[] = [],
 ): ConteudoRevisao {
-  const linhas = [...linhasDoLead(lead, redePublica), ...extra];
+  // "Reabrir pagamento": o atesto diz que o Pix anterior falhou, então a Revisão mostra a situação dele (Íris, Norma ✓).
+  const anterior: LinhaRevisao[] =
+    acao === 'reabrir-pagamento-cedente'
+      ? [{ rotulo: 'Pagamento anterior', valor: rotuloPagamentoPix(lead.ofertas[0]?.cessao?.pixStatus) }]
+      : [];
+  const base = linhasDoLead(lead, redePublica);
+  // A situação do pagamento vem antes da linha "Rede" (que fecha o resumo).
+  const linhas = [...base.slice(0, -1), ...anterior, ...base.slice(-1), ...extra];
   const rede = nomeDaRede(redePublica);
   switch (acao) {
     case 'registrar-cessao':
@@ -791,7 +799,7 @@ function ControlesDaEtapa({
         <div className="mt-2">
           {analise.pagamento === 'reconsultar' && (
             <p className="font-text text-xs text-base/70 mb-2">
-              Pix em andamento ({cessao?.pixStatus}). Reconsultar não paga de novo.
+              {rotuloPagamentoPix(cessao?.pixStatus)}. Reconsultar não paga de novo.
             </p>
           )}
           {analise.pagamento === 'reconsultar' ? (

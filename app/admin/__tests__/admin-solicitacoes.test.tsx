@@ -381,7 +381,8 @@ describe('detalhe: só a etapa "Agora" tem controles', () => {
     montar([lead({ cessao: assinada({ anuenciaStatus: 'CONFIRMADA', pixStatus: 'PROCESSANDO' }) })]);
     abrir();
     expect(agora().queryByRole('button', { name: /Pagar cedente/ })).toBeNull();
-    expect(agora().getByText(/Pix em andamento \(PROCESSANDO\)\. Reconsultar não paga de novo\./)).toBeTruthy();
+    // Norma ✓: o valor cru do banco (PROCESSANDO) vira "Pagamento em processamento".
+    expect(agora().getByText(/Pagamento em processamento\. Reconsultar não paga de novo\./)).toBeTruthy();
     fireEvent.click(agora().getByRole('button', { name: 'Reconsultar pagamento' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(corpo().action).toBe('pagar-cedente');
