@@ -19,13 +19,14 @@ import { accountExplorerUrl, assetExplorerUrl, txExplorerUrl } from '@/lib/stell
 import {
   caixaRealizado,
   concentracaoPorAdministradora,
+  contarCotasAtivas,
   navDaCota,
   navPorToken,
   navTotalDoPool,
   spreadRealizadoAcumulado,
   tokensEmitidosVivos,
 } from '@/lib/services/pool';
-import { fetchSupplyOnChainFromEnv } from '@/lib/stellar/supply';
+import { lerSupplyParaPainel } from '@/lib/services/painel-supply';
 import { LoginForm } from './login-form';
 import { IncorporarCotaForm } from './incorporar-cota-form';
 import { InvestidoresPainel } from './investidores-painel';
@@ -144,7 +145,8 @@ export default async function AdminPage() {
   // Denominador do ledger. O painel operacional é onde a divergência entre
   // `tokensVivos` (lastro de cota viva) e o supply circulante tem de ficar
   // visível: a diferença é o quanto do passivo já está coberto por caixa.
-  const supply = await fetchSupplyOnChainFromEnv().catch(() => null);
+  // M17: a leitura nunca derruba o painel, mas a falha deixa de ser silenciosa: vai ao log (sem mensagem) e a tela explica o "—".
+  const { supply, indisponivel: supplyIndisponivel } = await lerSupplyParaPainel();
   const navUnit = supply ? navPorToken(cotas, realizacoes, supply) : null;
   const navUnitLabel = navUnit === null ? '—' : brl(navUnit);
   const spreadAcumulado = spreadRealizadoAcumulado(realizacoes);
@@ -440,17 +442,18 @@ export default async function AdminPage() {
               label={`${parametros.assetCode} vivos`}
               value={tokenFmt(tokensVivos)}
             />
-            <Metric label="Cotas ativas" value={String(cotas.length)} />
+            <Metric label="Cotas ativas" value={String(contarCotasAtivas(cotas))} />
             <Metric
               label="Investidores"
               value={String(investidores.length)}
             />
           </section>
           <section className="mb-12 grid grid-cols-1 md:grid-cols-4 gap-px bg-base/15 border border-light-hairline rounded-panel overflow-hidden">
-            <Metric label="NAV / token" value={navUnitLabel} />
+            <Metric label="NAV / token" value={navUnitLabel} nota={supplyIndisponivel ? NOTA_SUPPLY_INDISPONIVEL : undefined} />
             <Metric
               label="Supply circulante (ledger)"
               value={supply ? tokenFmt(Number(supply.circulante)) : '—'}
+              nota={supplyIndisponivel ? NOTA_SUPPLY_INDISPONIVEL : undefined}
             />
             <Metric label="Caixa realizado" value={brl(caixa)} />
             <Metric
@@ -576,13 +579,21 @@ export default async function AdminPage() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+/** M17: por que o NAV/token e o supply aparecem como "—" quando a leitura do ledger falha (texto de diagnóstico do operador). */
+const NOTA_SUPPLY_INDISPONIVEL = 'Não foi possível ler o supply na rede agora. Atualize a página; se continuar, avise o time técnico.';
+
+function Metric({ label, value, nota }: { label: string; value: string; nota?: string }) {
   return (
     <div className="bg-lightBg px-5 py-6">
       <p className="font-details text-label-ui text-base/70">
         {label}
       </p>
       <p className="font-mono text-value-primary mt-2">{value}</p>
+      {nota && (
+        <p role="status" className="font-details text-label-ui text-base/70 mt-2">
+          {nota}
+        </p>
+      )}
     </div>
   );
 }

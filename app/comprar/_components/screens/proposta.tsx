@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { CotaResumo } from '../../_types';
 import { BRL, TIPO_LABEL, valorRevenda } from '../../_lib/glossary';
+import { FaixaContexto } from '../shell/faixa-contexto';
 
 export function PropostaScreen({
   cota,
@@ -32,6 +33,8 @@ export function PropostaScreen({
         Ao aceitar, a cota é reservada por 72h em seu nome enquanto você conclui
         a cessão. A reserva é registrada on-chain.
       </p>
+
+      <FaixaContexto cota={cota} reserva={null} soCota />
 
       <div className="mt-8 border border-light-hairline">
         <Row k="Cota" v={`${TIPO_LABEL[cota.tipoBem] ?? cota.tipoBem}${cota.localizacaoAprox ? ` · ${cota.localizacaoAprox}` : ''}`} />

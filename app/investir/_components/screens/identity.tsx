@@ -1,5 +1,6 @@
 'use client';
 
+import { FUNDING_ROTULO, FUNDING_TEXTO, ROTULO_VERIFICACAO, rotuloKyc } from '@/lib/format/status-humano';
 import { useAppPrivy as usePrivy } from '@/lib/hooks/privy';
 import type {
   EntityType,
@@ -55,14 +56,15 @@ export function IdentityScreen({
       <TestnetBanner />
 
       <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
-        02 // Identidade · KYC
+        02 // Verificação de identidade
       </p>
       <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">
-        Wallet Stellar e KYC programático.
+        Sua carteira e a verificação de identidade.
       </h1>
       <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
-        A Plina cria sua wallet Stellar embedded e registra o investidor na
-        anchor regulada Etherfuse. KYC auto-aprovado no sandbox.
+        A Plina cria sua carteira Stellar e envia seus dados à Etherfuse, parceira
+        de pagamento, para a verificação de identidade. Em ambiente de teste, a
+        verificação é simulada.
       </p>
 
       {/* Trilha: Institucional BR (funcional) / Internacional (M4, gated). */}
@@ -112,9 +114,8 @@ export function IdentityScreen({
               </p>
               <p className="font-text text-sm text-base/80 leading-relaxed">
                 Ao continuar, você consente com a criação da wallet Stellar
-                embedded, registro do customer na Etherfuse e submissão de
-                KYC programático no ambiente de sandbox. Nenhum dado real
-                é coletado nesta etapa.
+                embedded, registro do customer na Etherfuse e submissão da
+                verificação de identidade no ambiente de teste (simulada).
               </p>
             </div>
             <div className="mt-8">
@@ -161,14 +162,14 @@ export function IdentityScreen({
                 v={<span className="font-mono text-xs">{maskId(onboard.etherfuseCustomerId)}</span>}
               />
               <DataRow
-                k="KYC status"
+                k={ROTULO_VERIFICACAO}
                 v={
                   <span
                     className={`font-details text-[10px] tracking-[0.2em] uppercase ${
                       onboard.kycStatus === 'approved' ? 'text-primary-deep' : 'text-base/70'
                     }`}
                   >
-                    {onboard.kycStatus === 'approved' ? '● aprovado' : `○ ${onboard.kycStatus}`}
+                    {onboard.kycStatus === 'approved' ? `● ${rotuloKyc('approved')}` : `○ ${rotuloKyc(onboard.kycStatus)}`}
                   </span>
                 }
               />
@@ -182,18 +183,18 @@ export function IdentityScreen({
                       className="font-text text-xs text-base/75"
                     >
                       {kycTimedOut
-                        ? 'A verificação ainda não foi confirmada pela anchor. Recarregue a página mais tarde.'
-                        : 'Aguardando a confirmação da anchor (webhook assinado). Esta tela atualiza sozinha.'}
+                        ? 'A verificação ainda não foi confirmada pelo parceiro de pagamento. Recarregue a página mais tarde.'
+                        : 'Aguardando a confirmação do parceiro de pagamento. Esta tela atualiza sozinha.'}
                     </span>
                   }
                 />
               )}
               {onboard.fundedNow && (
                 <DataRow
-                  k="Funding"
+                  k={FUNDING_ROTULO}
                   v={
-                    <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65">
-                      friendbot · agora
+                    <span className="font-text text-sm text-base/80">
+                      {FUNDING_TEXTO}
                     </span>
                   }
                 />
