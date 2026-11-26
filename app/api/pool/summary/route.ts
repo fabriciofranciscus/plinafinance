@@ -19,6 +19,7 @@ import {
   navPorToken,
   navTotalDoPool,
   spreadRealizadoAcumulado,
+  STATUS_COTA_ATIVA,
   tokensEmitidosVivos,
 } from '@/lib/services/pool';
 import { caixaParaNav } from '@/lib/services/razao-fundo';
@@ -65,7 +66,7 @@ export const GET = withApi(async (req, { requestId }) => {
   const [parametros, cotas, realizacoes, caixaNav] = await Promise.all([
     db.parametrosPool.findUnique({ where: { id: 'singleton' } }),
     db.cota.findMany({
-      where: { status: { in: ['DISPONIVEL', 'RESERVADA'] } },
+      where: { status: { in: [...STATUS_COTA_ATIVA] } },
       orderBy: { criadaEm: 'asc' },
       select: {
         tipoBem: true,
