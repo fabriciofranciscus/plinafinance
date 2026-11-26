@@ -161,6 +161,9 @@ describe.skipIf(!PG)('Varredor de reservas órfãs de subscrição — Postgres 
     st.alerta.mockReset().mockResolvedValue(true);
     simularHorizon();
     await db.$executeRawUnsafe('TRUNCATE "OnRampOrder", "Quote", "MovimentoFundo", "EventoAudit", "HoldingPLINARF", "Investidor" RESTART IDENTITY CASCADE');
+    // Lastro do supply simulado (gate SUPPLY_SEM_LASTRO, #156): o razão registra os 1.000.000 PLINARF que o ledger mostra acima.
+    // Só quantidade (valor e caixa 0) e tipo APORTE_COTA: não entra nas contagens de SUBSCRICAO nem no caixa.
+    await db.movimentoFundo.create({ data: { tipo: 'APORTE_COTA', valorBrl: '0', deltaCaixa: '0', deltaTokens: '1000000', chave: 'seed-lastro' } });
   });
 
   // ── mecânica do teste (passa hoje): prova que o Horizon simulado e a semente funcionam ──
