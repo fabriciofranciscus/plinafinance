@@ -45,9 +45,10 @@ Paleta preservada. Não há nova cor de marca nem quarto fundo de conteúdo.
 | Ciano branco | `signal.600` #057A99 | Só sobre branco: 4,94:1; cinza reprova |
 | Ciano claro seguro | `signal.700` #046C88 | Branco 5,99:1; cinza 4,71:1 |
 | Texto sobre ciano 500 | `ink.on-signal` #132728 | 5,47:1; branco reprova |
-| Secundário claro | `ink.on-light-muted` rgba(19,39,40,.7) | Não reduzir alpha nem aplicar opacity no contêiner |
+| Secundário claro | `ink.on-light-muted` rgba(19,39,40,.7) | Piso em claro: 5,82:1 no branco, 5,18:1 no cinza. Não reduzir alpha nem aplicar opacity no contêiner |
 | Texto escuro | `ink.on-dark` #e4e4e4 | Sobre petróleo |
 | Secundário escuro | `ink.on-dark-muted` #A0CFE7 | Só em fundo escuro |
+| Apoio escuro mínimo | `ink.on-dark-subtle` rgba(228,228,228,.6) | Piso em escuro: 5,32:1 no petróleo, 5,92:1 no abyss. Rótulo pequeno e linha legal de rodapé |
 | Erro | `state.danger` #B3261E | Em claro, acompanhado de texto |
 | Erro escuro | `state.danger-on-dark` #F2B8B5 | Só em escuro |
 
@@ -55,7 +56,11 @@ Hairlines de 1 px: petróleo/12% em claro, branco/10% em escuro. São divisores 
 
 Texto normal ≥4,5:1, texto grande ≥3:1; indicador funcional ≥3:1. Validar o composto real no navegador. `ink.on-light-faint` (20%) é só decoração, nunca etapa futura, botão secundário, label ou dado legível. Não reduzir opacidade de todo um painel.
 
-Foco: anel de 2 px, offset 4 px, `signal.700` em claro e `signal.500` em escuro. Não recortar o anel com overflow. Erro e seleção incluem texto/semântica; cor sozinha não informa.
+**Piso de opacidade (texto legível).** O contraste é o do composto, não o da cor de origem. Petróleo sobre claro: mínimo 70% (60% dá 3,88:1 no cinza; 40% dá 2,30:1). Off-white sobre escuro: mínimo 60% (50% dá 4,14:1). Abaixo do piso só entra decoração sem informação. Rótulo de 10–12 px nunca usa a exceção de texto grande. Hierarquia abaixo do piso se resolve com tamanho, peso ou posição, não com mais transparência.
+
+**Hover de botão preenchido.** O rótulo acompanha o preenchimento no mesmo estado. Preenchimento `signal.500` exige rótulo petróleo (branco 2,85:1 e off-white 2,24:1 reprovam). Botão petróleo com rótulo claro usa hover `signal.700` (branco 5,99:1, off-white 4,71:1); `signal.600` só serve a rótulo branco puro (4,94:1) e reprova com off-white (3,89:1).
+
+Foco: anel de 2 px, offset 4 px, `signal.700` em claro e `signal.500` em escuro. O anel segue a superfície onde o elemento está, não a cor do elemento: uma regra global de foco em `signal.500` reprova em toda tela clara (2,85:1 / 2,24:1), inclusive no skip link sobre claro. Campo em claro não troca o anel por borda ciano 500. Não recortar o anel com overflow. Erro e seleção incluem texto/semântica; cor sozinha não informa.
 
 ## 4. Lei de hierarquia tipográfica
 
@@ -198,4 +203,4 @@ Neon, gradiente de texto/borda, sombras coloridas, glass em conteúdo, card íco
 11. Conferir 390 e 1440 px, 320 px para reflow, zoom 200%, textos longos, vazio/carregando/erro/bloqueado/sucesso.
 12. Copy e comportamento financeiro intactos; revisão visual de Íris, gate de Vera e revisão final do Atlas na implementação.
 
-Na entrega da doutrina: validar JSON, aliases e correspondência dos exports; executar `node design-system/check-contrast.mjs`. Isso não substitui medição em tela, leitor de tela ou gate do app.
+Na entrega da doutrina: validar JSON, aliases e correspondência dos exports; executar `node design-system/check-contrast.mjs`. O script compõe tintas translúcidas sobre a superfície e trava os pisos de opacidade; `--scan app components` lista no código as classes abaixo do piso, o foco em ciano 500 e o hover `signal.600` com rótulo off-white (`--strict` falha a execução). Isso não substitui medição em tela, leitor de tela ou gate do app.

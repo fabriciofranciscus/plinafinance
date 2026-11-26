@@ -74,7 +74,7 @@ export default function StepperVender({
                     ? 'bg-primary-deep text-white'
                     : isCurrent
                       ? 'bg-primary text-base'
-                      : 'bg-white text-base/40 border border-light-hairline',
+                      : 'bg-white text-base/70 border border-light-hairline',
                   // anel no passo em foco — distingue mesmo quando já concluído (✓)
                   isCurrent ? 'ring-2 ring-primary ring-offset-2' : '',
                 ].join(' ')}
@@ -88,7 +88,7 @@ export default function StepperVender({
                     ? 'text-base font-bold'
                     : isDone
                       ? 'text-base/70'
-                      : 'text-base/40',
+                      : 'text-base/70',
                   clickable && !isCurrent ? 'group-hover:text-base' : '',
                 ].join(' ')}
               >
@@ -108,7 +108,7 @@ export default function StepperVender({
                 <button
                   type="button"
                   onClick={() => onStepClick(idx)}
-                  className={`${wrapperClass} group cursor-pointer appearance-none bg-transparent focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary rounded-sm`}
+                  className={`${wrapperClass} group cursor-pointer appearance-none bg-transparent focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-signal-700 rounded-sm`}
                 >
                   {inner}
                 </button>
