@@ -16,7 +16,11 @@
  *    mais no ledger não tem ativo por trás e diluiria o NAV sem que nada
  *    parecesse errado. Caso de origem: o seed rodado duas vezes em 16/11/2026.
  * 5. TTL curto + single-flight: a rota pública de summary não vira amplificador
- *    de leitura ao Horizon (N requests = 1 leitura por janela).
+ *    de leitura ao Horizon (N requests = 1 leitura por janela). Exceção, para o
+ *    item 4 não fechar à toa: quando um valor REAPROVEITADO (cache ou leitura em
+ *    voo) parece sem lastro, o ledger é relido uma vez antes de fechar, porque um
+ *    resgate baixa o razão na hora e o supply do cache ainda é o de antes da
+ *    queima. Num descasamento real a releitura confirma e não se repete.
  *
  * O asset code vem de `fetchSupplyDasClasses` (`assetCodeForClasse`): fonte
  * única, igual para a tela e para o resgate.
@@ -33,6 +37,9 @@ import { supplyEmitidoParaNavAsDecimal, supplySemLastro } from './pool';
 
 /** Janela em que o supply lido é reaproveitado. */
 export const NAV_SUPPLY_TTL_MS = 15_000;
+
+/** Idade mínima de um valor que já veio de uma releitura para ser relido outra vez (2º resgate na mesma janela). */
+export const NAV_RELEITURA_IDADE_MIN_MS = 1_000;
 
 /** Mensagem pública constante — a causa fica só no log, com requestId. */
 export const NAV_INDISPONIVEL_MENSAGEM =
@@ -77,8 +84,23 @@ export interface SupplyDoNav {
   subordinada: SupplyOnChain;
 }
 
-let cache: { value: SupplyDasClasses; expiraEm: number } | null = null;
-let emVoo: Promise<SupplyDasClasses> | null = null;
+/** Uma leitura do ledger e o que já se sabe sobre o lastro dela. */
+interface Leitura {
+  value: SupplyDasClasses;
+  /** Ordem de INÍCIO: leitura mais velha que termina depois não substitui a mais nova no cache. */
+  ordem: number;
+  lidaEm: number;
+  expiraEm: number;
+  veioDeReleitura: boolean;
+  /** Já foi vista sem lastro logo depois de lida do ledger: o excesso é dela, reler pelo cache não muda. */
+  semLastroNaLeitura: boolean;
+  /** A releitura disparada por causa desta leitura: uma só, partilhada por quem a tiver em mãos (e a falha também). */
+  releitura?: Promise<Leitura>;
+}
+
+let cache: Leitura | null = null;
+let emVoo: Promise<Leitura> | null = null;
+let leiturasIniciadas = 0;
 
 /** Só para testes. */
 export function resetNavSupplyCache(): void {
@@ -166,9 +188,9 @@ async function exigirSemSwapEmVoo(): Promise<void> {
  * Supply sem lastro: o ledger tem mais PLINARF emitido do que o razão do fundo registra. Roda DEPOIS dos
  * gates de emissão e swap em voo (que cobrem a janela legítima em que o ledger já tem +q e o razão ainda
  * não), e sobre o supply que vai ser devolvido, inclusive o do cache. O razão é lido a cada chamada.
- * Falha de leitura fecha, como nos outros gates.
+ * Falha de leitura fecha, como nos outros gates. Devolve as quantidades quando falta lastro, ou `null`.
  */
-async function exigirSupplyComLastro(supplies: SupplyDoNav): Promise<SupplyDoNav> {
+async function faltaDeLastro(supplies: SupplyDoNav) {
   let noRazao;
   try {
     const agg = await db.movimentoFundo.aggregate({ _sum: { deltaTokens: true } });
@@ -179,40 +201,89 @@ async function exigirSupplyComLastro(supplies: SupplyDoNav): Promise<SupplyDoNav
   }
   const emitido = supplyEmitidoParaNavAsDecimal(supplies.senior);
   const { excedente, semLastro } = supplySemLastro(emitido, noRazao);
-  if (semLastro) {
-    // Só quantidades (públicas no ledger): o operador precisa delas para reconciliar.
-    console.error('[nav-supply] supply sem lastro no razão do fundo', {
-      emitidoNoLedger: emitido.toString(),
-      noRazao: noRazao.toString(),
-      excedente: excedente.toString(),
-    });
-    throw new NavIndisponivelError('SUPPLY_SEM_LASTRO');
-  }
-  return supplies;
+  if (!semLastro) return null;
+  return {
+    emitidoNoLedger: emitido.toString(),
+    noRazao: noRazao.toString(),
+    excedente: excedente.toString(),
+  };
 }
 
-export async function lerSupplyDoNav(opts: { fresh?: boolean } = {}): Promise<SupplyDoNav> {
-  // Dois gates fail-closed (cada um consulta o banco a cada chamada, fora do cache): emissão de cota em voo
-  // (E1-4: TentativaEmissao PENDENTE/CONFIRMADA sem aplicadaEm) e swap de subscrição em voo (N1: Quote
-  // reservado e sem consumedAt). Qualquer um fecha o NAV. Depois da leitura, o supply ainda tem de ter
-  // lastro no razão (`exigirSupplyComLastro`).
-  await exigirSemEmissaoEmVoo();
-  await exigirSemSwapEmVoo();
-  if (!opts.fresh) {
-    if (cache && Date.now() < cache.expiraEm) return exigirSupplyComLastro(aplicarTravaD3(cache.value));
-    if (emVoo) return exigirSupplyComLastro(aplicarTravaD3(await emVoo));
-  }
+function fecharSemLastro(quantidades: NonNullable<Awaited<ReturnType<typeof faltaDeLastro>>>): never {
+  // Só quantidades (públicas no ledger): o operador precisa delas para reconciliar.
+  console.error('[nav-supply] supply sem lastro no razão do fundo', quantidades);
+  throw new NavIndisponivelError('SUPPLY_SEM_LASTRO');
+}
 
+/** Lê o ledger e guarda no cache. `compartilhar` publica a leitura em voo (single-flight). */
+function lerEGuardar(opts: { compartilhar: boolean; veioDeReleitura: boolean }): Promise<Leitura> {
+  const ordem = ++leiturasIniciadas;
   const leitura = lerDoLedger().then((value) => {
-    cache = { value, expiraEm: Date.now() + NAV_SUPPLY_TTL_MS };
-    return value;
+    const lidaEm = Date.now();
+    const nova: Leitura = {
+      value,
+      ordem,
+      lidaEm,
+      expiraEm: lidaEm + NAV_SUPPLY_TTL_MS,
+      veioDeReleitura: opts.veioDeReleitura,
+      semLastroNaLeitura: false,
+    };
+    if (!cache || ordem > cache.ordem) cache = nova;
+    return nova;
   });
-  if (!opts.fresh) {
+  if (opts.compartilhar) {
     emVoo = leitura;
     const limpar = () => {
       if (emVoo === leitura) emVoo = null;
     };
     leitura.then(limpar, limpar);
   }
-  return exigirSupplyComLastro(aplicarTravaD3(await leitura));
+  return leitura;
+}
+
+function podeReler(leitura: Leitura, origem: 'cache' | 'em-voo'): boolean {
+  if (leitura.veioDeReleitura) {
+    return !leitura.semLastroNaLeitura && Date.now() - leitura.lidaEm > NAV_RELEITURA_IDADE_MIN_MS;
+  }
+  return origem === 'em-voo' || !leitura.semLastroNaLeitura;
+}
+
+/**
+ * Valor que outra chamada leu. Se parece sem lastro, relê o ledger UMA vez antes de fechar e decide só pelo
+ * valor fresco (trava D3 e razão de novo). Releitura que falha fecha: nunca volta ao valor reaproveitado.
+ */
+async function conferirReaproveitada(leitura: Leitura, origem: 'cache' | 'em-voo'): Promise<SupplyDoNav> {
+  const supplies = aplicarTravaD3(leitura.value);
+  const falta = await faltaDeLastro(supplies);
+  if (!falta) return supplies;
+  if (!leitura.releitura) {
+    if (!podeReler(leitura, origem)) fecharSemLastro(falta);
+    leitura.releitura = lerEGuardar({ compartilhar: true, veioDeReleitura: true });
+  }
+  const fresca = await leitura.releitura;
+  const relidos = aplicarTravaD3(fresca.value);
+  const aindaFalta = await faltaDeLastro(relidos);
+  if (!aindaFalta) return relidos;
+  fresca.semLastroNaLeitura = true;
+  return fecharSemLastro(aindaFalta);
+}
+
+export async function lerSupplyDoNav(opts: { fresh?: boolean } = {}): Promise<SupplyDoNav> {
+  // Dois gates fail-closed (cada um consulta o banco a cada chamada, fora do cache): emissão de cota em voo
+  // (E1-4: TentativaEmissao PENDENTE/CONFIRMADA sem aplicadaEm) e swap de subscrição em voo (N1: Quote
+  // reservado e sem consumedAt). Qualquer um fecha o NAV. Depois da leitura, o supply ainda tem de ter
+  // lastro no razão (`faltaDeLastro`).
+  await exigirSemEmissaoEmVoo();
+  await exigirSemSwapEmVoo();
+  if (!opts.fresh) {
+    if (cache && Date.now() < cache.expiraEm) return conferirReaproveitada(cache, 'cache');
+    if (emVoo) return conferirReaproveitada(await emVoo, 'em-voo');
+  }
+
+  const propria = await lerEGuardar({ compartilhar: !opts.fresh, veioDeReleitura: false });
+  const supplies = aplicarTravaD3(propria.value);
+  const falta = await faltaDeLastro(supplies);
+  if (!falta) return supplies;
+  propria.semLastroNaLeitura = true;
+  return fecharSemLastro(falta);
 }

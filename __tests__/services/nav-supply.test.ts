@@ -294,7 +294,7 @@ describe('lerSupplyDoNav — supply sem lastro no razão do fundo', () => {
     await lerSupplyDoNav(); // cacheia leitura com lastro
     movimentoAggregate.mockResolvedValue(razao('999'));
     await expect(lerSupplyDoNav()).rejects.toMatchObject({ motivo: 'SUPPLY_SEM_LASTRO' });
-    expect(fetchSupplyDasClasses).toHaveBeenCalledTimes(1);
+    expect(fetchSupplyDasClasses).toHaveBeenCalledTimes(2); // a do cache + uma releitura antes de fechar (nav-supply-releitura)
   });
 
   it('roda depois dos gates de emissão em voo: na janela legítima o motivo é EMISSAO_PENDENTE', async () => {
