@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const m = vi.hoisted(() => ({
-  incorporarCota: vi.fn(), executarClawback: vi.fn(), atualizarStatusCota: vi.fn(), registrarValidacaoLegal: vi.fn(),
+  incorporarCota: vi.fn(), executarClawback: vi.fn(), registrarValidacaoLegal: vi.fn(),
   log: vi.fn(),
 }));
 
@@ -21,11 +21,11 @@ vi.mock('@/lib/auth/admin', () => ({
 vi.mock('@/lib/rate-limit/config', () => ({ adminLoginLimiter: { consume: vi.fn().mockResolvedValue(true), reset: vi.fn() } }));
 vi.mock('@/lib/services/tokenizacao', async (orig) => ({
   ...(await orig<typeof import('@/lib/services/tokenizacao')>()),
-  incorporarCota: m.incorporarCota, executarClawback: m.executarClawback, atualizarStatusCota: m.atualizarStatusCota,
+  incorporarCota: m.incorporarCota, executarClawback: m.executarClawback,
 }));
 vi.mock('@/lib/services/originacao', () => ({ registrarValidacaoLegal: m.registrarValidacaoLegal }));
 
-import { incorporarCotaAction, registrarValidacaoLegalAction, atualizarStatusCotaAction } from '@/app/admin/actions';
+import { incorporarCotaAction, registrarValidacaoLegalAction } from '@/app/admin/actions';
 import { IncorporacaoBloqueadaError, IncorporacaoEmissaoError } from '@/lib/services/tokenizacao';
 
 const SEGREDO = 'Invalid `prisma.cota.update()` invocation: cota cmk123 email fulana@exemplo.test STELLAR_ISSUER_SECRET GSECRET';
@@ -39,7 +39,6 @@ beforeEach(() => {
 const ACOES: Array<[string, () => Promise<{ ok: boolean; error?: string }>, ReturnType<typeof vi.fn>]> = [
   ['incorporarCotaAction', () => incorporarCotaAction(null, fd({ tipoBem: 'IMOVEL', administradora: 'x', valorCarta: '1', desagioAquisicao: '0.1' })), m.incorporarCota],
   ['registrarValidacaoLegalAction', () => registrarValidacaoLegalAction(null, fd({ cotaId: 'c1', laudoUrl: 'https://l.test/x' })), m.registrarValidacaoLegal],
-  ['atualizarStatusCotaAction', () => atualizarStatusCotaAction(null, fd({ cotaId: 'c1', status: 'ATIVA' })), m.atualizarStatusCota],
 ];
 
 describe('actions do /admin — erro fixo', () => {
@@ -76,12 +75,6 @@ describe('actions do /admin — erro fixo', () => {
     const r = await registrarValidacaoLegalAction(null, fd({ cotaId: 'c1', laudoUrl: 'ftp://x' }));
     expect(r).toEqual({ ok: false, error: 'laudoUrl obrigatória (URL pública do documento).' });
     expect(m.registrarValidacaoLegal).not.toHaveBeenCalled();
-  });
-
-  it('atualizarStatusCotaAction: EMISSAO_PENDENTE recebe mensagem fixa sem chamar o serviço', async () => {
-    const r = await atualizarStatusCotaAction(null, fd({ cotaId: 'c1', status: 'EMISSAO_PENDENTE' }));
-    expect(r).toEqual({ ok: false, error: 'Status EMISSAO_PENDENTE só muda pela incorporação/reconciliação.' });
-    expect(m.atualizarStatusCota).not.toHaveBeenCalled();
   });
 
   it('sucesso continua igual (formato e txHash)', async () => {

@@ -241,7 +241,6 @@ vi.mock('@/lib/db', () => {
 import {
   IncorporacaoBloqueadaError,
   IncorporacaoEmissaoError,
-  atualizarStatusCota,
   incorporarCota,
   memoHashDaIncorporacao,
 } from '@/lib/services/tokenizacao';
@@ -688,20 +687,6 @@ describe('incorporarCota — emissão recusada (nada vai à chain)', () => {
     st.fetchSupplyDasClasses.mockResolvedValue({ senior: supply('0'), subordinada: supply('1') });
     await expect(incorporarCota(base)).rejects.toBeInstanceOf(NavIndisponivelError);
     expect(emissoes()).toBe(0);
-  });
-});
-
-describe('atualizarStatusCota', () => {
-  it('não entra nem sai de EMISSAO_PENDENTE (em desuso) por aqui', async () => {
-    st.cotas.set('c', { id: 'c', status: 'DISPONIVEL' });
-    await expect(atualizarStatusCota({ cotaId: 'c', status: 'EMISSAO_PENDENTE' as never, operador: 'a' })).rejects.toThrow(/EMISSAO_PENDENTE/);
-    st.cotas.set('c', { id: 'c', status: 'EMISSAO_PENDENTE' });
-    await expect(atualizarStatusCota({ cotaId: 'c', status: 'DISPONIVEL' as never, operador: 'a' })).rejects.toThrow(/EMISSAO_PENDENTE/);
-  });
-  it('transições normais continuam', async () => {
-    st.cotas.set('c', { id: 'c', status: 'DISPONIVEL' });
-    await atualizarStatusCota({ cotaId: 'c', status: 'REVERTIDA' as never, operador: 'a' });
-    expect(st.cotas.get('c')!.status).toBe('REVERTIDA');
   });
 });
 

@@ -1093,31 +1093,6 @@ async function concluirRegistroDoClawback(a: {
   }
 }
 
-export interface AtualizarStatusCotaInput {
-  cotaId: string;
-  status: StatusCota;
-  operador: string;
-}
-
-export async function atualizarStatusCota(input: AtualizarStatusCotaInput) {
-  // EMISSAO_PENDENTE (E1-4) é do fluxo de incorporação: nem entra nem sai por
-  // aqui — promover uma cota sem emissão confirmada poria ativo sem token no NAV.
-  const atual = await db.cota.findUnique({
-    where: { id: input.cotaId },
-    select: { status: true },
-  });
-  if (
-    input.status === StatusCota.EMISSAO_PENDENTE ||
-    atual?.status === StatusCota.EMISSAO_PENDENTE
-  ) {
-    throw new Error('Status EMISSAO_PENDENTE só muda pela incorporação/reconciliação.');
-  }
-  return db.cota.update({
-    where: { id: input.cotaId },
-    data: { status: input.status },
-  });
-}
-
 /** Chave pública do issuer (o registro amarra o emissor). Vazia → o registro recusa (fail-closed). */
 function issuerPublico(): string {
   const s = issuerSigner() as { publicKey?: () => string };

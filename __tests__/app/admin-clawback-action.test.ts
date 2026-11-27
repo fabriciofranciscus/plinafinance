@@ -10,7 +10,7 @@ vi.mock('@/lib/rate-limit/config', () => ({ adminLoginLimiter: { consume: async 
 vi.mock('@/lib/services/originacao', () => ({ registrarValidacaoLegal: vi.fn() }));
 vi.mock('@/lib/services/tokenizacao', async (orig) => ({
   ...(await orig<typeof import('@/lib/services/tokenizacao')>()),
-  executarClawback: m.executar, incorporarCota: vi.fn(), atualizarStatusCota: vi.fn(),
+  executarClawback: m.executar, incorporarCota: vi.fn(),
 }));
 
 import { executarClawbackAction } from '@/app/admin/actions';
