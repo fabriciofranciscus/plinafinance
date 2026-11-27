@@ -18,6 +18,7 @@
  */
 
 import { registrarMovimentoFundo } from './razao-fundo';
+import { STELLAR_NETWORK } from '../stellar/config';
 import {
   CaminhoRealizacao,
   LeadCompradorStatus,
@@ -446,6 +447,23 @@ export interface ExecutarCaminhoAResult {
 }
 
 /**
+ * A realização só roda onde o pagamento do comprador é declaradamente simulado. Lista de permissão: só o valor exato `TESTNET`
+ * libera; `PUBLIC`, vazio ou qualquer outro valor fecha.
+ */
+export function realizacaoLiberadaNestaRede(): boolean {
+  return (STELLAR_NETWORK as string) === 'TESTNET';
+}
+
+/** Mensagem FIXA (sem id, valor nem nome de variável). */
+export class RealizacaoBloqueadaError extends Error {
+  readonly code = 'PAGAMENTO_NAO_COMPROVADO' as const;
+  constructor() {
+    super('Realização bloqueada: o servidor ainda não comprova o pagamento do comprador. Nada foi gravado.');
+    this.name = 'RealizacaoBloqueadaError';
+  }
+}
+
+/**
  * Executa Caminho A: comprador-usuário paga, transferência efetiva,
  * Cota → REALIZADA, RealizacaoCaminho persistida com spread, audit
  * on-chain do hash completo. NAV/token sobe pra holders.
@@ -458,6 +476,11 @@ export interface ExecutarCaminhoAResult {
 export async function executarCaminhoA(
   input: ExecutarCaminhoAInput,
 ): Promise<ExecutarCaminhoAResult> {
+  // Gate de pagamento, fase 1: não há prova do pagamento no sistema (o atesto é só tela) e realizar grava o valor no razão, que
+  // sobe o NAV. Fora da testnet recusa AQUI, antes de ler o banco, ancorar ou gravar; vale para todos os chamadores. Só sai quando
+  // houver prova de pagamento conferida no servidor.
+  if (!realizacaoLiberadaNestaRede()) throw new RealizacaoBloqueadaError();
+
   const reserva = await db.reserva.findUnique({
     where: { id: input.reservaId },
     include: {
