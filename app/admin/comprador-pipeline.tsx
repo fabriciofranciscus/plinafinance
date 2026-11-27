@@ -253,7 +253,7 @@ function CaminhoABloqueado() {
   return (
     <div className="mt-3 space-y-2">
       <p id={id} className="font-text text-xs text-base/70">
-        Realização bloqueada: o servidor ainda não comprova o pagamento do comprador.
+        Indisponível nesta rede: a realização só roda na rede de testes até o pagamento do comprador ser comprovado no sistema.
       </p>
       <button
         type="button"

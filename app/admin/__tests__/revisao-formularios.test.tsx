@@ -97,7 +97,7 @@ describe('Caminho A', () => {
     const executar = screen.getByRole('button', { name: 'Executar Caminho A' }) as HTMLButtonElement;
     expect(executar.disabled).toBe(true);
     const motivo = document.getElementById(executar.getAttribute('aria-describedby')!)!;
-    expect(motivo.textContent).toBe('Realização bloqueada: o servidor ainda não comprova o pagamento do comprador.');
+    expect(motivo.textContent).toBe('Indisponível nesta rede: a realização só roda na rede de testes até o pagamento do comprador ser comprovado no sistema.');
     expect(screen.queryByRole('spinbutton')).toBeNull();
     fireEvent.click(executar);
     expect(screen.queryByTestId('revisao-acao')).toBeNull();
