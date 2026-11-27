@@ -18,11 +18,11 @@ const REGEX_STELLAR = /^\d{1,12}(\.\d{1,7})?$/;
 
 export const ValorBrlString = z
   .string()
-  .regex(REGEX_BRL, 'valor em reais inválido: use só dígitos, com até 13 inteiros e 2 casas decimais');
+  .regex(REGEX_BRL, 'valor em reais inválido: use ponto como separador decimal, ex.: 250000.00, com até 13 inteiros e 2 casas');
 
 export const DesagioColunaString = z
   .string()
-  .regex(REGEX_FRACAO, 'deságio inválido: use dígitos com até 4 casas decimais (ex.: 0.20 para 20%)');
+  .regex(REGEX_FRACAO, 'deságio inválido: use uma fração entre 0 e 1 com até 4 casas, ex.: 0.20 para 20%; não omita o zero inicial');
 
 export const FracaoDesagioString = z
   .string()
