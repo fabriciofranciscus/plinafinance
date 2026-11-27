@@ -1,5 +1,5 @@
 import type { CotaResumo, DiligenciaData } from '../../_types';
-import { BRL, TIPO_LABEL } from '../../_lib/glossary';
+import { BRL, TIPO_LABEL, explorerTx } from '../../_lib/glossary';
 import { FaixaContexto } from '../shell/faixa-contexto';
 
 const ACAO_LABEL: Record<string, string> = {
@@ -38,11 +38,13 @@ export function DiligenciaScreen({
   data,
   loading,
   onContinue,
+  erro,
 }: {
   selectedCota: CotaResumo | null;
   data: DiligenciaData | null;
   loading: boolean;
   onContinue: () => void;
+  erro?: React.ReactNode;
 }) {
   const tipo = selectedCota ? TIPO_LABEL[selectedCota.tipoBem] ?? selectedCota.tipoBem : '';
   const valor = selectedCota ? BRL.format(selectedCota.valorCarta) : '';
@@ -62,7 +64,7 @@ export function DiligenciaScreen({
       <FaixaContexto cota={selectedCota} reserva={null} />
 
       {loading ? (
-        <p className="mt-8 font-details text-[10px] tracking-[0.2em] uppercase text-base/55 animate-pulse">
+        <p className="mt-8 font-details text-[10px] tracking-[0.2em] uppercase text-base/65 animate-pulse">
           Carregando due diligence…
         </p>
       ) : !data ? (
@@ -73,9 +75,9 @@ export function DiligenciaScreen({
         <>
           {/* Jurídico */}
           <div className="mt-8">
-            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 mb-3">
+            <h2 className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65 mb-3">
               Jurídico
-            </p>
+            </h2>
             <div className="space-y-3">
               <Item>Contemplação confirmada — laudo de validação legal arquivado.</Item>
               <Item>Adimplência verificada — parcelas em dia até a originação.</Item>
@@ -89,21 +91,28 @@ export function DiligenciaScreen({
 
           {/* On-chain */}
           <div className="mt-8 border-y border-light-hairline py-6">
-            <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 mb-4">
+            <h2 className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65 mb-4">
               On-chain
-            </p>
+            </h2>
             <div className="grid grid-cols-1 gap-px bg-base/10">
               <Row k="Hash do laudo" v={shortHash(data.cota.hashValidacao)} />
-              <Row k="Tx de validação" v={shortHash(data.cota.validacaoTxHash)} />
-              <Row k="Tx de emissão" v={shortHash(data.cota.emissaoTxHash)} />
+              <Row k="Tx de validação" v={shortHash(data.cota.validacaoTxHash)} tx={data.cota.validacaoTxHash} />
+              <Row k="Tx de emissão" v={shortHash(data.cota.emissaoTxHash)} tx={data.cota.emissaoTxHash} />
               <Row k="PLINA-RF emitido" v={data.cota.tokensEmitidos.toString()} />
             </div>
             {data.eventos.length > 0 && (
               <ul className="mt-4 space-y-2">
                 {data.eventos.map((e, i) => (
                   <li key={i} className="flex items-center gap-2 font-mono text-[11px] text-base/65">
-                    <span className="text-primary-deep">✓</span>
-                    {ACAO_LABEL[e.acao] ?? e.acao} · {shortHash(e.stellarTxHash)}
+                    <span aria-hidden="true" className="text-primary-deep">✓</span>
+                    {ACAO_LABEL[e.acao] ?? e.acao} ·{' '}
+                    {e.stellarTxHash ? (
+                      <a href={explorerTx(e.stellarTxHash)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-[44px] items-center text-primary-deep underline hover:text-base">
+                        {shortHash(e.stellarTxHash)}
+                      </a>
+                    ) : (
+                      shortHash(e.stellarTxHash)
+                    )}
                   </li>
                 ))}
               </ul>
@@ -119,17 +128,33 @@ export function DiligenciaScreen({
       >
         Avançar para proposta →
       </button>
+      {erro}
     </div>
   );
 }
 
-function Row({ k, v }: { k: string; v: string }) {
+function Row({ k, v, tx }: { k: string; v: string; tx?: string | null }) {
+  const id = `row-${k.replace(/\s+/g, '-').toLowerCase()}`;
   return (
     <div className="bg-white px-5 py-4 flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-6">
-      <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65 sm:min-w-[160px]">
+      <span id={id} className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65 sm:min-w-[160px]">
         {k}
       </span>
-      <span className="font-mono text-xs text-base break-all">{v}</span>
+      <span className="font-mono text-xs text-base break-all">
+        {tx ? (
+          <a
+            href={explorerTx(tx)}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-describedby={id}
+            className="inline-flex min-h-[44px] items-center text-primary-deep underline hover:text-base"
+          >
+            {v}
+          </a>
+        ) : (
+          v
+        )}
+      </span>
     </div>
   );
 }

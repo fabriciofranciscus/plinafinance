@@ -116,7 +116,8 @@ describe('cessão sem aparência de campo (C6)', () => {
 
   it('a linha da reserva mantém o mesmo texto', () => {
     render(<CessaoScreen pessoa={pessoa} cota={cota} reserva={reserva} cessao={null} signing={false} onAssinar={() => {}} />);
-    expect(screen.getByText(/Reserva res-12345678… · prova on-chain aaaaaaaa…/)).toBeTruthy();
+    // o tx agora é link (C5), então o texto é conferido pelo parágrafo inteiro
+    expect(screen.getByTestId('documento-cessao').textContent).toContain('Reserva res-12345678… · prova on-chain aaaaaaaa…');
   });
 });
 
@@ -139,6 +140,25 @@ describe('celular: fase + subtela (C11)', () => {
     render(<Rail current="kyc" />);
     expect(screen.getByText('KYC')).toBeTruthy();
     expect(screen.getByText('Assinatura')).toBeTruthy();
+  });
+});
+
+describe('confirmação antes do envio: não promete aquisição concluída', () => {
+  it('parágrafo aprovado pela Norma', () => {
+    render(<ConfirmacaoScreen cota={cota} reserva={reserva} cessao={cessao} confirmacao={null} confirming={false} onConfirmar={() => {}} />);
+    const texto = document.body.textContent!.replace(/\s+/g, ' ');
+    expect(texto).toContain('A cessão está assinada e registrada na rede de testes. Confirme para registrar a transferência de titularidade, que depende da aprovação da administradora.');
+    expect(texto).not.toContain('finalizar a aquisição');
+  });
+});
+
+describe('confirmação pendente: sem promessa de e-mail; quem aprova é a administradora', () => {
+  it('parágrafo aprovado pela Norma', () => {
+    const pend = { status: 'PENDENTE_CONFIRMACAO', valorRealizado: '150000' } as never;
+    render(<ConfirmacaoScreen cota={cota} reserva={reserva} cessao={cessao} confirmacao={pend} confirming={false} onConfirmar={() => {}} />);
+    const texto = document.body.textContent!.replace(/\s+/g, ' ');
+    expect(texto).toMatch(/Sua cessão está assinada e a reserva registrada\. A transferência de titularidade depende da aprovação da administradora\. Valor a pagar: R\$ 150\.000/);
+    expect(texto).not.toMatch(/por e-mail|A equipe Plina confirma/);
   });
 });
 
@@ -176,7 +196,7 @@ describe('frases protegidas N2–N5: mesmas, na mesma ordem relativa (regressão
     ordem('confirmacao.tsx', [
       'Confirme a transferência de titularidade.',
       'Aguardando confirmação.',
-      'Você agora é titular da carta de crédito.',
+      'A transferência de titularidade depende da aprovação da administradora.',
       'Próximos passos',
     ]));
 });

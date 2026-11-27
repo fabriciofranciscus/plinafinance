@@ -1,6 +1,7 @@
 import type { CessaoData, CotaResumo, ReservaData } from '../../_types';
 import type { PessoaState } from '@/components/PessoaProvider';
 import { FaixaContexto } from '../shell/faixa-contexto';
+import { explorerTx } from '../../_lib/glossary';
 
 const labelCls =
   'font-details text-[10px] tracking-[0.2em] uppercase text-base/70';
@@ -11,6 +12,7 @@ export function CessaoScreen({
   reserva,
   signing,
   onAssinar,
+  erro,
 }: {
   pessoa: PessoaState;
   cota: CotaResumo | null;
@@ -18,6 +20,7 @@ export function CessaoScreen({
   cessao: CessaoData | null;
   signing: boolean;
   onAssinar: () => void;
+  erro?: React.ReactNode;
 }) {
   return (
     <div>
@@ -35,7 +38,7 @@ export function CessaoScreen({
       <FaixaContexto cota={cota} reserva={reserva} />
 
       <div data-testid="documento-cessao" className="mt-8 border border-light-hairline bg-lightBg/40 p-6">
-        <p className={labelCls}>Documento</p>
+        <h2 className={labelCls}>Documento</h2>
         <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field k="Nome" v={pessoa.nome ?? '—'} />
           <Field k="E-mail" v={pessoa.email ?? '—'} />
@@ -43,7 +46,14 @@ export function CessaoScreen({
         {reserva && (
           <p className="mt-4 font-mono text-[11px] text-base/70">
             Reserva {reserva.reservaId.slice(0, 12)}… · prova on-chain{' '}
-            {reserva.txHash.slice(0, 8)}…
+            <a
+              href={explorerTx(reserva.txHash)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-[44px] items-center text-base underline hover:text-primary-deep"
+            >
+              {reserva.txHash.slice(0, 8)}…
+            </a>
           </p>
         )}
       </div>
@@ -55,6 +65,7 @@ export function CessaoScreen({
       >
         {signing ? 'Simulando…' : 'Simular assinatura →'}
       </button>
+      {erro}
     </div>
   );
 }

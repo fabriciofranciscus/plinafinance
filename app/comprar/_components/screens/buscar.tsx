@@ -5,15 +5,20 @@ import type { CotaResumo } from '../../_types';
 import { BRL, TIPO_LABEL, valorRevenda } from '../../_lib/glossary';
 
 const labelCls =
-  'font-details text-[10px] tracking-[0.2em] uppercase text-base/60';
+  'font-details text-[10px] tracking-[0.2em] uppercase text-base/65';
 
 export function BuscarScreen({
   cotas,
   loading,
+  falhou,
+  erro,
   onSelect,
 }: {
   cotas: CotaResumo[] | null;
   loading: boolean;
+  /** A leitura da lista falhou: o erro ocupa o lugar da lista e a frase de filtro vazio não aparece. */
+  falhou: boolean;
+  erro?: React.ReactNode;
   onSelect: (cota: CotaResumo) => void;
 }) {
   const [tipo, setTipo] = useState<string>('TODOS');
@@ -73,10 +78,12 @@ export function BuscarScreen({
         </label>
       </div>
 
-      {/* Grid */}
+      {/* Quatro saídas exclusivas: carregando · falha · filtro sem resultado · lista (AP-5 C3). */}
       <div className="mt-8">
-        {loading ? (
-          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/55 animate-pulse">
+        {falhou ? (
+          erro ?? null
+        ) : loading || cotas === null ? (
+          <p role="status" className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 animate-pulse">
             Carregando cotas…
           </p>
         ) : filtradas.length === 0 ? (
@@ -84,11 +91,11 @@ export function BuscarScreen({
             Nenhuma cota disponível com esses filtros. Ajuste e tente de novo.
           </p>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-base/15 border border-light-hairline">
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-base/15 border border-light-hairline">
             {filtradas.map((c) => (
               <CotaCard key={c.id} cota={c} onSelect={() => onSelect(c)} />
             ))}
-          </div>
+          </ul>
         )}
       </div>
     </div>
@@ -99,9 +106,12 @@ function CotaCard({ cota, onSelect }: { cota: CotaResumo; onSelect: () => void }
   const paga = valorRevenda(cota.valorCarta, cota.desagioRevenda);
   const descontoPct = ((cota.desagioRevenda ?? 0) * 100).toFixed(1);
 
+  const idTipo = `cota-${cota.id}-tipo`;
+  const idValor = `cota-${cota.id}-valor`;
+
   return (
-    <div className="bg-sheet-white p-5 flex flex-col">
-      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
+    <li className="bg-sheet-white p-5 flex flex-col">
+      <p id={idTipo} className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65">
         {TIPO_LABEL[cota.tipoBem] ?? cota.tipoBem}
         {cota.localizacaoAprox ? ` · ${cota.localizacaoAprox}` : ''}
       </p>
@@ -110,14 +120,14 @@ function CotaCard({ cota, onSelect }: { cota: CotaResumo; onSelect: () => void }
       </div>
 
       <div className="mt-5">
-        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/50">
+        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65">
           Valor de face
         </p>
-        <p className="font-mono text-lg text-base">{BRL.format(cota.valorCarta)}</p>
+        <p id={idValor} className="font-mono text-lg text-base">{BRL.format(cota.valorCarta)}</p>
       </div>
 
       <div className="mt-3 border border-primary-deep/30 bg-primary-deep/5 p-3">
-        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/50">
+        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65">
           Entrada (−{descontoPct}% sobre o valor de face)
         </p>
         <p className="font-mono text-2xl font-bold text-primary-deep">
@@ -129,17 +139,18 @@ function CotaCard({ cota, onSelect }: { cota: CotaResumo; onSelect: () => void }
       </div>
 
       {cota.prazoRestanteMeses != null && (
-        <p className="mt-3 font-mono text-[11px] text-base/55">
+        <p className="mt-3 font-mono text-[11px] text-base/65">
           Prazo restante: {cota.prazoRestanteMeses}m
         </p>
       )}
 
       <button
         onClick={onSelect}
+        aria-describedby={`${idTipo} ${idValor}`}
         className="mt-5 w-full bg-base text-white py-3 font-details text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-primary-deep transition-colors max-md:min-h-[44px]"
       >
         Selecionar cota →
       </button>
-    </div>
+    </li>
   );
 }

@@ -1,4 +1,5 @@
 import type { Screen } from '../_types';
+import { txExplorerUrl } from '@/lib/stellar/explorer';
 
 export const SCREENS: { id: Screen; label: string }[] = [
   { id: 'buscar', label: 'Buscar cota' },
@@ -56,4 +57,15 @@ export function valorRevenda(valorCarta: number, desagioRevenda: number | null):
 /** Rótulo curto da tela (subtela) dentro da fase: "KYC", "Assinatura"... */
 export function screenLabel(screen: Screen): string {
   return SCREENS.find((s) => s.id === screen)?.label ?? '';
+}
+
+/** Subtela a exibir depois do nome da fase (cabeçalho do celular); só fases com mais de uma tela têm. */
+export function subtelaDaFase(screen: Screen): string | null {
+  const { phase } = phaseForScreen(screen);
+  return phase.screens.length > 1 ? screenLabel(screen) : null;
+}
+
+/** Link da transação no explorer da rede configurada, com o hash COMPLETO. */
+export function explorerTx(hash: string): string {
+  return txExplorerUrl(hash);
 }

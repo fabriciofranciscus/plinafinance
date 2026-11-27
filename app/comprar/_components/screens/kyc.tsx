@@ -8,7 +8,7 @@ import { FaixaContexto } from '../shell/faixa-contexto';
 const fieldCls =
   'w-full px-4 py-3 border border-light-hairline font-text text-sm text-base bg-lightBg/30 focus:outline-none focus-visible:border-primary-deep focus-visible:ring-2 focus-visible:ring-primary-deep/20 transition-colors';
 const labelCls =
-  'font-details text-[10px] tracking-[0.2em] uppercase text-base/60 mb-1.5 block';
+  'font-details text-[10px] tracking-[0.2em] uppercase text-base/65 mb-1.5 block';
 
 export function KycScreen({
   pessoa,
@@ -16,12 +16,14 @@ export function KycScreen({
   reserva,
   loading,
   onSubmit,
+  erro,
 }: {
   pessoa: PessoaState;
   cota: CotaResumo | null;
   reserva: ReservaData | null;
   loading: boolean;
   onSubmit: (input: { nome?: string; cpf?: string }) => void;
+  erro?: React.ReactNode;
 }) {
   const [nome, setNome] = useState('');
   const [cpf, setCpf] = useState('');
@@ -105,6 +107,7 @@ export function KycScreen({
       >
         {loading ? 'Verificando…' : 'Verificar identidade →'}
       </button>
+      {erro}
     </div>
   );
 }
