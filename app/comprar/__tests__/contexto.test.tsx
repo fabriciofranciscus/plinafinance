@@ -143,6 +143,15 @@ describe('celular: fase + subtela (C11)', () => {
   });
 });
 
+describe('confirmação antes do envio: não promete aquisição concluída', () => {
+  it('parágrafo aprovado pela Norma', () => {
+    render(<ConfirmacaoScreen cota={cota} reserva={reserva} cessao={cessao} confirmacao={null} confirming={false} onConfirmar={() => {}} />);
+    const texto = document.body.textContent!.replace(/\s+/g, ' ');
+    expect(texto).toContain('A cessão está assinada e registrada na rede de testes. Confirme para registrar a transferência de titularidade, que depende da aprovação da administradora.');
+    expect(texto).not.toContain('finalizar a aquisição');
+  });
+});
+
 describe('frases protegidas N2–N5: mesmas, na mesma ordem relativa (regressão byte a byte)', () => {
   const ordem = (arquivo: string, frases: string[]) => {
     const src = readFileSync(`app/comprar/_components/screens/${arquivo}`, 'utf8');

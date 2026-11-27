@@ -34,8 +34,9 @@ export function ConfirmacaoScreen({
           Confirme a transferência de titularidade.
         </h1>
         <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
-          A cessão está assinada e registrada on-chain. Confirme para finalizar
-          a aquisição da carta de crédito.
+          A cessão está assinada e registrada na rede de testes. Confirme para
+          registrar a transferência de titularidade, que depende da aprovação da
+          administradora.
         </p>
 
         <FaixaContexto cota={cota} reserva={reserva} />
