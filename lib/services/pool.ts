@@ -48,6 +48,16 @@ export interface CotaForNav {
 
 const ONE = new Prisma.Decimal(1);
 
+/**
+ * Cota ATIVA = ainda no pool: disponível ou reservada. Realizada (vendida) e revertida não contam; EMISSAO_PENDENTE está em desuso.
+ * Fonte única: o `pool/summary` e o painel /admin usam esta lista (o admin contava todas as cotas, M15 do backlog de 25/11).
+ */
+export const STATUS_COTA_ATIVA: readonly StatusCota[] = [StatusCota.DISPONIVEL, StatusCota.RESERVADA];
+
+export function contarCotasAtivas(cotas: ReadonlyArray<{ status: StatusCota }>): number {
+  return cotas.filter((c) => STATUS_COTA_ATIVA.includes(c.status)).length;
+}
+
 export function navDaCotaAsDecimal(cota: {
   valorCarta: Numericable;
   desagioAquisicao: Numericable;

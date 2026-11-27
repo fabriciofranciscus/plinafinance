@@ -1,4 +1,5 @@
 import type { Screen } from '../_types';
+import { txExplorerUrl } from '@/lib/stellar/explorer';
 
 export const SCREENS: { id: Screen; label: string }[] = [
   { id: 'buscar', label: 'Buscar cota' },
@@ -64,7 +65,7 @@ export function subtelaDaFase(screen: Screen): string | null {
   return phase.screens.length > 1 ? screenLabel(screen) : null;
 }
 
-/** Link da transação no explorer (testnet), com o hash COMPLETO. */
+/** Link da transação no explorer da rede configurada, com o hash COMPLETO. */
 export function explorerTx(hash: string): string {
-  return `https://stellar.expert/explorer/testnet/tx/${hash}`;
+  return txExplorerUrl(hash);
 }

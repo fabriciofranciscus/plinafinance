@@ -65,7 +65,7 @@ export function ConfirmScreen({
     <div>
       <TestnetBanner />
 
-      <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
+      <p className="font-details text-[10px] tracking-[0.3em] uppercase text-signal-700">
         06 // Revisão · swap atômico
       </p>
       <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">
@@ -80,14 +80,14 @@ export function ConfirmScreen({
 
       <div className="mt-12 border-t border-light-hairline">
         <div className="py-8 border-b border-light-hairline">
-          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65">
+          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
             Você receberá
           </p>
           <p className="font-mono text-5xl md:text-6xl mt-4 text-base font-medium tracking-tight">
             {NUMBER_BR.format(Number(tokensDaCotacao(quote)))}
-            <span className="font-mono text-2xl md:text-3xl text-base/45 ml-3">PLINA-RF</span>
+            <span className="font-mono text-2xl md:text-3xl text-base/70 ml-3">PLINA-RF</span>
           </p>
-          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65 mt-3">
+          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 mt-3">
             Simulação em testnet · valores da cotação acima, sem valor financeiro real
           </p>
         </div>
@@ -172,7 +172,7 @@ export function ConfirmScreen({
             <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base">
               {showXdr ? '— Ocultar XDR' : '+ Inspecionar XDR completo'}
             </span>
-            <span className="font-mono text-[10px] text-base/55">
+            <span className="font-mono text-[10px] text-base/70">
               base64 · stellar envelope
             </span>
           </button>
@@ -188,7 +188,7 @@ export function ConfirmScreen({
           funcional). Demais são display-only e NÃO alteram a assinatura/swap;
           ficam selecionáveis só com NEXT_PUBLIC_CUSTODY_PROVIDERS. */}
       <div className="mt-10">
-        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/65">
+        <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70">
           Custódia
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -216,7 +216,7 @@ export function ConfirmScreen({
           })}
         </div>
         {custodyProvider !== 'SELF' && (
-          <p className="font-mono text-[11px] text-base/55 mt-3">
+          <p className="font-mono text-[11px] text-base/70 mt-3">
             Custódia integrada — em integração. A assinatura desta operação segue
             pela wallet embedded; o roteamento por custodiante entra numa fase
             posterior.
@@ -267,7 +267,7 @@ export function ConfirmScreen({
               type="button"
               onClick={onRequote}
               disabled={requoting}
-              className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep hover:text-base disabled:opacity-40"
+              className="font-details text-[10px] tracking-[0.2em] uppercase text-signal-700 hover:text-base disabled:opacity-40"
             >
               {requoting ? 'Gerando cotação…' : 'Gerar nova cotação →'}
             </button>
@@ -291,7 +291,7 @@ export function ConfirmScreen({
           )}
         </button>
         {!buying && (
-          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/55 mt-4">
+          <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 mt-4">
             Pop-up Privy vai pedir confirmação da assinatura
           </p>
         )}

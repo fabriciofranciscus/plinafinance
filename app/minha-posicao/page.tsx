@@ -23,6 +23,7 @@ import { ResgateSection } from './_components/ResgateSection';
 import type { UseResgateArgs } from './_hooks/use-resgate';
 import { emitidoNoLedger, participacaoPct } from './_lib/emitido-ledger';
 import { fmtPct } from '@/lib/me/formato';
+import { accountExplorerUrl, assetExplorerUrl, txExplorerUrl } from '@/lib/stellar/explorer';
 
 interface BalanceRow {
   asset_code?: string;
@@ -61,7 +62,9 @@ interface PoolSummary {
 
 const HORIZON_URL =
   process.env.NEXT_PUBLIC_STELLAR_HORIZON_URL ??
-  'https://horizon-testnet.stellar.org';
+  (process.env.NEXT_PUBLIC_STELLAR_NETWORK === 'PUBLIC'
+    ? 'https://horizon.stellar.org'
+    : 'https://horizon-testnet.stellar.org');
 
 const NUMBER_BR = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 });
 const NUMBER_INT = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
@@ -98,13 +101,13 @@ const MOTIVO_LABEL: Record<string, string> = {
 };
 
 function explorerAccount(pubkey: string) {
-  return `https://stellar.expert/explorer/testnet/account/${pubkey}`;
+  return accountExplorerUrl(pubkey);
 }
 function explorerTx(hash: string) {
-  return `https://stellar.expert/explorer/testnet/tx/${hash}`;
+  return txExplorerUrl(hash);
 }
 function explorerAsset(code: string, issuer: string) {
-  return `https://stellar.expert/explorer/testnet/asset/${code}-${issuer}`;
+  return assetExplorerUrl(issuer, code);
 }
 
 export default function MinhaPosicaoPage() {

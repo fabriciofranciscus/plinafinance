@@ -1,3 +1,4 @@
+import { txExplorerUrl } from '@/lib/stellar/explorer';
 /** Formatação de EXIBIÇÃO (pt-BR). Os valores chegam prontos do servidor; aqui só se formata, nada se calcula. */
 
 const num = (s: string | null | undefined): number | null => {
@@ -30,7 +31,7 @@ export const fmtDataHora = (iso: string | null | undefined) => {
   return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
 };
 
-export const explorerTx = (hash: string) => `https://stellar.expert/explorer/testnet/tx/${hash}`;
+export const explorerTx = (hash: string) => txExplorerUrl(hash);
 export const hashCurto = (hash: string) => `${hash.slice(0, 4)}…${hash.slice(-4)}`;
 
 /** Nome para o cabeçalho: nunca e-mail nem vazio. */

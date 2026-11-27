@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
+import { txExplorerUrl } from '@/lib/stellar/explorer';
 
 interface PipelineComprador {
   id: string;
@@ -48,7 +49,7 @@ const STATUS_RESERVA: Record<string, string> = {
 };
 
 function explorerTx(hash: string) {
-  return `https://stellar.expert/explorer/testnet/tx/${hash}`;
+  return txExplorerUrl(hash);
 }
 
 const BRL = new Intl.NumberFormat('pt-BR', {

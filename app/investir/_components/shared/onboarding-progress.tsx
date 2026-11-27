@@ -6,7 +6,7 @@ export function OnboardingProgress() {
   const phases = [
     'Criando wallet Stellar embedded',
     'Registrando customer na anchor',
-    'Submetendo KYC programático',
+    'Enviando sua verificação de identidade',
     'Confirmando aprovação',
   ];
   const [step, setStep] = useState(0);
@@ -35,14 +35,14 @@ export function OnboardingProgress() {
               />
               <span
                 className={`font-mono text-xs transition-colors ${
-                  isDone ? 'text-primary-deep' : isCurrent ? 'text-base' : 'text-base/35'
+                  isDone ? 'text-signal-700' : isCurrent ? 'text-base' : 'text-base/70'
                 }`}
               >
                 {String(idx + 1).padStart(2, '0')}
               </span>
               <span
                 className={`font-text text-sm transition-colors flex-1 ${
-                  isCurrent ? 'text-base' : isDone ? 'text-base/70' : 'text-base/40'
+                  isCurrent ? 'text-base' : isDone ? 'text-base/70' : 'text-base/70'
                 }`}
               >
                 {p}
@@ -50,7 +50,7 @@ export function OnboardingProgress() {
               </span>
               {isDone && (
                 <span
-                  className="font-mono text-[10px] text-primary-deep"
+                  className="font-mono text-[10px] text-signal-700"
                   aria-label="concluído"
                 >
                   ✓
@@ -60,7 +60,7 @@ export function OnboardingProgress() {
           );
         })}
       </ol>
-      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/55 mt-3">
+      <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 mt-3">
         Sandbox auto-aprova · ~3-8s
       </p>
     </div>

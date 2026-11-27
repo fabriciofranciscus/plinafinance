@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from 'react';
 import { executarClawbackAction, type ActionResult } from './actions';
 import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
+import { txExplorerUrl } from '@/lib/stellar/explorer';
 
 const motivoOptions = [
   { value: 'DECISAO_JUDICIAL', label: 'Decisão judicial' },
@@ -95,7 +96,7 @@ export function ClawbackForm({
         <p className="font-text text-body-small text-base/80">
           ✓ Clawback executado. Tx:{' '}
           <a
-            href={`https://stellar.expert/explorer/testnet/tx/${state.txHash}`}
+            href={txExplorerUrl(state.txHash)}
             target="_blank"
             rel="noopener noreferrer"
             className="font-mono text-xs underline"

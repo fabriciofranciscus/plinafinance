@@ -1,7 +1,12 @@
 import Link from 'next/link';
 import type { CessaoData, ConfirmacaoData, CotaResumo, ReservaData } from '../../_types';
-import { BRL, explorerTx, valorRevenda } from '../../_lib/glossary';
+import { BRL, valorRevenda } from '../../_lib/glossary';
+import { txExplorerUrl } from '@/lib/stellar/explorer';
 import { FaixaContexto } from '../shell/faixa-contexto';
+
+function explorerTx(hash: string) {
+  return txExplorerUrl(hash);
+}
 
 export function ConfirmacaoScreen({
   cota,

@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { incorporarCotaAction, type ActionResult } from './actions';
 import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
+import { txExplorerUrl } from '@/lib/stellar/explorer';
 
 const tipoBemOptions = [
   { value: 'IMOVEL', label: 'Imóvel' },
@@ -130,7 +131,7 @@ export function IncorporarCotaForm() {
         <p className="font-text text-sm text-base/80">
           ✓ Cota incorporada. Tx:{' '}
           <a
-            href={`https://stellar.expert/explorer/testnet/tx/${state.txHash}`}
+            href={txExplorerUrl(state.txHash)}
             target="_blank"
             rel="noopener noreferrer"
             className="font-mono text-xs underline"

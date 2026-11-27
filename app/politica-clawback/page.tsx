@@ -68,7 +68,7 @@ export default function PoliticaClawbackPage() {
         <ol className="space-y-8">
           {HIPOTESES.map((h, idx) => (
             <li key={h.enum} className="border-l-2 border-primary pl-6">
-              <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 mb-1">
+              <p className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 mb-1">
                 Hipótese {idx + 1} · <span className="font-mono">{h.enum}</span>
               </p>
               <h3 className="font-title text-xl font-semibold mb-2">
@@ -139,7 +139,7 @@ export default function PoliticaClawbackPage() {
         </ul>
       </section>
 
-      <p className="mt-16 pt-8 border-t border-light-hairline text-xs text-base/60">
+      <p className="mt-16 pt-8 border-t border-light-hairline text-xs text-base/70">
         Versão 0.1 · rede de testes. A versão final entra em vigor antes de
         qualquer operação com valor real. Atualizações registradas com
         versionamento aqui e linkadas no{' '}

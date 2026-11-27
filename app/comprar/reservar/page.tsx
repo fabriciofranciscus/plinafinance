@@ -13,9 +13,10 @@ import { useAppPrivy } from '@/lib/hooks/privy';
 import { useRequireAuth } from '@/lib/hooks/use-require-auth';
 import { postJson } from '@/lib/http/client';
 import { SemCotaEscolhida } from './sem-cota';
+import { txExplorerUrl } from '@/lib/stellar/explorer';
 
 function explorerTx(hash: string) {
-  return `https://stellar.expert/explorer/testnet/tx/${hash}`;
+  return txExplorerUrl(hash);
 }
 
 interface ReservaResult {
