@@ -5,7 +5,7 @@
  * reserva. Form inline pra executar Caminho A (finaliza realização).
  */
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
 import { txExplorerUrl } from '@/lib/stellar/explorer';
@@ -201,16 +201,18 @@ function LeadCard({ lead, redePublica }: { lead: PipelineComprador; redePublica:
                 )}
               </div>
 
-              {r.status === 'ATIVA' && (
-                <ExecutarCaminhoAForm
-                  reservaId={r.id}
-                  valorRevendaSugerido={valorRevenda}
-                  linhas={linhasDaReserva(lead, r, valorRevenda, redePublica)}
-                  redePublica={redePublica}
-                  onSubmit={call}
-                  busy={busy}
-                />
-              )}
+              {r.status === 'ATIVA' &&
+                (redePublica ? (
+                  <CaminhoABloqueado />
+                ) : (
+                  <ExecutarCaminhoAForm
+                    reservaId={r.id}
+                    valorRevendaSugerido={valorRevenda}
+                    linhas={linhasDaReserva(lead, r, valorRevenda, redePublica)}
+                    onSubmit={call}
+                    busy={busy}
+                  />
+                ))}
               {r.status === 'ATIVA' && (
                 <AcaoComRevisao
                   desabilitado={busy}
@@ -242,36 +244,53 @@ function LeadCard({ lead, redePublica }: { lead: PipelineComprador; redePublica:
   );
 }
 
+/**
+ * Rede principal: o servidor recusa a realização enquanto não comprovar o pagamento (gate do #166), então a tela mostra a ação
+ * desabilitada com o motivo, em vez de um formulário que sempre falharia.
+ */
+function CaminhoABloqueado() {
+  const id = useId();
+  return (
+    <div className="mt-3 space-y-2">
+      <p id={id} className="font-text text-xs text-base/70">
+        Realização bloqueada: o servidor ainda não comprova o pagamento do comprador.
+      </p>
+      <button
+        type="button"
+        disabled
+        aria-describedby={id}
+        className="bg-base text-lightBg font-details text-[10px] tracking-[0.2em] uppercase px-4 py-2 disabled:opacity-50"
+      >
+        Executar Caminho A
+      </button>
+    </div>
+  );
+}
+
 function ExecutarCaminhoAForm({
   reservaId,
   valorRevendaSugerido,
   linhas,
-  redePublica,
   onSubmit,
   busy,
 }: {
   reservaId: string;
   valorRevendaSugerido: number;
   linhas: LinhaRevisao[];
-  redePublica: boolean;
   onSubmit: (action: string, payload: Record<string, unknown>) => void;
   busy: boolean;
 }) {
   // Enviar (botão ou Enter) abre a Revisão; só a confirmação executa o Caminho A com o valor revisado.
-  const rotuloValor = redePublica ? 'Valor recebido' : 'Valor simulado';
+  // Só existe na rede de testes, onde o pagamento é simulado (textos da Consuelo: nada afirma recebimento ou registro).
   const revisao = useRevisaoDeFormulario((dados) => ({
     titulo: 'Revisar antes de executar o Caminho A',
     linhas: [
       ...linhas,
-      { rotulo: rotuloValor, valor: <span className="font-mono">{BRL_CENTAVOS.format(Number(dados.get('valorRealizado')))}</span> },
+      { rotulo: 'Valor simulado', valor: <span className="font-mono">{BRL_CENTAVOS.format(Number(dados.get('valorRealizado')))}</span> },
     ],
-    // Textos por rede (Consuelo): na rede de testes o pagamento é simulado, então nada afirma recebimento ou comprovação.
-    consequencia: redePublica
-      ? 'A cota sai do pool como realizada. O valor recebido entra no caixa do fundo e passa a compor o NAV. Não há como desfazer pelo painel.'
-      : 'A cota sai do pool como realizada. O valor simulado passa a compor o caixa e o NAV na rede de testes. Não há como desfazer pelo painel.',
-    atesto: redePublica
-      ? 'Conferi o comprador, a cota e o valor efetivamente recebido, e o pagamento do comprador está comprovado.'
-      : 'Conferi o comprador, a cota e o valor, e entendo que o pagamento do comprador é simulado na rede de testes.',
+    consequencia:
+      'A cota sai do pool como realizada. O valor simulado passa a compor o caixa e o NAV na rede de testes. Não há como desfazer pelo painel.',
+    atesto: 'Conferi o comprador, a cota e o valor, e entendo que o pagamento do comprador é simulado na rede de testes.',
     confirmar: 'Executar Caminho A',
   }));
   return (
@@ -292,7 +311,7 @@ function ExecutarCaminhoAForm({
     >
       <label className="block">
         <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 block mb-1">
-          {rotuloValor}
+          Valor simulado
         </span>
         <input
           name="valorRealizado"

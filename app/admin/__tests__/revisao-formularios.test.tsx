@@ -73,24 +73,37 @@ describe('Caminho A', () => {
   });
 
   // Consuelo (condição no #157) + decisão do Atlas: sem gate no servidor, o atesto precisa dizer o que o operador afirma.
-  // Na rede de testes o pagamento é simulado e nada o registra (Vera): nem "comprovado" nem "registrado"; "comprovado" só na principal.
-  it.each([
-    [false, 'Conferi o comprador, a cota e o valor, e entendo que o pagamento do comprador é simulado na rede de testes.', 'A cota sai do pool como realizada. O valor simulado passa a compor o caixa e o NAV na rede de testes. Não há como desfazer pelo painel.'],
-    [true, 'Conferi o comprador, a cota e o valor efetivamente recebido, e o pagamento do comprador está comprovado.', 'A cota sai do pool como realizada. O valor recebido entra no caixa do fundo e passa a compor o NAV. Não há como desfazer pelo painel.'],
-  ])('rede principal=%s: atesto e consequência próprios; é o atesto que habilita a execução', (redePublica, texto, consequencia) => {
-    render(<CompradorPipeline leads={[comprador]} redePublica={redePublica} />);
+  // Na rede de testes o pagamento é simulado e nada o registra (Vera): nem "comprovado" nem "registrado".
+  it('rede de testes: atesto, consequência e rótulo próprios; é o atesto que habilita a execução', () => {
+    render(<CompradorPipeline leads={[comprador]} />);
     fireEvent.click(screen.getByRole('button', { name: 'Executar Caminho A' }));
-    expect(screen.getByTestId('revisao-consequencia').textContent).toBe(consequencia);
-    const atesto = revisao().getByRole('checkbox', { name: texto });
+    expect(screen.getByTestId('revisao-consequencia').textContent).toBe(
+      'A cota sai do pool como realizada. O valor simulado passa a compor o caixa e o NAV na rede de testes. Não há como desfazer pelo painel.',
+    );
+    const atesto = revisao().getByRole('checkbox', { name: 'Conferi o comprador, a cota e o valor, e entendo que o pagamento do comprador é simulado na rede de testes.' });
     const executar = revisao().getByRole('button', { name: 'Executar Caminho A' }) as HTMLButtonElement;
     expect(executar.disabled).toBe(true);
     fireEvent.click(atesto);
     expect(executar.disabled).toBe(false);
     // Rótulo do campo e da linha da Revisão: com pagamento simulado, nada de "recebido".
-    const [rotulo, outro] = redePublica ? ['Valor recebido', 'Valor simulado'] : ['Valor simulado', 'Valor recebido'];
-    expect(screen.getByRole('spinbutton', { name: rotulo })).toBeTruthy();
-    expect(screen.getByTestId('revisao-acao').textContent).toMatch(new RegExp(`${rotulo}\\s*R\\$\\s*70\\.400,00`));
-    expect(document.body.textContent).not.toContain(outro);
+    expect(screen.getByRole('spinbutton', { name: 'Valor simulado' })).toBeTruthy();
+    expect(screen.getByTestId('revisao-acao').textContent).toMatch(/Valor simulado\s*R\$\s*70\.400,00/);
+    expect(document.body.textContent).not.toContain('Valor recebido');
+  });
+
+  // Gate de pagamento (#166): fora da rede de testes o servidor recusa sempre; a tela não oferece o que vai falhar.
+  it('rede principal: botão desabilitado com o motivo, sem campo, sem Revisão e sem envio', () => {
+    render(<CompradorPipeline leads={[comprador]} redePublica />);
+    const executar = screen.getByRole('button', { name: 'Executar Caminho A' }) as HTMLButtonElement;
+    expect(executar.disabled).toBe(true);
+    const motivo = document.getElementById(executar.getAttribute('aria-describedby')!)!;
+    expect(motivo.textContent).toBe('Realização bloqueada: o servidor ainda não comprova o pagamento do comprador.');
+    expect(screen.queryByRole('spinbutton')).toBeNull();
+    fireEvent.click(executar);
+    expect(screen.queryByTestId('revisao-acao')).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    // cancelar a reserva continua possível
+    expect((screen.getByRole('button', { name: 'Cancelar reserva' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('Enter no valor abre a Revisão e não executa', () => {
