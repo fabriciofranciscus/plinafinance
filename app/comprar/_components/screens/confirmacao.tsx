@@ -74,9 +74,9 @@ export function ConfirmacaoScreen({
           Aguardando confirmação.
         </h1>
         <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
-          Sua cessão está assinada e a reserva registrada. A equipe Plina confirma
-          a transferência de titularidade na administradora e você recebe o aviso
-          por e-mail. Valor a pagar: {BRL.format(Number(confirmacao.valorRealizado))}.
+          Sua cessão está assinada e a reserva registrada. A transferência de
+          titularidade depende da aprovação da administradora. Valor a pagar:{' '}
+          {BRL.format(Number(confirmacao.valorRealizado))}.
         </p>
 
         <FaixaContexto cota={cota} reserva={reserva} semValorAPagar />

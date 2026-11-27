@@ -152,6 +152,16 @@ describe('confirmação antes do envio: não promete aquisição concluída', ()
   });
 });
 
+describe('confirmação pendente: sem promessa de e-mail; quem aprova é a administradora', () => {
+  it('parágrafo aprovado pela Norma', () => {
+    const pend = { status: 'PENDENTE_CONFIRMACAO', valorRealizado: '150000' } as never;
+    render(<ConfirmacaoScreen cota={cota} reserva={reserva} cessao={cessao} confirmacao={pend} confirming={false} onConfirmar={() => {}} />);
+    const texto = document.body.textContent!.replace(/\s+/g, ' ');
+    expect(texto).toMatch(/Sua cessão está assinada e a reserva registrada\. A transferência de titularidade depende da aprovação da administradora\. Valor a pagar: R\$ 150\.000/);
+    expect(texto).not.toMatch(/por e-mail|A equipe Plina confirma/);
+  });
+});
+
 describe('frases protegidas N2–N5: mesmas, na mesma ordem relativa (regressão byte a byte)', () => {
   const ordem = (arquivo: string, frases: string[]) => {
     const src = readFileSync(`app/comprar/_components/screens/${arquivo}`, 'utf8');
