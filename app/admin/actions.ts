@@ -21,6 +21,7 @@ import {
 } from '@/lib/auth/admin';
 import { adminLoginLimiter } from '@/lib/rate-limit/config';
 import { causaSegura } from '@/lib/api/causa-segura';
+import { DesagioColunaString, ValorBrlString } from '@/lib/api/valores';
 import {
   atualizarStatusCota,
   ClawbackError,
@@ -120,12 +121,18 @@ export async function incorporarCotaAction(
       return { ok: false, error: 'Prazo inválido: informe um número inteiro de 0 a 600 (0 = cota quitada).' };
     }
   }
+  // Carta e deságio no formato das colunas (o mesmo do aporte mostrado na Revisão): o Decimal do serviço aceitaria ".18", "1.8e-1"
+  // ou "2.5e5", que a tela mostra como "—". Sem trim: o texto segue como veio. Faixa [0, 1] e custo positivo ficam no serviço.
+  const valorCarta = ValorBrlString.safeParse(formData.get('valorCarta') ?? '');
+  if (!valorCarta.success) return { ok: false, error: valorCarta.error.issues[0]!.message };
+  const desagioAquisicao = DesagioColunaString.safeParse(formData.get('desagioAquisicao') ?? '');
+  if (!desagioAquisicao.success) return { ok: false, error: desagioAquisicao.error.issues[0]!.message };
   try {
     const result = await incorporarCota({
       tipoBem: formData.get('tipoBem') as TipoBem,
       administradora: String(formData.get('administradora') ?? '').trim(),
-      valorCarta: String(formData.get('valorCarta') ?? ''),
-      desagioAquisicao: String(formData.get('desagioAquisicao') ?? ''),
+      valorCarta: valorCarta.data,
+      desagioAquisicao: desagioAquisicao.data,
       desagioRevenda:
         String(formData.get('desagioRevenda') ?? '').trim() || undefined,
       localizacaoAprox:
