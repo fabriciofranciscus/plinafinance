@@ -258,11 +258,12 @@ function ExecutarCaminhoAForm({
   busy: boolean;
 }) {
   // Enviar (botão ou Enter) abre a Revisão; só a confirmação executa o Caminho A com o valor revisado.
+  const rotuloValor = redePublica ? 'Valor recebido' : 'Valor simulado';
   const revisao = useRevisaoDeFormulario((dados) => ({
     titulo: 'Revisar antes de executar o Caminho A',
     linhas: [
       ...linhas,
-      { rotulo: 'Valor recebido', valor: <span className="font-mono">{BRL_CENTAVOS.format(Number(dados.get('valorRealizado')))}</span> },
+      { rotulo: rotuloValor, valor: <span className="font-mono">{BRL_CENTAVOS.format(Number(dados.get('valorRealizado')))}</span> },
     ],
     // Textos por rede (Consuelo): na rede de testes o pagamento é simulado, então nada afirma recebimento ou comprovação.
     consequencia: redePublica
@@ -291,7 +292,7 @@ function ExecutarCaminhoAForm({
     >
       <label className="block">
         <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 block mb-1">
-          Valor recebido
+          {rotuloValor}
         </span>
         <input
           name="valorRealizado"

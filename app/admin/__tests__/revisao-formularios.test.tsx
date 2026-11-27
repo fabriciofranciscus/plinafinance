@@ -66,7 +66,7 @@ describe('Caminho A', () => {
     const texto = screen.getByTestId('revisao-acao').textContent!;
     expect(texto).toContain('Comprador de teste · comprador@exemplo.test');
     expect(texto).toContain('Veículo');
-    expect(texto).toMatch(/Valor recebido\s*R\$\s*70\.400,00/);
+    expect(texto).toMatch(/Valor simulado\s*R\$\s*70\.400,00/);
     confirmar();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(corpo()).toEqual({ action: 'executar-caminho-a', reservaId: 'r1', valorRealizado: '70400' });
@@ -86,6 +86,11 @@ describe('Caminho A', () => {
     expect(executar.disabled).toBe(true);
     fireEvent.click(atesto);
     expect(executar.disabled).toBe(false);
+    // Rótulo do campo e da linha da Revisão: com pagamento simulado, nada de "recebido".
+    const [rotulo, outro] = redePublica ? ['Valor recebido', 'Valor simulado'] : ['Valor simulado', 'Valor recebido'];
+    expect(screen.getByRole('spinbutton', { name: rotulo })).toBeTruthy();
+    expect(screen.getByTestId('revisao-acao').textContent).toMatch(new RegExp(`${rotulo}\\s*R\\$\\s*70\\.400,00`));
+    expect(document.body.textContent).not.toContain(outro);
   });
 
   it('Enter no valor abre a Revisão e não executa', () => {
