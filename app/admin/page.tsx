@@ -40,6 +40,7 @@ import { InvestidoresPainel } from './investidores-painel';
 import { PaineisAdmin } from './paineis';
 import { Concentracao } from './concentracao';
 import { ValidacaoForm } from './validacao-form';
+import { rotuloTipoBem } from '@/lib/admin/tipo-bem';
 import { VendedorPipeline } from './vendedor-pipeline';
 import { CompradorPipeline } from './comprador-pipeline';
 
@@ -311,6 +312,7 @@ export default async function AdminPage() {
               },
             })),
           }))}
+          redePublica={process.env.STELLAR_NETWORK === 'PUBLIC'}
         />
       </section>
 
@@ -391,6 +393,8 @@ export default async function AdminPage() {
                         <ValidacaoForm
                           cotaId={c.id}
                           hasValidacao={!!c.validacaoTxHash}
+                          descricaoCota={`${rotuloTipoBem(c.tipoBem)} · ${c.administradora} · ${brl(Number(c.valorCarta))}`}
+                          redePublica={process.env.STELLAR_NETWORK === 'PUBLIC'}
                         />
                       )}
                     </Td>
@@ -601,7 +605,7 @@ export default async function AdminPage() {
         <p className="font-text text-sm text-base/70 mb-6 max-w-2xl">
           Emite PLINA-RF on-chain (issuer → distributor) e persiste a cota no pool. Operação real na testnet — irreversível.
         </p>
-        <IncorporarCotaForm />
+        <IncorporarCotaForm redePublica={process.env.STELLAR_NETWORK === 'PUBLIC'} />
       </details>
               </>
             ),

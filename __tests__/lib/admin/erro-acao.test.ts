@@ -50,6 +50,12 @@ describe('avisoDeResposta: 200 que não é o passo concluído (mapa §4.5)', () 
     expect(avisoDeResposta('pagar-cedente', { status: 'INCERTO' })).toMatch(/não repita o pagamento/);
     expect(avisoDeResposta('pagar-cedente', { status: 'FALHOU' })).toMatch(/Reabrir pagamento/);
   });
+  it('pagar: texto exato aprovado pela Norma (sem a palavra "Pix" solta no aviso)', () => {
+    expect(avisoDeResposta('pagar-cedente', { status: 'PROCESSANDO' })).toBe('Pagamento em processamento. Reconsultar não paga de novo; confira mais tarde.');
+    expect(avisoDeResposta('pagar-cedente', { status: 'INCERTO' })).toBe('Resultado do pagamento incerto. Reconsulte antes de qualquer nova ação; não repita o pagamento.');
+    expect(avisoDeResposta('pagar-cedente', { status: 'FALHOU' })).toBe('O pagamento não foi concluído. Use "Reabrir pagamento" depois de conferir.');
+  });
+
   it('outras ações não geram aviso', () => {
     expect(avisoDeResposta('registrar-laudo', { ok: true })).toBeNull();
     expect(avisoDeResposta('enviar-cessao', { jaEnviada: true })).toBeNull();

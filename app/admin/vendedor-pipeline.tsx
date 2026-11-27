@@ -18,6 +18,8 @@ import { avisoDeResposta, interpretarErroDeAcao, oQueFazer, TEXTO_INCERTO, type 
 import type { LeadAdmin } from '@/lib/admin/tipos';
 import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
 import { txExplorerUrl } from '@/lib/stellar/explorer';
+import { rotuloPagamentoPix } from '@/lib/admin/pix-rotulo';
+import { AcaoComRevisao, nomeDaRede, type ConteudoRevisao, type LinhaRevisao } from './revisao-acao';
 
 type PipelineLead = LeadAdmin;
 
@@ -71,6 +73,11 @@ export function idCurto(id: string): string {
 }
 
 const BRL_INTEIRO = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const brlDe = (v: { toString(): string } | null | undefined) => {
+  const n = Number(v?.toString());
+  return Number.isFinite(n) ? BRL.format(n) : '—';
+};
 
 function valorDoLead(lead: PipelineLead): string {
   const o = lead.ofertas[0];
@@ -468,6 +475,104 @@ function rotuloDeEvidencia(id: string, texto: string): string {
   return texto;
 }
 
+// ─── Revisão das ações irreversíveis ───────────────────────────────────────────────────────────
+
+/** Quem e o quê a ação atinge: o mesmo resumo em todas as etapas, para o operador conferir o lead antes de agir. */
+function linhasDoLead(lead: PipelineLead, redePublica: boolean): LinhaRevisao[] {
+  const o = lead.ofertas[0];
+  return [
+    { rotulo: 'Solicitação', valor: <span className="font-mono">{idCurto(lead.id)}</span> },
+    { rotulo: 'Cedente', valor: `${lead.nome} · ${lead.email}` },
+    ...(o
+      ? [
+          { rotulo: 'Cota', valor: `${ROTULO_TIPO_BEM[o.tipoBem] ?? o.tipoBem} · ${o.administradora}` },
+          { rotulo: 'Valor da carta', valor: <span className="font-mono">{brlDe(o.valorCarta)}</span> },
+          { rotulo: 'Valor ao cedente', valor: <span className="font-mono">{brlDe(o.valorLiquidoVendedor)}</span> },
+        ]
+      : []),
+    { rotulo: 'Rede', valor: nomeDaRede(redePublica) },
+  ];
+}
+
+export function revisaoDe(
+  acao: 'registrar-cessao' | 'registrar-laudo' | 'enviar-cessao' | 'registrar-anuencia' | 'pagar-cedente' | 'reabrir-pagamento-cedente' | 'incorporar-cota',
+  lead: PipelineLead,
+  redePublica: boolean,
+  extra: LinhaRevisao[] = [],
+): ConteudoRevisao {
+  // "Reabrir pagamento": o atesto diz que o Pix anterior falhou, então a Revisão mostra a situação dele (Íris, Norma ✓).
+  const anterior: LinhaRevisao[] =
+    acao === 'reabrir-pagamento-cedente'
+      ? [{ rotulo: 'Pagamento anterior', valor: rotuloPagamentoPix(lead.ofertas[0]?.cessao?.pixStatus) }]
+      : [];
+  const base = linhasDoLead(lead, redePublica);
+  // A situação do pagamento vem antes da linha "Rede" (que fecha o resumo).
+  const linhas = [...base.slice(0, -1), ...anterior, ...base.slice(-1), ...extra];
+  const rede = nomeDaRede(redePublica);
+  switch (acao) {
+    case 'registrar-cessao':
+      return {
+        titulo: 'Revisar antes de registrar a cessão',
+        linhas,
+        consequencia: 'Registra a cessão desta proposta e envia o termo ao cedente para assinatura (DocuSign). Não há como cancelar o envio por aqui.',
+        atesto: 'Conferi o cedente, a cota e o valor, e entendo que o termo será enviado para assinatura.',
+        confirmar: 'Registrar e enviar',
+      };
+    case 'enviar-cessao':
+      return {
+        titulo: 'Revisar antes de enviar para assinatura',
+        linhas,
+        consequencia: 'Envia o termo de cessão ao cedente para assinatura (DocuSign). Não há como cancelar o envio por aqui.',
+        atesto: 'Conferi o cedente, a cota e o valor, e entendo que o termo será enviado para assinatura.',
+        confirmar: 'Enviar para assinatura',
+      };
+    case 'registrar-laudo':
+      return {
+        titulo: 'Revisar antes de registrar o laudo',
+        linhas,
+        consequencia: `Grava o hash do laudo na ${rede}. O registro é público e não pode ser apagado; um laudo errado exige um novo registro.`,
+        atesto: `Conferi o laudo e a cessão, e entendo que o hash fica registrado na ${rede}.`,
+        confirmar: 'Registrar laudo',
+      };
+    case 'registrar-anuencia':
+      return {
+        titulo: 'Revisar antes de registrar a anuência',
+        linhas,
+        // Norma (25/11): "libera o pagamento" afirmaria uma aprovação real. Na rede de testes a anuência é simulada; na principal a frase fica
+        // neutra até o jurídico (⚖) fechar o texto.
+        consequencia: `Registra a anuência da administradora na auditoria desta cessão. ${redePublica ? '' : 'Na rede de testes, a anuência é simulada. Ela registra a etapa, mas não substitui a aprovação real da administradora. '}Um registro novo substitui este, mas os dois ficam no histórico.`,
+        atesto: 'Conferi a cessão, o tipo de anuência e a referência.',
+        confirmar: 'Registrar anuência',
+      };
+    case 'pagar-cedente':
+      return {
+        titulo: 'Revisar antes de pagar o cedente',
+        linhas,
+        consequencia: redePublica
+          ? 'Envia o Pix do valor ao cedente. Pix enviado não volta.'
+          : 'Envia o Pix simulado do valor ao cedente, na rede de testes. Na rede principal, esta ação envia um Pix real.',
+        atesto: redePublica ? 'Conferi o cedente e o valor, e entendo que o Pix enviado não volta.' : 'Conferi o cedente e o valor do pagamento.',
+        confirmar: redePublica ? 'Pagar cedente' : 'Pagar cedente (Pix simulado)',
+      };
+    case 'reabrir-pagamento-cedente':
+      return {
+        titulo: 'Revisar antes de reabrir o pagamento',
+        linhas,
+        consequencia: 'Reabre o pagamento para um novo envio do Pix ao mesmo destino do cadastro. A decisão fica registrada na auditoria.',
+        atesto: 'Conferi que o Pix anterior falhou e que o cedente e o valor estão certos.',
+        confirmar: 'Reabrir pagamento',
+      };
+    case 'incorporar-cota':
+      return {
+        titulo: 'Revisar antes de incorporar a cota',
+        linhas,
+        consequencia: `Incorpora a cota ao pool e emite PLINA-RF na ${rede}, ao NAV do momento. Token emitido só sai de circulação com uma queima registrada na rede.`,
+        atesto: `Conferi a cota e o valor, e entendo que a emissão fica registrada na ${rede}.`,
+        confirmar: 'Incorporar e emitir',
+      };
+  }
+}
+
 // ─── Controles de cada etapa "Agora" ───────────────────────────────────────────────────────────
 
 function ControlesDaEtapa({
@@ -514,9 +619,13 @@ function ControlesDaEtapa({
     case 'cessao':
       return (
         <div className="mt-2">
-          <button type="button" disabled={ocupado} onClick={() => onExecutar('registrar-cessao', { ofertaId: oferta!.id })} className={BTN}>
-            {rotulo('registrar-cessao', 'Registrar cessão')}
-          </button>
+          <AcaoComRevisao
+            className={BTN}
+            desabilitado={ocupado}
+            rotulo={rotulo('registrar-cessao', 'Registrar cessão')}
+            revisao={revisaoDe('registrar-cessao', lead, redePublica)}
+            onExecutar={() => onExecutar('registrar-cessao', { ofertaId: oferta!.id })}
+          />
           {processando}
         </div>
       );
@@ -538,15 +647,16 @@ function ControlesDaEtapa({
               rotulado). Sem dado pessoal.
             </span>
           </label>
-          <button
-            type="button"
-            disabled={ocupado || !/^https?:\/\//.test(laudoUrl.trim())}
-            aria-describedby="razao-laudo"
-            onClick={() => onExecutar('registrar-laudo', { cessaoId: cessao!.id, laudoUrl: laudoUrl.trim() })}
+          <AcaoComRevisao
             className={BTN}
-          >
-            {rotulo('registrar-laudo', 'Registrar laudo')}
-          </button>
+            desabilitado={ocupado || !/^https?:\/\//.test(laudoUrl.trim())}
+            describedBy="razao-laudo"
+            rotulo={rotulo('registrar-laudo', 'Registrar laudo')}
+            revisao={revisaoDe('registrar-laudo', lead, redePublica, [
+              { rotulo: 'Laudo', valor: <span className="break-all font-mono text-sm">{laudoUrl.trim()}</span> },
+            ])}
+            onExecutar={() => onExecutar('registrar-laudo', { cessaoId: cessao!.id, laudoUrl: laudoUrl.trim() })}
+          />
           {!/^https?:\/\//.test(laudoUrl.trim()) && (
             <p id="razao-laudo" className="font-text text-xs text-base/70">Informe a URL do laudo (começando com http ou https).</p>
           )}
@@ -558,9 +668,13 @@ function ControlesDaEtapa({
       return (
         <div className="mt-2">
           <p className="font-text text-xs text-base/70 mb-2">Laudo registrado. Falta enviar à assinatura.</p>
-          <button type="button" disabled={ocupado} onClick={() => onExecutar('enviar-cessao', { cessaoId: cessao!.id })} className={BTN}>
-            {rotulo('enviar-cessao', 'Enviar para assinatura (DocuSign)')}
-          </button>
+          <AcaoComRevisao
+            className={BTN}
+            desabilitado={ocupado}
+            rotulo={rotulo('enviar-cessao', 'Enviar para assinatura (DocuSign)')}
+            revisao={revisaoDe('enviar-cessao', lead, redePublica)}
+            onExecutar={() => onExecutar('enviar-cessao', { cessaoId: cessao!.id })}
+          />
           {processando}
         </div>
       );
@@ -640,21 +754,23 @@ function ControlesDaEtapa({
               className="mt-1 w-full min-h-[44px] bg-white border border-base/55 px-3 py-2 font-text text-sm"
             />
           </label>
-          <button
-            type="button"
-            disabled={ocupado || (anuenciaTipo === 'CONFIRMADA' && !anuenciaRef.trim()) || !cessao?.laudoHash}
-            aria-describedby="razao-anuencia"
-            onClick={() =>
+          <AcaoComRevisao
+            className={BTN}
+            desabilitado={ocupado || (anuenciaTipo === 'CONFIRMADA' && !anuenciaRef.trim()) || !cessao?.laudoHash}
+            describedBy="razao-anuencia"
+            rotulo={rotulo('registrar-anuencia', 'Registrar anuência')}
+            revisao={revisaoDe('registrar-anuencia', lead, redePublica, [
+              { rotulo: 'Anuência', valor: ROTULO_ANUENCIA[anuenciaTipo] ?? anuenciaTipo },
+              ...(anuenciaRef.trim() ? [{ rotulo: 'Referência', valor: anuenciaRef.trim() }] : []),
+            ])}
+            onExecutar={() =>
               onExecutar('registrar-anuencia', {
                 hashValidacao: cessao!.laudoHash,
                 status: anuenciaTipo,
                 ...(anuenciaRef.trim() ? { referencia: anuenciaRef.trim() } : {}),
               })
             }
-            className={BTN}
-          >
-            {rotulo('registrar-anuencia', 'Registrar anuência')}
-          </button>
+          />
           {!cessao?.laudoHash ? (
             <p id="razao-anuencia" className="font-text text-xs text-base/70">Falta o hash do laudo para registrar a anuência.</p>
           ) : anuenciaTipo === 'CONFIRMADA' && !anuenciaRef.trim() ? (
@@ -668,10 +784,14 @@ function ControlesDaEtapa({
       if (analise.pagamento === 'reabrir') {
         return (
           <div className="mt-2">
-            <p className="font-text text-xs text-base/70 mb-2">O Pix falhou e foi confirmado pelo PSP. Reabrir pagamento é uma ação auditada.</p>
-            <button type="button" disabled={ocupado} onClick={() => onExecutar('reabrir-pagamento-cedente', { cessaoId: cessao!.id })} className={BTN}>
-              {rotulo('reabrir-pagamento-cedente', 'Reabrir pagamento')}
-            </button>
+            <p className="font-text text-xs text-base/70 mb-2">O pagamento não foi concluído e foi confirmado pelo parceiro de pagamento. Reabrir pagamento é uma ação auditada.</p>
+            <AcaoComRevisao
+              className={BTN}
+              desabilitado={ocupado}
+              rotulo={rotulo('reabrir-pagamento-cedente', 'Reabrir pagamento')}
+              revisao={revisaoDe('reabrir-pagamento-cedente', lead, redePublica)}
+              onExecutar={() => onExecutar('reabrir-pagamento-cedente', { cessaoId: cessao!.id })}
+            />
             {processando}
           </div>
         );
@@ -680,18 +800,29 @@ function ControlesDaEtapa({
         <div className="mt-2">
           {analise.pagamento === 'reconsultar' && (
             <p className="font-text text-xs text-base/70 mb-2">
-              Pix em andamento ({cessao?.pixStatus}). Reconsultar não paga de novo.
+              {rotuloPagamentoPix(cessao?.pixStatus)}. Reconsultar não paga de novo.
             </p>
           )}
-          <button type="button" disabled={ocupado} onClick={() => onExecutar('pagar-cedente', { cessaoId: cessao!.id })} className={BTN}>
-            {executando === 'pagar-cedente'
-              ? GERUNDIO['pagar-cedente']
-              : analise.pagamento === 'reconsultar'
-                ? 'Reconsultar pagamento'
-                : redePublica
-                  ? 'Pagar cedente (Pix)'
-                  : 'Pagar cedente (Pix simulado, rede de testes)'}
-          </button>
+          {analise.pagamento === 'reconsultar' ? (
+            // Reconsultar só lê a situação no PSP e não paga de novo: sem Revisão.
+            <button type="button" disabled={ocupado} onClick={() => onExecutar('pagar-cedente', { cessaoId: cessao!.id })} className={BTN}>
+              {executando === 'pagar-cedente' ? GERUNDIO['pagar-cedente'] : 'Reconsultar pagamento'}
+            </button>
+          ) : (
+            <AcaoComRevisao
+              className={BTN}
+              desabilitado={ocupado}
+              rotulo={
+                executando === 'pagar-cedente'
+                  ? GERUNDIO['pagar-cedente']
+                  : redePublica
+                    ? 'Pagar cedente (Pix)'
+                    : 'Pagar cedente (Pix simulado, rede de testes)'
+              }
+              revisao={revisaoDe('pagar-cedente', lead, redePublica)}
+              onExecutar={() => onExecutar('pagar-cedente', { cessaoId: cessao!.id })}
+            />
+          )}
           {processando}
         </div>
       );
@@ -699,9 +830,13 @@ function ControlesDaEtapa({
     case 'incorporacao':
       return (
         <div className="mt-2">
-          <button type="button" disabled={ocupado} onClick={() => onExecutar('incorporar-cota', { cessaoId: cessao!.id })} className={BTN}>
-            {rotulo('incorporar-cota', 'Incorporar cota ao pool · emitir PLINA-RF')}
-          </button>
+          <AcaoComRevisao
+            className={BTN}
+            desabilitado={ocupado}
+            rotulo={rotulo('incorporar-cota', 'Incorporar cota ao pool · emitir PLINA-RF')}
+            revisao={revisaoDe('incorporar-cota', lead, redePublica)}
+            onExecutar={() => onExecutar('incorporar-cota', { cessaoId: cessao!.id })}
+          />
           {executando === 'incorporar-cota' && (
             <p role="status" className="mt-2 font-text text-xs text-base/70">Processando. Aguarde a confirmação antes de repetir.</p>
           )}
