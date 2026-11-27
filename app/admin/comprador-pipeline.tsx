@@ -263,7 +263,7 @@ function ExecutarCaminhoAForm({
     ],
     consequencia:
       'A cota sai do pool como realizada. O valor recebido entra no caixa do fundo e passa a compor o NAV. Não há como desfazer pelo painel.',
-    atesto: 'Conferi o comprador, a cota e o valor efetivamente recebido.',
+    atesto: 'Conferi o comprador, a cota e o valor efetivamente recebido, e o pagamento do comprador está comprovado.',
     confirmar: 'Executar Caminho A',
   }));
   return (

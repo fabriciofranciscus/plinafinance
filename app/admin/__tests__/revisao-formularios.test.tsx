@@ -72,6 +72,17 @@ describe('Caminho A', () => {
     expect(corpo()).toEqual({ action: 'executar-caminho-a', reservaId: 'r1', valorRealizado: '70400' });
   });
 
+  // Consuelo (condição no #157) + decisão do Atlas: sem gate no servidor, o atesto precisa afirmar o pagamento comprovado.
+  it('o atesto exige o pagamento do comprador comprovado e é ele que habilita a execução', () => {
+    render(<CompradorPipeline leads={[comprador]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Executar Caminho A' }));
+    const atesto = revisao().getByRole('checkbox', { name: 'Conferi o comprador, a cota e o valor efetivamente recebido, e o pagamento do comprador está comprovado.' });
+    const executar = revisao().getByRole('button', { name: 'Executar Caminho A' }) as HTMLButtonElement;
+    expect(executar.disabled).toBe(true);
+    fireEvent.click(atesto);
+    expect(executar.disabled).toBe(false);
+  });
+
   it('Enter no valor abre a Revisão e não executa', () => {
     render(<CompradorPipeline leads={[comprador]} />);
     const valor = screen.getByRole('spinbutton');
