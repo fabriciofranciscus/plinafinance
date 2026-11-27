@@ -1,9 +1,9 @@
 import type { CessaoData, CotaResumo, ReservaData } from '../../_types';
 import type { PessoaState } from '@/components/PessoaProvider';
-import { BRL, TIPO_LABEL, valorRevenda } from '../../_lib/glossary';
+import { FaixaContexto } from '../shell/faixa-contexto';
 
 const labelCls =
-  'font-details text-[10px] tracking-[0.2em] uppercase text-base/60';
+  'font-details text-[10px] tracking-[0.2em] uppercase text-base/70';
 
 export function CessaoScreen({
   pessoa,
@@ -19,8 +19,6 @@ export function CessaoScreen({
   signing: boolean;
   onAssinar: () => void;
 }) {
-  const paga = cota ? valorRevenda(cota.valorCarta, cota.desagioRevenda) : 0;
-
   return (
     <div>
       <p className="font-details text-[10px] tracking-[0.3em] uppercase text-primary-deep">
@@ -34,23 +32,16 @@ export function CessaoScreen({
         Finance → {pessoa.nome ?? 'comprador'}.
       </p>
 
-      <div className="mt-8 border border-light-hairline bg-lightBg/40 p-6">
+      <FaixaContexto cota={cota} reserva={reserva} />
+
+      <div data-testid="documento-cessao" className="mt-8 border border-light-hairline bg-lightBg/40 p-6">
         <p className={labelCls}>Documento</p>
-        <p className="mt-2 font-title text-lg font-semibold text-base">
-          Modelo de contrato de cessão (demonstração)
-        </p>
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field k="Nome" v={pessoa.nome ?? '—'} />
           <Field k="E-mail" v={pessoa.email ?? '—'} />
-          {cota && (
-            <>
-              <Field k="Cota" v={`${TIPO_LABEL[cota.tipoBem] ?? cota.tipoBem}`} />
-              <Field k="Valor a pagar" v={BRL.format(paga)} />
-            </>
-          )}
-        </div>
+        </dl>
         {reserva && (
-          <p className="mt-4 font-mono text-[11px] text-base/55">
+          <p className="mt-4 font-mono text-[11px] text-base/70">
             Reserva {reserva.reservaId.slice(0, 12)}… · prova on-chain{' '}
             {reserva.txHash.slice(0, 8)}…
           </p>
@@ -70,13 +61,9 @@ export function CessaoScreen({
 
 function Field({ k, v }: { k: string; v: string }) {
   return (
-    <div>
-      <span className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60">
-        {k}
-      </span>
-      <p className="mt-1 border border-light-hairline bg-white px-3 py-2.5 font-text text-sm text-base/80 break-all">
-        {v}
-      </p>
+    <div className="min-w-0">
+      <dt className={labelCls}>{k}</dt>
+      <dd className="mt-1 break-all font-text text-sm text-base">{v}</dd>
     </div>
   );
 }

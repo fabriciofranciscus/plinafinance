@@ -22,7 +22,7 @@ export function ErrorBlock({
             Operação interrompida
           </p>
         </div>
-        <span className="font-mono text-[10px] text-base/55 tracking-wide">
+        <span className="font-mono text-[10px] text-base/70 tracking-wide">
           {error.ticketId}
         </span>
       </div>
@@ -32,19 +32,19 @@ export function ErrorBlock({
       <div className="border-t border-light-hairline px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
         <button
           onClick={() => setShowTech((v) => !v)}
-          className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 hover:text-base"
+          className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 hover:text-base"
         >
           {showTech ? '— Detalhes técnicos' : '+ Detalhes técnicos'}
         </button>
         <button
           onClick={() => setReportOpen(true)}
-          className="font-details text-[10px] tracking-[0.2em] uppercase text-primary-deep hover:text-base"
+          className="font-details text-[10px] tracking-[0.2em] uppercase text-signal-700 hover:text-base"
         >
           Reportar incidente →
         </button>
         <button
           onClick={onDismiss}
-          className="font-details text-[10px] tracking-[0.2em] uppercase text-base/60 hover:text-base ml-auto"
+          className="font-details text-[10px] tracking-[0.2em] uppercase text-base/70 hover:text-base ml-auto"
         >
           Dispensar
         </button>

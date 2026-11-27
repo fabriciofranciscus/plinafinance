@@ -16,6 +16,7 @@ import { usePrivy, useLogin, useLogout } from '@privy-io/react-auth';
 import { useSignRawHash } from '@privy-io/react-auth/extended-chains';
 import { useEffect, useState } from 'react';
 import { unwrapEnvelope } from '@/lib/http/client';
+import { accountExplorerUrl, txExplorerUrl } from '@/lib/stellar/explorer';
 
 export default function LabPage() {
   const { ready, authenticated, user, getAccessToken } = usePrivy();
@@ -109,7 +110,7 @@ export default function LabPage() {
       });
       const { hash } = await unwrapEnvelope<{ hash: string }>(submitRes);
       append(`     ✓ tx hash=${hash}`);
-      append(`     → https://stellar.expert/explorer/testnet/tx/${hash}`);
+      append(`     → ${txExplorerUrl(hash)}`);
     } catch (err) {
       append(`✗ ERRO: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -153,7 +154,7 @@ export default function LabPage() {
             <strong>Stellar address:</strong>{' '}
             {stellarAddress ? (
               <a
-                href={`https://stellar.expert/explorer/testnet/account/${stellarAddress}`}
+                href={accountExplorerUrl(stellarAddress)}
                 target="_blank"
                 rel="noopener noreferrer"
               >

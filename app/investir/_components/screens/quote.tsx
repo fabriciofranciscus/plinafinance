@@ -44,7 +44,7 @@ export function QuoteScreen({
         03 // Cotação · BRL → PLINA-RF
       </p>
       <h1 className="font-title text-3xl md:text-4xl font-semibold mt-3 tracking-tight leading-tight text-base">
-        Quote ao vivo na anchor regulada.
+        Cotação ao vivo do parceiro de pagamento.
       </h1>
       <p className="font-text text-base mt-4 text-base/80 leading-relaxed max-w-prose">
         Consulta real à Etherfuse. Em rede de testes, a cotação usa o valor por

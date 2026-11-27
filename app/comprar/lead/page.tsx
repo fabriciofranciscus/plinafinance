@@ -7,9 +7,10 @@
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { withTimeout } from '@/lib/http/client';
+import { txExplorerUrl } from '@/lib/stellar/explorer';
 
 function explorerTx(hash: string) {
-  return `https://stellar.expert/explorer/testnet/tx/${hash}`;
+  return txExplorerUrl(hash);
 }
 
 interface Result {

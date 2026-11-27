@@ -20,6 +20,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { unwrapEnvelope } from '@/lib/http/client';
 import { SACAR, resultadoSaque } from '@/lib/sacar/microcopy';
 import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
+import { txExplorerUrl } from '@/lib/stellar/explorer';
 
 // Estados em que a Etherfuse não vai mais avançar o pedido (além de processing/completed).
 const STATUS_TERMINAL_RUIM = ['failed', 'cancelled', 'canceled', 'refunded'];
@@ -32,7 +33,7 @@ const BRL = new Intl.NumberFormat('pt-BR', {
 });
 
 function explorerTx(hash: string) {
-  return `https://stellar.expert/explorer/testnet/tx/${hash}`;
+  return txExplorerUrl(hash);
 }
 
 interface QuoteData {

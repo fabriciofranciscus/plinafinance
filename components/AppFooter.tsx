@@ -1,3 +1,4 @@
+import { accountExplorerUrl, assetExplorerUrl } from '@/lib/stellar/explorer';
 /**
  * AppFooter — chrome compartilhado das superfícies do app.
  *
@@ -24,7 +25,6 @@ interface AppFooterProps {
 const contorno = (operacional: boolean) =>
   operacional ? 'max-w-[var(--workspace-max)] px-[var(--spacing-gutter-ui)]' : 'max-w-6xl px-6';
 
-const STELLAR_EXPERT_TESTNET = 'https://stellar.expert/explorer/testnet';
 const MOBILE_ALVOS = 'max-md:[&_a]:inline-flex max-md:[&_a]:min-h-[44px] max-md:[&_a]:items-center';
 const ROTULO = 'font-details text-[10px] tracking-[0.2em] uppercase text-lightBg/70';
 const LINK = 'text-lightBg/85 hover:text-primary transition-colors';
@@ -92,7 +92,7 @@ function FooterOperacao({ issuerPubkey, operacional }: { issuerPubkey: string; o
             <dt className={ROTULO}>Issuer</dt>
             <dd>
               <a
-                href={`${STELLAR_EXPERT_TESTNET}/account/${issuerPubkey}`}
+                href={accountExplorerUrl(issuerPubkey)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-mono text-lightBg/85 hover:text-primary break-all"
@@ -110,7 +110,7 @@ function FooterOperacao({ issuerPubkey, operacional }: { issuerPubkey: string; o
           </li>
           <li>
             <a
-              href={`${STELLAR_EXPERT_TESTNET}/asset/PLINARF-${issuerPubkey}`}
+              href={assetExplorerUrl(issuerPubkey)}
               target="_blank"
               rel="noopener noreferrer"
               className={LINK}
@@ -181,7 +181,7 @@ export function AppFooter({ issuerPubkey, variante = 'completo', operacional = f
             </li>
             <li>
               <a
-                href={`${STELLAR_EXPERT_TESTNET}/asset/PLINARF-${issuerPubkey}`}
+                href={assetExplorerUrl(issuerPubkey)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-lightBg/85 hover:text-primary transition-colors"
@@ -210,7 +210,7 @@ export function AppFooter({ issuerPubkey, variante = 'completo', operacional = f
               </span>
               <br />
               <a
-                href={`${STELLAR_EXPERT_TESTNET}/account/${issuerPubkey}`}
+                href={accountExplorerUrl(issuerPubkey)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-mono text-lightBg/85 hover:text-primary break-all"

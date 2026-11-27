@@ -4,6 +4,12 @@ import { withBotId } from "botid/next/config";
 const nextConfig: NextConfig = {
   devIndicators: false,
   serverExternalPackages: ["pdfkit"],
+  // Rede Stellar visível ao cliente (links do explorer, lib/stellar/explorer.ts):
+  // deriva de STELLAR_NETWORK para servidor e cliente nunca divergirem. Só PUBLIC
+  // muda o comportamento; qualquer outro valor (ou ausente) é testnet.
+  env: {
+    NEXT_PUBLIC_STELLAR_NETWORK: process.env.STELLAR_NETWORK === "PUBLIC" ? "PUBLIC" : "TESTNET",
+  },
   outputFileTracingIncludes: {
     "/api/admin/originacao": [
       "./node_modules/.pnpm/pdfkit@*/node_modules/pdfkit/js/data/**",

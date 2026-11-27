@@ -4,6 +4,7 @@ import { aporteDaCotaBrl } from '@/lib/services/aporte';
 import { useActionState } from 'react';
 import { incorporarCotaAction, type ActionResult } from './actions';
 import { semNotacaoCientifica } from '@/lib/format/campo-numerico';
+import { txExplorerUrl } from '@/lib/stellar/explorer';
 import { nomeDaRede, useRevisaoDeFormulario } from './revisao-acao';
 
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -158,7 +159,7 @@ export function IncorporarCotaForm({ redePublica = false }: { redePublica?: bool
         <p className="font-text text-sm text-base/80">
           ✓ Cota incorporada. Tx:{' '}
           <a
-            href={`https://stellar.expert/explorer/testnet/tx/${state.txHash}`}
+            href={txExplorerUrl(state.txHash)}
             target="_blank"
             rel="noopener noreferrer"
             className="font-mono text-xs underline"

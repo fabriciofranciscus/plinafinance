@@ -124,8 +124,10 @@ export function BankingScreen({
             <input
               type="text"
               value={cpf}
-              onChange={(e) => setCpf(e.target.value.replace(/\D/g, ''))}
-              maxLength={11}
+              // Sem maxLength: ele cortaria "529.982.247-25" colado ANTES de a máscara sair. Tira o que não é dígito e só então limita a 11.
+              onChange={(e) => setCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
+              inputMode="numeric"
+              autoComplete="off"
               placeholder="52998224725"
               className="mt-3 w-full bg-transparent border-b border-base/30 pb-3 font-mono text-sm text-base focus:outline-none focus:border-base"
             />

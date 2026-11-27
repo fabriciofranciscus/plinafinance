@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import type { CessaoData, ConfirmacaoData, CotaResumo, ReservaData } from '../../_types';
 import { BRL, valorRevenda } from '../../_lib/glossary';
+import { txExplorerUrl } from '@/lib/stellar/explorer';
+import { FaixaContexto } from '../shell/faixa-contexto';
 
 function explorerTx(hash: string) {
-  return `https://stellar.expert/explorer/testnet/tx/${hash}`;
+  return txExplorerUrl(hash);
 }
 
 export function ConfirmacaoScreen({
@@ -39,6 +41,8 @@ export function ConfirmacaoScreen({
           a aquisição da carta de crédito.
         </p>
 
+        <FaixaContexto cota={cota} reserva={reserva} />
+
         {cessao && (
           <p className="mt-6 font-mono text-[11px] text-base/55">
             Cessão {cessao.cessaoCompradorId.slice(0, 12)}… · hash{' '}
@@ -72,6 +76,8 @@ export function ConfirmacaoScreen({
           a transferência de titularidade na administradora e você recebe o aviso
           por e-mail. Valor a pagar: {BRL.format(Number(confirmacao.valorRealizado))}.
         </p>
+
+        <FaixaContexto cota={cota} reserva={reserva} semValorAPagar />
         {reserva && (
           <p className="mt-6 font-mono text-[11px] text-base/55">
             Prova on-chain da reserva:{' '}

@@ -31,6 +31,8 @@
   --color-danger-on-dark: #F2B8B5;
 
   /* ---- Hairlines: usable as border-hairline / bg-hairline --------------- */
+  --color-ink-muted: rgba(19, 39, 40, 0.7); /* floor for text on light */
+  --color-ink-on-dark-subtle: rgba(228, 228, 228, 0.6); /* floor for text on dark */
   --color-hairline: rgba(19, 39, 40, 0.12);
   --color-hairline-dark: rgba(255, 255, 255, 0.1);
   --color-hairline-dark-tinted: rgba(160, 207, 231, 0.1);
