@@ -16,6 +16,7 @@ import { parseBody } from '@/lib/http/parse-body';
 import {
   cancelarReserva,
   executarCaminhoA,
+  RealizacaoBloqueadaError,
 } from '@/lib/services/realizacao';
 
 export const dynamic = 'force-dynamic';
@@ -63,6 +64,9 @@ export async function POST(req: Request) {
       }
     }
   } catch (err) {
+    if (err instanceof RealizacaoBloqueadaError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: 409 });
+    }
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'unknown' },
       { status: 500 },

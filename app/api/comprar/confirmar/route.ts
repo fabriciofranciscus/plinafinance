@@ -10,7 +10,8 @@
  * Com a flag BUYER_SELF_REALIZACAO ligada (testnet/MVP) o comprador dispara
  * `executarCaminhoA` direto (Cota→REALIZADA, spread, on-chain) → recibo
  * imediato. Desligada (produção): retorna PENDENTE_CONFIRMACAO — um operador
- * roda o close-out fora de banda.
+ * roda o close-out fora de banda. Fora da TESTNET a flag não vale: sem prova de
+ * pagamento no servidor a resposta é sempre PENDENTE_CONFIRMACAO.
  */
 
 import { NextResponse } from 'next/server';
@@ -19,7 +20,7 @@ import { Prisma, ReservaStatus, StatusCota, CessaoStatus } from '@prisma/client'
 import { withPessoaAuth } from '@/lib/wallet/pessoa-auth';
 import { parseBody } from '@/lib/http/parse-body';
 import { sensitiveAuthLimiter, clientIp } from '@/lib/rate-limit/config';
-import { executarCaminhoA } from '@/lib/services/realizacao';
+import { executarCaminhoA, realizacaoLiberadaNestaRede } from '@/lib/services/realizacao';
 import { getFlag } from '@/lib/env/flags';
 import { db } from '@/lib/db';
 
@@ -85,7 +86,8 @@ export const POST = withPessoaAuth(async (req, { user }) => {
     .mul(new Prisma.Decimal(1).minus(new Prisma.Decimal(reserva.cota.desagioRevenda)))
     .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_EVEN);
 
-  const selfRealizacao = await getFlag('BUYER_SELF_REALIZACAO');
+  // A flag não basta: fora da testnet o pagamento não é comprovado no servidor, então o pedido fica pendente (o serviço também recusa).
+  const selfRealizacao = realizacaoLiberadaNestaRede() && (await getFlag('BUYER_SELF_REALIZACAO'));
   if (!selfRealizacao) {
     return NextResponse.json({
       status: 'PENDENTE_CONFIRMACAO',
