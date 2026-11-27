@@ -59,7 +59,16 @@ const BRL = new Intl.NumberFormat('pt-BR', {
   maximumFractionDigits: 0,
 });
 
-export function CompradorPipeline({ leads, redePublica = false }: { leads: PipelineComprador[]; redePublica?: boolean }) {
+export function CompradorPipeline({
+  leads,
+  redePublica = false,
+  realizacaoLiberada = false,
+}: {
+  leads: PipelineComprador[];
+  redePublica?: boolean;
+  /** Mesma regra do servidor (#166): só `true` com a rede exatamente TESTNET. Sem a informação, o Caminho A fica fechado. */
+  realizacaoLiberada?: boolean;
+}) {
   if (leads.length === 0) {
     return (
       <p className="font-text text-sm text-base/70">
@@ -71,7 +80,7 @@ export function CompradorPipeline({ leads, redePublica = false }: { leads: Pipel
   return (
     <div className="space-y-3">
       {leads.map((l) => (
-        <LeadCard key={l.id} lead={l} redePublica={redePublica} />
+        <LeadCard key={l.id} lead={l} redePublica={redePublica} realizacaoLiberada={realizacaoLiberada} />
       ))}
     </div>
   );
@@ -97,7 +106,15 @@ function linhasDaReserva(
   ];
 }
 
-function LeadCard({ lead, redePublica }: { lead: PipelineComprador; redePublica: boolean }) {
+function LeadCard({
+  lead,
+  redePublica,
+  realizacaoLiberada,
+}: {
+  lead: PipelineComprador;
+  redePublica: boolean;
+  realizacaoLiberada: boolean;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -202,9 +219,7 @@ function LeadCard({ lead, redePublica }: { lead: PipelineComprador; redePublica:
               </div>
 
               {r.status === 'ATIVA' &&
-                (redePublica ? (
-                  <CaminhoABloqueado />
-                ) : (
+                (realizacaoLiberada ? (
                   <ExecutarCaminhoAForm
                     reservaId={r.id}
                     valorRevendaSugerido={valorRevenda}
@@ -212,6 +227,8 @@ function LeadCard({ lead, redePublica }: { lead: PipelineComprador; redePublica:
                     onSubmit={call}
                     busy={busy}
                   />
+                ) : (
+                  <CaminhoABloqueado />
                 ))}
               {r.status === 'ATIVA' && (
                 <AcaoComRevisao
@@ -245,7 +262,7 @@ function LeadCard({ lead, redePublica }: { lead: PipelineComprador; redePublica:
 }
 
 /**
- * Rede principal: o servidor recusa a realização enquanto não comprovar o pagamento (gate do #166), então a tela mostra a ação
+ * Fora da rede de testes o servidor recusa a realização enquanto não comprovar o pagamento (gate do #166), então a tela mostra a ação
  * desabilitada com o motivo, em vez de um formulário que sempre falharia.
  */
 function CaminhoABloqueado() {

@@ -28,7 +28,7 @@ describe('Caminho A', () => {
     reservas: [{ id: 'r1', status: 'ATIVA', expiraEm: '2026-11-28T00:00:00Z', onChainTxHash: null, cota: { id: 'cota0000abcd', tipoBem: 'VEICULO', valorCarta: '80000', desagioRevenda: '0.12', status: 'RESERVADA' } }],
   };
   it('frase em minúsculas, sem o status cru, e a ordem que a Íris pediu', () => {
-    render(<CompradorPipeline leads={[comprador]} />);
+    render(<CompradorPipeline leads={[comprador]} realizacaoLiberada />);
     fireEvent.click(screen.getByRole('button', { name: /Executar Caminho A/ }));
     const c = screen.getByTestId('revisao-consequencia').textContent;
     expect(c).toBe('A cota sai do pool como realizada. O valor simulado passa a compor o caixa e o NAV na rede de testes. Não há como desfazer pelo painel.');

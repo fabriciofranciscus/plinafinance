@@ -60,7 +60,7 @@ const corpo = () => JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestIni
 
 describe('Caminho A', () => {
   it('Executar abre a Revisão com comprador, cota e valor; só a confirmação envia', async () => {
-    render(<CompradorPipeline leads={[comprador]} />);
+    render(<CompradorPipeline leads={[comprador]} realizacaoLiberada />);
     fireEvent.click(screen.getByRole('button', { name: 'Executar Caminho A' }));
     expect(fetchMock).not.toHaveBeenCalled();
     const texto = screen.getByTestId('revisao-acao').textContent!;
@@ -75,7 +75,7 @@ describe('Caminho A', () => {
   // Consuelo (condição no #157) + decisão do Atlas: sem gate no servidor, o atesto precisa dizer o que o operador afirma.
   // Na rede de testes o pagamento é simulado e nada o registra (Vera): nem "comprovado" nem "registrado".
   it('rede de testes: atesto, consequência e rótulo próprios; é o atesto que habilita a execução', () => {
-    render(<CompradorPipeline leads={[comprador]} />);
+    render(<CompradorPipeline leads={[comprador]} realizacaoLiberada />);
     fireEvent.click(screen.getByRole('button', { name: 'Executar Caminho A' }));
     expect(screen.getByTestId('revisao-consequencia').textContent).toBe(
       'A cota sai do pool como realizada. O valor simulado passa a compor o caixa e o NAV na rede de testes. Não há como desfazer pelo painel.',
@@ -92,8 +92,13 @@ describe('Caminho A', () => {
   });
 
   // Gate de pagamento (#166): fora da rede de testes o servidor recusa sempre; a tela não oferece o que vai falhar.
-  it('rede principal: botão desabilitado com o motivo, sem campo, sem Revisão e sem envio', () => {
-    render(<CompradorPipeline leads={[comprador]} redePublica />);
+  // Mesma regra do servidor (Consuelo): só libera quando a rede é exatamente TESTNET; sem a informação, fecha.
+  it.each([
+    ['rede principal', { redePublica: true, realizacaoLiberada: false }],
+    ['outro valor fora de TESTNET', { redePublica: false, realizacaoLiberada: false }],
+    ['sem a informação (padrão fechado)', {}],
+  ])('%s: botão desabilitado com o motivo, sem campo, sem Revisão e sem envio', (_, props) => {
+    render(<CompradorPipeline leads={[comprador]} {...props} />);
     const executar = screen.getByRole('button', { name: 'Executar Caminho A' }) as HTMLButtonElement;
     expect(executar.disabled).toBe(true);
     const motivo = document.getElementById(executar.getAttribute('aria-describedby')!)!;
@@ -107,7 +112,7 @@ describe('Caminho A', () => {
   });
 
   it('Enter no valor abre a Revisão e não executa', () => {
-    render(<CompradorPipeline leads={[comprador]} />);
+    render(<CompradorPipeline leads={[comprador]} realizacaoLiberada />);
     const valor = screen.getByRole('spinbutton');
     fireEvent.submit(valor.closest('form')!);
     expect(screen.getByTestId('revisao-acao')).toBeTruthy();
@@ -115,7 +120,7 @@ describe('Caminho A', () => {
   });
 
   it('valor alterado depois da Revisão: volta para a Revisão com o valor novo, sem enviar', async () => {
-    render(<CompradorPipeline leads={[comprador]} />);
+    render(<CompradorPipeline leads={[comprador]} realizacaoLiberada />);
     fireEvent.click(screen.getByRole('button', { name: 'Executar Caminho A' }));
     fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '71000' } });
     confirmar();

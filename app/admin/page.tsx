@@ -15,7 +15,7 @@
 
 import { db } from '@/lib/db';
 import { isAdminAuthenticated } from '@/lib/auth/admin';
-import { accountExplorerUrl, assetExplorerUrl, txExplorerUrl } from '@/lib/stellar/config';
+import { accountExplorerUrl, assetExplorerUrl, STELLAR_NETWORK, txExplorerUrl } from '@/lib/stellar/config';
 import {
   caixaRealizado,
   concentracaoPorAdministradora,
@@ -288,6 +288,7 @@ export default async function AdminPage() {
             })),
           }))}
           redePublica={process.env.STELLAR_NETWORK === 'PUBLIC'}
+          realizacaoLiberada={STELLAR_NETWORK === 'TESTNET'}
         />
       </section>
 
