@@ -73,9 +73,9 @@ describe('Caminho A', () => {
   });
 
   // Consuelo (condição no #157) + decisão do Atlas: sem gate no servidor, o atesto precisa dizer o que o operador afirma.
-  // Na rede de testes o pagamento é simulado; "comprovado" só vale na rede principal.
+  // Na rede de testes o pagamento é simulado e nada o registra (Vera): nem "comprovado" nem "registrado"; "comprovado" só na principal.
   it.each([
-    [false, 'Conferi o comprador, a cota e o valor, e o pagamento simulado do comprador está registrado na rede de testes.', 'A cota sai do pool como realizada. O valor simulado passa a compor o caixa e o NAV na rede de testes. Não há como desfazer pelo painel.'],
+    [false, 'Conferi o comprador, a cota e o valor, e entendo que o pagamento do comprador é simulado na rede de testes.', 'A cota sai do pool como realizada. O valor simulado passa a compor o caixa e o NAV na rede de testes. Não há como desfazer pelo painel.'],
     [true, 'Conferi o comprador, a cota e o valor efetivamente recebido, e o pagamento do comprador está comprovado.', 'A cota sai do pool como realizada. O valor recebido entra no caixa do fundo e passa a compor o NAV. Não há como desfazer pelo painel.'],
   ])('rede principal=%s: atesto e consequência próprios; é o atesto que habilita a execução', (redePublica, texto, consequencia) => {
     render(<CompradorPipeline leads={[comprador]} redePublica={redePublica} />);

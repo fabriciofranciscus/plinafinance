@@ -271,7 +271,7 @@ function ExecutarCaminhoAForm({
       : 'A cota sai do pool como realizada. O valor simulado passa a compor o caixa e o NAV na rede de testes. Não há como desfazer pelo painel.',
     atesto: redePublica
       ? 'Conferi o comprador, a cota e o valor efetivamente recebido, e o pagamento do comprador está comprovado.'
-      : 'Conferi o comprador, a cota e o valor, e o pagamento simulado do comprador está registrado na rede de testes.',
+      : 'Conferi o comprador, a cota e o valor, e entendo que o pagamento do comprador é simulado na rede de testes.',
     confirmar: 'Executar Caminho A',
   }));
   return (
