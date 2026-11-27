@@ -72,11 +72,16 @@ describe('Caminho A', () => {
     expect(corpo()).toEqual({ action: 'executar-caminho-a', reservaId: 'r1', valorRealizado: '70400' });
   });
 
-  // Consuelo (condição no #157) + decisão do Atlas: sem gate no servidor, o atesto precisa afirmar o pagamento comprovado.
-  it('o atesto exige o pagamento do comprador comprovado e é ele que habilita a execução', () => {
-    render(<CompradorPipeline leads={[comprador]} />);
+  // Consuelo (condição no #157) + decisão do Atlas: sem gate no servidor, o atesto precisa dizer o que o operador afirma.
+  // Na rede de testes o pagamento é simulado; "comprovado" só vale na rede principal.
+  it.each([
+    [false, 'Conferi o comprador, a cota e o valor, e o pagamento simulado do comprador está registrado na rede de testes.', 'A cota sai do pool como realizada. O valor simulado passa a compor o caixa e o NAV na rede de testes. Não há como desfazer pelo painel.'],
+    [true, 'Conferi o comprador, a cota e o valor efetivamente recebido, e o pagamento do comprador está comprovado.', 'A cota sai do pool como realizada. O valor recebido entra no caixa do fundo e passa a compor o NAV. Não há como desfazer pelo painel.'],
+  ])('rede principal=%s: atesto e consequência próprios; é o atesto que habilita a execução', (redePublica, texto, consequencia) => {
+    render(<CompradorPipeline leads={[comprador]} redePublica={redePublica} />);
     fireEvent.click(screen.getByRole('button', { name: 'Executar Caminho A' }));
-    const atesto = revisao().getByRole('checkbox', { name: 'Conferi o comprador, a cota e o valor efetivamente recebido, e o pagamento do comprador está comprovado.' });
+    expect(screen.getByTestId('revisao-consequencia').textContent).toBe(consequencia);
+    const atesto = revisao().getByRole('checkbox', { name: texto });
     const executar = revisao().getByRole('button', { name: 'Executar Caminho A' }) as HTMLButtonElement;
     expect(executar.disabled).toBe(true);
     fireEvent.click(atesto);

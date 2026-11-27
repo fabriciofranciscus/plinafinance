@@ -206,6 +206,7 @@ function LeadCard({ lead, redePublica }: { lead: PipelineComprador; redePublica:
                   reservaId={r.id}
                   valorRevendaSugerido={valorRevenda}
                   linhas={linhasDaReserva(lead, r, valorRevenda, redePublica)}
+                  redePublica={redePublica}
                   onSubmit={call}
                   busy={busy}
                 />
@@ -245,12 +246,14 @@ function ExecutarCaminhoAForm({
   reservaId,
   valorRevendaSugerido,
   linhas,
+  redePublica,
   onSubmit,
   busy,
 }: {
   reservaId: string;
   valorRevendaSugerido: number;
   linhas: LinhaRevisao[];
+  redePublica: boolean;
   onSubmit: (action: string, payload: Record<string, unknown>) => void;
   busy: boolean;
 }) {
@@ -261,9 +264,13 @@ function ExecutarCaminhoAForm({
       ...linhas,
       { rotulo: 'Valor recebido', valor: <span className="font-mono">{BRL_CENTAVOS.format(Number(dados.get('valorRealizado')))}</span> },
     ],
-    consequencia:
-      'A cota sai do pool como realizada. O valor recebido entra no caixa do fundo e passa a compor o NAV. Não há como desfazer pelo painel.',
-    atesto: 'Conferi o comprador, a cota e o valor efetivamente recebido, e o pagamento do comprador está comprovado.',
+    // Textos por rede (Consuelo): na rede de testes o pagamento é simulado, então nada afirma recebimento ou comprovação.
+    consequencia: redePublica
+      ? 'A cota sai do pool como realizada. O valor recebido entra no caixa do fundo e passa a compor o NAV. Não há como desfazer pelo painel.'
+      : 'A cota sai do pool como realizada. O valor simulado passa a compor o caixa e o NAV na rede de testes. Não há como desfazer pelo painel.',
+    atesto: redePublica
+      ? 'Conferi o comprador, a cota e o valor efetivamente recebido, e o pagamento do comprador está comprovado.'
+      : 'Conferi o comprador, a cota e o valor, e o pagamento simulado do comprador está registrado na rede de testes.',
     confirmar: 'Executar Caminho A',
   }));
   return (

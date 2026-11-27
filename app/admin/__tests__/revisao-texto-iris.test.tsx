@@ -31,7 +31,7 @@ describe('Caminho A', () => {
     render(<CompradorPipeline leads={[comprador]} />);
     fireEvent.click(screen.getByRole('button', { name: /Executar Caminho A/ }));
     const c = screen.getByTestId('revisao-consequencia').textContent;
-    expect(c).toBe('A cota sai do pool como realizada. O valor recebido entra no caixa do fundo e passa a compor o NAV. Não há como desfazer pelo painel.');
+    expect(c).toBe('A cota sai do pool como realizada. O valor simulado passa a compor o caixa e o NAV na rede de testes. Não há como desfazer pelo painel.');
     expect(c).not.toContain('REALIZADA');
   });
 });
