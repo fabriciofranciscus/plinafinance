@@ -104,16 +104,16 @@ export function ConfirmacaoScreen({
         05 // Transferência
       </p>
       <h1 className="mt-3 font-title text-3xl md:text-4xl font-semibold tracking-tight leading-tight text-base">
-        Cessão concluída
+        Cessão registrada na rede de testes
       </h1>
       <p className="mt-4 max-w-prose font-text text-base text-base/80 leading-relaxed">
-        Você agora é titular da carta de crédito.
+        A transferência de titularidade depende da aprovação da administradora.
       </p>
 
       {cota && (
         <div className="mt-8 grid max-w-xl grid-cols-1 gap-px border border-light-hairline bg-base/10 text-left sm:grid-cols-3">
           <Stat k="Carta de crédito" v={BRL.format(cota.valorCarta)} />
-          <Stat k="Pago" v={BRL.format(paga)} />
+          <Stat k="Valor a pagar" v={BRL.format(paga)} />
           <Stat k="Diferença para o valor de face" v={BRL.format(economia)} accent />
         </div>
       )}
@@ -130,7 +130,7 @@ export function ConfirmacaoScreen({
         </h2>
         <ul className="space-y-1.5 font-text text-sm text-base/75">
           <li>→ Contate a administradora para a transferência de titularidade.</li>
-          <li>→ Utilize a carta de crédito para aquisição do bem.</li>
+          <li>→ Guarde a confirmação da cessão para seus registros.</li>
           <li>→ Baixe o documento de cessão para seus registros.</li>
         </ul>
       </div>

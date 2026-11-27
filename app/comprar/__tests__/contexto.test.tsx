@@ -177,7 +177,7 @@ describe('frases protegidas N2–N5: mesmas, na mesma ordem relativa (regressão
     ordem('confirmacao.tsx', [
       'Confirme a transferência de titularidade.',
       'Aguardando confirmação.',
-      'Você agora é titular da carta de crédito.',
+      'A transferência de titularidade depende da aprovação da administradora.',
       'Próximos passos',
     ]));
 });

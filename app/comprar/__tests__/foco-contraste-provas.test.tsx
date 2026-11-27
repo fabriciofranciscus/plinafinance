@@ -110,15 +110,17 @@ describe('confirmação realizada alinhada (C8, D1 do Atlas: sem o círculo ✓)
     expect(screen.queryByText('✓')).toBeNull();
   });
 
-  it('os textos protegidos (N4/N5) ficam iguais: título, "Você agora é titular…", três valores, aviso de cotas quitadas, próximos passos', () => {
+  // Consuelo ✗ no #164 + texto da Norma: sem "concluída", sem titularidade antes da administradora, sem "Pago" sem pagamento comprovado.
+  it('texto aprovado: título, aviso da administradora, três valores, aviso de cotas quitadas, próximos passos', () => {
     montar();
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Cessão concluída');
-    expect(screen.getByText('Você agora é titular da carta de crédito.')).toBeTruthy();
-    for (const k of ['Carta de crédito', 'Pago', 'Diferença para o valor de face']) expect(screen.getByText(k)).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Cessão registrada na rede de testes');
+    expect(screen.getByText('A transferência de titularidade depende da aprovação da administradora.')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/Cessão concluída|é titular|Pago|Utilize a carta/);
+    for (const k of ['Carta de crédito', 'Valor a pagar', 'Diferença para o valor de face']) expect(screen.getByText(k)).toBeTruthy();
     expect(screen.getByText('Nesta fase, só são aceitas cotas quitadas (sem parcelas restantes).')).toBeTruthy();
     expect(screen.getAllByRole('listitem').map((l) => l.textContent)).toEqual([
       '→ Contate a administradora para a transferência de titularidade.',
-      '→ Utilize a carta de crédito para aquisição do bem.',
+      '→ Guarde a confirmação da cessão para seus registros.',
       '→ Baixe o documento de cessão para seus registros.',
     ]);
   });
