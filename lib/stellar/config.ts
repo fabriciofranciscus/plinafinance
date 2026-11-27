@@ -1,4 +1,5 @@
 import { Networks } from '@stellar/stellar-sdk';
+import { assetExplorerUrl as assetUrl } from './explorer';
 
 /**
  * Configuração Stellar.
@@ -86,13 +87,7 @@ export const FUNDER_BALANCE_FLOOR = envOu('FUNDER_BALANCE_FLOOR', '50');
 export const ISSUER_BALANCE_FLOOR = envOu('ISSUER_BALANCE_FLOOR', '5');
 export const DISTRIBUTOR_BALANCE_FLOOR = envOu('DISTRIBUTOR_BALANCE_FLOOR', '5');
 
-const stellarExpertBase =
-  STELLAR_NETWORK === 'PUBLIC'
-    ? 'https://stellar.expert/explorer/public'
-    : 'https://stellar.expert/explorer/testnet';
-
-export const txExplorerUrl = (hash: string) => `${stellarExpertBase}/tx/${hash}`;
-export const accountExplorerUrl = (pubkey: string) =>
-  `${stellarExpertBase}/account/${pubkey}`;
+// Links do explorer: implementação em ./explorer (sem o SDK, segura para componentes cliente).
+export { txExplorerUrl, accountExplorerUrl } from './explorer';
 export const assetExplorerUrl = (issuerPubkey: string, code = assetCode) =>
-  `${stellarExpertBase}/asset/${code}-${issuerPubkey}`;
+  assetUrl(issuerPubkey, code);

@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import type { CessaoData, ConfirmacaoData, CotaResumo, ReservaData } from '../../_types';
 import { BRL, valorRevenda } from '../../_lib/glossary';
+import { txExplorerUrl } from '@/lib/stellar/explorer';
 import { FaixaContexto } from '../shell/faixa-contexto';
 
 function explorerTx(hash: string) {
-  return `https://stellar.expert/explorer/testnet/tx/${hash}`;
+  return txExplorerUrl(hash);
 }
 
 export function ConfirmacaoScreen({
