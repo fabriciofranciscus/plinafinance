@@ -504,6 +504,7 @@ describe.skipIf(!PG)('Resgate com queima (E2-6) — Postgres real', () => {
       const r = await varrer();
       expect(r.resgatesEscriturados).toBe(1);
       expect(await movimentos('RESGATE_PAGO')).toBe(1);
+      st.fetchSupplyDasClasses.mockResolvedValue({ senior: supply('999900'), subordinada: supply('0') }); // o ledger reflete a queima de 100 (lastro, #156)
       expect(await navDisponivel()).toBe(true);
     });
 
@@ -540,6 +541,7 @@ describe.skipIf(!PG)('Resgate com queima (E2-6) — Postgres real', () => {
       expect(chain.submetidos).toHaveLength(1);
       expect(await movimentos('RESGATE_PAGO')).toBe(1);
       expect((await estado(c.quoteId))?.consumedTxHash).toBe(r.txHash);
+      st.fetchSupplyDasClasses.mockResolvedValue({ senior: supply('999900'), subordinada: supply('0') }); // o ledger reflete a queima de 100 (lastro, #156)
       expect(await navDisponivel()).toBe(true);
     });
 
@@ -650,6 +652,7 @@ describe.skipIf(!PG)('Resgate com queima (E2-6) — Postgres real', () => {
       const r2 = await varrer();
       expect(r2.resgatesEscriturados).toBe(0);
       expect(await movimentos('RESGATE_PAGO')).toBe(1);
+      st.fetchSupplyDasClasses.mockResolvedValue({ senior: supply('999900'), subordinada: supply('0') }); // o ledger reflete a queima de 100 (lastro, #156)
       expect(await navDisponivel()).toBe(true);
     });
 
@@ -1131,6 +1134,7 @@ describe.skipIf(!PG)('Resgate com queima (E2-6) — Postgres real', () => {
     it('F2: um erro que NÃO é corrida (ex.: XDR de outra cotação consumida) continua sendo erro', async () => {
       const c1 = await cotar();
       await submeter(assinar(c1.xdr), c1.quoteId);
+      st.fetchSupplyDasClasses.mockResolvedValue({ senior: supply('999900'), subordinada: supply('0') }); // o ledger reflete a queima de 100 (lastro, #156)
       const c2 = await cotar('50.0000000');
       // XDR da cotação 2 apresentado na cotação 1 (consumida com outro XDR) → 409, não "idempotente"
       const e = (await erro(submeter(assinar(c2.xdr), c1.quoteId))) as ApiError;

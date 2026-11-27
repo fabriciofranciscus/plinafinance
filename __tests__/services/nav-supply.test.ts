@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Prisma } from '@prisma/client';
 
-const { fetchSupplyDasClasses, tentativaFindFirst, quoteFindFirst, resgateFindFirst } = vi.hoisted(() => ({
+const { fetchSupplyDasClasses, tentativaFindFirst, quoteFindFirst, resgateFindFirst, movimentoAggregate } = vi.hoisted(() => ({
   fetchSupplyDasClasses: vi.fn(),
   tentativaFindFirst: vi.fn(),
   quoteFindFirst: vi.fn(),
   resgateFindFirst: vi.fn(),
+  movimentoAggregate: vi.fn(),
 }));
 vi.mock('@/lib/stellar/supply', () => ({ fetchSupplyDasClasses }));
 vi.mock('@/lib/db', () => ({
@@ -13,6 +14,7 @@ vi.mock('@/lib/db', () => ({
     tentativaEmissao: { findFirst: tentativaFindFirst },
     quote: { findFirst: quoteFindFirst },
     resgateCotacao: { findFirst: resgateFindFirst },
+    movimentoFundo: { aggregate: movimentoAggregate },
   },
 }));
 
@@ -28,6 +30,9 @@ const D = (v: string) => new Prisma.Decimal(v);
 function supply(code: string, circulante: string) {
   return { code, circulante: D(circulante), tesouraria: D('0') } as never;
 }
+function razao(deltaTokens: string | null) {
+  return { _sum: { deltaTokens: deltaTokens === null ? null : D(deltaTokens) } };
+}
 function ledger(seniorCirc = '1000', subCirc = '0') {
   return { senior: supply('PLINARF', seniorCirc), subordinada: supply('PLINARFB', subCirc) };
 }
@@ -40,6 +45,8 @@ beforeEach(() => {
   tentativaFindFirst.mockReset().mockResolvedValue(null);
   quoteFindFirst.mockReset().mockResolvedValue(null);
   resgateFindFirst.mockReset().mockResolvedValue(null);
+  // Razão do fundo com o mesmo supply do `ledger()` padrão: tudo com lastro.
+  movimentoAggregate.mockReset().mockResolvedValue(razao('1000'));
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -128,6 +135,7 @@ describe('lerSupplyDoNav — TTL e single-flight', () => {
   it('fresh ignora o TTL e renova o cache', async () => {
     await lerSupplyDoNav();
     fetchSupplyDasClasses.mockResolvedValue(ledger('2000'));
+    movimentoAggregate.mockResolvedValue(razao('2000')); // a emissão escriturou junto
     const fresco = await lerSupplyDoNav({ fresh: true });
     expect(fresco.senior.circulante.toString()).toBe('2000');
     expect(fetchSupplyDasClasses).toHaveBeenCalledTimes(2);
@@ -234,3 +242,70 @@ describe('lerSupplyDoNav — resgate com queima em voo (E2-6)', () => {
   });
 });
 
+
+describe('lerSupplyDoNav — supply sem lastro no razão do fundo', () => {
+  /** Sênior com circulante e tesouraria separados: o NAV divide pela soma dos dois. */
+  function ledgerComTesouraria(circulante: string, tesouraria: string) {
+    return {
+      senior: { code: 'PLINARF', circulante: D(circulante), tesouraria: D(tesouraria) },
+      subordinada: supply('PLINARFB', '0'),
+    } as never;
+  }
+
+  it('recusa o caso de 16/11/2026: seed rodado duas vezes contra o mesmo issuer', async () => {
+    // Ledger: 774.800 no distributor + 19,96 com investidor. Razão: só as 3 cotas, 387.400.
+    fetchSupplyDasClasses.mockResolvedValue(ledgerComTesouraria('19.96', '774800'));
+    movimentoAggregate.mockResolvedValue(razao('387400'));
+    const err = await lerSupplyDoNav().catch((e) => e);
+    expect(err).toBeInstanceOf(NavIndisponivelError);
+    expect(err.motivo).toBe('SUPPLY_SEM_LASTRO');
+    expect(err.message).toBe(NAV_INDISPONIVEL_MENSAGEM);
+    // O operador acha as quantidades no log; a resposta pública segue constante.
+    expect(console.error).toHaveBeenCalledWith('[nav-supply] supply sem lastro no razão do fundo', {
+      emitidoNoLedger: '774819.96',
+      noRazao: '387400',
+      excedente: '387419.96',
+    });
+  });
+
+  it('é exato: um token a mais no ledger já fecha o NAV', async () => {
+    fetchSupplyDasClasses.mockResolvedValue(ledger('1000.0000001'));
+    await expect(lerSupplyDoNav()).rejects.toMatchObject({ motivo: 'SUPPLY_SEM_LASTRO' });
+  });
+
+  it('ledger igual ao razão publica, contando circulante e tesouraria', async () => {
+    fetchSupplyDasClasses.mockResolvedValue(ledgerComTesouraria('19.96', '387380.04'));
+    movimentoAggregate.mockResolvedValue(razao('387400'));
+    await expect(lerSupplyDoNav()).resolves.toMatchObject({ senior: { code: 'PLINARF' } });
+  });
+
+  it('ledger abaixo do razão publica: queima fora do razão (TES-3) não infla o denominador', async () => {
+    fetchSupplyDasClasses.mockResolvedValue(ledger('400'));
+    movimentoAggregate.mockResolvedValue(razao('2154940'));
+    await expect(lerSupplyDoNav()).resolves.toMatchObject({ senior: { code: 'PLINARF' } });
+  });
+
+  it('razão vazio com supply no ledger fecha o NAV', async () => {
+    movimentoAggregate.mockResolvedValue(razao(null));
+    await expect(lerSupplyDoNav()).rejects.toMatchObject({ motivo: 'SUPPLY_SEM_LASTRO' });
+  });
+
+  it('vale também para o supply em cache: o razão é relido a cada chamada', async () => {
+    await lerSupplyDoNav(); // cacheia leitura com lastro
+    movimentoAggregate.mockResolvedValue(razao('999'));
+    await expect(lerSupplyDoNav()).rejects.toMatchObject({ motivo: 'SUPPLY_SEM_LASTRO' });
+    expect(fetchSupplyDasClasses).toHaveBeenCalledTimes(2); // a do cache + uma releitura antes de fechar (nav-supply-releitura)
+  });
+
+  it('roda depois dos gates de emissão em voo: na janela legítima o motivo é EMISSAO_PENDENTE', async () => {
+    fetchSupplyDasClasses.mockResolvedValue(ledger('1400'));
+    tentativaFindFirst.mockResolvedValue({ memoHash: 'ab' });
+    await expect(lerSupplyDoNav()).rejects.toMatchObject({ motivo: 'EMISSAO_PENDENTE' });
+    expect(movimentoAggregate).not.toHaveBeenCalled();
+  });
+
+  it('falha ao ler o razão é fail-closed', async () => {
+    movimentoAggregate.mockRejectedValue(new Error('db fora'));
+    await expect(lerSupplyDoNav()).rejects.toMatchObject({ motivo: 'LEDGER_LEITURA_FALHOU' });
+  });
+});

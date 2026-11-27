@@ -189,6 +189,27 @@ export function supplyEmitidoParaNavAsDecimal(supply: SupplyParaNav): Prisma.Dec
 }
 
 /**
+ * Quanto do supply emitido no ledger o razão do fundo não registra.
+ *
+ * `noRazao` é Σ `MovimentoFundo.deltaTokens`: toda emissão (aporte,
+ * subscrição) entra com +q e todo resgate com −q. Supply acima disso é token
+ * sem lastro no fundo: cunhado sem escrituração, como o seed rodado duas vezes
+ * contra o mesmo issuer em 16/11/2026, que publicou NAV/token de -R$ 19.409
+ * (com a fórmula atual, sairia R$ 0,50).
+ *
+ * Comparação exata, como a conciliação do snapshot. Só o excesso conta: ledger
+ * abaixo do razão é queima fora do razão (excesso de tesouraria, TES-3) e não
+ * infla o denominador com token sem ativo.
+ */
+export function supplySemLastro(
+  emitidoNoLedger: Numericable,
+  noRazao: Numericable,
+): { excedente: Prisma.Decimal; semLastro: boolean } {
+  const excedente = toDecimal(emitidoNoLedger).minus(toDecimal(noRazao));
+  return { excedente, semLastro: excedente.gt(0) };
+}
+
+/**
  * Ativo do fundo atribuível ao supply emitido: o próprio NAV total (cotas
  * ativas + caixa). Desde a ADR 2026-11-09 não há dedução da tesouraria ao par:
  * ela deduzia duas vezes (no resgate sem queima) e transferia valor entre

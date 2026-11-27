@@ -17,7 +17,7 @@ vi.mock('@/lib/db', () => ({
     resgateCotacao: { findFirst: async () => null },
     cota: { findMany: m.cotas },
     realizacaoCaminho: { findMany: m.realizacoes },
-    movimentoFundo: { aggregate: async () => ({ _sum: { deltaCaixa: null } }), createMany: async () => ({ count: 1 }) },
+    movimentoFundo: { aggregate: async () => ({ _sum: { deltaCaixa: null, deltaTokens: '1000000000000000' } }) /* razão cobre o ledger do teste; o gate de lastro é testado em nav-supply.test.ts */, createMany: async () => ({ count: 1 }) },
   },
 }));
 vi.mock('@/lib/env/feature-gates', () => ({ isSorobanWaterfallEnabled: async () => false }));

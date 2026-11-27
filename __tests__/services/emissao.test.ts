@@ -5,7 +5,7 @@ const m = vi.hoisted(() => ({ fetchSupplyDasClasses: vi.fn(), cotas: vi.fn(), re
 vi.mock('@/lib/stellar/supply', () => ({ fetchSupplyDasClasses: m.fetchSupplyDasClasses }));
 vi.mock('@/lib/db', () => ({
   db: { tentativaEmissao: { findFirst: async () => null }, quote: { findFirst: async () => null }, resgateCotacao: { findFirst: async () => null }, cota: { findMany: m.cotas }, realizacaoCaminho: { findMany: m.realizacoes },
-    movimentoFundo: { aggregate: async () => ({ _sum: { deltaCaixa: null } }), createMany: async () => ({ count: 1 }) } },
+    movimentoFundo: { aggregate: async () => ({ _sum: { deltaCaixa: null, deltaTokens: '1000000000000000' } }) /* razão cobre o ledger do teste; o gate de lastro é testado em nav-supply.test.ts */, createMany: async () => ({ count: 1 }) } },
 }));
 
 import { NavMudouError, calcularPrecoDeEmissao, revalidarNavDaCotacao } from '@/lib/services/emissao';
