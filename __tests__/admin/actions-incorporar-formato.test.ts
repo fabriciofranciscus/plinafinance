@@ -30,8 +30,8 @@ const fd = (valorCarta?: string, desagio?: string) => {
   if (desagio !== undefined) f.set('desagioAquisicao', desagio);
   return f;
 };
-const ERRO_CARTA = 'valor em reais inválido: use só dígitos, com até 13 inteiros e 2 casas decimais';
-const ERRO_DESAGIO = 'deságio inválido: use dígitos com até 4 casas decimais (ex.: 0.20 para 20%)';
+const ERRO_CARTA = 'valor em reais inválido: use ponto como separador decimal, ex.: 250000.00, com até 13 inteiros e 2 casas';
+const ERRO_DESAGIO = 'deságio inválido: use uma fração entre 0 e 1 com até 4 casas, ex.: 0.20 para 20%; não omita o zero inicial';
 
 beforeEach(() => { m.incorporarCota.mockReset(); m.incorporarCota.mockResolvedValue({ txHash: 'tx' }); });
 
