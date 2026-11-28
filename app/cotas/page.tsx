@@ -40,7 +40,9 @@ export default async function CotasPage() {
         </h1>
         <p className="font-text text-base/80 mt-4 max-w-2xl leading-relaxed">
           Cartas de crédito de consórcio contempladas, com deságio sobre o
-          valor de face. Reserve por 72h enquanto qualifica a transferência.
+          valor de face. A reserva exige login. A compra só se confirma depois
+          da verificação de identidade e da assinatura da cessão. A
+          transferência depende da aprovação da administradora.
         </p>
         <div className="mt-6 flex gap-3 text-xs">
           <Link
