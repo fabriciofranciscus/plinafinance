@@ -4,7 +4,7 @@
  * Server Actions do /admin.
  *
  * Auth: passwordLoginAction + logoutAction.
- * Operação: incorporarCotaAction + executarClawbackAction + atualizarStatusAction.
+ * Operação: incorporarCotaAction + executarClawbackAction.
  *
  * Cada mutação revalida `/admin` e `/pool` para refletir mudanças
  * (incorporação muda NAV, clawback muda saldo investidor).
@@ -23,7 +23,6 @@ import { adminLoginLimiter } from '@/lib/rate-limit/config';
 import { causaSegura } from '@/lib/api/causa-segura';
 import { DesagioColunaString, ValorBrlString } from '@/lib/api/valores';
 import {
-  atualizarStatusCota,
   ClawbackError,
   executarClawback,
   IncorporacaoBloqueadaError,
@@ -31,7 +30,7 @@ import {
   incorporarCota,
 } from '@/lib/services/tokenizacao';
 import { registrarValidacaoLegal } from '@/lib/services/originacao';
-import { CaminhoRealizacao, MotivoClawback, StatusCota, TipoBem } from '@prisma/client';
+import { CaminhoRealizacao, MotivoClawback, TipoBem } from '@prisma/client';
 
 export interface ActionResult {
   ok: boolean;
@@ -202,27 +201,5 @@ export async function registrarValidacaoLegalAction(
     return { ok: true, txHash: result.txHash };
   } catch (err) {
     return erroFixoDeAcao(err, 'validacao-legal');
-  }
-}
-
-export async function atualizarStatusCotaAction(
-  _prev: ActionResult | null,
-  formData: FormData,
-): Promise<ActionResult> {
-  await ensureAuth();
-  if (formData.get('status') === StatusCota.EMISSAO_PENDENTE) {
-    return { ok: false, error: 'Status EMISSAO_PENDENTE só muda pela incorporação/reconciliação.' };
-  }
-  try {
-    await atualizarStatusCota({
-      cotaId: String(formData.get('cotaId') ?? ''),
-      status: formData.get('status') as StatusCota,
-      operador: 'admin-panel',
-    });
-    revalidatePath('/admin');
-    revalidatePath('/pool');
-    return { ok: true };
-  } catch (err) {
-    return erroFixoDeAcao(err, 'status-cota');
   }
 }
