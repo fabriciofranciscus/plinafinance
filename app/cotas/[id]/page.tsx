@@ -146,13 +146,12 @@ export default async function CotaDetailPage({ params }: PageProps) {
             href={`/comprar/reservar?cotaId=${cota.id}`}
             className="inline-block bg-base text-lightBg font-details text-xs tracking-[0.2em] uppercase px-8 py-4 hover:bg-signal-700 transition-colors"
           >
-            Reservar por 72h →
+            Reservar →
           </Link>
           <p className="font-text text-xs text-base/70 mt-4 max-w-prose leading-relaxed">
-            A reserva trava a cota por 72 horas pra você qualificar capital +
-            preparar transferência. Após qualificação, Plina coordena a
-            transferência de titularidade na administradora. Contrato com
-            hash on-chain após assinatura.
+            A reserva exige login. A compra só se confirma depois da
+            verificação de identidade e da assinatura da cessão. A
+            transferência depende da aprovação da administradora.
           </p>
         </section>
       ) : (
